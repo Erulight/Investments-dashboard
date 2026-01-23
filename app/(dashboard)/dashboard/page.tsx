@@ -1,28 +1,6 @@
 import { getCurrentUser } from '@/lib/auth'
 import { Card, CardHeader, CardTitle, CardContent } from '@/components/ui/Card'
-import { Table, TableHeader, TableBody, TableRow, TableHead, TableCell } from '@/components/ui/Table'
-
-async function getDashboardStats(userId: string, role: string, personId?: string) {
-  const baseUrl = process.env.NEXT_PUBLIC_APP_URL || 'http://localhost:3000'
-  
-  try {
-    const res = await fetch(`${baseUrl}/api/dashboard/stats`, {
-      cache: 'no-store',
-      headers: {
-        'Cookie': `auth_token=${userId}`,
-      },
-    })
-    
-    if (!res.ok) {
-      return null
-    }
-    
-    return res.json()
-  } catch (error) {
-    console.error('Failed to fetch stats:', error)
-    return null
-  }
-}
+import { prisma } from '@/lib/db'
 
 export default async function DashboardPage() {
   const user = await getCurrentUser()
@@ -30,6 +8,48 @@ export default async function DashboardPage() {
   if (!user) {
     return null
   }
+
+  let totalInvested = 0
+  let totalValue = 0
+  let totalProfit = 0
+  let activeInvestments = 0
+
+  if (user.role === 'OWNER') {
+    const investments = await prisma.investment.findMany({
+      where: { account: { isActive: true } },
+    })
+
+    totalInvested = investments.reduce((sum, inv) => sum + inv.principalAmount, 0)
+    totalValue = investments.reduce((sum, inv) => sum + inv.currentValue, 0)
+    totalProfit = investments.reduce(
+      (sum, inv) => sum + inv.realizedProfit + inv.unrealizedProfit,
+      0
+    )
+    activeInvestments = investments.length
+  } else if (user.role === 'PARTNER' && user.personId) {
+    const participants = await prisma.dealParticipant.findMany({
+      where: { personId: user.personId },
+      include: { investment: true },
+    })
+
+    totalInvested = participants.reduce((sum, p) => sum + p.investedAmount, 0)
+    totalValue = participants.reduce((sum, p) => sum + p.currentValue, 0)
+    totalProfit = participants.reduce((sum, p) => sum + p.profit, 0)
+    activeInvestments = participants.length
+  }
+
+  const recentTransactions = await prisma.transaction.findMany({
+    where:
+      user.role === 'PARTNER' && user.personId
+        ? { personId: user.personId }
+        : {},
+    take: 10,
+    orderBy: { date: 'desc' },
+    include: {
+      investment: true,
+      account: true,
+    },
+  })
 
   return (
     <div className="space-y-8">
@@ -48,7 +68,9 @@ export default async function DashboardPage() {
             </CardTitle>
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold text-gray-900">SAR 0</div>
+            <div className="text-2xl font-bold text-gray-900">
+              SAR {totalInvested.toLocaleString()}
+            </div>
           </CardContent>
         </Card>
 
@@ -59,7 +81,9 @@ export default async function DashboardPage() {
             </CardTitle>
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold text-gray-900">SAR 0</div>
+            <div className="text-2xl font-bold text-gray-900">
+              SAR {totalValue.toLocaleString()}
+            </div>
           </CardContent>
         </Card>
 
@@ -70,7 +94,9 @@ export default async function DashboardPage() {
             </CardTitle>
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold text-green-600">SAR 0</div>
+            <div className={`text-2xl font-bold ${totalProfit >= 0 ? 'text-green-600' : 'text-red-600'}`}>
+              SAR {totalProfit.toLocaleString()}
+            </div>
           </CardContent>
         </Card>
 
@@ -81,7 +107,9 @@ export default async function DashboardPage() {
             </CardTitle>
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold text-gray-900">0</div>
+            <div className="text-2xl font-bold text-gray-900">
+              {activeInvestments}
+            </div>
           </CardContent>
         </Card>
       </div>
@@ -91,9 +119,31 @@ export default async function DashboardPage() {
           <CardTitle>Recent Transactions</CardTitle>
         </CardHeader>
         <CardContent>
-          <p className="text-gray-500 text-center py-8">
-            No transactions yet. Start by adding investments or importing data.
-          </p>
+          {recentTransactions.length === 0 ? (
+            <p className="text-gray-500 text-center py-8">
+              No transactions yet. Start by adding investments or importing data.
+            </p>
+          ) : (
+            <div className="space-y-4">
+              {recentTransactions.map((tx) => (
+                <div key={tx.id} className="flex justify-between items-center p-3 bg-gray-50 rounded-lg">
+                  <div>
+                    <div className="font-medium text-gray-900">
+                      {tx.investment?.name || tx.account.name}
+                    </div>
+                    <div className="text-sm text-gray-600">
+                      {new Date(tx.date).toLocaleDateString()} - {tx.type}
+                    </div>
+                  </div>
+                  <div className="text-right">
+                    <div className={`font-semibold ${tx.amount >= 0 ? 'text-green-600' : 'text-red-600'}`}>
+                      {tx.account.currency} {Math.abs(tx.amount).toLocaleString()}
+                    </div>
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
         </CardContent>
       </Card>
     </div>

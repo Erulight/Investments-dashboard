@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { prisma } from '@/lib/db'
-import { verifyPassword, setAuthCookie } from '@/lib/auth'
+import { verifyPassword, setAuthCookie, Role } from '@/lib/auth'
 
 export async function POST(req: NextRequest) {
   try {
@@ -27,7 +27,7 @@ export async function POST(req: NextRequest) {
     await setAuthCookie({
       userId: user.id,
       email: user.email,
-      role: user.role as any,
+      role: user.role as Role,
     })
     
     return NextResponse.json({

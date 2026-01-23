@@ -2,8 +2,6 @@
 
 A comprehensive investment portfolio management system built with Next.js 14, Prisma ORM, and TypeScript. Features role-based access control (RBAC), multi-module investment tracking, CSV import/export, and audit logging.
 
-## 🚀 Features
-
 ### Authentication & Authorization
 - **JWT-based authentication** with secure HttpOnly cookies
 - **Email & password** sign-up, sign-in flows

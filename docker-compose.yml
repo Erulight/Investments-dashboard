@@ -27,7 +27,7 @@ services:
       COOKIE_SAME_SITE: lax
     depends_on:
       - db
-    command: sh -c "npx prisma migrate deploy && npx prisma db seed && node server.js"
+    command: sh -c "npx prisma migrate deploy && npm run prisma:seed && node server.js"
 
 volumes:
   postgres_data:
