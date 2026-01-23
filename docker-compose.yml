@@ -20,7 +20,7 @@ services:
       - '3000:3000'
     environment:
       DATABASE_URL: postgresql://investments:investments_password@db:5432/investments_dashboard?schema=public
-      JWT_SECRET: ${JWT_SECRET:-change-this-secret-in-production}
+      JWT_SECRET: ${JWT_SECRET:?JWT_SECRET environment variable is required}
       NODE_ENV: production
       NEXT_PUBLIC_APP_URL: http://localhost:3000
       COOKIE_SECURE: 'false'

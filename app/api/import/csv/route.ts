@@ -25,10 +25,19 @@ export async function POST(req: NextRequest) {
     })
   } catch (error) {
     console.error('Import error:', error)
+    
+    let statusCode = 500
+    if (error instanceof Error) {
+      if (error.message === 'Unauthorized') {
+        statusCode = 401
+      } else if (error.message === 'Forbidden') {
+        statusCode = 403
+      }
+    }
+    
     return NextResponse.json(
       { error: error instanceof Error ? error.message : 'Import failed' },
-      { status: error instanceof Error && error.message === 'Unauthorized' ? 401 : 
-                error instanceof Error && error.message === 'Forbidden' ? 403 : 500 }
+      { status: statusCode }
     )
   }
 }

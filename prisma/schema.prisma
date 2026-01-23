@@ -7,6 +7,10 @@ datasource db {
   url      = env("DATABASE_URL")
 }
 
+// Note: This schema uses SQLite for development convenience.
+// For production with PostgreSQL, change provider to "postgresql"
+// and update DATABASE_URL to a PostgreSQL connection string.
+
 model User {
   id                String   @id @default(cuid())
   email             String   @unique

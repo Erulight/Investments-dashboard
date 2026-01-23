@@ -1,14 +1,11 @@
 import { redirect } from 'next/navigation'
 import { getCurrentUser } from '@/lib/auth'
+import { requireAuth } from '@/lib/rbac'
 import { Card, CardHeader, CardTitle, CardContent } from '@/components/ui/Card'
 import { prisma } from '@/lib/db'
 
 export default async function SettingsPage() {
-  const user = await getCurrentUser()
-  
-  if (!user || user.role !== 'OWNER') {
-    redirect('/dashboard')
-  }
+  await requireAuth(['OWNER'])
 
   const recoveryAssumptions = await prisma.recoveryAssumption.findMany({
     orderBy: { status: 'asc' },

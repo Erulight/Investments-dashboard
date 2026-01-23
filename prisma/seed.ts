@@ -5,6 +5,8 @@ const prisma = new PrismaClient()
 
 async function main() {
   console.log('Starting seed...')
+  console.warn('⚠️  WARNING: This seed script creates demo accounts with hardcoded passwords.')
+  console.warn('⚠️  These should NEVER be used in production. Change passwords immediately after deployment.')
 
   const ownerPassword = await bcrypt.hash('OwnerDemo123!', 10)
   const partnerPassword = await bcrypt.hash('PartnerDemo123!', 10)
