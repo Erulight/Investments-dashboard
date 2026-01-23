@@ -1,0 +1,209 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "sqlite"
+  url      = env("DATABASE_URL")
+}
+
+model User {
+  id                String   @id @default(cuid())
+  email             String   @unique
+  password          String
+  name              String
+  role              String   @default("VIEWER")
+  canEditAsPartner  Boolean  @default(false)
+  createdAt         DateTime @default(now())
+  updatedAt         DateTime @updatedAt
+
+  personId          String?  @unique
+  person            Person?  @relation(fields: [personId], references: [id])
+  auditLogs         AuditLog[]
+
+  @@index([email])
+}
+
+model Person {
+  id                String   @id @default(cuid())
+  name              String
+  email             String?
+  phone             String?
+  createdAt         DateTime @default(now())
+  updatedAt         DateTime @updatedAt
+
+  user              User?
+  dealParticipants  DealParticipant[]
+  transactions      Transaction[]
+
+  @@index([email])
+}
+
+model Account {
+  id                String      @id @default(cuid())
+  name              String
+  type              String
+  description       String?
+  currency          String      @default("SAR")
+  isActive          Boolean     @default(true)
+  metadata          String?
+  createdAt         DateTime    @default(now())
+  updatedAt         DateTime    @updatedAt
+
+  investments       Investment[]
+  transactions      Transaction[]
+  valuations        Valuation[]
+
+  @@index([type])
+}
+
+model Investment {
+  id                String   @id @default(cuid())
+  accountId         String
+  account           Account  @relation(fields: [accountId], references: [id], onDelete: Cascade)
+  
+  name              String
+  category          String?
+  
+  principalAmount   Float
+  currentValue      Float    @default(0)
+  realizedProfit    Float    @default(0)
+  unrealizedProfit  Float    @default(0)
+  
+  startDate         DateTime
+  maturityDate      DateTime?
+  
+  interestRate      Float?
+  
+  notes             String?
+  metadata          String?
+  
+  createdAt         DateTime @default(now())
+  updatedAt         DateTime @updatedAt
+
+  dealParticipants  DealParticipant[]
+  transactions      Transaction[]
+
+  @@index([accountId])
+  @@index([category])
+}
+
+model DealParticipant {
+  id                String   @id @default(cuid())
+  investmentId      String
+  investment        Investment @relation(fields: [investmentId], references: [id], onDelete: Cascade)
+  
+  personId          String
+  person            Person   @relation(fields: [personId], references: [id], onDelete: Cascade)
+  
+  investedAmount    Float
+  currentValue      Float    @default(0)
+  receivable        Float    @default(0)
+  profit            Float    @default(0)
+  
+  sharePercentage   Float?
+  notes             String?
+  
+  createdAt         DateTime @default(now())
+  updatedAt         DateTime @updatedAt
+
+  @@unique([investmentId, personId])
+  @@index([investmentId])
+  @@index([personId])
+}
+
+model Transaction {
+  id                String          @id @default(cuid())
+  accountId         String
+  account           Account         @relation(fields: [accountId], references: [id], onDelete: Cascade)
+  
+  investmentId      String?
+  investment        Investment?     @relation(fields: [investmentId], references: [id], onDelete: SetNull)
+  
+  personId          String?
+  person            Person?         @relation(fields: [personId], references: [id], onDelete: SetNull)
+  
+  type              String
+  amount            Float
+  date              DateTime
+  description       String?
+  
+  metadata          String?
+  
+  createdAt         DateTime        @default(now())
+  updatedAt         DateTime        @updatedAt
+
+  @@index([accountId])
+  @@index([investmentId])
+  @@index([personId])
+  @@index([date])
+}
+
+model Valuation {
+  id                String   @id @default(cuid())
+  accountId         String
+  account           Account  @relation(fields: [accountId], references: [id], onDelete: Cascade)
+  
+  date              DateTime
+  navPerUnit        Float
+  totalValue        Float
+  notes             String?
+  
+  createdAt         DateTime @default(now())
+  updatedAt         DateTime @updatedAt
+
+  @@index([accountId])
+  @@index([date])
+}
+
+model RecoveryAssumption {
+  id                String   @id @default(cuid())
+  status            String   @unique
+  recoveryRate      Float
+  description       String?
+  
+  createdAt         DateTime @default(now())
+  updatedAt         DateTime @updatedAt
+}
+
+model Goal {
+  id                String   @id @default(cuid())
+  name              String
+  targetAmount      Float
+  currentAmount     Float    @default(0)
+  targetDate        DateTime?
+  category          String?
+  notes             String?
+  
+  createdAt         DateTime @default(now())
+  updatedAt         DateTime @updatedAt
+}
+
+model AuditLog {
+  id                String   @id @default(cuid())
+  userId            String
+  user              User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  
+  action            String
+  entityType        String
+  entityId          String
+  changes           String?
+  
+  createdAt         DateTime @default(now())
+
+  @@index([userId])
+  @@index([entityType])
+  @@index([createdAt])
+}
+
+model SystemSetting {
+  id                String   @id @default(cuid())
+  key               String   @unique
+  value             String
+  description       String?
+  
+  createdAt         DateTime @default(now())
+  updatedAt         DateTime @updatedAt
+
+  @@index([key])
+}
