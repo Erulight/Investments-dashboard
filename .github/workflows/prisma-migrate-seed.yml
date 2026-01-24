@@ -28,108 +28,71 @@ jobs:
       - name: Generate Prisma client
         run: npx prisma generate
 
-      # --- DEBUG STEP: network & connectivity checks ---
+      # --- DEBUG STEP: network & connectivity checks (bash-only) ---
       - name: Debug - check DNS and TCP connectivity to DB host
         run: |
-          echo "Parsing DATABASE_URL (host and port) for debug (no secret printed):"
-          python - <<'PY'
-import os,urllib.parse
-u = os.environ.get("DATABASE_URL") or ""
-if not u:
-  print("DATABASE_URL is empty")
-else:
-  p = urllib.parse.urlparse(u)
-  print("Host:", p.hostname or "<none>")
-  print("Port:", p.port or 5432)
-  print("User:", p.username or "<none>")
-  print("DB name:", p.path.lstrip('/') or "<none>")
-PY
+          echo "Parsing DATABASE_URL for debug (secrets are masked in logs)..."
+          if [ -z "$DATABASE_URL" ]; then
+            echo "DATABASE_URL is EMPTY"
+            exit 0
+          fi
+
+          # Extract host, port, user, db using sed (works for standard postgres URI)
+          HOST=$(echo "$DATABASE_URL" | sed -E 's#^[^@]*@([^:/?]+).*#\1#')
+          PORT=$(echo "$DATABASE_URL" | sed -E 's#^[^:]+://[^@]*@[^:]+:([0-9]+)/.*#\1#' || echo "")
+          if [ -z "$PORT" ]; then PORT=5432; fi
+          USER=$(echo "$DATABASE_URL" | sed -E 's#^[^:]+://([^:]+):.*@.*#\1#' || true)
+          DBNAME=$(echo "$DATABASE_URL" | sed -E 's#.*/([^/?]+)(\\?.*)?$#\1#' || echo "postgres")
+
+          echo "Host: $HOST"
+          echo "Port: $PORT"
+          echo "User: ${USER:-<none>}"
+          echo "DB: ${DBNAME:-<none>}"
           echo
-          echo "Resolve DNS for host:"
-          python - <<'PY'
-import os,urllib.parse,socket
-u = os.environ.get("DATABASE_URL") or ""
-p = urllib.parse.urlparse(u)
-host = p.hostname or ""
-if host:
-  try:
-    print("Resolved IPs:", socket.getaddrinfo(host, None))
-  except Exception as e:
-    print("DNS resolution failed:", e)
-else:
-  print("No host parsed")
-PY
-          echo
-          echo "Install debug tools and test TCP connect to port 5432"
-          sudo apt-get update -y
-          sudo apt-get install -y netcat postgresql-client
-          HOST=$(python - <<'PY'
-import os,urllib.parse
-u = os.environ.get("DATABASE_URL") or ""
-p = urllib.parse.urlparse(u)
-print(p.hostname or "")
-PY
-)
-          if [ -z "$HOST" ]; then
-            echo "HOST empty - DATABASE_URL probably not set"
+
+          echo "Resolving DNS for host..."
+          if command -v getent >/dev/null 2>&1; then
+            getent hosts "$HOST" || echo "getent failed"
           else
-            echo "Testing TCP connect to $HOST:5432 (may timeout if blocked)"
-            nc -vz "$HOST" 5432 || true
+            nslookup "$HOST" || host "$HOST" || echo "DNS lookup tools unavailable"
+          fi
+          echo
+
+          echo "Installing debug tools (netcat, psql)..."
+          sudo apt-get update -y
+          sudo apt-get install -y netcat postgresql-client || true
+          echo
+
+          if [ -n "$HOST" ]; then
+            echo "Testing TCP connect to $HOST:$PORT (may timeout if blocked)..."
+            nc -vz "$HOST" "$PORT" || true
+          else
+            echo "Host empty - skipping TCP test"
           fi
         env:
           DATABASE_URL: ${{ secrets.DATABASE_URL }}
 
-      - name: Debug - attempt psql list databases (will be masked)
+      - name: Debug - attempt psql listing (will be masked)
         if: always()
         run: |
-          echo "Attempting psql connection (may fail if credentials wrong or SSL missing)."
-          # extract components and run psql with sslmode=require
-          python - <<'PY'
-import os,urllib.parse
-u = os.environ.get("DATABASE_URL") or ""
-if not u:
-  print("DATABASE_URL not set")
-else:
-  p = urllib.parse.urlparse(u)
-  user = p.username or "postgres"
-  pwd = p.password or ""
-  host = p.hostname or ""
-  port = p.port or 5432
-  db = p.path.lstrip('/') or "postgres"
-  # print only host and db (not password)
-  print(f"Will attempt psql to host={host}, db={db}, user={user}")
-  # print connection string for psql (password not shown)
-  conn = f"postgresql://{user}:<REDACTED>@{host}:{port}/{db}?sslmode=require"
-  print("psql conn string (password redacted):", conn)
-PY
-          # Attempt psql; errors are fine (we capture output)
-          PGPASSWORD=$(python - <<'PY'
-import os,urllib.parse
-u = os.environ.get("DATABASE_URL") or ""
-p = urllib.parse.urlparse(u)
-print(p.password or "")
-PY
-)
-          HOST=$(python - <<'PY'
-import os,urllib.parse
-u = os.environ.get("DATABASE_URL") or ""
-p = urllib.parse.urlparse(u)
-print(p.hostname or "")
-PY
-)
-          DB=$(python - <<'PY'
-import os,urllib.parse
-u = os.environ.get("DATABASE_URL") or ""
-p = urllib.parse.urlparse(u)
-print(p.path.lstrip('/') or "postgres")
-PY
-)
-          if [ -z "$HOST" ]; then
-            echo "Skipping psql (no host parsed)"
-          else
-            # Use sslmode=require to match Supabase requirements
-            PGPASSWORD="$PGPASSWORD" psql "postgresql://postgres@$HOST:5432/$DB?sslmode=require" -c "\l" || true
+          if [ -z "$DATABASE_URL" ]; then
+            echo "DATABASE_URL not set - skipping psql test"
+            exit 0
           fi
+
+          # Extract password, host, db (simple extraction; secrets are masked)
+          PGPASS=$(echo "$DATABASE_URL" | sed -E 's#^[^:]+://[^:]+:([^@]+)@.*#\1#' || echo "")
+          HOST=$(echo "$DATABASE_URL" | sed -E 's#^[^@]*@([^:/?]+).*#\1#')
+          DB=$(echo "$DATABASE_URL" | sed -E 's#.*/([^/?]+)(\\?.*)?$#\1#' || echo "postgres")
+
+          if [ -z "$HOST" ]; then
+            echo "No host parsed - skipping psql"
+            exit 0
+          fi
+
+          echo "Will attempt psql to host=$HOST db=$DB (password masked)"
+          # Try connecting with sslmode=require (Supabase needs SSL)
+          PGPASSWORD="$PGPASS" psql "postgresql://postgres@$HOST:5432/$DB?sslmode=require" -c "\l" || true
         env:
           DATABASE_URL: ${{ secrets.DATABASE_URL }}
 
