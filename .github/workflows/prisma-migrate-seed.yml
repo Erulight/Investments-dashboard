@@ -26,6 +26,9 @@ jobs:
       - name: Generate Prisma client
         run: npx prisma generate
 
+      - name: Run lint (allow failures)
+        run: npm run lint || true
+
       - name: Ensure DATABASE_URL is available
         run: echo "DATABASE_URL is set"
         env:
