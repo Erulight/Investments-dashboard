@@ -1,42 +1,36 @@
-name: CI
-
 on:
   push:
-    branches: [ main, develop ]
+    branches:
+      - main
   pull_request:
-    branches: [ main, develop ]
 
 jobs:
   lint-and-test:
+    name: Lint and Test
     runs-on: ubuntu-latest
-    
-    permissions:
-      contents: read
-
+    env:
+      NODE_OPTIONS: "--max-old-space-size=4096"
     steps:
-      - uses: actions/checkout@v4
+      - name: Check out repository
+        uses: actions/checkout@v4
 
-      - name: Setup Node.js
+      - name: Use Node.js 20
         uses: actions/setup-node@v4
         with:
-          node-version: '20'
+          node-version: 20
           cache: 'npm'
 
       - name: Install dependencies
         run: npm ci
 
-      - name: Generate Prisma Client
+      - name: Generate Prisma client
         run: npx prisma generate
 
       - name: Run lint (allow failures)
         run: npm run lint || true
 
       - name: Run tests
-        run: npm test
+        run: npm run test
 
-      - name: Build
+      - name: Build (optional)
         run: npm run build
-        env:
-          DATABASE_URL: file:./test.db
-          JWT_SECRET: test-secret
-          NODE_ENV: production
