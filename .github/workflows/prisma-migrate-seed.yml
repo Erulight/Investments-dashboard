@@ -10,6 +10,8 @@ jobs:
     runs-on: ubuntu-latest
     env:
       NODE_OPTIONS: "--max-old-space-size=4096"
+      JWT_SECRET: ${{ secrets.JWT_SECRET }}
+      DATABASE_URL: ${{ secrets.DATABASE_URL }}
     steps:
       - name: Check out repository
         uses: actions/checkout@v4
@@ -38,12 +40,6 @@ jobs:
         run: npx prisma db push --schema=prisma/schema.prisma
         env:
           DATABASE_URL: ${{ secrets.DATABASE_URL }}
-
-      - name: Run Prisma migrations (if you prefer migrate instead of db push uncomment below)
-        # If you prefer migration history, replace the previous step with `npx prisma migrate deploy`
-        # run: npx prisma migrate deploy --schema=prisma/schema.prisma
-        # env:
-        #   DATABASE_URL: ${{ secrets.DATABASE_URL }}
 
       - name: Run seed script
         run: npm run prisma:seed
