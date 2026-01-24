@@ -51,93 +51,135 @@ export default async function DashboardPage() {
     },
   })
 
+  const returnPercentage = totalInvested > 0 ? ((totalValue - totalInvested) / totalInvested * 100) : 0
+
   return (
-    <div className="space-y-8">
-      <div>
-        <h1 className="text-3xl font-bold text-gray-900">Dashboard</h1>
-        <p className="mt-2 text-gray-600">
-          Welcome back, {user.name}! Here&apos;s an overview of your investments.
-        </p>
+    <div className="space-y-8 animate-fade-in">
+      {/* Welcome Header */}
+      <div className="bg-white rounded-2xl shadow-lg p-8 border border-gray-100">
+        <div className="flex items-center justify-between">
+          <div>
+            <h1 className="text-4xl font-bold bg-gradient-to-r from-blue-600 to-purple-600 bg-clip-text text-transparent">
+              Welcome back, {user.name}!
+            </h1>
+            <p className="mt-2 text-lg text-gray-600">
+              Here&apos;s an overview of your Sukuk portfolio performance
+            </p>
+          </div>
+          <div className="hidden lg:block">
+            <div className="w-20 h-20 bg-gradient-to-br from-blue-500 to-purple-600 rounded-2xl flex items-center justify-center shadow-lg">
+              <span className="text-4xl">💎</span>
+            </div>
+          </div>
+        </div>
       </div>
 
+      {/* Stats Grid */}
       <div className="grid grid-cols-1 gap-6 sm:grid-cols-2 lg:grid-cols-4">
-        <Card>
-          <CardHeader>
-            <CardTitle className="text-sm font-medium text-gray-500">
-              Total Invested
-            </CardTitle>
-          </CardHeader>
+        <Card hover className="sukuk-card-hover">
           <CardContent>
-            <div className="text-2xl font-bold text-gray-900">
+            <div className="flex items-center justify-between mb-2">
+              <p className="text-sm font-medium text-gray-500">Total Invested</p>
+              <span className="text-2xl">📈</span>
+            </div>
+            <div className="text-3xl font-bold text-gray-900">
               SAR {totalInvested.toLocaleString()}
             </div>
+            <p className="text-xs text-gray-500 mt-2">Principal Amount</p>
           </CardContent>
         </Card>
 
-        <Card>
-          <CardHeader>
-            <CardTitle className="text-sm font-medium text-gray-500">
-              Current Value
-            </CardTitle>
-          </CardHeader>
+        <Card hover className="sukuk-card-hover">
           <CardContent>
-            <div className="text-2xl font-bold text-gray-900">
+            <div className="flex items-center justify-between mb-2">
+              <p className="text-sm font-medium text-gray-500">Current Value</p>
+              <span className="text-2xl">💰</span>
+            </div>
+            <div className="text-3xl font-bold text-blue-600">
               SAR {totalValue.toLocaleString()}
             </div>
+            <p className="text-xs text-gray-500 mt-2">Portfolio Value</p>
           </CardContent>
         </Card>
 
-        <Card>
-          <CardHeader>
-            <CardTitle className="text-sm font-medium text-gray-500">
-              Total Profit
-            </CardTitle>
-          </CardHeader>
+        <Card hover className="sukuk-card-hover">
           <CardContent>
-            <div className={`text-2xl font-bold ${totalProfit >= 0 ? 'text-green-600' : 'text-red-600'}`}>
+            <div className="flex items-center justify-between mb-2">
+              <p className="text-sm font-medium text-gray-500">Total Return</p>
+              <span className="text-2xl">{totalProfit >= 0 ? '✨' : '📉'}</span>
+            </div>
+            <div className={`text-3xl font-bold ${totalProfit >= 0 ? 'text-green-600' : 'text-red-600'}`}>
               SAR {totalProfit.toLocaleString()}
             </div>
+            <p className={`text-xs mt-2 font-semibold ${returnPercentage >= 0 ? 'text-green-600' : 'text-red-600'}`}>
+              {returnPercentage >= 0 ? '↑' : '↓'} {Math.abs(returnPercentage).toFixed(2)}% Return
+            </p>
           </CardContent>
         </Card>
 
-        <Card>
-          <CardHeader>
-            <CardTitle className="text-sm font-medium text-gray-500">
-              Active Investments
-            </CardTitle>
-          </CardHeader>
+        <Card variant="gradient" className="sukuk-card-hover">
           <CardContent>
-            <div className="text-2xl font-bold text-gray-900">
+            <div className="flex items-center justify-between mb-2">
+              <p className="text-sm font-medium text-white/90">Active Sukuk</p>
+              <span className="text-2xl">🎯</span>
+            </div>
+            <div className="text-3xl font-bold text-white">
               {activeInvestments}
             </div>
+            <p className="text-xs text-white/80 mt-2">Investment Deals</p>
           </CardContent>
         </Card>
       </div>
 
+      {/* Recent Transactions */}
       <Card>
         <CardHeader>
-          <CardTitle>Recent Transactions</CardTitle>
+          <div className="flex items-center justify-between">
+            <div>
+              <CardTitle className="text-2xl font-bold text-gray-900">Recent Transactions</CardTitle>
+              <p className="text-sm text-gray-500 mt-1">Latest activity in your portfolio</p>
+            </div>
+            <span className="text-3xl">📊</span>
+          </div>
         </CardHeader>
         <CardContent>
           {recentTransactions.length === 0 ? (
-            <p className="text-gray-500 text-center py-8">
-              No transactions yet. Start by adding investments or importing data.
-            </p>
+            <div className="text-center py-16">
+              <div className="text-6xl mb-4">📭</div>
+              <p className="text-gray-500 text-lg font-medium">No transactions yet</p>
+              <p className="text-gray-400 text-sm mt-2">
+                Start by adding investments or importing data
+              </p>
+            </div>
           ) : (
-            <div className="space-y-4">
+            <div className="space-y-3">
               {recentTransactions.map((tx) => (
-                <div key={tx.id} className="flex justify-between items-center p-3 bg-gray-50 rounded-lg">
-                  <div>
-                    <div className="font-medium text-gray-900">
-                      {tx.investment?.name || tx.account.name}
+                <div 
+                  key={tx.id} 
+                  className="flex justify-between items-center p-4 bg-gradient-to-r from-gray-50 to-blue-50 rounded-xl hover:shadow-md transition-all duration-200 border border-gray-100"
+                >
+                  <div className="flex items-center space-x-4">
+                    <div className={`w-12 h-12 rounded-xl flex items-center justify-center text-xl ${
+                      tx.amount >= 0 ? 'bg-green-100' : 'bg-red-100'
+                    }`}>
+                      {tx.amount >= 0 ? '💵' : '💸'}
                     </div>
-                    <div className="text-sm text-gray-600">
-                      {new Date(tx.date).toLocaleDateString()} - {tx.type}
+                    <div>
+                      <div className="font-semibold text-gray-900">
+                        {tx.investment?.name || tx.account.name}
+                      </div>
+                      <div className="text-sm text-gray-600 flex items-center space-x-2">
+                        <span>{new Date(tx.date).toLocaleDateString()}</span>
+                        <span>•</span>
+                        <span className="px-2 py-0.5 bg-blue-100 text-blue-700 rounded-full text-xs font-medium">
+                          {tx.type}
+                        </span>
+                      </div>
                     </div>
                   </div>
                   <div className="text-right">
-                    <div className={`font-semibold ${tx.amount >= 0 ? 'text-green-600' : 'text-red-600'}`}>
-                      {tx.account.currency} {Math.abs(tx.amount).toLocaleString()}
+                    <div className={`text-xl font-bold ${tx.amount >= 0 ? 'text-green-600' : 'text-red-600'}`}>
+                      {tx.amount >= 0 ? '+' : '-'}{tx.account.currency} {Math.abs(tx.amount).toLocaleString()}
                     </div>
                   </div>
                 </div>
@@ -146,6 +188,35 @@ export default async function DashboardPage() {
           )}
         </CardContent>
       </Card>
+
+      {/* Quick Actions */}
+      {user.role === 'OWNER' && (
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+          <Card hover variant="bordered" className="sukuk-card-hover">
+            <CardContent className="text-center py-8">
+              <div className="text-5xl mb-4">📥</div>
+              <h3 className="text-lg font-semibold text-gray-900 mb-2">Import Data</h3>
+              <p className="text-sm text-gray-600">Upload CSV files to import Sukuk investments</p>
+            </CardContent>
+          </Card>
+          
+          <Card hover variant="bordered" className="sukuk-card-hover">
+            <CardContent className="text-center py-8">
+              <div className="text-5xl mb-4">➕</div>
+              <h3 className="text-lg font-semibold text-gray-900 mb-2">Add Investment</h3>
+              <p className="text-sm text-gray-600">Manually create a new Sukuk deal</p>
+            </CardContent>
+          </Card>
+          
+          <Card hover variant="bordered" className="sukuk-card-hover">
+            <CardContent className="text-center py-8">
+              <div className="text-5xl mb-4">📊</div>
+              <h3 className="text-lg font-semibold text-gray-900 mb-2">View Reports</h3>
+              <p className="text-sm text-gray-600">Generate detailed portfolio reports</p>
+            </CardContent>
+          </Card>
+        </div>
+      )}
     </div>
   )
 }
