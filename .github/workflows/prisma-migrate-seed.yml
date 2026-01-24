@@ -1,0 +1,51 @@
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - main
+
+jobs:
+  migrate-and-seed:
+    name: Deploy Prisma schema and run seed (Supabase)
+    runs-on: ubuntu-latest
+    env:
+      NODE_OPTIONS: "--max-old-space-size=4096"
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Use Node.js 20
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: 'npm'
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Generate Prisma client
+        run: npx prisma generate
+
+      - name: Ensure DATABASE_URL is available
+        run: echo "DATABASE_URL is set"
+        env:
+          DATABASE_URL: ${{ secrets.DATABASE_URL }}
+
+      - name: Push schema to database
+        run: npx prisma db push --schema=prisma/schema.prisma
+        env:
+          DATABASE_URL: ${{ secrets.DATABASE_URL }}
+
+      - name: Run Prisma migrations (if you prefer migrate instead of db push uncomment below)
+        # If you prefer migration history, replace the previous step with `npx prisma migrate deploy`
+        # run: npx prisma migrate deploy --schema=prisma/schema.prisma
+        # env:
+        #   DATABASE_URL: ${{ secrets.DATABASE_URL }}
+
+      - name: Run seed script
+        run: npm run prisma:seed
+        env:
+          DATABASE_URL: ${{ secrets.DATABASE_URL }}
+
+      - name: Confirm done
+        run: echo "Migrations and seed completed."
