@@ -28,10 +28,117 @@ jobs:
       - name: Generate Prisma client
         run: npx prisma generate
 
+      # --- DEBUG STEP: network & connectivity checks ---
+      - name: Debug - check DNS and TCP connectivity to DB host
+        run: |
+          echo "Parsing DATABASE_URL (host and port) for debug (no secret printed):"
+          python - <<'PY'
+import os,urllib.parse
+u = os.environ.get("DATABASE_URL") or ""
+if not u:
+  print("DATABASE_URL is empty")
+else:
+  p = urllib.parse.urlparse(u)
+  print("Host:", p.hostname or "<none>")
+  print("Port:", p.port or 5432)
+  print("User:", p.username or "<none>")
+  print("DB name:", p.path.lstrip('/') or "<none>")
+PY
+          echo
+          echo "Resolve DNS for host:"
+          python - <<'PY'
+import os,urllib.parse,socket
+u = os.environ.get("DATABASE_URL") or ""
+p = urllib.parse.urlparse(u)
+host = p.hostname or ""
+if host:
+  try:
+    print("Resolved IPs:", socket.getaddrinfo(host, None))
+  except Exception as e:
+    print("DNS resolution failed:", e)
+else:
+  print("No host parsed")
+PY
+          echo
+          echo "Install debug tools and test TCP connect to port 5432"
+          sudo apt-get update -y
+          sudo apt-get install -y netcat postgresql-client
+          HOST=$(python - <<'PY'
+import os,urllib.parse
+u = os.environ.get("DATABASE_URL") or ""
+p = urllib.parse.urlparse(u)
+print(p.hostname or "")
+PY
+)
+          if [ -z "$HOST" ]; then
+            echo "HOST empty - DATABASE_URL probably not set"
+          else
+            echo "Testing TCP connect to $HOST:5432 (may timeout if blocked)"
+            nc -vz "$HOST" 5432 || true
+          fi
+        env:
+          DATABASE_URL: ${{ secrets.DATABASE_URL }}
+
+      - name: Debug - attempt psql list databases (will be masked)
+        if: always()
+        run: |
+          echo "Attempting psql connection (may fail if credentials wrong or SSL missing)."
+          # extract components and run psql with sslmode=require
+          python - <<'PY'
+import os,urllib.parse
+u = os.environ.get("DATABASE_URL") or ""
+if not u:
+  print("DATABASE_URL not set")
+else:
+  p = urllib.parse.urlparse(u)
+  user = p.username or "postgres"
+  pwd = p.password or ""
+  host = p.hostname or ""
+  port = p.port or 5432
+  db = p.path.lstrip('/') or "postgres"
+  # print only host and db (not password)
+  print(f"Will attempt psql to host={host}, db={db}, user={user}")
+  # print connection string for psql (password not shown)
+  conn = f"postgresql://{user}:<REDACTED>@{host}:{port}/{db}?sslmode=require"
+  print("psql conn string (password redacted):", conn)
+PY
+          # Attempt psql; errors are fine (we capture output)
+          PGPASSWORD=$(python - <<'PY'
+import os,urllib.parse
+u = os.environ.get("DATABASE_URL") or ""
+p = urllib.parse.urlparse(u)
+print(p.password or "")
+PY
+)
+          HOST=$(python - <<'PY'
+import os,urllib.parse
+u = os.environ.get("DATABASE_URL") or ""
+p = urllib.parse.urlparse(u)
+print(p.hostname or "")
+PY
+)
+          DB=$(python - <<'PY'
+import os,urllib.parse
+u = os.environ.get("DATABASE_URL") or ""
+p = urllib.parse.urlparse(u)
+print(p.path.lstrip('/') or "postgres")
+PY
+)
+          if [ -z "$HOST" ]; then
+            echo "Skipping psql (no host parsed)"
+          else
+            # Use sslmode=require to match Supabase requirements
+            PGPASSWORD="$PGPASSWORD" psql "postgresql://postgres@$HOST:5432/$DB?sslmode=require" -c "\l" || true
+          fi
+        env:
+          DATABASE_URL: ${{ secrets.DATABASE_URL }}
+
+      # --- End debug steps ---
+
       - name: Run lint (allow failures)
         run: npm run lint || true
 
-      - name: Ensure DATABASE_URL is available
+      - name: Ensure DATABASE_URL is available (sanity)
         run: echo "DATABASE_URL is set"
         env:
           DATABASE_URL: ${{ secrets.DATABASE_URL }}
