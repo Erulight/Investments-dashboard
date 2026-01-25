@@ -5,7 +5,7 @@ interface TableProps {
 
 export function Table({ children, className = '' }: TableProps) {
   return (
-    <div className={`overflow-x-auto ${className}`}>
+    <div className={`overflow-x-auto rounded-xl ${className}`}>
       <table className="min-w-full divide-y divide-gray-200">
         {children}
       </table>
@@ -15,7 +15,7 @@ export function Table({ children, className = '' }: TableProps) {
 
 export function TableHeader({ children }: TableProps) {
   return (
-    <thead className="bg-gray-50">
+    <thead className="bg-gradient-to-r from-gray-50 to-blue-50">
       {children}
     </thead>
   )
@@ -23,7 +23,7 @@ export function TableHeader({ children }: TableProps) {
 
 export function TableBody({ children }: TableProps) {
   return (
-    <tbody className="bg-white divide-y divide-gray-200">
+    <tbody className="bg-white divide-y divide-gray-100">
       {children}
     </tbody>
   )
@@ -31,7 +31,7 @@ export function TableBody({ children }: TableProps) {
 
 export function TableRow({ children, className = '' }: TableProps) {
   return (
-    <tr className={className}>
+    <tr className={`transition-colors duration-150 ${className}`}>
       {children}
     </tr>
   )
@@ -39,7 +39,7 @@ export function TableRow({ children, className = '' }: TableProps) {
 
 export function TableHead({ children, className = '' }: TableProps) {
   return (
-    <th className={`px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider ${className}`}>
+    <th className={`px-6 py-4 text-left text-xs font-bold text-gray-700 uppercase tracking-wider ${className}`}>
       {children}
     </th>
   )
@@ -47,7 +47,7 @@ export function TableHead({ children, className = '' }: TableProps) {
 
 export function TableCell({ children, className = '' }: TableProps) {
   return (
-    <td className={`px-6 py-4 whitespace-nowrap text-sm text-gray-900 ${className}`}>
+    <td className={`px-6 py-4 text-sm text-gray-900 ${className}`}>
       {children}
     </td>
   )
