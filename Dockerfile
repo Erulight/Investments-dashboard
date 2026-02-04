@@ -26,26 +26,31 @@ ARG DATABASE_URL
 ENV JWT_SECRET=$JWT_SECRET
 ENV DATABASE_URL=$DATABASE_URL
 
-ENV NEXT_TELEMETRY_DISABLED 1
+ENV NEXT_TELEMETRY_DISABLED=1
 
 # Generate Prisma client and build the app
 RUN npx prisma generate
+
+# Ensure public directory exists (even if empty) before build
+RUN mkdir -p public
+
 RUN npm run build
 
 # Runner Setup
 FROM base AS runner
 WORKDIR /app
 
-ENV NODE_ENV production
-ENV NEXT_TELEMETRY_DISABLED 1
-ENV PORT 3000
-ENV HOSTNAME "0.0.0.0"
+ENV NODE_ENV=production
+ENV NEXT_TELEMETRY_DISABLED=1
+ENV PORT=3000
+ENV HOSTNAME="0.0.0.0"
 
 # Security & User
 RUN addgroup --system --gid 1001 nodejs
 RUN adduser --system --uid 1001 nextjs
 
 # Copy built files from the builder phase
+# Public folder is included in standalone output if it exists
 COPY --from=builder /app/public ./public
 COPY --from=builder --chown=nextjs:nodejs /app/.next/standalone ./
 COPY --from=builder --chown=nextjs:nodejs /app/.next/static ./.next/static
