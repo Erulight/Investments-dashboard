@@ -1,8 +1,7 @@
 import { Card, CardHeader, CardTitle, CardContent } from '@/components/ui/Card'
-import { Table, TableHeader, TableBody, TableRow, TableHead, TableCell } from '@/components/ui/Table'
-import Link from 'next/link'
 import { getCurrentUser } from '@/lib/auth'
 import { prisma } from '@/lib/db'
+import { SukukList } from '@/components/sukuk/SukukList'
 
 export default async function InvestmentsPage() {
   const user = await getCurrentUser()
@@ -102,88 +101,15 @@ export default async function InvestmentsPage() {
               <h3 className="text-2xl font-bold text-gray-900 mb-2">No Sukuk Investments Yet</h3>
               <p className="text-gray-500 text-lg">
                 {user.role === 'OWNER' 
-                  ? 'Start by importing data or creating your first Sukuk investment.' 
+                  ? 'Start by creating your first Sukuk investment.' 
                   : 'Contact the owner to add you to Sukuk investments.'}
               </p>
             </CardContent>
           </Card>
         ) : (
           <Card>
-            <CardHeader>
-              <div className="flex items-center justify-between">
-                <div>
-                  <CardTitle className="text-2xl font-bold text-gray-900">All Sukuk Deals</CardTitle>
-                  <p className="text-sm text-gray-500 mt-1">{investments.length} active investments</p>
-                </div>
-                {user.role === 'OWNER' && (
-                  <button className="px-6 py-3 bg-gradient-to-r from-blue-500 to-purple-600 text-white font-semibold rounded-xl shadow-lg hover:shadow-xl transform hover:-translate-y-0.5 transition-all duration-200">
-                    + Add New Deal
-                  </button>
-                )}
-              </div>
-            </CardHeader>
             <CardContent>
-              <Table>
-                <TableHeader>
-                  <TableRow>
-                    <TableHead>Deal Name</TableHead>
-                    <TableHead>Account Type</TableHead>
-                    <TableHead>Principal</TableHead>
-                    <TableHead>Current Value</TableHead>
-                    <TableHead>Profit/Loss</TableHead>
-                    <TableHead>Return %</TableHead>
-                    <TableHead>Status</TableHead>
-                  </TableRow>
-                </TableHeader>
-                <TableBody>
-                  {investments.map((inv: any) => {
-                    const principal = inv.myParticipation?.investedAmount || inv.principalAmount
-                    const current = inv.myParticipation?.currentValue || inv.currentValue
-                    const profit = inv.myParticipation?.profit || (inv.realizedProfit + inv.unrealizedProfit)
-                    const returnPct = principal > 0 ? ((current - principal) / principal * 100) : 0
-
-                    return (
-                      <TableRow key={inv.id} className="hover:bg-blue-50 transition-colors duration-150">
-                        <TableCell className="font-semibold text-gray-900">
-                          <div className="flex items-center space-x-2">
-                            <span className="text-xl">📄</span>
-                            <span>{inv.name}</span>
-                          </div>
-                        </TableCell>
-                        <TableCell>
-                          <span className="px-3 py-1 bg-blue-100 text-blue-700 rounded-full text-xs font-medium">
-                            {inv.account?.name}
-                          </span>
-                        </TableCell>
-                        <TableCell className="font-semibold text-gray-700">
-                          {inv.account?.currency} {principal.toLocaleString()}
-                        </TableCell>
-                        <TableCell className="font-semibold text-blue-600">
-                          {inv.account?.currency} {current.toLocaleString()}
-                        </TableCell>
-                        <TableCell>
-                          <div className={`flex items-center space-x-1 font-bold ${profit >= 0 ? 'text-green-600' : 'text-red-600'}`}>
-                            <span>{profit >= 0 ? '↑' : '↓'}</span>
-                            <span>{inv.account?.currency} {Math.abs(profit).toLocaleString()}</span>
-                          </div>
-                        </TableCell>
-                        <TableCell>
-                          <div className={`flex items-center space-x-1 font-bold ${returnPct >= 0 ? 'text-green-600' : 'text-red-600'}`}>
-                            <span>{returnPct >= 0 ? '↑' : '↓'}</span>
-                            <span>{Math.abs(returnPct).toFixed(2)}%</span>
-                          </div>
-                        </TableCell>
-                        <TableCell>
-                          <span className="px-3 py-1.5 inline-flex items-center text-xs leading-5 font-semibold rounded-full bg-green-100 text-green-800 shadow-sm">
-                            <span className="w-2 h-2 bg-green-500 rounded-full mr-2 animate-pulse"></span>
-                            Active
-                          </span>
-                        </TableCell>
-                      </TableRow>
-                    )
-                  })}
-                </TableBody>
-              </Table>
+              <SukukList initialSukuk={investments} userRole={user.role} />
             </CardContent>
           </Card>
         )}
