@@ -94,25 +94,11 @@ export default async function InvestmentsPage() {
 
       {/* Investments List */}
       <div className="grid grid-cols-1 gap-6">
-        {investments.length === 0 ? (
-          <Card>
-            <CardContent className="py-20 text-center">
-              <div className="text-7xl mb-6">💼</div>
-              <h3 className="text-2xl font-bold text-gray-900 mb-2">No Sukuk Investments Yet</h3>
-              <p className="text-gray-500 text-lg">
-                {user.role === 'OWNER' 
-                  ? 'Start by creating your first Sukuk investment.' 
-                  : 'Contact the owner to add you to Sukuk investments.'}
-              </p>
-            </CardContent>
-          </Card>
-        ) : (
-          <Card>
-            <CardContent>
-              <SukukList initialSukuk={investments} userRole={user.role} />
-            </CardContent>
-          </Card>
-        )}
+        <Card>
+          <CardContent>
+            <SukukList initialSukuk={investments} userRole={user.role} />
+          </CardContent>
+        </Card>
       </div>
 
       {/* Performance Overview for Owner */}
