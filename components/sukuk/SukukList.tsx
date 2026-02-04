@@ -22,6 +22,65 @@ export function SukukList({ initialSukuk, userRole }: SukukListProps) {
   const isEmpty = sukuk.length === 0
 
   const openCreateModal = () => setIsCreateModalOpen(true)
+  const asOfDate = new Date()
+  const asOfLabel = asOfDate.toLocaleDateString()
+
+  const toDate = (value?: string | Date | null) => {
+    if (!value) return null
+    const date = new Date(value)
+    if (Number.isNaN(date.getTime())) return null
+    return date
+  }
+
+  const formatDate = (value?: string | Date | null) => {
+    const date = toDate(value)
+    if (!date) return '-'
+    return date.toLocaleDateString('en-CA')
+  }
+
+  const formatCurrency = (value: number, currency?: string) => {
+    const amount = Number.isFinite(value) ? value : 0
+    const formatted = amount.toLocaleString(undefined, {
+      minimumFractionDigits: 2,
+      maximumFractionDigits: 2,
+    })
+    return currency ? `${currency} ${formatted}` : formatted
+  }
+
+  const formatPercent = (value: number) => {
+    const percent = Number.isFinite(value) ? value : 0
+    return `${percent.toFixed(2)}%`
+  }
+
+  const getPeriodMonths = (start?: string | Date | null, end?: string | Date | null) => {
+    const startDate = toDate(start)
+    const endDate = toDate(end)
+    if (!startDate || !endDate) return null
+    const months = (endDate.getFullYear() - startDate.getFullYear()) * 12
+      + (endDate.getMonth() - startDate.getMonth())
+      + (endDate.getDate() - startDate.getDate()) / 30
+    return Math.max(0, months)
+  }
+
+  const getDaysRemaining = (end?: string | Date | null) => {
+    const endDate = toDate(end)
+    if (!endDate) return null
+    const asOf = new Date(asOfDate.getFullYear(), asOfDate.getMonth(), asOfDate.getDate())
+    const endDay = new Date(endDate.getFullYear(), endDate.getMonth(), endDate.getDate())
+    const diffMs = endDay.getTime() - asOf.getTime()
+    const diffDays = Math.ceil(diffMs / (1000 * 60 * 60 * 24))
+    return Math.max(0, diffDays)
+  }
+
+  const getStatus = (daysRemaining: number | null, receivable: number, hasMaturityDate: boolean) => {
+    if (!hasMaturityDate) {
+      return { label: 'Active', className: 'bg-blue-100 text-blue-800' }
+    }
+    if (daysRemaining === 0 || receivable <= 0) {
+      return { label: 'Completed', className: 'bg-green-100 text-green-800' }
+    }
+    return { label: 'Pending', className: 'bg-yellow-100 text-yellow-800' }
+  }
 
   const handleCreateSuccess = () => {
     setIsCreateModalOpen(false)
@@ -68,20 +127,23 @@ export function SukukList({ initialSukuk, userRole }: SukukListProps) {
 
   return (
     <>
-      <div className="flex items-center justify-between mb-4">
+      <div className="flex flex-wrap items-center justify-between gap-4 mb-4">
         <div>
           <h2 className="text-2xl font-bold text-gray-900">All Sukuk Deals</h2>
           <p className="text-sm text-gray-500 mt-1">{sukuk.length} active investments</p>
         </div>
-        {userRole === 'OWNER' && (
-          <Button
-            onClick={openCreateModal}
-            variant="primary"
-            size="lg"
-          >
-            + Add New Deal
-          </Button>
-        )}
+        <div className="flex items-center gap-4">
+          <span className="text-sm text-gray-500">As of {asOfLabel}</span>
+          {userRole === 'OWNER' && (
+            <Button
+              onClick={openCreateModal}
+              variant="primary"
+              size="lg"
+            >
+              + Add New Deal
+            </Button>
+          )}
+        </div>
       </div>
 
       {isEmpty ? (
@@ -103,12 +165,19 @@ export function SukukList({ initialSukuk, userRole }: SukukListProps) {
         <Table>
           <TableHeader>
             <TableRow>
-              <TableHead>Deal Name</TableHead>
-              <TableHead>Account Type</TableHead>
-              <TableHead>Principal</TableHead>
-              <TableHead>Current Value</TableHead>
-              <TableHead>Profit/Loss</TableHead>
-              <TableHead>Return %</TableHead>
+              <TableHead>Platform</TableHead>
+              <TableHead>Sukuk Type</TableHead>
+              <TableHead>Company Name</TableHead>
+              <TableHead>Total Investment</TableHead>
+              <TableHead>APR</TableHead>
+              <TableHead>APR After Fees</TableHead>
+              <TableHead>Total Investment Period</TableHead>
+              <TableHead>Maturity Date</TableHead>
+              <TableHead>Maturity Days Remaining</TableHead>
+              <TableHead>Fees</TableHead>
+              <TableHead>Net Profit</TableHead>
+              <TableHead>Total Received</TableHead>
+              <TableHead>Receivable</TableHead>
               <TableHead>Status</TableHead>
               {userRole === 'OWNER' && <TableHead>Actions</TableHead>}
             </TableRow>
@@ -116,45 +185,71 @@ export function SukukList({ initialSukuk, userRole }: SukukListProps) {
           <TableBody>
             {sukuk.map((inv: any) => {
               const principal = inv.myParticipation?.investedAmount || inv.principalAmount
-              const current = inv.myParticipation?.currentValue || inv.currentValue
-              const profit = inv.myParticipation?.profit || (inv.realizedProfit + inv.unrealizedProfit)
-              const returnPct = principal > 0 ? ((current - principal) / principal * 100) : 0
+              const totalInvestment = Number.isFinite(principal) ? principal : 0
+              const apr = Number.isFinite(inv.interestRate) ? inv.interestRate : 0
+              const fees = Number.isFinite(inv.fees) ? inv.fees : 0
+              const totalReceived = Number.isFinite(inv.totalReceived) ? inv.totalReceived : 0
+              const periodMonths = getPeriodMonths(inv.startDate, inv.maturityDate)
+              const periodYears = periodMonths ? periodMonths / 12 : 0
+              const grossProfit = totalInvestment > 0 && apr > 0 && periodYears > 0
+                ? totalInvestment * (apr / 100) * periodYears
+                : 0
+              const netProfit = grossProfit - fees
+              const aprAfterFees = totalInvestment > 0 ? (netProfit / totalInvestment) * 100 : 0
+              const receivable = Math.max(0, netProfit - totalReceived)
+              const daysRemaining = getDaysRemaining(inv.maturityDate)
+              const status = getStatus(daysRemaining, receivable, Boolean(inv.maturityDate))
+              const currency = inv.account?.currency || ''
 
               return (
                 <TableRow key={inv.id} className="hover:bg-blue-50 transition-colors duration-150">
-                  <TableCell className="font-semibold text-gray-900">
-                    <div className="flex items-center space-x-2">
-                      <span className="text-xl">📄</span>
-                      <span>{inv.name}</span>
-                    </div>
-                  </TableCell>
                   <TableCell>
                     <span className="px-3 py-1 bg-blue-100 text-blue-700 rounded-full text-xs font-medium">
-                      {inv.account?.name}
+                      {inv.account?.name || '—'}
                     </span>
                   </TableCell>
+                  <TableCell>
+                    <span className="px-3 py-1 bg-gray-100 text-gray-700 rounded-full text-xs font-medium">
+                      {inv.category || '—'}
+                    </span>
+                  </TableCell>
+                  <TableCell className="font-semibold text-gray-900">
+                    {inv.name}
+                  </TableCell>
                   <TableCell className="font-semibold text-gray-700">
-                    {inv.account?.currency} {principal.toLocaleString()}
+                    {formatCurrency(totalInvestment, currency)}
                   </TableCell>
                   <TableCell className="font-semibold text-blue-600">
-                    {inv.account?.currency} {current.toLocaleString()}
+                    {formatPercent(apr)}
+                  </TableCell>
+                  <TableCell className="font-semibold text-blue-600">
+                    {formatPercent(aprAfterFees)}
+                  </TableCell>
+                  <TableCell className="font-semibold text-gray-700">
+                    {periodMonths === null ? '—' : periodMonths.toFixed(1)}
+                  </TableCell>
+                  <TableCell className="font-semibold text-gray-700">
+                    {formatDate(inv.maturityDate)}
+                  </TableCell>
+                  <TableCell className="font-semibold text-gray-700">
+                    {daysRemaining === null ? '—' : daysRemaining}
+                  </TableCell>
+                  <TableCell className="font-semibold text-gray-700">
+                    {formatCurrency(fees, currency)}
+                  </TableCell>
+                  <TableCell className="font-semibold text-gray-700">
+                    {formatCurrency(netProfit, currency)}
+                  </TableCell>
+                  <TableCell className="font-semibold text-gray-700">
+                    {formatCurrency(totalReceived, currency)}
+                  </TableCell>
+                  <TableCell className="font-semibold text-gray-700">
+                    {formatCurrency(receivable, currency)}
                   </TableCell>
                   <TableCell>
-                    <div className={`flex items-center space-x-1 font-bold ${profit >= 0 ? 'text-green-600' : 'text-red-600'}`}>
-                      <span>{profit >= 0 ? '↑' : '↓'}</span>
-                      <span>{inv.account?.currency} {Math.abs(profit).toLocaleString()}</span>
-                    </div>
-                  </TableCell>
-                  <TableCell>
-                    <div className={`flex items-center space-x-1 font-bold ${returnPct >= 0 ? 'text-green-600' : 'text-red-600'}`}>
-                      <span>{returnPct >= 0 ? '↑' : '↓'}</span>
-                      <span>{Math.abs(returnPct).toFixed(2)}%</span>
-                    </div>
-                  </TableCell>
-                  <TableCell>
-                    <span className="px-3 py-1.5 inline-flex items-center text-xs leading-5 font-semibold rounded-full bg-green-100 text-green-800 shadow-sm">
-                      <span className="w-2 h-2 bg-green-500 rounded-full mr-2 animate-pulse"></span>
-                      Active
+                    <span className={`px-3 py-1.5 inline-flex items-center text-xs leading-5 font-semibold rounded-full shadow-sm ${status.className}`}>
+                      <span className="w-2 h-2 bg-current rounded-full mr-2 opacity-70"></span>
+                      {status.label}
                     </span>
                   </TableCell>
                   {userRole === 'OWNER' && (
