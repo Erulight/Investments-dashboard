@@ -30,10 +30,6 @@ ENV NEXT_TELEMETRY_DISABLED=1
 
 # Generate Prisma client and build the app
 RUN npx prisma generate
-
-# Ensure public directory exists (even if empty) before build
-RUN mkdir -p public
-
 RUN npm run build
 
 # Runner Setup
