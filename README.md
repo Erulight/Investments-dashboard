@@ -230,12 +230,21 @@ This starts:
 
 ### Production Deployment
 
-1. Build the image:
+#### Docker Build with Build Arguments
+
+The Dockerfile requires `JWT_SECRET` and `DATABASE_URL` to be passed as build arguments for the build step:
+
 ```bash
-docker build -t investments-dashboard .
+docker build \
+  --build-arg JWT_SECRET="your-jwt-secret" \
+  --build-arg DATABASE_URL="postgresql://user:pass@host:port/db" \
+  -t investments-dashboard .
 ```
 
-2. Run with environment variables:
+#### Running the Container
+
+Run with environment variables (these will be used at runtime):
+
 ```bash
 docker run -d \
   -p 3000:3000 \
@@ -243,6 +252,22 @@ docker run -d \
   -e JWT_SECRET="..." \
   investments-dashboard
 ```
+
+#### Railway Deployment
+
+For Railway or similar platforms, ensure the following build and runtime environment variables are configured:
+
+**Build-time variables** (set in Railway build settings):
+- `JWT_SECRET`: Your JWT secret key
+- `DATABASE_URL`: PostgreSQL connection string (automatically provided by Railway if using Railway PostgreSQL)
+
+**Runtime variables** (set in Railway service variables):
+- `JWT_SECRET`: Same as build-time
+- `DATABASE_URL`: Same as build-time
+- `COOKIE_SECURE`: Set to `"true"` for production
+- `COOKIE_SAME_SITE`: Recommended `"lax"` or `"strict"`
+
+**Note**: The Dockerfile uses `ARG` and `ENV` instructions to ensure environment variables are available during the build process, particularly for Prisma client generation and Next.js build.
 
 ## 🧪 Testing
 

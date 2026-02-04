@@ -3,13 +3,13 @@ generator client {
 }
 
 datasource db {
-  provider = "sqlite"
+  provider = "postgresql"
   url      = env("DATABASE_URL")
 }
 
-// Note: This schema uses SQLite for development convenience.
-// For production with PostgreSQL, change provider to "postgresql"
-// and update DATABASE_URL to a PostgreSQL connection string.
+// Note: This schema uses PostgreSQL for production.
+// For local development with SQLite, change provider to "sqlite"
+// and update DATABASE_URL (e.g., "file:./dev.db").
 
 model User {
   id                String   @id @default(cuid())
