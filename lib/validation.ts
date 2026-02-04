@@ -13,6 +13,7 @@ export const createSukukSchema = z.object({
   maturityDate: z.string().optional().refine((date) => !date || !isNaN(Date.parse(date)), {
     message: 'Invalid maturity date',
   }),
+  // Note: Using 'interestRate' to match existing database schema, but represents profit/return rate for Sukuk
   interestRate: z.number().min(0).max(100).optional(),
   notes: z.string().optional(),
   metadata: z.string().optional(),

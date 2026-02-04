@@ -216,7 +216,7 @@ export function SukukForm({ mode, initialData, onSuccess, onCancel }: SukukFormP
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
           <div>
             <label htmlFor="principalAmount" className="block text-sm font-medium text-gray-700 mb-1">
-              Principal Amount * (SAR)
+              Principal Amount *
             </label>
             <input
               type="number"
@@ -235,7 +235,7 @@ export function SukukForm({ mode, initialData, onSuccess, onCancel }: SukukFormP
 
           <div>
             <label htmlFor="currentValue" className="block text-sm font-medium text-gray-700 mb-1">
-              Current Value (SAR)
+              Current Value
             </label>
             <input
               type="number"
@@ -254,7 +254,7 @@ export function SukukForm({ mode, initialData, onSuccess, onCancel }: SukukFormP
 
         <div>
           <label htmlFor="interestRate" className="block text-sm font-medium text-gray-700 mb-1">
-            Interest Rate (%)
+            Profit Rate (%)
           </label>
           <input
             type="number"
