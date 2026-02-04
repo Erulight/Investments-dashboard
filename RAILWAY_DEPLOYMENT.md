@@ -18,8 +18,8 @@ These variables must be set as **both build-time and runtime variables**:
 
 | Variable | Description | Example |
 |----------|-------------|---------|
-| `JWT_SECRET` | Secret key for JWT token signing | `b0cd8e599b04030c55a597a5ef5a1ff1` |
-| `DATABASE_URL` | PostgreSQL connection string | `postgresql://user:pass@host:port/db` |
+| `JWT_SECRET` | Secret key for JWT token signing | `your-secure-random-jwt-secret-key-here` |
+| `DATABASE_URL` | PostgreSQL connection string | `postgresql://user:password@host:port/database` |
 
 ### Optional Runtime Variables
 
@@ -56,7 +56,7 @@ These variables must be set as **both build-time and runtime variables**:
 3. Add the following variables:
 
 **Build and Runtime Variables:**
-- `JWT_SECRET`: Your JWT secret key (e.g., `b0cd8e599b04030c55a597a5ef5a1ff1`)
+- `JWT_SECRET`: Your JWT secret key (generate with `openssl rand -hex 32`)
 
 **Runtime-Only Variables:**
 - `COOKIE_SECURE`: `true`

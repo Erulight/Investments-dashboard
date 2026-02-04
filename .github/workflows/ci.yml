@@ -10,8 +10,8 @@ jobs:
     runs-on: ubuntu-latest
     env:
       NODE_OPTIONS: "--max-old-space-size=4096"
-      JWT_SECRET: ${{ secrets.JWT_SECRET || 'test-secret-for-ci' }}
-      DATABASE_URL: ${{ secrets.DATABASE_URL || 'postgresql://test:test@localhost:5432/testdb' }}
+      JWT_SECRET: ${{ secrets.JWT_SECRET || 'ci-test-secret-do-not-use-in-production-12345678' }}
+      DATABASE_URL: ${{ secrets.DATABASE_URL || 'postgresql://testuser:testpass@localhost:5432/testdb' }}
     steps:
       - name: Check out repository
         uses: actions/checkout@v4
