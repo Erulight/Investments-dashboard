@@ -49,6 +49,8 @@ export async function POST(req: NextRequest) {
           startDate: new Date(data.startDate),
           maturityDate: data.maturityDate ? new Date(data.maturityDate) : null,
           interestRate: data.interestRate,
+          fees: data.fees ?? 0,
+          totalReceived: data.totalReceived ?? 0,
           notes: data.notes,
           metadata: data.metadata,
         },

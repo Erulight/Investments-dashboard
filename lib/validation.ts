@@ -15,6 +15,8 @@ export const createSukukSchema = z.object({
   }),
   // Note: Using 'interestRate' to match existing database schema, but represents profit/return rate for Sukuk
   interestRate: z.number().min(0).max(100).optional(),
+  fees: z.number().min(0, 'Fees cannot be negative').optional(),
+  totalReceived: z.number().min(0, 'Total received cannot be negative').optional(),
   notes: z.string().optional(),
   metadata: z.string().optional(),
   participants: z.array(z.object({
@@ -38,6 +40,8 @@ export const updateSukukSchema = z.object({
     message: 'Invalid maturity date',
   }),
   interestRate: z.number().min(0).max(100).optional(),
+  fees: z.number().min(0, 'Fees cannot be negative').optional(),
+  totalReceived: z.number().min(0, 'Total received cannot be negative').optional(),
   notes: z.string().optional(),
   metadata: z.string().optional(),
   participants: z.array(z.object({

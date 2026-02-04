@@ -126,6 +126,8 @@ export async function PUT(
         updateData.maturityDate = data.maturityDate ? new Date(data.maturityDate) : null
       }
       if (data.interestRate !== undefined) updateData.interestRate = data.interestRate
+      if (data.fees !== undefined) updateData.fees = data.fees
+      if (data.totalReceived !== undefined) updateData.totalReceived = data.totalReceived
       if (data.notes !== undefined) updateData.notes = data.notes
       if (data.metadata !== undefined) updateData.metadata = data.metadata
       
