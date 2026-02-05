@@ -96,7 +96,7 @@ export function SukukList({ initialSukuk, userRole }: SukukListProps) {
     const endDay = new Date(endDate.getFullYear(), endDate.getMonth(), endDate.getDate())
     const diffMs = endDay.getTime() - asOf.getTime()
     const diffDays = Math.ceil(diffMs / (1000 * 60 * 60 * 24))
-    return Math.max(0, diffDays)
+    return diffDays
   }
 
   const getProgress = (netProfit: number, totalReceived: number) => {
@@ -119,7 +119,10 @@ export function SukukList({ initialSukuk, userRole }: SukukListProps) {
     const grossProfit = totalInvestment > 0 && apr > 0 && periodYears > 0
       ? totalInvestment * (apr / 100) * periodYears
       : 0
-    const netProfit = Math.max(0, grossProfit - fees)
+    const manualReceivable = Number.isFinite(inv.receivableAmount) ? inv.receivableAmount : null
+    const netProfit = manualReceivable !== null && manualReceivable > 0
+      ? manualReceivable
+      : Math.max(0, grossProfit - fees)
     const aprAfterFees = totalInvestment > 0 ? (netProfit / totalInvestment) * 100 : 0
     const receivable = Math.max(0, netProfit - totalReceived)
     const daysRemaining = getDaysRemaining(inv.maturityDate)
@@ -128,7 +131,9 @@ export function SukukList({ initialSukuk, userRole }: SukukListProps) {
 
     return {
       totalInvestment,
-      apr,
+      apr: manualReceivable !== null && manualReceivable > 0 && periodYears
+        ? ((manualReceivable + fees) / totalInvestment / periodYears) * 100
+        : apr,
       fees,
       totalReceived,
       periodMonths,
@@ -136,6 +141,12 @@ export function SukukList({ initialSukuk, userRole }: SukukListProps) {
       aprAfterFees,
       receivable,
       daysRemaining,
+      paymentStatus:
+        daysRemaining !== null && daysRemaining < 0 && receivable > 0
+          ? 'delayed'
+          : daysRemaining !== null && daysRemaining > 0 && totalReceived > 0
+            ? 'early'
+            : 'on-time',
       progress,
       currency,
     }
@@ -382,7 +393,19 @@ export function SukukList({ initialSukuk, userRole }: SukukListProps) {
                     {formatDate(inv.maturityDate)}
                   </TableCell>
                   <TableCell className="px-2 py-2 text-gray-700 tabular-nums">
-                    {metrics.daysRemaining === null ? '—' : metrics.daysRemaining}
+                    {metrics.daysRemaining === null ? (
+                      '—'
+                    ) : metrics.daysRemaining < 0 && metrics.receivable > 0 ? (
+                      <span className="text-red-600 font-semibold">
+                        Delayed {Math.abs(metrics.daysRemaining)}d
+                      </span>
+                    ) : metrics.daysRemaining > 0 && metrics.totalReceived > 0 ? (
+                      <span className="text-emerald-600 font-semibold">
+                        Early {metrics.daysRemaining}d
+                      </span>
+                    ) : (
+                      metrics.daysRemaining
+                    )}
                   </TableCell>
                   <TableCell className="px-2 py-2 text-gray-700 tabular-nums">
                     {formatCurrency(metrics.fees, metrics.currency)}
@@ -399,6 +422,7 @@ export function SukukList({ initialSukuk, userRole }: SukukListProps) {
                   <TableCell className="px-2 py-2">
                     <span className={`px-2 py-1 inline-flex items-center text-[10px] leading-4 font-semibold rounded-full shadow-sm ${metrics.progress.className}`}>
                       <span className="w-2 h-2 bg-current rounded-full mr-2 opacity-70"></span>
+                      {metrics.paymentStatus === 'delayed' ? 'Delayed ' : metrics.paymentStatus === 'early' ? 'Early ' : ''}
                       {metrics.progress.percent.toFixed(2)}%
                     </span>
                   </TableCell>
@@ -562,7 +586,14 @@ export function SukukList({ initialSukuk, userRole }: SukukListProps) {
                 <div>
                   <p className="text-gray-500">Status %</p>
                   <p className="font-semibold text-gray-900">
+                    {(metrics.paymentStatus === 'delayed' ? 'Delayed ' : metrics.paymentStatus === 'early' ? 'Early ' : '')}
                     {metrics.progress.percent.toFixed(2)}%
+                  </p>
+                </div>
+                <div>
+                  <p className="text-gray-500">Payment Timing</p>
+                  <p className="font-semibold text-gray-900 capitalize">
+                    {metrics.paymentStatus.replace('-', ' ')}
                   </p>
                 </div>
               </div>

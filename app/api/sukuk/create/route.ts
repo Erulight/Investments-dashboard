@@ -23,6 +23,19 @@ export async function POST(req: NextRequest) {
     }
     
     const data = validationResult.data
+    const receivableAmount = data.receivableAmount ?? 0
+    const fees = data.fees ?? 0
+    const startDate = new Date(data.startDate)
+    const maturityDate = data.maturityDate ? new Date(data.maturityDate) : null
+    const periodMonths = maturityDate
+      ? (maturityDate.getFullYear() - startDate.getFullYear()) * 12
+        + (maturityDate.getMonth() - startDate.getMonth())
+        + (maturityDate.getDate() - startDate.getDate()) / 30
+      : null
+    const periodYears = periodMonths ? periodMonths / 12 : null
+    const computedApr = periodYears && data.principalAmount > 0
+      ? ((receivableAmount + fees) / data.principalAmount / periodYears) * 100
+      : data.interestRate
     
     // Check if account exists
     const account = await prisma.account.findUnique({
@@ -57,11 +70,12 @@ export async function POST(req: NextRequest) {
           category: data.category,
           principalAmount: data.principalAmount,
           currentValue: data.currentValue ?? data.principalAmount,
-          startDate: new Date(data.startDate),
-          maturityDate: data.maturityDate ? new Date(data.maturityDate) : null,
-          interestRate: data.interestRate,
-          fees: data.fees ?? 0,
+          startDate,
+          maturityDate,
+          interestRate: computedApr,
+          fees,
           totalReceived: data.totalReceived ?? 0,
+          receivableAmount,
           notes: data.notes,
           metadata: data.metadata,
         },

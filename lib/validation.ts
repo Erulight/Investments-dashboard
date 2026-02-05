@@ -17,6 +17,7 @@ export const createSukukSchema = z.object({
   interestRate: z.number().min(0).max(100).optional(),
   fees: z.number().min(0, 'Fees cannot be negative').optional(),
   totalReceived: z.number().min(0, 'Total received cannot be negative').optional(),
+  receivableAmount: z.number().min(0, 'Receivable cannot be negative').optional(),
   notes: z.string().optional(),
   metadata: z.string().optional(),
   participants: z.array(z.object({
@@ -42,6 +43,7 @@ export const updateSukukSchema = z.object({
   interestRate: z.number().min(0).max(100).optional(),
   fees: z.number().min(0, 'Fees cannot be negative').optional(),
   totalReceived: z.number().min(0, 'Total received cannot be negative').optional(),
+  receivableAmount: z.number().min(0, 'Receivable cannot be negative').optional(),
   notes: z.string().optional(),
   metadata: z.string().optional(),
   participants: z.array(z.object({
