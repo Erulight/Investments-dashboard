@@ -1,6 +1,7 @@
 import { getCurrentUser } from '@/lib/auth'
 import { Card, CardHeader, CardTitle, CardContent } from '@/components/ui/Card'
 import { prisma } from '@/lib/db'
+import { DEMO_INVESTMENT_NAMES } from '@/lib/demo'
 
 export default async function DashboardPage() {
   const user = await getCurrentUser()
@@ -16,7 +17,10 @@ export default async function DashboardPage() {
 
   if (user.role === 'OWNER') {
     const investments = await prisma.investment.findMany({
-      where: { account: { isActive: true } },
+      where: {
+        account: { isActive: true },
+        name: { notIn: DEMO_INVESTMENT_NAMES },
+      },
     })
 
     totalInvested = investments.reduce((sum, inv) => sum + inv.principalAmount, 0)
@@ -28,7 +32,12 @@ export default async function DashboardPage() {
     activeInvestments = investments.length
   } else if (user.role === 'PARTNER' && user.personId) {
     const participants = await prisma.dealParticipant.findMany({
-      where: { personId: user.personId },
+      where: {
+        personId: user.personId,
+        investment: {
+          name: { notIn: DEMO_INVESTMENT_NAMES },
+        },
+      },
       include: { investment: true },
     })
 
@@ -38,11 +47,24 @@ export default async function DashboardPage() {
     activeInvestments = participants.length
   }
 
+  const transactionWhere =
+    user.role === 'PARTNER' && user.personId
+      ? {
+          personId: user.personId,
+          OR: [
+            { investment: { name: { notIn: DEMO_INVESTMENT_NAMES } } },
+            { investmentId: null },
+          ],
+        }
+      : {
+          OR: [
+            { investment: { name: { notIn: DEMO_INVESTMENT_NAMES } } },
+            { investmentId: null },
+          ],
+        }
+
   const recentTransactions = await prisma.transaction.findMany({
-    where:
-      user.role === 'PARTNER' && user.personId
-        ? { personId: user.personId }
-        : {},
+    where: transactionWhere,
     take: 10,
     orderBy: { date: 'desc' },
     include: {

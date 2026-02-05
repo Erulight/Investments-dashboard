@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { prisma } from '@/lib/db'
 import { requireAuth } from '@/lib/rbac'
+import { DEMO_INVESTMENT_NAMES } from '@/lib/demo'
 
 export async function GET(req: NextRequest) {
   try {
@@ -13,7 +14,10 @@ export async function GET(req: NextRequest) {
 
     if (user.role === 'OWNER') {
       const investments = await prisma.investment.findMany({
-        where: { account: { isActive: true } },
+        where: {
+          account: { isActive: true },
+          name: { notIn: DEMO_INVESTMENT_NAMES },
+        },
       })
 
       totalInvested = investments.reduce((sum, inv) => sum + inv.principalAmount, 0)
@@ -25,7 +29,12 @@ export async function GET(req: NextRequest) {
       activeInvestments = investments.length
     } else if (user.role === 'PARTNER' && user.personId) {
       const participants = await prisma.dealParticipant.findMany({
-        where: { personId: user.personId },
+        where: {
+          personId: user.personId,
+          investment: {
+            name: { notIn: DEMO_INVESTMENT_NAMES },
+          },
+        },
         include: { investment: true },
       })
 
@@ -35,11 +44,24 @@ export async function GET(req: NextRequest) {
       activeInvestments = participants.length
     }
 
+    const transactionWhere =
+      user.role === 'PARTNER' && user.personId
+        ? {
+            personId: user.personId,
+            OR: [
+              { investment: { name: { notIn: DEMO_INVESTMENT_NAMES } } },
+              { investmentId: null },
+            ],
+          }
+        : {
+            OR: [
+              { investment: { name: { notIn: DEMO_INVESTMENT_NAMES } } },
+              { investmentId: null },
+            ],
+          }
+
     const recentTransactions = await prisma.transaction.findMany({
-      where:
-        user.role === 'PARTNER' && user.personId
-          ? { personId: user.personId }
-          : {},
+      where: transactionWhere,
       take: 10,
       orderBy: { date: 'desc' },
       include: {

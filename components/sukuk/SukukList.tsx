@@ -37,6 +37,7 @@ export function SukukList({ initialSukuk, userRole }: SukukListProps) {
   })
   const [partners, setPartners] = useState<any[]>([])
   const [actionError, setActionError] = useState('')
+  const [actionLoading, setActionLoading] = useState(false)
   const isEmpty = sukuk.length === 0
 
   const openCreateModal = () => setIsCreateModalOpen(true)
@@ -187,8 +188,15 @@ export function SukukList({ initialSukuk, userRole }: SukukListProps) {
   const handleWithdraw = async (e: React.FormEvent) => {
     e.preventDefault()
     if (!withdrawTarget) return
+    if (actionLoading) return
     setActionError('')
+    setActionLoading(true)
     try {
+      if (!withdrawForm.amount) {
+        setActionError('Amount is required')
+        setActionLoading(false)
+        return
+      }
       const res = await fetch(`/api/sukuk/${withdrawTarget.id}/withdraw`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -208,13 +216,17 @@ export function SukukList({ initialSukuk, userRole }: SukukListProps) {
       router.refresh()
     } catch (error) {
       setActionError('Failed to withdraw')
+    } finally {
+      setActionLoading(false)
     }
   }
 
   const handleSell = async (e: React.FormEvent) => {
     e.preventDefault()
     if (!sellTarget) return
+    if (actionLoading) return
     setActionError('')
+    setActionLoading(true)
     try {
       const res = await fetch(`/api/sukuk/${sellTarget.id}/sell`, {
         method: 'POST',
@@ -236,6 +248,8 @@ export function SukukList({ initialSukuk, userRole }: SukukListProps) {
       router.refresh()
     } catch (error) {
       setActionError('Failed to sell')
+    } finally {
+      setActionLoading(false)
     }
   }
 
@@ -605,11 +619,11 @@ export function SukukList({ initialSukuk, userRole }: SukukListProps) {
             />
           </div>
           <div className="flex justify-end gap-3">
-            <Button type="button" variant="secondary" onClick={() => setWithdrawTarget(null)}>
+            <Button type="button" variant="secondary" onClick={() => setWithdrawTarget(null)} disabled={actionLoading}>
               Cancel
             </Button>
-            <Button type="submit" variant="primary">
-              Withdraw
+            <Button type="submit" variant="primary" disabled={actionLoading}>
+              {actionLoading ? 'Processing...' : 'Withdraw'}
             </Button>
           </div>
         </form>
@@ -696,11 +710,11 @@ export function SukukList({ initialSukuk, userRole }: SukukListProps) {
             />
           </div>
           <div className="flex justify-end gap-3">
-            <Button type="button" variant="secondary" onClick={() => setSellTarget(null)}>
+            <Button type="button" variant="secondary" onClick={() => setSellTarget(null)} disabled={actionLoading}>
               Cancel
             </Button>
-            <Button type="submit" variant="primary">
-              Sell
+            <Button type="submit" variant="primary" disabled={actionLoading}>
+              {actionLoading ? 'Processing...' : 'Sell'}
             </Button>
           </div>
         </form>
