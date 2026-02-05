@@ -9,6 +9,14 @@ global.fetch = vi.fn()
 describe('SukukForm Component', () => {
   const mockOnSuccess = vi.fn()
   const mockOnCancel = vi.fn()
+  const mockAccountsResponse = {
+    ok: true,
+    json: async () => ({
+      accounts: [
+        { id: 'account-1', name: 'Sukuk Investments', currency: 'SAR' },
+      ],
+    }),
+  }
 
   beforeEach(() => {
     vi.clearAllMocks()
@@ -16,6 +24,7 @@ describe('SukukForm Component', () => {
   })
 
   it('renders create form with all required fields', () => {
+    ;(global.fetch as any).mockResolvedValueOnce(mockAccountsResponse)
     render(
       <SukukForm
         mode="create"
@@ -26,7 +35,7 @@ describe('SukukForm Component', () => {
 
     // Check for required fields
     expect(screen.getByLabelText(/Sukuk Name/i)).toBeInTheDocument()
-    expect(screen.getByLabelText(/Account ID/i)).toBeInTheDocument()
+    expect(screen.getByLabelText(/Account/i)).toBeInTheDocument()
     expect(screen.getByLabelText(/Principal Amount/i)).toBeInTheDocument()
     expect(screen.getByLabelText(/Start Date/i)).toBeInTheDocument()
 
@@ -41,7 +50,8 @@ describe('SukukForm Component', () => {
     expect(screen.getByRole('button', { name: /Create Sukuk/i })).toBeInTheDocument()
   })
 
-  it('renders edit form with initial data', () => {
+  it('renders edit form with initial data', async () => {
+    ;(global.fetch as any).mockResolvedValueOnce(mockAccountsResponse)
     const initialData = {
       id: 'sukuk-1',
       accountId: 'account-1',
@@ -65,13 +75,15 @@ describe('SukukForm Component', () => {
     )
 
     expect(screen.getByDisplayValue('Test Sukuk')).toBeInTheDocument()
-    expect(screen.getByDisplayValue('account-1')).toBeInTheDocument()
+    await screen.findByRole('option', { name: /Sukuk Investments/i })
+    expect(screen.getByLabelText(/Account/i)).toHaveValue('account-1')
     expect(screen.getByDisplayValue('100000')).toBeInTheDocument()
     expect(screen.getByDisplayValue('Corporate')).toBeInTheDocument()
     expect(screen.getByRole('button', { name: /Update Sukuk/i })).toBeInTheDocument()
   })
 
   it('validates required fields on submit', async () => {
+    ;(global.fetch as any).mockResolvedValueOnce(mockAccountsResponse)
     render(
       <SukukForm
         mode="create"
@@ -82,7 +94,7 @@ describe('SukukForm Component', () => {
 
     // Verify required fields have the required attribute
     const nameInput = screen.getByLabelText(/Sukuk Name/i)
-    const accountIdInput = screen.getByLabelText(/Account ID/i)
+    const accountIdInput = screen.getByLabelText(/Account/i)
     const principalInput = screen.getByLabelText(/Principal Amount/i)
     const startDateInput = screen.getByLabelText(/Start Date/i)
     
@@ -95,7 +107,9 @@ describe('SukukForm Component', () => {
   it('submits form with valid data', async () => {
     const user = userEvent.setup()
 
-    ;(global.fetch as any).mockResolvedValueOnce({
+    ;(global.fetch as any)
+      .mockResolvedValueOnce(mockAccountsResponse)
+      .mockResolvedValueOnce({
       ok: true,
       json: async () => ({ success: true, sukuk: { id: 'sukuk-1' } }),
     })
@@ -110,7 +124,8 @@ describe('SukukForm Component', () => {
 
     // Fill in required fields
     await user.type(screen.getByLabelText(/Sukuk Name/i), 'Test Sukuk')
-    await user.type(screen.getByLabelText(/Account ID/i), 'account-1')
+    await screen.findByRole('option', { name: /Sukuk Investments/i })
+    await user.selectOptions(screen.getByLabelText(/Account/i), 'account-1')
     await user.type(screen.getByLabelText(/Principal Amount/i), '100000')
     
     const startDateInput = screen.getByLabelText(/Start Date/i)
@@ -138,7 +153,9 @@ describe('SukukForm Component', () => {
   it('displays error message on API failure', async () => {
     const user = userEvent.setup()
 
-    ;(global.fetch as any).mockResolvedValueOnce({
+    ;(global.fetch as any)
+      .mockResolvedValueOnce(mockAccountsResponse)
+      .mockResolvedValueOnce({
       ok: false,
       json: async () => ({ error: 'Failed to create Sukuk' }),
     })
@@ -153,7 +170,8 @@ describe('SukukForm Component', () => {
 
     // Fill in required fields
     await user.type(screen.getByLabelText(/Sukuk Name/i), 'Test Sukuk')
-    await user.type(screen.getByLabelText(/Account ID/i), 'account-1')
+    await screen.findByRole('option', { name: /Sukuk Investments/i })
+    await user.selectOptions(screen.getByLabelText(/Account/i), 'account-1')
     await user.type(screen.getByLabelText(/Principal Amount/i), '100000')
     
     const startDateInput = screen.getByLabelText(/Start Date/i)
@@ -173,6 +191,7 @@ describe('SukukForm Component', () => {
   it('calls onCancel when cancel button is clicked', async () => {
     const user = userEvent.setup()
 
+    ;(global.fetch as any).mockResolvedValueOnce(mockAccountsResponse)
     render(
       <SukukForm
         mode="create"
@@ -190,6 +209,7 @@ describe('SukukForm Component', () => {
   it('validates principalAmount is a positive number', async () => {
     const user = userEvent.setup()
 
+    ;(global.fetch as any).mockResolvedValueOnce(mockAccountsResponse)
     render(
       <SukukForm
         mode="create"
@@ -206,6 +226,7 @@ describe('SukukForm Component', () => {
   })
 
   it('has proper field types and constraints', async () => {
+    ;(global.fetch as any).mockResolvedValueOnce(mockAccountsResponse)
     render(
       <SukukForm
         mode="create"
@@ -241,7 +262,9 @@ describe('SukukForm Component', () => {
       startDate: '2024-01-01T00:00:00.000Z',
     }
 
-    ;(global.fetch as any).mockResolvedValueOnce({
+    ;(global.fetch as any)
+      .mockResolvedValueOnce(mockAccountsResponse)
+      .mockResolvedValueOnce({
       ok: true,
       json: async () => ({ success: true, sukuk: { id: 'sukuk-1' } }),
     })
