@@ -21,6 +21,7 @@ export async function GET(req: NextRequest) {
         name: true,
         type: true,
         currency: true,
+        description: true,
       },
     })
 
