@@ -2,6 +2,7 @@ import { notFound } from 'next/navigation'
 import { getCurrentUser } from '@/lib/auth'
 import { prisma } from '@/lib/db'
 import { ZakatTypeDetails } from '@/components/zakat/ZakatTypeDetails'
+import type { ZakatSukukDeal } from '@/lib/zakat'
 
 const payoutTypes = [
   'WITHDRAW_PROFIT',
@@ -76,9 +77,10 @@ export default async function ZakatTypePage({
     return acc
   }, {})
 
-  const sukukDeals = sukukInvestments.map((inv) => {
+  const sukukDeals: ZakatSukukDeal[] = sukukInvestments.map((inv) => {
     const payouts = payoutsByInvestment[inv.id] || []
-    const profitModel = payouts.length > 0 ? 'Periodic payouts' : 'Bullet payout at maturity'
+    const profitModel: ZakatSukukDeal['profitModel'] =
+      payouts.length > 0 ? 'Periodic payouts' : 'Bullet payout at maturity'
     const principal =
       inv.myParticipation?.investedAmount ?? inv.principalAmount ?? 0
 
