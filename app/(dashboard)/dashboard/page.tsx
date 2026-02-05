@@ -2,13 +2,27 @@ import { getCurrentUser } from '@/lib/auth'
 import { Card, CardHeader, CardTitle, CardContent } from '@/components/ui/Card'
 import { prisma } from '@/lib/db'
 import { DEMO_INVESTMENT_NAMES } from '@/lib/demo'
+import { YearFilter } from '@/components/dashboard/YearFilter'
 
-export default async function DashboardPage() {
+export default async function DashboardPage({
+  searchParams,
+}: {
+  searchParams?: { year?: string }
+}) {
   const user = await getCurrentUser()
   
   if (!user) {
     return null
   }
+
+  const selectedYear = Number(searchParams?.year) || new Date().getFullYear()
+  const yearStart = new Date(selectedYear, 0, 1)
+  const yearEnd = new Date(selectedYear + 1, 0, 1)
+
+  const cashSetting = await prisma.systemSetting.findUnique({
+    where: { key: 'CASH_BALANCE' },
+  })
+  const cashBalance = cashSetting ? Number(cashSetting.value) : 0
 
   let totalInvested = 0
   let totalValue = 0
@@ -64,7 +78,10 @@ export default async function DashboardPage() {
         }
 
   const recentTransactions = await prisma.transaction.findMany({
-    where: transactionWhere,
+    where: {
+      ...transactionWhere,
+      date: { gte: yearStart, lt: yearEnd },
+    },
     take: 10,
     orderBy: { date: 'desc' },
     include: {
@@ -73,6 +90,18 @@ export default async function DashboardPage() {
     },
   })
 
+  const yearlyProfit = await prisma.transaction.aggregate({
+    where: {
+      ...transactionWhere,
+      type: 'WITHDRAW_PROFIT',
+      date: { gte: yearStart, lt: yearEnd },
+    },
+    _sum: { amount: true },
+  })
+
+  const yearlyProfitValue = Math.abs(yearlyProfit._sum.amount || 0)
+
+  const totalPortfolioValue = cashBalance + totalValue
   const returnPercentage = totalInvested > 0 ? ((totalValue - totalInvested) / totalInvested * 100) : 0
 
   return (
@@ -96,8 +125,15 @@ export default async function DashboardPage() {
         </div>
       </div>
 
+      <div className="flex flex-wrap items-center justify-between gap-4">
+        <YearFilter selectedYear={selectedYear} />
+        <div className="text-sm text-gray-500">
+          Showing gains for {selectedYear}
+        </div>
+      </div>
+
       {/* Stats Grid */}
-      <div className="grid grid-cols-1 gap-6 sm:grid-cols-2 lg:grid-cols-4">
+      <div className="grid grid-cols-1 gap-6 sm:grid-cols-2 lg:grid-cols-5">
         <Card hover className="sukuk-card-hover">
           <CardContent>
             <div className="flex items-center justify-between mb-2">
@@ -114,28 +150,41 @@ export default async function DashboardPage() {
         <Card hover className="sukuk-card-hover">
           <CardContent>
             <div className="flex items-center justify-between mb-2">
-              <p className="text-sm font-medium text-gray-500">Current Value</p>
+              <p className="text-sm font-medium text-gray-500">Portfolio Value</p>
               <span className="text-2xl">💰</span>
             </div>
             <div className="text-3xl font-bold text-blue-600">
-              SAR {totalValue.toLocaleString()}
+              SAR {totalPortfolioValue.toLocaleString()}
             </div>
-            <p className="text-xs text-gray-500 mt-2">Portfolio Value</p>
+            <p className="text-xs text-gray-500 mt-2">Cash + Investments</p>
           </CardContent>
         </Card>
 
         <Card hover className="sukuk-card-hover">
           <CardContent>
             <div className="flex items-center justify-between mb-2">
-              <p className="text-sm font-medium text-gray-500">Total Return</p>
-              <span className="text-2xl">{totalProfit >= 0 ? '✨' : '📉'}</span>
+              <p className="text-sm font-medium text-gray-500">Yearly Return</p>
+              <span className="text-2xl">{yearlyProfitValue >= 0 ? '✨' : '📉'}</span>
             </div>
-            <div className={`text-3xl font-bold ${totalProfit >= 0 ? 'text-green-600' : 'text-red-600'}`}>
-              SAR {totalProfit.toLocaleString()}
+            <div className={`text-3xl font-bold ${yearlyProfitValue >= 0 ? 'text-green-600' : 'text-red-600'}`}>
+              SAR {yearlyProfitValue.toLocaleString()}
             </div>
             <p className={`text-xs mt-2 font-semibold ${returnPercentage >= 0 ? 'text-green-600' : 'text-red-600'}`}>
               {returnPercentage >= 0 ? '↑' : '↓'} {Math.abs(returnPercentage).toFixed(2)}% Return
             </p>
+          </CardContent>
+        </Card>
+
+        <Card hover className="sukuk-card-hover">
+          <CardContent>
+            <div className="flex items-center justify-between mb-2">
+              <p className="text-sm font-medium text-gray-500">Cash Balance</p>
+              <span className="text-2xl">🏦</span>
+            </div>
+            <div className="text-3xl font-bold text-gray-900">
+              SAR {cashBalance.toLocaleString()}
+            </div>
+            <p className="text-xs text-gray-500 mt-2">Available Cash</p>
           </CardContent>
         </Card>
 

@@ -71,6 +71,27 @@ export async function POST(
         },
       })
 
+      const cashSetting = await tx.systemSetting.findUnique({
+        where: { key: 'CASH_BALANCE' },
+      })
+      const currentCash = cashSetting ? Number(cashSetting.value) : 0
+      const nextCash = currentCash + amount
+
+      if (cashSetting) {
+        await tx.systemSetting.update({
+          where: { key: 'CASH_BALANCE' },
+          data: { value: nextCash.toString() },
+        })
+      } else {
+        await tx.systemSetting.create({
+          data: {
+            key: 'CASH_BALANCE',
+            value: nextCash.toString(),
+            description: 'Available cash balance for investments',
+          },
+        })
+      }
+
       await tx.transaction.create({
         data: {
           accountId: investment.accountId,

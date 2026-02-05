@@ -125,7 +125,7 @@ export function SukukList({ initialSukuk, userRole }: SukukListProps) {
     const grossProfit = Number.isFinite(normalizedCurrentValue)
       ? grossProfitFromValue
       : grossProfitFromApr
-    const netProfit = grossProfit - fees
+    const netProfit = Math.max(0, grossProfit - fees)
     const aprAfterFees = totalInvestment > 0 ? (netProfit / totalInvestment) * 100 : 0
     const receivable = Math.max(0, netProfit - totalReceived)
     const daysRemaining = getDaysRemaining(inv.maturityDate)
