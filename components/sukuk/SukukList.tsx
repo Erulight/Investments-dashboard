@@ -19,6 +19,23 @@ export function SukukList({ initialSukuk, userRole }: SukukListProps) {
   const [isEditModalOpen, setIsEditModalOpen] = useState(false)
   const [editingSukuk, setEditingSukuk] = useState<any>(null)
   const [deletingId, setDeletingId] = useState<string | null>(null)
+  const [withdrawTarget, setWithdrawTarget] = useState<any>(null)
+  const [sellTarget, setSellTarget] = useState<any>(null)
+  const [withdrawForm, setWithdrawForm] = useState({
+    source: 'PROFIT',
+    amount: '',
+    date: new Date().toISOString().split('T')[0],
+    notes: '',
+  })
+  const [sellForm, setSellForm] = useState({
+    buyerPersonId: '',
+    amount: '',
+    salePrice: '',
+    date: new Date().toISOString().split('T')[0],
+    notes: '',
+  })
+  const [partners, setPartners] = useState<any[]>([])
+  const [actionError, setActionError] = useState('')
   const isEmpty = sukuk.length === 0
 
   const openCreateModal = () => setIsCreateModalOpen(true)
@@ -87,6 +104,105 @@ export function SukukList({ initialSukuk, userRole }: SukukListProps) {
     const percent = Math.min(100, Math.max(0, (totalReceived / netProfit) * 100))
     const className = percent >= 100 ? 'bg-green-100 text-green-800' : 'bg-yellow-100 text-yellow-800'
     return { percent, className }
+  }
+
+  const resetWithdrawForm = () => {
+    setWithdrawForm({
+      source: 'PROFIT',
+      amount: '',
+      date: new Date().toISOString().split('T')[0],
+      notes: '',
+    })
+  }
+
+  const resetSellForm = () => {
+    setSellForm({
+      buyerPersonId: '',
+      amount: '',
+      salePrice: '',
+      date: new Date().toISOString().split('T')[0],
+      notes: '',
+    })
+  }
+
+  const openWithdrawModal = (investment: any) => {
+    setActionError('')
+    setWithdrawTarget(investment)
+    resetWithdrawForm()
+  }
+
+  const openSellModal = async (investment: any) => {
+    setActionError('')
+    setSellTarget(investment)
+    resetSellForm()
+    if (partners.length === 0) {
+      try {
+        const res = await fetch('/api/partners')
+        const data = await res.json().catch(() => ({}))
+        if (!res.ok) {
+          throw new Error(data.error || 'Failed to load partners')
+        }
+        setPartners(Array.isArray(data.partners) ? data.partners : [])
+      } catch (error) {
+        console.error('Failed to load partners:', error)
+        setActionError('Failed to load partners.')
+      }
+    }
+  }
+
+  const handleWithdraw = async (e: React.FormEvent) => {
+    e.preventDefault()
+    if (!withdrawTarget) return
+    setActionError('')
+    try {
+      const res = await fetch(`/api/sukuk/${withdrawTarget.id}/withdraw`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          source: withdrawForm.source,
+          amount: parseFloat(withdrawForm.amount),
+          date: withdrawForm.date,
+          notes: withdrawForm.notes,
+        }),
+      })
+      const data = await res.json()
+      if (!res.ok) {
+        setActionError(data.error || 'Failed to withdraw')
+        return
+      }
+      setWithdrawTarget(null)
+      router.refresh()
+    } catch (error) {
+      setActionError('Failed to withdraw')
+    }
+  }
+
+  const handleSell = async (e: React.FormEvent) => {
+    e.preventDefault()
+    if (!sellTarget) return
+    setActionError('')
+    try {
+      const res = await fetch(`/api/sukuk/${sellTarget.id}/sell`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          buyerPersonId: sellForm.buyerPersonId,
+          amount: parseFloat(sellForm.amount),
+          salePrice: sellForm.salePrice ? parseFloat(sellForm.salePrice) : undefined,
+          date: sellForm.date,
+          notes: sellForm.notes,
+        }),
+      })
+      const data = await res.json()
+      if (!res.ok) {
+        setActionError(data.error || 'Failed to sell')
+        return
+      }
+      setSellTarget(null)
+      router.refresh()
+    } catch (error) {
+      setActionError('Failed to sell')
+    }
   }
 
   const handleCreateSuccess = () => {
@@ -261,13 +377,27 @@ export function SukukList({ initialSukuk, userRole }: SukukListProps) {
                   </TableCell>
                   {userRole === 'OWNER' && (
                     <TableCell>
-                      <div className="flex items-center space-x-2">
+                      <div className="flex flex-wrap items-center gap-2">
                         <Button
                           size="sm"
                           variant="secondary"
                           onClick={() => handleEdit(inv)}
                         >
                           Edit
+                        </Button>
+                        <Button
+                          size="sm"
+                          variant="ghost"
+                          onClick={() => openWithdrawModal(inv)}
+                        >
+                          Withdraw
+                        </Button>
+                        <Button
+                          size="sm"
+                          variant="ghost"
+                          onClick={() => openSellModal(inv)}
+                        >
+                          Sell
                         </Button>
                         <Button
                           size="sm"
@@ -320,6 +450,169 @@ export function SukukList({ initialSukuk, userRole }: SukukListProps) {
             }}
           />
         )}
+      </Modal>
+
+      <Modal
+        isOpen={Boolean(withdrawTarget)}
+        onClose={() => setWithdrawTarget(null)}
+        title="Withdraw Cash"
+      >
+        <form onSubmit={handleWithdraw} className="space-y-4">
+          {actionError && (
+            <div className="rounded-lg bg-red-50 p-3 text-sm text-red-700 border border-red-200">
+              {actionError}
+            </div>
+          )}
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-1">
+              Source
+            </label>
+            <select
+              value={withdrawForm.source}
+              onChange={(e) => setWithdrawForm((prev) => ({ ...prev, source: e.target.value }))}
+              className="w-full px-4 py-2 border border-gray-300 rounded-lg bg-white focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+            >
+              <option value="PROFIT">Profit</option>
+              <option value="PRINCIPAL">Principal</option>
+            </select>
+          </div>
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-1">
+              Amount
+            </label>
+            <input
+              type="number"
+              min="0"
+              step="0.01"
+              value={withdrawForm.amount}
+              onChange={(e) => setWithdrawForm((prev) => ({ ...prev, amount: e.target.value }))}
+              className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+              required
+            />
+          </div>
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-1">
+              Date
+            </label>
+            <input
+              type="date"
+              value={withdrawForm.date}
+              onChange={(e) => setWithdrawForm((prev) => ({ ...prev, date: e.target.value }))}
+              className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+              required
+            />
+          </div>
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-1">
+              Notes
+            </label>
+            <textarea
+              rows={2}
+              value={withdrawForm.notes}
+              onChange={(e) => setWithdrawForm((prev) => ({ ...prev, notes: e.target.value }))}
+              className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+            />
+          </div>
+          <div className="flex justify-end gap-3">
+            <Button type="button" variant="secondary" onClick={() => setWithdrawTarget(null)}>
+              Cancel
+            </Button>
+            <Button type="submit" variant="primary">
+              Withdraw
+            </Button>
+          </div>
+        </form>
+      </Modal>
+
+      <Modal
+        isOpen={Boolean(sellTarget)}
+        onClose={() => setSellTarget(null)}
+        title="Sell Sukuk to Partner"
+      >
+        <form onSubmit={handleSell} className="space-y-4">
+          {actionError && (
+            <div className="rounded-lg bg-red-50 p-3 text-sm text-red-700 border border-red-200">
+              {actionError}
+            </div>
+          )}
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-1">
+              Partner
+            </label>
+            <select
+              value={sellForm.buyerPersonId}
+              onChange={(e) => setSellForm((prev) => ({ ...prev, buyerPersonId: e.target.value }))}
+              className="w-full px-4 py-2 border border-gray-300 rounded-lg bg-white focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+              required
+            >
+              <option value="">Select partner</option>
+              {partners.map((partner) => (
+                <option key={partner.id} value={partner.id}>
+                  {partner.name}
+                </option>
+              ))}
+            </select>
+          </div>
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-1">
+              Principal Amount to Transfer
+            </label>
+            <input
+              type="number"
+              min="0"
+              step="0.01"
+              value={sellForm.amount}
+              onChange={(e) => setSellForm((prev) => ({ ...prev, amount: e.target.value }))}
+              className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+              required
+            />
+          </div>
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-1">
+              Sale Price (Cash Received)
+            </label>
+            <input
+              type="number"
+              min="0"
+              step="0.01"
+              value={sellForm.salePrice}
+              onChange={(e) => setSellForm((prev) => ({ ...prev, salePrice: e.target.value }))}
+              className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+              placeholder="Defaults to amount"
+            />
+          </div>
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-1">
+              Date
+            </label>
+            <input
+              type="date"
+              value={sellForm.date}
+              onChange={(e) => setSellForm((prev) => ({ ...prev, date: e.target.value }))}
+              className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+              required
+            />
+          </div>
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-1">
+              Notes
+            </label>
+            <textarea
+              rows={2}
+              value={sellForm.notes}
+              onChange={(e) => setSellForm((prev) => ({ ...prev, notes: e.target.value }))}
+              className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+            />
+          </div>
+          <div className="flex justify-end gap-3">
+            <Button type="button" variant="secondary" onClick={() => setSellTarget(null)}>
+              Cancel
+            </Button>
+            <Button type="submit" variant="primary">
+              Sell
+            </Button>
+          </div>
+        </form>
       </Modal>
     </>
   )

@@ -85,7 +85,13 @@ export default async function InvestmentsPage() {
     return sum + (grossProfit - fees)
   }, 0)
 
-  const totalValue = totalInvested + totalNetProfit
+  const totalWithdrawn = investments.reduce((sum, inv) => {
+    const received = Number.isFinite(inv.totalReceived) ? inv.totalReceived : 0
+    return sum + received
+  }, 0)
+
+  const totalReceivable = Math.max(0, totalNetProfit - totalWithdrawn)
+  const totalValue = totalInvested + totalReceivable
   const totalReturn = totalNetProfit
   const returnPercentage = totalInvested > 0 ? ((totalReturn / totalInvested) * 100) : 0
 
@@ -204,8 +210,23 @@ export default async function InvestmentsPage() {
                       💵
                     </div>
                     <div>
-                      <p className="text-sm text-gray-600">Avg. Return</p>
-                      <p className="text-xl font-bold text-gray-900">{returnPercentage.toFixed(2)}%</p>
+                      <p className="text-sm text-gray-600">Total Withdrawn</p>
+                      <p className="text-xl font-bold text-gray-900">
+                        SAR {totalWithdrawn.toLocaleString(undefined, { maximumFractionDigits: 0 })}
+                      </p>
+                    </div>
+                  </div>
+                </div>
+                <div className="flex items-center justify-between p-4 bg-yellow-50 rounded-xl">
+                  <div className="flex items-center space-x-3">
+                    <div className="w-12 h-12 bg-yellow-500 rounded-xl flex items-center justify-center text-white text-xl">
+                      🧾
+                    </div>
+                    <div>
+                      <p className="text-sm text-gray-600">Receivable</p>
+                      <p className="text-xl font-bold text-gray-900">
+                        SAR {totalReceivable.toLocaleString(undefined, { maximumFractionDigits: 0 })}
+                      </p>
                     </div>
                   </div>
                 </div>

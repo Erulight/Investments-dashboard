@@ -1,0 +1,183 @@
+import { NextRequest, NextResponse } from 'next/server'
+import { prisma } from '@/lib/db'
+import { requireAuth } from '@/lib/rbac'
+import { logAudit } from '@/lib/audit'
+
+export async function POST(
+  req: NextRequest,
+  { params }: { params: Promise<{ id: string }> }
+) {
+  try {
+    const user = await requireAuth(['OWNER'])
+    const { id } = await params
+    const body = await req.json()
+
+    const buyerPersonId = typeof body.buyerPersonId === 'string' ? body.buyerPersonId : ''
+    const amount = Number(body.amount)
+    const salePrice = body.salePrice !== undefined ? Number(body.salePrice) : amount
+    const notes = typeof body.notes === 'string' ? body.notes : ''
+    const date = body.date ? new Date(body.date) : new Date()
+
+    if (!buyerPersonId) {
+      return NextResponse.json({ error: 'Buyer is required' }, { status: 400 })
+    }
+    if (!Number.isFinite(amount) || amount <= 0) {
+      return NextResponse.json({ error: 'Amount must be greater than 0' }, { status: 400 })
+    }
+    if (!Number.isFinite(salePrice) || salePrice < 0) {
+      return NextResponse.json({ error: 'Sale price must be 0 or more' }, { status: 400 })
+    }
+
+    const investment = await prisma.investment.findUnique({
+      where: { id },
+      include: { dealParticipants: true },
+    })
+
+    if (!investment) {
+      return NextResponse.json({ error: 'Sukuk not found' }, { status: 404 })
+    }
+
+    if (!user.personId) {
+      return NextResponse.json({ error: 'Seller is missing a person profile' }, { status: 400 })
+    }
+
+    if (buyerPersonId === user.personId) {
+      return NextResponse.json({ error: 'Buyer must be different from seller' }, { status: 400 })
+    }
+
+    const seller = investment.dealParticipants.find((p) => p.personId === user.personId)
+
+    if (!seller) {
+      return NextResponse.json({ error: 'Seller does not own this Sukuk' }, { status: 400 })
+    }
+
+    if (amount > seller.investedAmount) {
+      return NextResponse.json({ error: 'Amount exceeds your principal' }, { status: 400 })
+    }
+
+    const ratio = seller.investedAmount > 0 ? amount / seller.investedAmount : 0
+    const currentValueTransfer = seller.currentValue * ratio
+    const profitTransfer = seller.profit * ratio
+    const sharePercentage = investment.principalAmount > 0
+      ? (amount / investment.principalAmount) * 100
+      : null
+
+    const updated = await prisma.$transaction(async (tx) => {
+      const sellerRemaining = seller.investedAmount - amount
+      if (sellerRemaining <= 0.000001) {
+        await tx.dealParticipant.delete({
+          where: { id: seller.id },
+        })
+      } else {
+        await tx.dealParticipant.update({
+          where: { id: seller.id },
+          data: {
+            investedAmount: sellerRemaining,
+            currentValue: Math.max(0, seller.currentValue - currentValueTransfer),
+            profit: Math.max(0, seller.profit - profitTransfer),
+            sharePercentage: investment.principalAmount > 0
+              ? (sellerRemaining / investment.principalAmount) * 100
+              : seller.sharePercentage,
+          },
+        })
+      }
+
+      const buyer = await tx.dealParticipant.findFirst({
+        where: { investmentId: investment.id, personId: buyerPersonId },
+      })
+
+      if (buyer) {
+        await tx.dealParticipant.update({
+          where: { id: buyer.id },
+          data: {
+            investedAmount: buyer.investedAmount + amount,
+            currentValue: buyer.currentValue + currentValueTransfer,
+            profit: buyer.profit + profitTransfer,
+            sharePercentage: investment.principalAmount > 0
+              ? ((buyer.investedAmount + amount) / investment.principalAmount) * 100
+              : buyer.sharePercentage,
+          },
+        })
+      } else {
+        await tx.dealParticipant.create({
+          data: {
+            investmentId: investment.id,
+            personId: buyerPersonId,
+            investedAmount: amount,
+            currentValue: currentValueTransfer,
+            profit: profitTransfer,
+            sharePercentage,
+          },
+        })
+      }
+
+      await tx.transaction.createMany({
+        data: [
+          {
+            accountId: investment.accountId,
+            investmentId: investment.id,
+            personId: user.personId,
+            type: 'SELL_TO_PARTNER',
+            amount: Math.abs(salePrice),
+            date,
+            description: notes || null,
+            metadata: JSON.stringify({
+              buyerPersonId,
+              principalTransferred: amount,
+              salePrice,
+            }),
+          },
+          {
+            accountId: investment.accountId,
+            investmentId: investment.id,
+            personId: buyerPersonId,
+            type: 'BUY_FROM_PARTNER',
+            amount: -Math.abs(salePrice),
+            date,
+            description: notes || null,
+            metadata: JSON.stringify({
+              sellerPersonId: user.personId,
+              principalTransferred: amount,
+              salePrice,
+            }),
+          },
+        ],
+      })
+
+      await logAudit(tx, {
+        userId: user.id,
+        action: 'UPDATE',
+        entityType: 'SUKUK',
+        entityId: investment.id,
+        changes: JSON.stringify({
+          sell: {
+            buyerPersonId,
+            amount,
+            salePrice,
+            date,
+          },
+        }),
+      })
+
+      return { success: true }
+    })
+
+    return NextResponse.json(updated)
+  } catch (error) {
+    console.error('Sell error:', error)
+
+    let statusCode = 500
+    if (error instanceof Error) {
+      if (error.message === 'Unauthorized') {
+        statusCode = 401
+      } else if (error.message === 'Forbidden') {
+        statusCode = 403
+      }
+    }
+
+    return NextResponse.json(
+      { error: error instanceof Error ? error.message : 'Failed to sell' },
+      { status: statusCode }
+    )
+  }
+}
