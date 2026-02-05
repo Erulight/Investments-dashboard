@@ -26,6 +26,7 @@ const navigation: NavItem[] = [
       { name: 'Savings', href: '/savings', icon: '💰' },
     ]
   },
+  { name: 'Zakat', href: '/zakat', icon: '🧮' },
   { name: 'Import', href: '/import', roles: ['OWNER'], icon: '📥' },
   { name: 'Settings', href: '/settings', roles: ['OWNER'], icon: '⚙️' },
 ]
