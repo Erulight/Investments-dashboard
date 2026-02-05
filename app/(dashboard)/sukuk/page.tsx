@@ -102,7 +102,7 @@ export default async function InvestmentsPage() {
     const grossProfit = Number.isFinite(normalizedCurrentValue)
       ? grossProfitFromValue
       : grossProfitFromApr
-    return sum + (grossProfit - fees)
+    return sum + Math.max(0, grossProfit - fees)
   }, 0)
 
   const totalWithdrawn = investments.reduce((sum, inv) => {

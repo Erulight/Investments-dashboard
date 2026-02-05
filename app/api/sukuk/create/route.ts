@@ -38,6 +38,12 @@ export async function POST(req: NextRequest) {
     
     // Create the Sukuk investment with participants in a transaction
     const sukuk = await prisma.$transaction(async (tx) => {
+      const cashSetting = await tx.systemSetting.findUnique({
+        where: { key: 'CASH_BALANCE' },
+      })
+      const currentCash = cashSetting ? Number(cashSetting.value) : 0
+      const nextCash = currentCash - data.principalAmount
+
       // Create the investment
       const newSukuk = await tx.investment.create({
         data: {
@@ -56,6 +62,21 @@ export async function POST(req: NextRequest) {
         },
       })
       
+      if (cashSetting) {
+        await tx.systemSetting.update({
+          where: { key: 'CASH_BALANCE' },
+          data: { value: nextCash.toString() },
+        })
+      } else {
+        await tx.systemSetting.create({
+          data: {
+            key: 'CASH_BALANCE',
+            value: nextCash.toString(),
+            description: 'Available cash balance for investments',
+          },
+        })
+      }
+
       // Create participants if provided
       if (data.participants && data.participants.length > 0) {
         await tx.dealParticipant.createMany({

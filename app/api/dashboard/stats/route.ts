@@ -6,6 +6,11 @@ import { DEMO_INVESTMENT_NAMES } from '@/lib/demo'
 export async function GET(req: NextRequest) {
   try {
     const user = await requireAuth()
+    const { searchParams } = new URL(req.url)
+    const yearParam = searchParams.get('year')
+    const selectedYear = yearParam ? Number(yearParam) : new Date().getFullYear()
+    const yearStart = new Date(selectedYear, 0, 1)
+    const yearEnd = new Date(selectedYear + 1, 0, 1)
 
     let totalInvested = 0
     let totalValue = 0
@@ -61,7 +66,10 @@ export async function GET(req: NextRequest) {
           }
 
     const recentTransactions = await prisma.transaction.findMany({
-      where: transactionWhere,
+      where: {
+        ...transactionWhere,
+        date: { gte: yearStart, lt: yearEnd },
+      },
       take: 10,
       orderBy: { date: 'desc' },
       include: {
@@ -70,12 +78,23 @@ export async function GET(req: NextRequest) {
       },
     })
 
+    const yearlyProfit = await prisma.transaction.aggregate({
+      where: {
+        ...transactionWhere,
+        type: 'WITHDRAW_PROFIT',
+        date: { gte: yearStart, lt: yearEnd },
+      },
+      _sum: { amount: true },
+    })
+
     return NextResponse.json({
       totalInvested,
       totalValue,
       totalProfit,
       activeInvestments,
       recentTransactions,
+      yearlyProfit: Math.abs(yearlyProfit._sum.amount || 0),
+      selectedYear,
     })
   } catch (error) {
     console.error('Stats error:', error)
