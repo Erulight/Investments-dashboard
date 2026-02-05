@@ -27,6 +27,14 @@ export function SukukList({ initialSukuk, userRole }: SukukListProps) {
 
   const toDate = (value?: string | Date | null) => {
     if (!value) return null
+    if (value instanceof Date) return value
+    if (typeof value === 'string') {
+      const match = value.match(/^(\d{4})-(\d{2})-(\d{2})/)
+      if (match) {
+        const [, year, month, day] = match
+        return new Date(Number(year), Number(month) - 1, Number(day))
+      }
+    }
     const date = new Date(value)
     if (Number.isNaN(date.getTime())) return null
     return date
@@ -72,11 +80,8 @@ export function SukukList({ initialSukuk, userRole }: SukukListProps) {
     return Math.max(0, diffDays)
   }
 
-  const getStatus = (daysRemaining: number | null, receivable: number, hasMaturityDate: boolean) => {
-    if (!hasMaturityDate) {
-      return { label: 'Active', className: 'bg-blue-100 text-blue-800' }
-    }
-    if (daysRemaining === 0 || receivable <= 0) {
+  const getStatus = (netProfit: number, totalReceived: number) => {
+    if (netProfit > 0 && totalReceived >= netProfit) {
       return { label: 'Completed', className: 'bg-green-100 text-green-800' }
     }
     return { label: 'Pending', className: 'bg-yellow-100 text-yellow-800' }
@@ -198,7 +203,7 @@ export function SukukList({ initialSukuk, userRole }: SukukListProps) {
               const aprAfterFees = totalInvestment > 0 ? (netProfit / totalInvestment) * 100 : 0
               const receivable = Math.max(0, netProfit - totalReceived)
               const daysRemaining = getDaysRemaining(inv.maturityDate)
-              const status = getStatus(daysRemaining, receivable, Boolean(inv.maturityDate))
+              const status = getStatus(netProfit, totalReceived)
               const currency = inv.account?.currency || ''
 
               return (
