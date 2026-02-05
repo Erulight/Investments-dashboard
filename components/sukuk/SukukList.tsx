@@ -339,20 +339,22 @@ export function SukukList({ initialSukuk, userRole }: SukukListProps) {
           )}
         </div>
       ) : (
-        <Table>
+        <Table className="text-[11px]">
           <TableHeader>
             <TableRow>
-              <TableHead>Company</TableHead>
-              <TableHead>Platform</TableHead>
-              <TableHead>Type</TableHead>
-              <TableHead>Total Investment</TableHead>
-              <TableHead>Net Profit</TableHead>
-              <TableHead>Fees</TableHead>
-              <TableHead>Total Received</TableHead>
-              <TableHead>Receivable</TableHead>
-              <TableHead>Status %</TableHead>
-              <TableHead>Details</TableHead>
-              {userRole === 'OWNER' && <TableHead>Actions</TableHead>}
+              <TableHead className="px-2 py-2 text-[11px]">Company</TableHead>
+              <TableHead className="px-2 py-2 text-[11px]">Total Investment</TableHead>
+              <TableHead className="px-2 py-2 text-[11px]">APR Yearly</TableHead>
+              <TableHead className="px-2 py-2 text-[11px]">APR After Fees</TableHead>
+              <TableHead className="px-2 py-2 text-[11px]">Investment Period</TableHead>
+              <TableHead className="px-2 py-2 text-[11px]">Maturity Date</TableHead>
+              <TableHead className="px-2 py-2 text-[11px]">Days Remaining</TableHead>
+              <TableHead className="px-2 py-2 text-[11px]">Fees</TableHead>
+              <TableHead className="px-2 py-2 text-[11px]">Net Profit</TableHead>
+              <TableHead className="px-2 py-2 text-[11px]">Total Received</TableHead>
+              <TableHead className="px-2 py-2 text-[11px]">Receivable</TableHead>
+              <TableHead className="px-2 py-2 text-[11px]">Status</TableHead>
+              {userRole === 'OWNER' && <TableHead className="px-2 py-2 text-[11px]">Actions</TableHead>}
             </TableRow>
           </TableHeader>
           <TableBody>
@@ -361,45 +363,53 @@ export function SukukList({ initialSukuk, userRole }: SukukListProps) {
 
               return (
                 <TableRow key={inv.id} className="hover:bg-blue-50 transition-colors duration-150">
-                  <TableCell className="font-semibold text-gray-900">{inv.name}</TableCell>
-                  <TableCell className="font-semibold text-gray-700">
-                    <span className="px-3 py-1 bg-blue-100 text-blue-700 rounded-full text-xs font-medium">
-                      {inv.account?.name || '—'}
-                    </span>
+                  <TableCell className="px-2 py-2 font-semibold text-gray-900">
+                    <button
+                      type="button"
+                      onClick={() => setDetailTarget(inv)}
+                      className="text-left hover:text-blue-600 transition-colors"
+                    >
+                      {inv.name}
+                    </button>
                   </TableCell>
-                  <TableCell>
-                    <span className="px-3 py-1 bg-gray-100 text-gray-700 rounded-full text-xs font-medium">
-                      {inv.category || '—'}
-                    </span>
-                  </TableCell>
-                  <TableCell className="font-semibold text-gray-700">
+                  <TableCell className="px-2 py-2 text-gray-700 tabular-nums">
                     {formatCurrency(metrics.totalInvestment, metrics.currency)}
                   </TableCell>
-                  <TableCell className="font-semibold text-gray-700">
-                    {formatCurrency(metrics.netProfit, metrics.currency)}
+                  <TableCell className="px-2 py-2 text-gray-700 tabular-nums">
+                    {formatPercent(metrics.apr)}
                   </TableCell>
-                  <TableCell className="font-semibold text-gray-700">
+                  <TableCell className="px-2 py-2 text-gray-700 tabular-nums">
+                    {formatPercent(metrics.aprAfterFees)}
+                  </TableCell>
+                  <TableCell className="px-2 py-2 text-gray-700 tabular-nums">
+                    {metrics.periodMonths === null ? '—' : metrics.periodMonths.toFixed(1)}
+                  </TableCell>
+                  <TableCell className="px-2 py-2 text-gray-700 tabular-nums">
+                    {formatDate(inv.maturityDate)}
+                  </TableCell>
+                  <TableCell className="px-2 py-2 text-gray-700 tabular-nums">
+                    {metrics.daysRemaining === null ? '—' : metrics.daysRemaining}
+                  </TableCell>
+                  <TableCell className="px-2 py-2 text-gray-700 tabular-nums">
                     {formatCurrency(metrics.fees, metrics.currency)}
                   </TableCell>
-                  <TableCell className="font-semibold text-gray-700">
+                  <TableCell className="px-2 py-2 text-gray-700 tabular-nums">
+                    {formatCurrency(metrics.netProfit, metrics.currency)}
+                  </TableCell>
+                  <TableCell className="px-2 py-2 text-gray-700 tabular-nums">
                     {formatCurrency(metrics.totalReceived, metrics.currency)}
                   </TableCell>
-                  <TableCell className="font-semibold text-gray-700">
+                  <TableCell className="px-2 py-2 text-gray-700 tabular-nums">
                     {formatCurrency(metrics.receivable, metrics.currency)}
                   </TableCell>
-                  <TableCell>
-                    <span className={`px-3 py-1.5 inline-flex items-center text-xs leading-5 font-semibold rounded-full shadow-sm ${metrics.progress.className}`}>
+                  <TableCell className="px-2 py-2">
+                    <span className={`px-2 py-1 inline-flex items-center text-[10px] leading-4 font-semibold rounded-full shadow-sm ${metrics.progress.className}`}>
                       <span className="w-2 h-2 bg-current rounded-full mr-2 opacity-70"></span>
                       {metrics.progress.percent.toFixed(2)}%
                     </span>
                   </TableCell>
-                  <TableCell>
-                    <Button size="sm" variant="ghost" onClick={() => setDetailTarget(inv)}>
-                      View
-                    </Button>
-                  </TableCell>
                   {userRole === 'OWNER' && (
-                    <TableCell>
+                    <TableCell className="px-2 py-2">
                       <div className="flex flex-wrap items-center gap-2">
                         <Button
                           size="sm"
