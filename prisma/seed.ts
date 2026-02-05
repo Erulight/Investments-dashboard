@@ -8,6 +8,44 @@ async function main() {
   console.warn('⚠️  WARNING: This seed script creates demo accounts with hardcoded passwords.')
   console.warn('⚠️  These should NEVER be used in production. Change passwords immediately after deployment.')
 
+  const demoInvestmentNames = [
+    'Tech Startup Sukuk A',
+    'Real Estate Sukuk B',
+    'Circlys Plan 2024',
+    'Malaa Managed Portfolio',
+    'Crypto Trading Portfolio',
+    'Local Restaurant Investment',
+  ]
+  const demoGoalNames = ['Retirement Fund', 'House Down Payment']
+
+  const demoInvestments = await prisma.investment.findMany({
+    where: { name: { in: demoInvestmentNames } },
+    select: { id: true },
+  })
+  const demoInvestmentIds = demoInvestments.map((inv) => inv.id)
+
+  if (demoInvestmentIds.length > 0) {
+    await prisma.transaction.deleteMany({
+      where: { investmentId: { in: demoInvestmentIds } },
+    })
+    await prisma.dealParticipant.deleteMany({
+      where: { investmentId: { in: demoInvestmentIds } },
+    })
+    await prisma.investment.deleteMany({
+      where: { id: { in: demoInvestmentIds } },
+    })
+  }
+
+  await prisma.valuation.deleteMany({
+    where: {
+      account: { name: 'Malaa Portfolio' },
+    },
+  })
+
+  await prisma.goal.deleteMany({
+    where: { name: { in: demoGoalNames } },
+  })
+
   const ownerPassword = await bcrypt.hash('OwnerDemo123!', 10)
   const partnerPassword = await bcrypt.hash('PartnerDemo123!', 10)
 
