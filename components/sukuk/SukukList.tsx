@@ -80,11 +80,13 @@ export function SukukList({ initialSukuk, userRole }: SukukListProps) {
     return Math.max(0, diffDays)
   }
 
-  const getStatus = (netProfit: number, totalReceived: number) => {
-    if (netProfit > 0 && totalReceived >= netProfit) {
-      return { label: 'Completed', className: 'bg-green-100 text-green-800' }
+  const getProgress = (netProfit: number, totalReceived: number) => {
+    if (netProfit <= 0) {
+      return { percent: 0, className: 'bg-gray-100 text-gray-700' }
     }
-    return { label: 'Pending', className: 'bg-yellow-100 text-yellow-800' }
+    const percent = Math.min(100, Math.max(0, (totalReceived / netProfit) * 100))
+    const className = percent >= 100 ? 'bg-green-100 text-green-800' : 'bg-yellow-100 text-yellow-800'
+    return { percent, className }
   }
 
   const handleCreateSuccess = () => {
@@ -183,7 +185,7 @@ export function SukukList({ initialSukuk, userRole }: SukukListProps) {
               <TableHead>Net Profit</TableHead>
               <TableHead>Total Received</TableHead>
               <TableHead>Receivable</TableHead>
-              <TableHead>Status</TableHead>
+              <TableHead>Status %</TableHead>
               {userRole === 'OWNER' && <TableHead>Actions</TableHead>}
             </TableRow>
           </TableHeader>
@@ -203,7 +205,7 @@ export function SukukList({ initialSukuk, userRole }: SukukListProps) {
               const aprAfterFees = totalInvestment > 0 ? (netProfit / totalInvestment) * 100 : 0
               const receivable = Math.max(0, netProfit - totalReceived)
               const daysRemaining = getDaysRemaining(inv.maturityDate)
-              const status = getStatus(netProfit, totalReceived)
+              const progress = getProgress(netProfit, totalReceived)
               const currency = inv.account?.currency || ''
 
               return (
@@ -252,9 +254,9 @@ export function SukukList({ initialSukuk, userRole }: SukukListProps) {
                     {formatCurrency(receivable, currency)}
                   </TableCell>
                   <TableCell>
-                    <span className={`px-3 py-1.5 inline-flex items-center text-xs leading-5 font-semibold rounded-full shadow-sm ${status.className}`}>
+                    <span className={`px-3 py-1.5 inline-flex items-center text-xs leading-5 font-semibold rounded-full shadow-sm ${progress.className}`}>
                       <span className="w-2 h-2 bg-current rounded-full mr-2 opacity-70"></span>
-                      {status.label}
+                      {progress.percent.toFixed(2)}%
                     </span>
                   </TableCell>
                   {userRole === 'OWNER' && (
