@@ -347,6 +347,7 @@ export function SukukList({ initialSukuk, userRole }: SukukListProps) {
               <TableHead>Type</TableHead>
               <TableHead>Total Investment</TableHead>
               <TableHead>Net Profit</TableHead>
+              <TableHead>Fees</TableHead>
               <TableHead>Total Received</TableHead>
               <TableHead>Receivable</TableHead>
               <TableHead>Status %</TableHead>
@@ -376,6 +377,9 @@ export function SukukList({ initialSukuk, userRole }: SukukListProps) {
                   </TableCell>
                   <TableCell className="font-semibold text-gray-700">
                     {formatCurrency(metrics.netProfit, metrics.currency)}
+                  </TableCell>
+                  <TableCell className="font-semibold text-gray-700">
+                    {formatCurrency(metrics.fees, metrics.currency)}
                   </TableCell>
                   <TableCell className="font-semibold text-gray-700">
                     {formatCurrency(metrics.totalReceived, metrics.currency)}
