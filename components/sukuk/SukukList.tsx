@@ -111,20 +111,14 @@ export function SukukList({ initialSukuk, userRole }: SukukListProps) {
   const getMetrics = (inv: any) => {
     const principal = inv.myParticipation?.investedAmount ?? inv.principalAmount
     const totalInvestment = Number.isFinite(principal) ? principal : 0
-    const currentValue = inv.myParticipation?.currentValue ?? inv.currentValue ?? totalInvestment
-    const normalizedCurrentValue = Number.isFinite(currentValue) ? currentValue : totalInvestment
     const apr = Number.isFinite(inv.interestRate) ? inv.interestRate : 0
     const fees = Number.isFinite(inv.fees) ? inv.fees : 0
     const totalReceived = Number.isFinite(inv.totalReceived) ? inv.totalReceived : 0
     const periodMonths = getPeriodMonths(inv.startDate, inv.maturityDate)
     const periodYears = periodMonths ? periodMonths / 12 : 0
-    const grossProfitFromValue = normalizedCurrentValue - totalInvestment
-    const grossProfitFromApr = totalInvestment > 0 && apr > 0 && periodYears > 0
+    const grossProfit = totalInvestment > 0 && apr > 0 && periodYears > 0
       ? totalInvestment * (apr / 100) * periodYears
       : 0
-    const grossProfit = Number.isFinite(normalizedCurrentValue)
-      ? grossProfitFromValue
-      : grossProfitFromApr
     const netProfit = Math.max(0, grossProfit - fees)
     const aprAfterFees = totalInvestment > 0 ? (netProfit / totalInvestment) * 100 : 0
     const receivable = Math.max(0, netProfit - totalReceived)
