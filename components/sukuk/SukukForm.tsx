@@ -27,7 +27,6 @@ export function SukukForm({ mode, initialData, onSuccess, onCancel }: SukukFormP
   })
   
   const [accounts, setAccounts] = useState<any[]>([])
-  const [persons, setPersons] = useState<any[]>([])
   const [participants, setParticipants] = useState<any[]>(
     initialData?.dealParticipants?.map((p: any) => ({
       personId: p.personId,
@@ -40,17 +39,28 @@ export function SukukForm({ mode, initialData, onSuccess, onCancel }: SukukFormP
   const [errors, setErrors] = useState<any>({})
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState('')
+  const [loadError, setLoadError] = useState('')
 
-  // Fetch accounts and persons on mount
+  // Fetch accounts on mount
   useEffect(() => {
     const fetchData = async () => {
       try {
-        // For now, we'll skip fetching accounts/persons
-        // In a real implementation, you'd fetch these from API endpoints
-        setAccounts([])
-        setPersons([])
+        setLoadError('')
+        const res = await fetch('/api/accounts?type=SUKUK')
+        const data = await res.json().catch(() => ({}))
+        if (!res.ok) {
+          throw new Error(data.error || 'Failed to load accounts')
+        }
+        const accountList = Array.isArray(data.accounts) ? data.accounts : []
+        setAccounts(accountList)
+        if (accountList.length === 1) {
+          setFormData((prev: any) =>
+            prev.accountId ? prev : { ...prev, accountId: accountList[0].id }
+          )
+        }
       } catch (err) {
-        console.error('Failed to fetch form data:', err)
+        console.error('Failed to fetch accounts:', err)
+        setLoadError('Failed to load accounts. Please refresh.')
       }
     }
     fetchData()
@@ -184,19 +194,28 @@ export function SukukForm({ mode, initialData, onSuccess, onCancel }: SukukFormP
 
         <div>
           <label htmlFor="accountId" className="block text-sm font-medium text-gray-700 mb-1">
-            Account ID *
+            Account *
           </label>
-          <input
-            type="text"
+          <select
             id="accountId"
             name="accountId"
             required
             value={formData.accountId}
             onChange={handleChange}
-            className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-            placeholder="Account ID (you'll need to get this from your accounts)"
-          />
+            className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent bg-white"
+          >
+            <option value="">Select a Sukuk account</option>
+            {accounts.map((account) => (
+              <option key={account.id} value={account.id}>
+                {account.name} ({account.currency})
+              </option>
+            ))}
+          </select>
           {errors.accountId && <p className="text-sm text-red-600 mt-1">{errors.accountId}</p>}
+          {loadError && <p className="text-sm text-red-600 mt-1">{loadError}</p>}
+          {!loadError && accounts.length === 0 && (
+            <p className="text-sm text-gray-500 mt-1">No Sukuk accounts found.</p>
+          )}
         </div>
 
         <div>
