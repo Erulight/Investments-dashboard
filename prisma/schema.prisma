@@ -24,6 +24,7 @@ model User {
   personId          String?  @unique
   person            Person?  @relation(fields: [personId], references: [id])
   auditLogs         AuditLog[]
+  zakatSnapshots    ZakatSnapshot[]
 
   @@index([email])
 }
@@ -212,4 +213,23 @@ model SystemSetting {
   updatedAt         DateTime @updatedAt
 
   @@index([key])
+}
+
+model ZakatSnapshot {
+  id                 String   @id @default(cuid())
+  userId             String
+  user               User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  zakatDate          DateTime
+  mode               String
+  nisabRef           String
+  nisabValue         Float
+  includeLiabilities Boolean  @default(false)
+  liabilities        Float    @default(0)
+  totalBase          Float
+  totalDue           Float
+  breakdown          String?
+  createdAt          DateTime @default(now())
+
+  @@index([userId])
+  @@index([zakatDate])
 }
