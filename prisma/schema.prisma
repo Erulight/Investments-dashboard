@@ -81,6 +81,7 @@ model Investment {
   interestRate      Float?
   fees              Float    @default(0)
   totalReceived     Float    @default(0)
+  receivableAmount  Float    @default(0)
   
   notes             String?
   metadata          String?

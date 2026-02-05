@@ -121,13 +121,32 @@ export async function PUT(
       if (data.category !== undefined) updateData.category = data.category
       if (data.principalAmount !== undefined) updateData.principalAmount = data.principalAmount
       if (data.currentValue !== undefined) updateData.currentValue = data.currentValue
-      if (data.startDate !== undefined) updateData.startDate = new Date(data.startDate)
-      if (data.maturityDate !== undefined) {
-        updateData.maturityDate = data.maturityDate ? new Date(data.maturityDate) : null
-      }
-      if (data.interestRate !== undefined) updateData.interestRate = data.interestRate
+      const startDate = data.startDate !== undefined
+        ? new Date(data.startDate)
+        : existingSukuk.startDate
+      const maturityDate = data.maturityDate !== undefined
+        ? (data.maturityDate ? new Date(data.maturityDate) : null)
+        : existingSukuk.maturityDate
+      if (data.startDate !== undefined) updateData.startDate = startDate
+      if (data.maturityDate !== undefined) updateData.maturityDate = maturityDate
+
       if (data.fees !== undefined) updateData.fees = data.fees
       if (data.totalReceived !== undefined) updateData.totalReceived = data.totalReceived
+      if (data.receivableAmount !== undefined) updateData.receivableAmount = data.receivableAmount
+
+      const principalAmount = data.principalAmount ?? existingSukuk.principalAmount
+      const fees = data.fees ?? existingSukuk.fees
+      const receivableAmount = data.receivableAmount ?? existingSukuk.receivableAmount
+      const periodMonths = maturityDate
+        ? (maturityDate.getFullYear() - startDate.getFullYear()) * 12
+          + (maturityDate.getMonth() - startDate.getMonth())
+          + (maturityDate.getDate() - startDate.getDate()) / 30
+        : null
+      const periodYears = periodMonths ? periodMonths / 12 : null
+      const computedApr = periodYears && principalAmount > 0
+        ? ((receivableAmount + fees) / principalAmount / periodYears) * 100
+        : data.interestRate ?? existingSukuk.interestRate
+      updateData.interestRate = computedApr
       if (data.notes !== undefined) updateData.notes = data.notes
       if (data.metadata !== undefined) updateData.metadata = data.metadata
       

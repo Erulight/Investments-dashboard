@@ -23,6 +23,7 @@ export function SukukForm({ mode, initialData, onSuccess, onCancel }: SukukFormP
     interestRate: initialData?.interestRate || '',
     fees: initialData?.fees ?? '',
     totalReceived: initialData?.totalReceived ?? '',
+    receivableAmount: initialData?.receivableAmount ?? '',
     notes: initialData?.notes || '',
   })
   
@@ -66,6 +67,29 @@ export function SukukForm({ mode, initialData, onSuccess, onCancel }: SukukFormP
     fetchData()
   }, [])
 
+  useEffect(() => {
+    const principal = parseFloat(formData.principalAmount || '0')
+    const fees = parseFloat(formData.fees || '0')
+    const receivable = parseFloat(formData.receivableAmount || '0')
+    if (!principal || !formData.startDate || !formData.maturityDate) {
+      setFormData((prev: any) => ({ ...prev, interestRate: '' }))
+      return
+    }
+    const startDate = new Date(formData.startDate)
+    const maturityDate = new Date(formData.maturityDate)
+    const periodMonths = (maturityDate.getFullYear() - startDate.getFullYear()) * 12
+      + (maturityDate.getMonth() - startDate.getMonth())
+      + (maturityDate.getDate() - startDate.getDate()) / 30
+    const periodYears = periodMonths ? periodMonths / 12 : 0
+    if (!periodYears) {
+      setFormData((prev: any) => ({ ...prev, interestRate: '' }))
+      return
+    }
+    const apr = ((receivable + fees) / principal / periodYears) * 100
+    const next = Number.isFinite(apr) ? apr.toFixed(2) : ''
+    setFormData((prev: any) => (prev.interestRate === next ? prev : { ...prev, interestRate: next }))
+  }, [formData.principalAmount, formData.fees, formData.receivableAmount, formData.startDate, formData.maturityDate])
+
   const handleChange = (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement>) => {
     const { name, value } = e.target
     setFormData((prev: any) => ({ ...prev, [name]: value }))
@@ -85,13 +109,29 @@ export function SukukForm({ mode, initialData, onSuccess, onCancel }: SukukFormP
       const parseOptionalNumber = (value: string) => (value === '' ? undefined : parseFloat(value))
 
       // Prepare data for validation
+      const principalAmount = parseFloat(formData.principalAmount)
+      const fees = parseOptionalNumber(formData.fees) ?? 0
+      const receivableAmount = parseOptionalNumber(formData.receivableAmount)
+      const startDate = formData.startDate ? new Date(formData.startDate) : null
+      const maturityDate = formData.maturityDate ? new Date(formData.maturityDate) : null
+      const periodMonths = startDate && maturityDate
+        ? (maturityDate.getFullYear() - startDate.getFullYear()) * 12
+          + (maturityDate.getMonth() - startDate.getMonth())
+          + (maturityDate.getDate() - startDate.getDate()) / 30
+        : null
+      const periodYears = periodMonths ? periodMonths / 12 : null
+      const computedApr = receivableAmount !== undefined && periodYears && principalAmount > 0
+        ? ((receivableAmount + fees) / principalAmount / periodYears) * 100
+        : parseOptionalNumber(formData.interestRate)
+
       const submitData = {
         ...formData,
-        principalAmount: parseFloat(formData.principalAmount),
+        principalAmount,
         currentValue: parseOptionalNumber(formData.currentValue),
-        interestRate: parseOptionalNumber(formData.interestRate),
-        fees: parseOptionalNumber(formData.fees),
+        interestRate: computedApr,
+        fees,
         totalReceived: parseOptionalNumber(formData.totalReceived),
+        receivableAmount,
         participants: participants.map(p => ({
           ...p,
           investedAmount: parseFloat(p.investedAmount),
@@ -279,7 +319,7 @@ export function SukukForm({ mode, initialData, onSuccess, onCancel }: SukukFormP
 
         <div>
           <label htmlFor="interestRate" className="block text-sm font-medium text-gray-700 mb-1">
-            Profit Rate (%)
+            APR Yearly (auto)
           </label>
           <input
             type="number"
@@ -289,9 +329,9 @@ export function SukukForm({ mode, initialData, onSuccess, onCancel }: SukukFormP
             min="0"
             max="100"
             value={formData.interestRate}
-            onChange={handleChange}
-            className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-            placeholder="0.00"
+            readOnly
+            className="w-full px-4 py-2 border border-gray-300 rounded-lg bg-gray-50 text-gray-700"
+            placeholder="Auto-calculated"
           />
           {errors.interestRate && <p className="text-sm text-red-600 mt-1">{errors.interestRate}</p>}
         </div>
@@ -332,6 +372,27 @@ export function SukukForm({ mode, initialData, onSuccess, onCancel }: SukukFormP
             />
             {errors.totalReceived && <p className="text-sm text-red-600 mt-1">{errors.totalReceived}</p>}
           </div>
+        </div>
+
+        <div>
+          <label htmlFor="receivableAmount" className="block text-sm font-medium text-gray-700 mb-1">
+            Receivable (Net Profit)
+          </label>
+          <input
+            type="number"
+            id="receivableAmount"
+            name="receivableAmount"
+            step="0.01"
+            min="0"
+            value={formData.receivableAmount}
+            onChange={handleChange}
+            className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+            placeholder="0.00"
+          />
+          {errors.receivableAmount && <p className="text-sm text-red-600 mt-1">{errors.receivableAmount}</p>}
+          <p className="text-xs text-gray-500 mt-1">
+            Enter expected net profit after fees. APR will be calculated automatically.
+          </p>
         </div>
       </div>
 
