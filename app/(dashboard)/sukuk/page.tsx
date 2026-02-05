@@ -42,17 +42,51 @@ export default async function InvestmentsPage() {
     }))
   }
 
+  const toDate = (value?: string | Date | null) => {
+    if (!value) return null
+    if (value instanceof Date) return value
+    if (typeof value === 'string') {
+      const match = value.match(/^(\d{4})-(\d{2})-(\d{2})/)
+      if (match) {
+        const [, year, month, day] = match
+        return new Date(Number(year), Number(month) - 1, Number(day))
+      }
+    }
+    const date = new Date(value)
+    if (Number.isNaN(date.getTime())) return null
+    return date
+  }
+
+  const getPeriodMonths = (start?: string | Date | null, end?: string | Date | null) => {
+    const startDate = toDate(start)
+    const endDate = toDate(end)
+    if (!startDate || !endDate) return 0
+    const months = (endDate.getFullYear() - startDate.getFullYear()) * 12
+      + (endDate.getMonth() - startDate.getMonth())
+      + (endDate.getDate() - startDate.getDate()) / 30
+    return Math.max(0, months)
+  }
+
   const totalInvested = investments.reduce((sum, inv) => {
     const principal = inv.myParticipation?.investedAmount || inv.principalAmount
-    return sum + principal
+    return sum + (Number.isFinite(principal) ? principal : 0)
   }, 0)
 
-  const totalValue = investments.reduce((sum, inv) => {
-    const current = inv.myParticipation?.currentValue || inv.currentValue
-    return sum + current
+  const totalNetProfit = investments.reduce((sum, inv) => {
+    const principal = inv.myParticipation?.investedAmount || inv.principalAmount
+    const investment = Number.isFinite(principal) ? principal : 0
+    const apr = Number.isFinite(inv.interestRate) ? inv.interestRate : 0
+    const fees = Number.isFinite(inv.fees) ? inv.fees : 0
+    const periodMonths = getPeriodMonths(inv.startDate, inv.maturityDate)
+    const periodYears = periodMonths ? periodMonths / 12 : 0
+    const grossProfit = investment > 0 && apr > 0 && periodYears > 0
+      ? investment * (apr / 100) * periodYears
+      : 0
+    return sum + (grossProfit - fees)
   }, 0)
 
-  const totalReturn = totalValue - totalInvested
+  const totalValue = totalInvested + totalNetProfit
+  const totalReturn = totalNetProfit
   const returnPercentage = totalInvested > 0 ? ((totalReturn / totalInvested) * 100) : 0
 
   return (
