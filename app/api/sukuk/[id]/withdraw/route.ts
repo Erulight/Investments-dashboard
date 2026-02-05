@@ -36,6 +36,27 @@ export async function POST(
       )
     }
 
+    const dayStart = new Date(date.getFullYear(), date.getMonth(), date.getDate())
+    const dayEnd = new Date(date.getFullYear(), date.getMonth(), date.getDate() + 1)
+    const existingTransaction = await prisma.transaction.findFirst({
+      where: {
+        investmentId: investment.id,
+        type: source === 'PROFIT' ? 'WITHDRAW_PROFIT' : 'WITHDRAW_PRINCIPAL',
+        amount: -Math.abs(amount),
+        date: {
+          gte: dayStart,
+          lt: dayEnd,
+        },
+      },
+    })
+
+    if (existingTransaction) {
+      return NextResponse.json(
+        { error: 'A matching withdrawal already exists for this date' },
+        { status: 409 }
+      )
+    }
+
     const updated = await prisma.$transaction(async (tx) => {
       const updatedInvestment = await tx.investment.update({
         where: { id },
