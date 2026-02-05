@@ -19,6 +19,11 @@ vi.mock('@/lib/db', () => ({
     dealParticipant: {
       createMany: vi.fn(),
     },
+    systemSetting: {
+      findUnique: vi.fn(),
+      update: vi.fn(),
+      create: vi.fn(),
+    },
     $transaction: vi.fn(),
   },
 }))
@@ -57,6 +62,10 @@ describe('POST /api/sukuk/create', () => {
 
   beforeEach(() => {
     vi.clearAllMocks()
+    vi.mocked(prisma.systemSetting.findUnique).mockResolvedValue({
+      key: 'CASH_BALANCE',
+      value: '1000000',
+    } as any)
   })
 
   it('should successfully create a sukuk with valid data', async () => {
@@ -89,6 +98,14 @@ describe('POST /api/sukuk/create', () => {
         },
         dealParticipant: {
           createMany: vi.fn(),
+        },
+        systemSetting: {
+          findUnique: vi.fn().mockResolvedValue({
+            key: 'CASH_BALANCE',
+            value: '1000000',
+          }),
+          update: vi.fn(),
+          create: vi.fn(),
         },
       })
     })
@@ -231,6 +248,14 @@ describe('POST /api/sukuk/create', () => {
         },
         dealParticipant: {
           createMany: vi.fn(),
+        },
+        systemSetting: {
+          findUnique: vi.fn().mockResolvedValue({
+            key: 'CASH_BALANCE',
+            value: '1000000',
+          }),
+          update: vi.fn(),
+          create: vi.fn(),
         },
       })
     })

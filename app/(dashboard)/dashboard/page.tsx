@@ -3,6 +3,7 @@ import { Card, CardHeader, CardTitle, CardContent } from '@/components/ui/Card'
 import { prisma } from '@/lib/db'
 import { DEMO_INVESTMENT_NAMES } from '@/lib/demo'
 import { YearFilter } from '@/components/dashboard/YearFilter'
+import { CashBalanceCard } from '@/components/dashboard/CashBalanceCard'
 
 export default async function DashboardPage({
   searchParams,
@@ -134,6 +135,7 @@ export default async function DashboardPage({
 
       {/* Stats Grid */}
       <div className="grid grid-cols-1 gap-6 sm:grid-cols-2 lg:grid-cols-5">
+        <CashBalanceCard initialCash={Number.isFinite(cashBalance) ? cashBalance : 0} />
         <Card hover className="sukuk-card-hover">
           <CardContent>
             <div className="flex items-center justify-between mb-2">
@@ -172,19 +174,6 @@ export default async function DashboardPage({
             <p className={`text-xs mt-2 font-semibold ${returnPercentage >= 0 ? 'text-green-600' : 'text-red-600'}`}>
               {returnPercentage >= 0 ? '↑' : '↓'} {Math.abs(returnPercentage).toFixed(2)}% Return
             </p>
-          </CardContent>
-        </Card>
-
-        <Card hover className="sukuk-card-hover">
-          <CardContent>
-            <div className="flex items-center justify-between mb-2">
-              <p className="text-sm font-medium text-gray-500">Cash Balance</p>
-              <span className="text-2xl">🏦</span>
-            </div>
-            <div className="text-3xl font-bold text-gray-900">
-              SAR {cashBalance.toLocaleString()}
-            </div>
-            <p className="text-xs text-gray-500 mt-2">Available Cash</p>
           </CardContent>
         </Card>
 

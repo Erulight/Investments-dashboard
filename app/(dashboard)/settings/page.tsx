@@ -3,7 +3,6 @@ import { getCurrentUser } from '@/lib/auth'
 import { requireAuth } from '@/lib/rbac'
 import { Card, CardHeader, CardTitle, CardContent } from '@/components/ui/Card'
 import { SukukPlatformManager } from '@/components/settings/SukukPlatformManager'
-import { CashBalanceManager } from '@/components/settings/CashBalanceManager'
 import { prisma } from '@/lib/db'
 
 export default async function SettingsPage() {
@@ -59,8 +58,6 @@ export default async function SettingsPage() {
       </Card>
 
       <SukukPlatformManager />
-
-      <CashBalanceManager />
 
       <Card>
         <CardHeader>

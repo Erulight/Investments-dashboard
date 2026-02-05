@@ -41,8 +41,13 @@ export async function POST(req: NextRequest) {
       const cashSetting = await tx.systemSetting.findUnique({
         where: { key: 'CASH_BALANCE' },
       })
-      const currentCash = cashSetting ? Number(cashSetting.value) : 0
+      const currentCashRaw = cashSetting ? Number(cashSetting.value) : 0
+      const currentCash = Number.isFinite(currentCashRaw) ? currentCashRaw : 0
       const nextCash = currentCash - data.principalAmount
+
+      if (nextCash < 0) {
+        throw new Error('INSUFFICIENT_CASH')
+      }
 
       // Create the investment
       const newSukuk = await tx.investment.create({
@@ -132,11 +137,20 @@ export async function POST(req: NextRequest) {
         statusCode = 401
       } else if (error.message === 'Forbidden') {
         statusCode = 403
+      } else if (error.message === 'INSUFFICIENT_CASH') {
+        statusCode = 400
       }
     }
     
     return NextResponse.json(
-      { error: error instanceof Error ? error.message : 'Failed to create Sukuk' },
+      {
+        error:
+          error instanceof Error && error.message === 'INSUFFICIENT_CASH'
+            ? 'Insufficient cash balance'
+            : error instanceof Error
+              ? error.message
+              : 'Failed to create Sukuk',
+      },
       { status: statusCode }
     )
   }
