@@ -12,7 +12,11 @@ export async function GET(req: NextRequest) {
     const category = searchParams.get('category')
     const skip = (page - 1) * limit
 
-    let whereClause: any = {}
+    let whereClause: any = {
+      account: {
+        type: 'SUKUK',
+      },
+    }
     
     // Apply category filter if provided
     if (category) {

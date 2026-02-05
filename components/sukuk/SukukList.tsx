@@ -19,6 +19,7 @@ export function SukukList({ initialSukuk, userRole }: SukukListProps) {
   const [isEditModalOpen, setIsEditModalOpen] = useState(false)
   const [editingSukuk, setEditingSukuk] = useState<any>(null)
   const [deletingId, setDeletingId] = useState<string | null>(null)
+  const [detailTarget, setDetailTarget] = useState<any>(null)
   const [withdrawTarget, setWithdrawTarget] = useState<any>(null)
   const [sellTarget, setSellTarget] = useState<any>(null)
   const [withdrawForm, setWithdrawForm] = useState({
@@ -104,6 +105,39 @@ export function SukukList({ initialSukuk, userRole }: SukukListProps) {
     const percent = Math.min(100, Math.max(0, (totalReceived / netProfit) * 100))
     const className = percent >= 100 ? 'bg-green-100 text-green-800' : 'bg-yellow-100 text-yellow-800'
     return { percent, className }
+  }
+
+  const getMetrics = (inv: any) => {
+    const principal = inv.myParticipation?.investedAmount || inv.principalAmount
+    const totalInvestment = Number.isFinite(principal) ? principal : 0
+    const apr = Number.isFinite(inv.interestRate) ? inv.interestRate : 0
+    const fees = Number.isFinite(inv.fees) ? inv.fees : 0
+    const totalReceived = Number.isFinite(inv.totalReceived) ? inv.totalReceived : 0
+    const periodMonths = getPeriodMonths(inv.startDate, inv.maturityDate)
+    const periodYears = periodMonths ? periodMonths / 12 : 0
+    const grossProfit = totalInvestment > 0 && apr > 0 && periodYears > 0
+      ? totalInvestment * (apr / 100) * periodYears
+      : 0
+    const netProfit = grossProfit - fees
+    const aprAfterFees = totalInvestment > 0 ? (netProfit / totalInvestment) * 100 : 0
+    const receivable = Math.max(0, netProfit - totalReceived)
+    const daysRemaining = getDaysRemaining(inv.maturityDate)
+    const progress = getProgress(netProfit, totalReceived)
+    const currency = inv.account?.currency || ''
+
+    return {
+      totalInvestment,
+      apr,
+      fees,
+      totalReceived,
+      periodMonths,
+      netProfit,
+      aprAfterFees,
+      receivable,
+      daysRemaining,
+      progress,
+      currency,
+    }
   }
 
   const resetWithdrawForm = () => {
@@ -288,45 +322,26 @@ export function SukukList({ initialSukuk, userRole }: SukukListProps) {
         <Table>
           <TableHeader>
             <TableRow>
+              <TableHead>Company</TableHead>
               <TableHead>Platform</TableHead>
-              <TableHead>Sukuk Type</TableHead>
-              <TableHead>Company Name</TableHead>
+              <TableHead>Type</TableHead>
               <TableHead>Total Investment</TableHead>
-              <TableHead>APR</TableHead>
-              <TableHead>APR After Fees</TableHead>
-              <TableHead>Total Investment Period</TableHead>
-              <TableHead>Maturity Date</TableHead>
-              <TableHead>Maturity Days Remaining</TableHead>
-              <TableHead>Fees</TableHead>
               <TableHead>Net Profit</TableHead>
               <TableHead>Total Received</TableHead>
               <TableHead>Receivable</TableHead>
               <TableHead>Status %</TableHead>
+              <TableHead>Details</TableHead>
               {userRole === 'OWNER' && <TableHead>Actions</TableHead>}
             </TableRow>
           </TableHeader>
           <TableBody>
             {sukuk.map((inv: any) => {
-              const principal = inv.myParticipation?.investedAmount || inv.principalAmount
-              const totalInvestment = Number.isFinite(principal) ? principal : 0
-              const apr = Number.isFinite(inv.interestRate) ? inv.interestRate : 0
-              const fees = Number.isFinite(inv.fees) ? inv.fees : 0
-              const totalReceived = Number.isFinite(inv.totalReceived) ? inv.totalReceived : 0
-              const periodMonths = getPeriodMonths(inv.startDate, inv.maturityDate)
-              const periodYears = periodMonths ? periodMonths / 12 : 0
-              const grossProfit = totalInvestment > 0 && apr > 0 && periodYears > 0
-                ? totalInvestment * (apr / 100) * periodYears
-                : 0
-              const netProfit = grossProfit - fees
-              const aprAfterFees = totalInvestment > 0 ? (netProfit / totalInvestment) * 100 : 0
-              const receivable = Math.max(0, netProfit - totalReceived)
-              const daysRemaining = getDaysRemaining(inv.maturityDate)
-              const progress = getProgress(netProfit, totalReceived)
-              const currency = inv.account?.currency || ''
+              const metrics = getMetrics(inv)
 
               return (
                 <TableRow key={inv.id} className="hover:bg-blue-50 transition-colors duration-150">
-                  <TableCell>
+                  <TableCell className="font-semibold text-gray-900">{inv.name}</TableCell>
+                  <TableCell className="font-semibold text-gray-700">
                     <span className="px-3 py-1 bg-blue-100 text-blue-700 rounded-full text-xs font-medium">
                       {inv.account?.name || '—'}
                     </span>
@@ -336,44 +351,28 @@ export function SukukList({ initialSukuk, userRole }: SukukListProps) {
                       {inv.category || '—'}
                     </span>
                   </TableCell>
-                  <TableCell className="font-semibold text-gray-900">
-                    {inv.name}
+                  <TableCell className="font-semibold text-gray-700">
+                    {formatCurrency(metrics.totalInvestment, metrics.currency)}
                   </TableCell>
                   <TableCell className="font-semibold text-gray-700">
-                    {formatCurrency(totalInvestment, currency)}
-                  </TableCell>
-                  <TableCell className="font-semibold text-blue-600">
-                    {formatPercent(apr)}
-                  </TableCell>
-                  <TableCell className="font-semibold text-blue-600">
-                    {formatPercent(aprAfterFees)}
+                    {formatCurrency(metrics.netProfit, metrics.currency)}
                   </TableCell>
                   <TableCell className="font-semibold text-gray-700">
-                    {periodMonths === null ? '—' : periodMonths.toFixed(1)}
+                    {formatCurrency(metrics.totalReceived, metrics.currency)}
                   </TableCell>
                   <TableCell className="font-semibold text-gray-700">
-                    {formatDate(inv.maturityDate)}
-                  </TableCell>
-                  <TableCell className="font-semibold text-gray-700">
-                    {daysRemaining === null ? '—' : daysRemaining}
-                  </TableCell>
-                  <TableCell className="font-semibold text-gray-700">
-                    {formatCurrency(fees, currency)}
-                  </TableCell>
-                  <TableCell className="font-semibold text-gray-700">
-                    {formatCurrency(netProfit, currency)}
-                  </TableCell>
-                  <TableCell className="font-semibold text-gray-700">
-                    {formatCurrency(totalReceived, currency)}
-                  </TableCell>
-                  <TableCell className="font-semibold text-gray-700">
-                    {formatCurrency(receivable, currency)}
+                    {formatCurrency(metrics.receivable, metrics.currency)}
                   </TableCell>
                   <TableCell>
-                    <span className={`px-3 py-1.5 inline-flex items-center text-xs leading-5 font-semibold rounded-full shadow-sm ${progress.className}`}>
+                    <span className={`px-3 py-1.5 inline-flex items-center text-xs leading-5 font-semibold rounded-full shadow-sm ${metrics.progress.className}`}>
                       <span className="w-2 h-2 bg-current rounded-full mr-2 opacity-70"></span>
-                      {progress.percent.toFixed(2)}%
+                      {metrics.progress.percent.toFixed(2)}%
                     </span>
+                  </TableCell>
+                  <TableCell>
+                    <Button size="sm" variant="ghost" onClick={() => setDetailTarget(inv)}>
+                      View
+                    </Button>
                   </TableCell>
                   {userRole === 'OWNER' && (
                     <TableCell>
@@ -450,6 +449,98 @@ export function SukukList({ initialSukuk, userRole }: SukukListProps) {
             }}
           />
         )}
+      </Modal>
+
+      <Modal
+        isOpen={Boolean(detailTarget)}
+        onClose={() => setDetailTarget(null)}
+        title="Sukuk Details"
+      >
+        {detailTarget && (() => {
+          const metrics = getMetrics(detailTarget)
+          return (
+            <div className="space-y-4 text-sm">
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div>
+                  <p className="text-gray-500">Company</p>
+                  <p className="font-semibold text-gray-900">{detailTarget.name}</p>
+                </div>
+                <div>
+                  <p className="text-gray-500">Platform</p>
+                  <p className="font-semibold text-gray-900">{detailTarget.account?.name || '—'}</p>
+                </div>
+                <div>
+                  <p className="text-gray-500">Type</p>
+                  <p className="font-semibold text-gray-900">{detailTarget.category || '—'}</p>
+                </div>
+                <div>
+                  <p className="text-gray-500">Total Investment</p>
+                  <p className="font-semibold text-gray-900">
+                    {formatCurrency(metrics.totalInvestment, metrics.currency)}
+                  </p>
+                </div>
+                <div>
+                  <p className="text-gray-500">APR</p>
+                  <p className="font-semibold text-gray-900">{formatPercent(metrics.apr)}</p>
+                </div>
+                <div>
+                  <p className="text-gray-500">APR After Fees</p>
+                  <p className="font-semibold text-gray-900">{formatPercent(metrics.aprAfterFees)}</p>
+                </div>
+                <div>
+                  <p className="text-gray-500">Start Date</p>
+                  <p className="font-semibold text-gray-900">{formatDate(detailTarget.startDate)}</p>
+                </div>
+                <div>
+                  <p className="text-gray-500">Maturity Date</p>
+                  <p className="font-semibold text-gray-900">{formatDate(detailTarget.maturityDate)}</p>
+                </div>
+                <div>
+                  <p className="text-gray-500">Investment Period (months)</p>
+                  <p className="font-semibold text-gray-900">
+                    {metrics.periodMonths === null ? '—' : metrics.periodMonths.toFixed(1)}
+                  </p>
+                </div>
+                <div>
+                  <p className="text-gray-500">Maturity Days Remaining</p>
+                  <p className="font-semibold text-gray-900">
+                    {metrics.daysRemaining === null ? '—' : metrics.daysRemaining}
+                  </p>
+                </div>
+                <div>
+                  <p className="text-gray-500">Fees</p>
+                  <p className="font-semibold text-gray-900">
+                    {formatCurrency(metrics.fees, metrics.currency)}
+                  </p>
+                </div>
+                <div>
+                  <p className="text-gray-500">Net Profit</p>
+                  <p className="font-semibold text-gray-900">
+                    {formatCurrency(metrics.netProfit, metrics.currency)}
+                  </p>
+                </div>
+                <div>
+                  <p className="text-gray-500">Total Received</p>
+                  <p className="font-semibold text-gray-900">
+                    {formatCurrency(metrics.totalReceived, metrics.currency)}
+                  </p>
+                </div>
+                <div>
+                  <p className="text-gray-500">Receivable</p>
+                  <p className="font-semibold text-gray-900">
+                    {formatCurrency(metrics.receivable, metrics.currency)}
+                  </p>
+                </div>
+                <div>
+                  <p className="text-gray-500">Status %</p>
+                  <p className="font-semibold text-gray-900">
+                    {metrics.progress.percent.toFixed(2)}%
+                  </p>
+                </div>
+              </div>
+            </div>
+          )
+        })()}
       </Modal>
 
       <Modal

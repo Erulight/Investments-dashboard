@@ -14,6 +14,12 @@ export default async function InvestmentsPage() {
 
   if (user.role === 'OWNER') {
     investments = await prisma.investment.findMany({
+      where: {
+        account: {
+          type: 'SUKUK',
+          isActive: true,
+        },
+      },
       include: {
         account: true,
         dealParticipants: {
@@ -24,7 +30,15 @@ export default async function InvestmentsPage() {
     })
   } else if (user.role === 'PARTNER' && user.personId) {
     const participants = await prisma.dealParticipant.findMany({
-      where: { personId: user.personId },
+      where: {
+        personId: user.personId,
+        investment: {
+          account: {
+            type: 'SUKUK',
+            isActive: true,
+          },
+        },
+      },
       include: {
         investment: {
           include: { account: true },
