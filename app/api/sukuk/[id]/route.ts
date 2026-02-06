@@ -3,6 +3,22 @@ import { prisma } from '@/lib/db'
 import { requireAuth } from '@/lib/rbac'
 import { updateSukukSchema } from '@/lib/validation'
 import { logAudit } from '@/lib/audit'
+import type { Prisma } from '@prisma/client'
+
+const getCashAccount = async (tx: Prisma.TransactionClient, currency = 'SAR') => {
+  const existing = await tx.account.findFirst({
+    where: { type: 'CASH', isActive: true },
+  })
+  if (existing) return existing
+  return tx.account.create({
+    data: {
+      name: 'Cash Balance',
+      type: 'CASH',
+      currency,
+      description: 'Cash ledger account',
+    },
+  })
+}
 
 export async function GET(
   req: NextRequest,
@@ -116,6 +132,10 @@ export async function PUT(
         { status: 404 }
       )
     }
+
+    const principalDelta = data.principalAmount !== undefined
+      ? data.principalAmount - existingSukuk.principalAmount
+      : 0
     
     // Update the Sukuk in a transaction
     const updatedSukuk = await prisma.$transaction(async (tx) => {
@@ -155,7 +175,56 @@ export async function PUT(
       updateData.interestRate = computedApr
       if (data.notes !== undefined) updateData.notes = data.notes
       if (data.metadata !== undefined) updateData.metadata = data.metadata
-      
+
+      if (principalDelta !== 0) {
+        const cashSetting = await tx.systemSetting.findUnique({
+          where: { key: 'CASH_BALANCE' },
+        })
+        const currentCash = cashSetting ? Number(cashSetting.value) : 0
+        const nextCash = currentCash - principalDelta
+
+        if (principalDelta > 0 && nextCash < 0) {
+          throw new Error('INSUFFICIENT_CASH')
+        }
+
+        if (cashSetting) {
+          await tx.systemSetting.update({
+            where: { key: 'CASH_BALANCE' },
+            data: { value: nextCash.toString() },
+          })
+        } else {
+          await tx.systemSetting.create({
+            data: {
+              key: 'CASH_BALANCE',
+              value: nextCash.toString(),
+              description: 'Available cash balance for investments',
+            },
+          })
+        }
+
+        const accountId = updateData.accountId ?? existingSukuk.accountId
+        const account = await tx.account.findUnique({
+          where: { id: accountId },
+        })
+        const cashAccount = await getCashAccount(tx, account?.currency || 'SAR')
+
+        await tx.transaction.create({
+          data: {
+            accountId: cashAccount.id,
+            investmentId: id,
+            personId: user.personId || null,
+            type: principalDelta > 0 ? 'CASH_OUT' : 'CASH_IN',
+            amount: -principalDelta,
+            date: new Date(),
+            description: 'Principal adjustment',
+            metadata: JSON.stringify({
+              previousPrincipal: existingSukuk.principalAmount,
+              newPrincipal: data.principalAmount,
+            }),
+          },
+        })
+      }
+
       const updated = await tx.investment.update({
         where: { id },
         data: updateData,
@@ -221,11 +290,20 @@ export async function PUT(
         statusCode = 401
       } else if (error.message === 'Forbidden') {
         statusCode = 403
+      } else if (error.message === 'INSUFFICIENT_CASH') {
+        statusCode = 400
       }
     }
     
     return NextResponse.json(
-      { error: error instanceof Error ? error.message : 'Failed to update Sukuk' },
+      {
+        error:
+          error instanceof Error && error.message === 'INSUFFICIENT_CASH'
+            ? 'Insufficient cash balance'
+            : error instanceof Error
+              ? error.message
+              : 'Failed to update Sukuk',
+      },
       { status: statusCode }
     )
   }
