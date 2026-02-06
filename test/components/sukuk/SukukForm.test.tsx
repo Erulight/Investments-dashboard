@@ -42,7 +42,7 @@ describe('SukukForm Component', () => {
     // Check for optional fields
     expect(screen.getByLabelText(/Category/i)).toBeInTheDocument()
     expect(screen.getByLabelText(/Current Value/i)).toBeInTheDocument()
-    expect(screen.getByLabelText(/Profit Rate/i)).toBeInTheDocument()
+    expect(screen.getByLabelText(/APR Yearly/i)).toBeInTheDocument()
     expect(screen.getByLabelText(/Maturity Date/i)).toBeInTheDocument()
     expect(screen.getByLabelText(/Notes/i)).toBeInTheDocument()
 
@@ -245,7 +245,7 @@ describe('SukukForm Component', () => {
     expect(principalInput).toHaveAttribute('required')
     expect(principalInput).toHaveAttribute('min', '0')
 
-    const interestRateInput = screen.getByLabelText(/Profit Rate/i)
+    const interestRateInput = screen.getByLabelText(/APR Yearly/i)
     expect(interestRateInput).toHaveAttribute('type', 'number')
     expect(interestRateInput).toHaveAttribute('min', '0')
     expect(interestRateInput).toHaveAttribute('max', '100')
