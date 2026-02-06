@@ -14,7 +14,9 @@ interface SukukListProps {
 
 export function SukukList({ initialSukuk, userRole }: SukukListProps) {
   const router = useRouter()
-  const [sukuk, setSukuk] = useState(initialSukuk)
+  const [sukuk, setSukuk] = useState<any[]>(
+    Array.isArray(initialSukuk) ? initialSukuk : []
+  )
   const [isCreateModalOpen, setIsCreateModalOpen] = useState(false)
   const [isEditModalOpen, setIsEditModalOpen] = useState(false)
   const [editingSukuk, setEditingSukuk] = useState<any>(null)
@@ -46,7 +48,8 @@ export function SukukList({ initialSukuk, userRole }: SukukListProps) {
     days: [] as string[],
     statuses: [] as string[],
   })
-  const isEmpty = sukuk.length === 0
+  const list = Array.isArray(sukuk) ? sukuk : []
+  const isEmpty = list.length === 0
 
   const openCreateModal = () => setIsCreateModalOpen(true)
   const asOfDate = new Date()
@@ -97,11 +100,25 @@ export function SukukList({ initialSukuk, userRole }: SukukListProps) {
     return Math.max(0, months)
   }
 
-  const getDaysRemaining = (end?: string | Date | null) => {
+  const startOfDay = (date: Date) => new Date(date.getFullYear(), date.getMonth(), date.getDate())
+
+  const getLatestReceiptDate = (inv: any) => {
+    const transactions = Array.isArray(inv.transactions) ? inv.transactions : []
+    const profitReceipts = transactions.filter((tx: any) => tx.type === 'WITHDRAW_PROFIT')
+    if (profitReceipts.length === 0) return null
+    return profitReceipts.reduce((latest: Date | null, tx: any) => {
+      const txDate = toDate(tx.date)
+      if (!txDate) return latest
+      if (!latest || txDate > latest) return txDate
+      return latest
+    }, null)
+  }
+
+  const getDaysRemaining = (end?: string | Date | null, reference?: Date | null) => {
     const endDate = toDate(end)
     if (!endDate) return null
-    const asOf = new Date(asOfDate.getFullYear(), asOfDate.getMonth(), asOfDate.getDate())
-    const endDay = new Date(endDate.getFullYear(), endDate.getMonth(), endDate.getDate())
+    const asOf = startOfDay(reference ?? asOfDate)
+    const endDay = startOfDay(endDate)
     const diffMs = endDay.getTime() - asOf.getTime()
     const diffDays = Math.ceil(diffMs / (1000 * 60 * 60 * 24))
     return diffDays
@@ -133,7 +150,12 @@ export function SukukList({ initialSukuk, userRole }: SukukListProps) {
       : Math.max(0, grossProfit - fees)
     const aprAfterFees = totalInvestment > 0 ? (netProfit / totalInvestment) * 100 : 0
     const receivable = Math.max(0, netProfit - totalReceived)
-    const daysRemaining = getDaysRemaining(inv.maturityDate)
+    const receiptDate = getLatestReceiptDate(inv)
+    const isFullyReceived = netProfit > 0 && totalReceived >= netProfit - 0.01
+    const referenceDate = isFullyReceived
+      ? receiptDate ?? toDate(inv.maturityDate) ?? asOfDate
+      : asOfDate
+    const daysRemaining = getDaysRemaining(inv.maturityDate, referenceDate)
     const progress = getProgress(netProfit, totalReceived)
     const currency = inv.account?.currency || ''
 
@@ -150,13 +172,14 @@ export function SukukList({ initialSukuk, userRole }: SukukListProps) {
       receivable,
       daysRemaining,
       paymentStatus:
-        daysRemaining !== null && daysRemaining < 0 && receivable > 0
+        daysRemaining !== null && daysRemaining < 0
           ? 'delayed'
-          : daysRemaining !== null && daysRemaining > 0 && totalReceived > 0
+          : isFullyReceived && daysRemaining !== null && daysRemaining > 0
             ? 'early'
             : 'on-time',
       progress,
       currency,
+      isFullyReceived,
     }
   }
 
@@ -180,7 +203,13 @@ export function SukukList({ initialSukuk, userRole }: SukukListProps) {
     })
   }
 
-  const filterOptions = sukuk.reduce(
+  const filterOptions = list.reduce<{
+    platforms: Set<string>
+    terms: Set<string>
+    years: Set<string>
+    months: Set<string>
+    days: Set<string>
+  }>(
     (acc, inv) => {
       const platform = inv.account?.name
       if (platform) acc.platforms.add(platform)
@@ -206,7 +235,7 @@ export function SukukList({ initialSukuk, userRole }: SukukListProps) {
     }
   )
 
-  const filteredSukuk = sukuk.filter((inv) => {
+  const filteredSukuk = list.filter((inv) => {
     const metrics = getMetrics(inv)
     const platform = inv.account?.name || ''
     const maturityDate = toDate(inv.maturityDate)
@@ -371,6 +400,45 @@ export function SukukList({ initialSukuk, userRole }: SukukListProps) {
     }
   }
 
+  const handleRollback = async (investment: any) => {
+    if (actionLoading) return
+    setActionError('')
+    const remainingPrincipal = Number(investment?.principalAmount ?? 0)
+    if (!Number.isFinite(remainingPrincipal) || remainingPrincipal <= 0) {
+      alert('No principal balance remaining to rollback.')
+      return
+    }
+    const currencyLabel = investment?.account?.currency || 'SAR'
+    const formatted = remainingPrincipal.toLocaleString(undefined, {
+      minimumFractionDigits: 2,
+      maximumFractionDigits: 2,
+    })
+    const confirmed = confirm(
+      `Rollback will move remaining principal (${currencyLabel} ${formatted}) to cash and close this deal. Continue?`
+    )
+    if (!confirmed) return
+    setActionLoading(true)
+    try {
+      const res = await fetch(`/api/sukuk/${investment.id}/rollback`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          date: new Date().toISOString().split('T')[0],
+        }),
+      })
+      const data = await res.json().catch(() => ({}))
+      if (!res.ok) {
+        alert(data.error || 'Failed to rollback')
+        return
+      }
+      router.refresh()
+    } catch (error) {
+      alert('Failed to rollback')
+    } finally {
+      setActionLoading(false)
+    }
+  }
+
   const handleCreateSuccess = () => {
     setIsCreateModalOpen(false)
     router.refresh()
@@ -405,7 +473,7 @@ export function SukukList({ initialSukuk, userRole }: SukukListProps) {
       }
 
       // Remove from local state
-      setSukuk(sukuk.filter((s) => s.id !== id))
+      setSukuk(list.filter((s) => s.id !== id))
       router.refresh()
     } catch (error) {
       alert('An error occurred while deleting the Sukuk')
@@ -420,7 +488,7 @@ export function SukukList({ initialSukuk, userRole }: SukukListProps) {
         <div>
           <h2 className="text-2xl font-bold text-gray-900">All Sukuk Deals</h2>
           <p className="text-sm text-gray-500 mt-1">
-            {filteredSukuk.length} of {sukuk.length} deals
+            {filteredSukuk.length} of {list.length} deals
           </p>
         </div>
         <div className="flex items-center gap-4">
@@ -625,11 +693,11 @@ export function SukukList({ initialSukuk, userRole }: SukukListProps) {
                   <TableCell className="px-2 py-2 text-gray-700 tabular-nums">
                     {metrics.daysRemaining === null ? (
                       '—'
-                    ) : metrics.daysRemaining < 0 && metrics.receivable > 0 ? (
+                    ) : metrics.paymentStatus === 'delayed' ? (
                       <span className="text-red-600 font-semibold">
                         Delayed {Math.abs(metrics.daysRemaining)}d
                       </span>
-                    ) : metrics.daysRemaining > 0 && metrics.totalReceived > 0 ? (
+                    ) : metrics.paymentStatus === 'early' ? (
                       <span className="text-emerald-600 font-semibold">
                         Early {metrics.daysRemaining}d
                       </span>
@@ -670,13 +738,23 @@ export function SukukList({ initialSukuk, userRole }: SukukListProps) {
                           size="sm"
                           variant="ghost"
                           onClick={() => openWithdrawModal(inv)}
+                          disabled={actionLoading}
                         >
                           Withdraw
                         </Button>
                         <Button
                           size="sm"
+                          variant="secondary"
+                          onClick={() => handleRollback(inv)}
+                          disabled={actionLoading}
+                        >
+                          Rollback
+                        </Button>
+                        <Button
+                          size="sm"
                           variant="ghost"
                           onClick={() => openSellModal(inv)}
+                          disabled={actionLoading}
                         >
                           Sell
                         </Button>
@@ -788,7 +866,13 @@ export function SukukList({ initialSukuk, userRole }: SukukListProps) {
                 <div>
                   <p className="text-gray-500">Maturity Days Remaining</p>
                   <p className="font-semibold text-gray-900">
-                    {metrics.daysRemaining === null ? '—' : metrics.daysRemaining}
+                    {metrics.daysRemaining === null
+                      ? '—'
+                      : metrics.paymentStatus === 'delayed'
+                        ? `Delayed ${Math.abs(metrics.daysRemaining)}d`
+                        : metrics.paymentStatus === 'early'
+                          ? `Early ${metrics.daysRemaining}d`
+                          : metrics.daysRemaining}
                   </p>
                 </div>
                 <div>
