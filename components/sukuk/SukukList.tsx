@@ -203,7 +203,13 @@ export function SukukList({ initialSukuk, userRole }: SukukListProps) {
     })
   }
 
-  const filterOptions = list.reduce(
+  const filterOptions = list.reduce<{
+    platforms: Set<string>
+    terms: Set<string>
+    years: Set<string>
+    months: Set<string>
+    days: Set<string>
+  }>(
     (acc, inv) => {
       const platform = inv.account?.name
       if (platform) acc.platforms.add(platform)
