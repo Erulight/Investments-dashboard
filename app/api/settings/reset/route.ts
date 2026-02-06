@@ -30,6 +30,9 @@ export async function POST(req: NextRequest) {
     }
 
     await prisma.$transaction(async (tx) => {
+      await tx.cashBucketMovement.deleteMany({})
+      await tx.investmentBucketAllocation.deleteMany({})
+      await tx.cashBucket.deleteMany({})
       await tx.transaction.deleteMany({})
       await tx.dealParticipant.deleteMany({})
       await tx.investment.deleteMany({})

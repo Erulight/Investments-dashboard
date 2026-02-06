@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { prisma } from '@/lib/db'
 import type { Prisma } from '@prisma/client'
 import { requireAuth } from '@/lib/rbac'
+import { createCashBucket, withdrawFromBuckets } from '@/lib/cashBuckets'
 
 const CASH_BALANCE_KEY = 'CASH_BALANCE'
 
@@ -39,6 +40,19 @@ export async function GET(req: NextRequest) {
       where: { type: 'CASH', isActive: true },
     })
 
+    const buckets = await prisma.cashBucket.findMany({
+      where: { balance: { gt: 0 } },
+      orderBy: { haulStartDate: 'asc' },
+      select: {
+        id: true,
+        label: true,
+        balance: true,
+        currency: true,
+        haulStartDate: true,
+        lastZakatPaidDate: true,
+      },
+    })
+
     const transactions = cashAccount
       ? await prisma.transaction.findMany({
           where: {
@@ -53,6 +67,7 @@ export async function GET(req: NextRequest) {
     return NextResponse.json({
       cashBalance: Number.isFinite(cashBalance) ? cashBalance : 0,
       transactions,
+      buckets,
       selectedYear,
     })
   } catch (error) {
@@ -72,13 +87,18 @@ export async function POST(req: NextRequest) {
     const amount = Number(body.amount)
     const notes = typeof body.notes === 'string' ? body.notes : ''
     const date = body.date ? new Date(body.date) : new Date()
+    const haulStartDate = body.haulStartDate ? new Date(body.haulStartDate) : date
+    const label = typeof body.label === 'string' ? body.label : null
+    const currency = typeof body.currency === 'string' && body.currency.trim()
+      ? body.currency.trim().toUpperCase()
+      : 'SAR'
 
     if (!Number.isFinite(amount) || amount <= 0) {
       return NextResponse.json({ error: 'Amount must be greater than 0' }, { status: 400 })
     }
 
     const result = await prisma.$transaction(async (tx) => {
-      const cashAccount = await getCashAccount(tx)
+      const cashAccount = await getCashAccount(tx, currency)
       const setting = await tx.systemSetting.findUnique({
         where: { key: CASH_BALANCE_KEY },
       })
@@ -102,6 +122,26 @@ export async function POST(req: NextRequest) {
             value: nextCash.toString(),
             description: 'Available cash balance for investments',
           },
+        })
+      }
+
+      if (direction === 'IN') {
+        await createCashBucket(tx, {
+          amount,
+          haulStartDate,
+          currency,
+          label,
+          date,
+          notes,
+          type: 'CASH_IN',
+        })
+      } else {
+        await withdrawFromBuckets(tx, {
+          amount,
+          currency,
+          date,
+          type: 'CASH_OUT',
+          notes,
         })
       }
 

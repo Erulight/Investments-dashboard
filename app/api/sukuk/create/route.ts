@@ -3,6 +3,7 @@ import { prisma } from '@/lib/db'
 import { requireAuth } from '@/lib/rbac'
 import { createSukukSchema } from '@/lib/validation'
 import { logAudit } from '@/lib/audit'
+import { withdrawFromBuckets } from '@/lib/cashBuckets'
 
 export async function POST(req: NextRequest) {
   try {
@@ -106,6 +107,16 @@ export async function POST(req: NextRequest) {
           },
         })
       }
+
+      await withdrawFromBuckets(tx, {
+        amount: data.principalAmount,
+        currency: account.currency || 'SAR',
+        date: startDate,
+        type: 'INVEST_OUT',
+        investmentId: newSukuk.id,
+        notes: 'Investment principal',
+        allocateToInvestment: true,
+      })
 
       await tx.transaction.create({
         data: {

@@ -4,6 +4,7 @@ import { requireAuth } from '@/lib/rbac'
 import { updateSukukSchema } from '@/lib/validation'
 import { logAudit } from '@/lib/audit'
 import type { Prisma } from '@prisma/client'
+import { creditBucketsForReceipt, withdrawFromBuckets } from '@/lib/cashBuckets'
 
 const getCashAccount = async (tx: Prisma.TransactionClient, currency = 'SAR') => {
   const existing = await tx.account.findFirst({
@@ -207,6 +208,27 @@ export async function PUT(
           where: { id: accountId },
         })
         const cashAccount = await getCashAccount(tx, account?.currency || 'SAR')
+
+        if (principalDelta > 0) {
+          await withdrawFromBuckets(tx, {
+            amount: principalDelta,
+            currency: account?.currency || 'SAR',
+            date: new Date(),
+            type: 'INVEST_OUT',
+            investmentId: id,
+            notes: 'Principal increase',
+            allocateToInvestment: true,
+          })
+        } else {
+          await creditBucketsForReceipt(tx, {
+            investmentId: id,
+            amount: Math.abs(principalDelta),
+            principalReduction: Math.abs(principalDelta),
+            date: new Date(),
+            type: 'WITHDRAW_PRINCIPAL',
+            notes: 'Principal decrease',
+          })
+        }
 
         await tx.transaction.create({
           data: {

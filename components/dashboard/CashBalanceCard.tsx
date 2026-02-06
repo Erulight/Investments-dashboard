@@ -12,10 +12,12 @@ export function CashBalanceCard({ initialCash }: { initialCash: number }) {
   const [amount, setAmount] = useState('')
   const [notes, setNotes] = useState('')
   const [direction, setDirection] = useState<'IN' | 'OUT'>('IN')
+  const [haulStartDate, setHaulStartDate] = useState(new Date().toISOString().split('T')[0])
   const [loading, setLoading] = useState(false)
   const [message, setMessage] = useState('')
   const [error, setError] = useState('')
   const [transactions, setTransactions] = useState<any[]>([])
+  const [buckets, setBuckets] = useState<any[]>([])
 
   const loadCash = async () => {
     setError('')
@@ -28,6 +30,7 @@ export function CashBalanceCard({ initialCash }: { initialCash: number }) {
       }
       setCashBalance(String(data.cashBalance ?? 0))
       setTransactions(Array.isArray(data.transactions) ? data.transactions : [])
+      setBuckets(Array.isArray(data.buckets) ? data.buckets : [])
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to load cash balance')
     }
@@ -52,6 +55,7 @@ export function CashBalanceCard({ initialCash }: { initialCash: number }) {
           amount: Number(amount),
           date: new Date().toISOString().split('T')[0],
           notes,
+          haulStartDate: direction === 'IN' ? haulStartDate : undefined,
         }),
       })
       const data = await res.json().catch(() => ({}))
@@ -99,14 +103,33 @@ export function CashBalanceCard({ initialCash }: { initialCash: number }) {
               className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:border-blue-500 focus:ring-2 focus:ring-blue-500"
               placeholder="Amount"
             />
+            {direction === 'IN' ? (
+              <input
+                type="date"
+                value={haulStartDate}
+                onChange={(e) => setHaulStartDate(e.target.value)}
+                className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:border-blue-500 focus:ring-2 focus:ring-blue-500"
+                aria-label="Ownership date"
+              />
+            ) : (
+              <input
+                type="text"
+                value={notes}
+                onChange={(e) => setNotes(e.target.value)}
+                className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:border-blue-500 focus:ring-2 focus:ring-blue-500"
+                placeholder="Notes"
+              />
+            )}
+          </div>
+          {direction === 'IN' && (
             <input
               type="text"
               value={notes}
               onChange={(e) => setNotes(e.target.value)}
               className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:border-blue-500 focus:ring-2 focus:ring-blue-500"
-              placeholder="Notes"
+              placeholder="Notes (optional)"
             />
-          </div>
+          )}
           <div className="flex items-center gap-2">
             <Button type="submit" variant="primary" size="sm" disabled={loading}>
               {loading ? 'Saving...' : 'Log Cash'}
@@ -123,6 +146,23 @@ export function CashBalanceCard({ initialCash }: { initialCash: number }) {
                     <span>{new Date(tx.date).toLocaleDateString()} • {tx.type}</span>
                     <span className={tx.amount >= 0 ? 'text-green-600' : 'text-red-600'}>
                       {tx.amount >= 0 ? '+' : '-'}SAR {Math.abs(tx.amount).toLocaleString()}
+                    </span>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+          {buckets.length > 0 && (
+            <div className="pt-3 border-t border-gray-200">
+              <p className="text-xs font-semibold text-gray-500 mb-2">Haul Buckets</p>
+              <div className="space-y-1 text-xs text-gray-600">
+                {buckets.map((bucket) => (
+                  <div key={bucket.id} className="flex items-center justify-between">
+                    <span>
+                      {new Date(bucket.haulStartDate).toLocaleDateString()} • {bucket.id.slice(0, 6)}
+                    </span>
+                    <span className="text-gray-800">
+                      {bucket.currency} {Number(bucket.balance).toLocaleString()}
                     </span>
                   </div>
                 ))}

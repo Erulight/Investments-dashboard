@@ -90,9 +90,63 @@ model Investment {
 
   dealParticipants  DealParticipant[]
   transactions      Transaction[]
+  bucketAllocations InvestmentBucketAllocation[]
 
   @@index([accountId])
   @@index([category])
+}
+
+model CashBucket {
+  id                String   @id @default(cuid())
+  label             String?
+  currency          String   @default("SAR")
+  haulStartDate     DateTime
+  lastZakatPaidDate DateTime?
+  balance           Float    @default(0)
+  createdAt         DateTime @default(now())
+  updatedAt         DateTime @updatedAt
+
+  movements         CashBucketMovement[]
+  allocations       InvestmentBucketAllocation[]
+
+  @@index([currency])
+  @@index([haulStartDate])
+}
+
+model CashBucketMovement {
+  id            String     @id @default(cuid())
+  cashBucketId  String
+  cashBucket    CashBucket @relation(fields: [cashBucketId], references: [id], onDelete: Cascade)
+
+  investmentId  String?
+  investment    Investment? @relation(fields: [investmentId], references: [id], onDelete: SetNull)
+
+  amount        Float
+  type          String
+  date          DateTime
+  notes         String?
+
+  createdAt     DateTime @default(now())
+
+  @@index([cashBucketId])
+  @@index([investmentId])
+  @@index([date])
+}
+
+model InvestmentBucketAllocation {
+  id                String     @id @default(cuid())
+  investmentId      String
+  investment        Investment @relation(fields: [investmentId], references: [id], onDelete: Cascade)
+  cashBucketId      String
+  cashBucket        CashBucket @relation(fields: [cashBucketId], references: [id], onDelete: Cascade)
+  principalAllocated Float
+  principalRemaining Float
+  createdAt         DateTime @default(now())
+  updatedAt         DateTime @updatedAt
+
+  @@unique([investmentId, cashBucketId])
+  @@index([investmentId])
+  @@index([cashBucketId])
 }
 
 model DealParticipant {

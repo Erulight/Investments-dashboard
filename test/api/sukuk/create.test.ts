@@ -34,6 +34,10 @@ vi.mock('@/lib/audit', () => ({
   logAudit: vi.fn(),
 }))
 
+vi.mock('@/lib/cashBuckets', () => ({
+  withdrawFromBuckets: vi.fn(),
+}))
+
 import { requireAuth } from '@/lib/rbac'
 import { prisma } from '@/lib/db'
 

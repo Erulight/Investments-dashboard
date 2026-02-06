@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { prisma } from '@/lib/db'
 import { requireAuth } from '@/lib/rbac'
 import { logAudit } from '@/lib/audit'
+import { creditBucketsForReceipt } from '@/lib/cashBuckets'
 
 const toDate = (value?: string | Date | null) => {
   if (!value) return null
@@ -100,6 +101,15 @@ export async function POST(
           },
         })
       }
+
+      await creditBucketsForReceipt(tx, {
+        investmentId: investment.id,
+        amount: remainingPrincipal,
+        principalReduction: remainingPrincipal,
+        date,
+        type: 'ROLLBACK_PRINCIPAL',
+        notes: notes || null,
+      })
 
       const cashAccount = await tx.account.findFirst({
         where: { type: 'CASH', isActive: true },

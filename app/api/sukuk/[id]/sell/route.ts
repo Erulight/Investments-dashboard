@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { prisma } from '@/lib/db'
 import { requireAuth } from '@/lib/rbac'
 import { logAudit } from '@/lib/audit'
+import { creditBucketsForReceipt } from '@/lib/cashBuckets'
 
 export async function POST(
   req: NextRequest,
@@ -175,6 +176,15 @@ export async function POST(
           },
         })
       }
+
+      await creditBucketsForReceipt(tx, {
+        investmentId: investment.id,
+        amount: salePrice,
+        principalReduction: amount,
+        date,
+        type: 'SELL_RECEIPT',
+        notes: notes || null,
+      })
 
       await logAudit(tx, {
         userId: user.id,
