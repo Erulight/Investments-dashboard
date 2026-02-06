@@ -1,10 +1,11 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { prisma } from '@/lib/db'
+import type { Prisma } from '@prisma/client'
 import { requireAuth } from '@/lib/rbac'
 
 const CASH_BALANCE_KEY = 'CASH_BALANCE'
 
-const getCashAccount = async (tx: typeof prisma, currency = 'SAR') => {
+const getCashAccount = async (tx: Prisma.TransactionClient, currency = 'SAR') => {
   const existing = await tx.account.findFirst({
     where: { type: 'CASH', isActive: true },
   })
