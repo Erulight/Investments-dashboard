@@ -35,11 +35,17 @@ export default async function DashboardPage({
   let totalProfit = 0
   let activeInvestments = 0
 
+  const investmentDateFilter = {
+    startDate: { lt: yearEnd },
+    OR: [{ maturityDate: null }, { maturityDate: { gte: yearStart } }],
+  }
+
   if (user.role === 'OWNER') {
     const investments = await prisma.investment.findMany({
       where: {
         account: { isActive: true },
         name: { notIn: DEMO_INVESTMENT_NAMES },
+        ...investmentDateFilter,
       },
     })
 
@@ -56,6 +62,7 @@ export default async function DashboardPage({
         personId: user.personId,
         investment: {
           name: { notIn: DEMO_INVESTMENT_NAMES },
+          ...investmentDateFilter,
         },
       },
       include: { investment: true },
