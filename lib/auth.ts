@@ -3,10 +3,13 @@ import jwt from 'jsonwebtoken'
 import { cookies } from 'next/headers'
 import { prisma } from './db'
 
-if (!process.env.JWT_SECRET) {
-  throw new Error('JWT_SECRET environment variable is required')
+const getJwtSecret = () => {
+  const secret = process.env.JWT_SECRET
+  if (!secret) {
+    throw new Error('JWT_SECRET environment variable is required')
+  }
+  return secret
 }
-const JWT_SECRET = process.env.JWT_SECRET
 const COOKIE_NAME = 'auth_token'
 
 export type Role = 'OWNER' | 'PARTNER' | 'VIEWER'
@@ -26,12 +29,14 @@ export async function verifyPassword(password: string, hash: string): Promise<bo
 }
 
 export function generateToken(payload: JWTPayload): string {
-  return jwt.sign(payload, JWT_SECRET, { expiresIn: '7d' })
+  return jwt.sign(payload, getJwtSecret(), { expiresIn: '7d' })
 }
 
 export function verifyToken(token: string): JWTPayload | null {
   try {
-    return jwt.verify(token, JWT_SECRET) as JWTPayload
+    const secret = process.env.JWT_SECRET
+    if (!secret) return null
+    return jwt.verify(token, secret) as JWTPayload
   } catch {
     return null
   }
