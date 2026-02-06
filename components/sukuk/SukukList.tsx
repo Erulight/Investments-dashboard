@@ -14,7 +14,9 @@ interface SukukListProps {
 
 export function SukukList({ initialSukuk, userRole }: SukukListProps) {
   const router = useRouter()
-  const [sukuk, setSukuk] = useState(initialSukuk)
+  const [sukuk, setSukuk] = useState<any[]>(
+    Array.isArray(initialSukuk) ? initialSukuk : []
+  )
   const [isCreateModalOpen, setIsCreateModalOpen] = useState(false)
   const [isEditModalOpen, setIsEditModalOpen] = useState(false)
   const [editingSukuk, setEditingSukuk] = useState<any>(null)
@@ -46,7 +48,8 @@ export function SukukList({ initialSukuk, userRole }: SukukListProps) {
     days: [] as string[],
     statuses: [] as string[],
   })
-  const isEmpty = sukuk.length === 0
+  const list = Array.isArray(sukuk) ? sukuk : []
+  const isEmpty = list.length === 0
 
   const openCreateModal = () => setIsCreateModalOpen(true)
   const asOfDate = new Date()
@@ -200,7 +203,7 @@ export function SukukList({ initialSukuk, userRole }: SukukListProps) {
     })
   }
 
-  const filterOptions = sukuk.reduce(
+  const filterOptions = list.reduce(
     (acc, inv) => {
       const platform = inv.account?.name
       if (platform) acc.platforms.add(platform)
@@ -226,7 +229,7 @@ export function SukukList({ initialSukuk, userRole }: SukukListProps) {
     }
   )
 
-  const filteredSukuk = sukuk.filter((inv) => {
+  const filteredSukuk = list.filter((inv) => {
     const metrics = getMetrics(inv)
     const platform = inv.account?.name || ''
     const maturityDate = toDate(inv.maturityDate)
@@ -464,7 +467,7 @@ export function SukukList({ initialSukuk, userRole }: SukukListProps) {
       }
 
       // Remove from local state
-      setSukuk(sukuk.filter((s) => s.id !== id))
+      setSukuk(list.filter((s) => s.id !== id))
       router.refresh()
     } catch (error) {
       alert('An error occurred while deleting the Sukuk')
@@ -479,7 +482,7 @@ export function SukukList({ initialSukuk, userRole }: SukukListProps) {
         <div>
           <h2 className="text-2xl font-bold text-gray-900">All Sukuk Deals</h2>
           <p className="text-sm text-gray-500 mt-1">
-            {filteredSukuk.length} of {sukuk.length} deals
+            {filteredSukuk.length} of {list.length} deals
           </p>
         </div>
         <div className="flex items-center gap-4">
