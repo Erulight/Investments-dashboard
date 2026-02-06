@@ -38,6 +38,14 @@ export function SukukList({ initialSukuk, userRole }: SukukListProps) {
   const [partners, setPartners] = useState<any[]>([])
   const [actionError, setActionError] = useState('')
   const [actionLoading, setActionLoading] = useState(false)
+  const [filters, setFilters] = useState({
+    platforms: [] as string[],
+    terms: [] as string[],
+    years: [] as string[],
+    months: [] as string[],
+    days: [] as string[],
+    statuses: [] as string[],
+  })
   const isEmpty = sukuk.length === 0
 
   const openCreateModal = () => setIsCreateModalOpen(true)
@@ -151,6 +159,105 @@ export function SukukList({ initialSukuk, userRole }: SukukListProps) {
       currency,
     }
   }
+
+  const toggleFilter = (key: keyof typeof filters, value: string) => {
+    setFilters((prev) => {
+      const list = prev[key]
+      const exists = list.includes(value)
+      const next = exists ? list.filter((item) => item !== value) : [...list, value]
+      return { ...prev, [key]: next }
+    })
+  }
+
+  const clearFilters = () => {
+    setFilters({
+      platforms: [],
+      terms: [],
+      years: [],
+      months: [],
+      days: [],
+      statuses: [],
+    })
+  }
+
+  const filterOptions = sukuk.reduce(
+    (acc, inv) => {
+      const platform = inv.account?.name
+      if (platform) acc.platforms.add(platform)
+      const maturityDate = toDate(inv.maturityDate)
+      if (maturityDate) {
+        acc.years.add(String(maturityDate.getFullYear()))
+        acc.months.add(String(maturityDate.getMonth() + 1))
+        acc.days.add(String(maturityDate.getDate()))
+      }
+      const metrics = getMetrics(inv)
+      if (metrics.periodMonths !== null) {
+        if (metrics.periodMonths <= 12) acc.terms.add('short')
+        if (metrics.periodMonths > 12) acc.terms.add('long')
+      }
+      return acc
+    },
+    {
+      platforms: new Set<string>(),
+      terms: new Set<string>(),
+      years: new Set<string>(),
+      months: new Set<string>(),
+      days: new Set<string>(),
+    }
+  )
+
+  const filteredSukuk = sukuk.filter((inv) => {
+    const metrics = getMetrics(inv)
+    const platform = inv.account?.name || ''
+    const maturityDate = toDate(inv.maturityDate)
+    const year = maturityDate ? String(maturityDate.getFullYear()) : null
+    const month = maturityDate ? String(maturityDate.getMonth() + 1) : null
+    const day = maturityDate ? String(maturityDate.getDate()) : null
+    const term = metrics.periodMonths === null
+      ? 'unknown'
+      : metrics.periodMonths <= 12
+        ? 'short'
+        : 'long'
+
+    if (filters.platforms.length > 0 && !filters.platforms.includes(platform)) {
+      return false
+    }
+
+    if (filters.terms.length > 0 && !filters.terms.includes(term)) {
+      return false
+    }
+
+    if (filters.years.length > 0 && (!year || !filters.years.includes(year))) {
+      return false
+    }
+
+    if (filters.months.length > 0 && (!month || !filters.months.includes(month))) {
+      return false
+    }
+
+    if (filters.days.length > 0 && (!day || !filters.days.includes(day))) {
+      return false
+    }
+
+    if (filters.statuses.length > 0) {
+      const statusChecks = {
+        receivable: metrics.receivable > 0,
+        received: metrics.receivable <= 0,
+        nearClose: metrics.daysRemaining !== null && metrics.daysRemaining > 0 && metrics.daysRemaining <= 30,
+        closing: metrics.daysRemaining !== null && metrics.daysRemaining <= 0,
+      }
+      const matches = filters.statuses.some((status) => {
+        if (status === 'receivable') return statusChecks.receivable
+        if (status === 'received') return statusChecks.received
+        if (status === 'nearClose') return statusChecks.nearClose
+        if (status === 'closing') return statusChecks.closing
+        return false
+      })
+      if (!matches) return false
+    }
+
+    return true
+  })
 
   const resetWithdrawForm = () => {
     setWithdrawForm({
@@ -312,7 +419,9 @@ export function SukukList({ initialSukuk, userRole }: SukukListProps) {
       <div className="flex flex-wrap items-center justify-between gap-4 mb-4">
         <div>
           <h2 className="text-2xl font-bold text-gray-900">All Sukuk Deals</h2>
-          <p className="text-sm text-gray-500 mt-1">{sukuk.length} active investments</p>
+          <p className="text-sm text-gray-500 mt-1">
+            {filteredSukuk.length} of {sukuk.length} deals
+          </p>
         </div>
         <div className="flex items-center gap-4">
           <span className="text-sm text-gray-500">As of {asOfLabel}</span>
@@ -344,8 +453,129 @@ export function SukukList({ initialSukuk, userRole }: SukukListProps) {
           )}
         </div>
       ) : (
-        <Table className="text-[11px]">
-          <TableHeader>
+        <>
+          <div className="mb-4 rounded-xl border border-gray-200 bg-white p-4">
+            <div className="flex flex-wrap items-center justify-between gap-3">
+              <div className="text-sm font-semibold text-gray-700">Filters</div>
+              <Button variant="ghost" size="sm" onClick={clearFilters}>
+                Clear all
+              </Button>
+            </div>
+            <div className="mt-4 grid grid-cols-1 gap-4 md:grid-cols-2 lg:grid-cols-3">
+              <div>
+                <div className="text-xs font-semibold text-gray-500 mb-2">Platforms</div>
+                <div className="flex flex-wrap gap-2">
+                  {Array.from(filterOptions.platforms).map((platform) => (
+                    <label key={platform} className="flex items-center gap-1 text-xs text-gray-600">
+                      <input
+                        type="checkbox"
+                        checked={filters.platforms.includes(platform)}
+                        onChange={() => toggleFilter('platforms', platform)}
+                        className="h-3 w-3 rounded border-gray-300 text-blue-600"
+                      />
+                      {platform}
+                    </label>
+                  ))}
+                </div>
+              </div>
+              <div>
+                <div className="text-xs font-semibold text-gray-500 mb-2">Term</div>
+                <div className="flex flex-wrap gap-2">
+                  {['short', 'long'].map((term) => (
+                    <label key={term} className="flex items-center gap-1 text-xs text-gray-600 capitalize">
+                      <input
+                        type="checkbox"
+                        checked={filters.terms.includes(term)}
+                        onChange={() => toggleFilter('terms', term)}
+                        className="h-3 w-3 rounded border-gray-300 text-blue-600"
+                      />
+                      {term} term
+                    </label>
+                  ))}
+                </div>
+              </div>
+              <div>
+                <div className="text-xs font-semibold text-gray-500 mb-2">Status</div>
+                <div className="flex flex-wrap gap-2">
+                  {[
+                    { key: 'receivable', label: 'Receivable' },
+                    { key: 'received', label: 'Received' },
+                    { key: 'nearClose', label: 'Near Close' },
+                    { key: 'closing', label: 'Closing' },
+                  ].map((status) => (
+                    <label key={status.key} className="flex items-center gap-1 text-xs text-gray-600">
+                      <input
+                        type="checkbox"
+                        checked={filters.statuses.includes(status.key)}
+                        onChange={() => toggleFilter('statuses', status.key)}
+                        className="h-3 w-3 rounded border-gray-300 text-blue-600"
+                      />
+                      {status.label}
+                    </label>
+                  ))}
+                </div>
+              </div>
+              <div>
+                <div className="text-xs font-semibold text-gray-500 mb-2">Year</div>
+                <div className="flex flex-wrap gap-2">
+                  {Array.from(filterOptions.years).sort().map((year) => (
+                    <label key={year} className="flex items-center gap-1 text-xs text-gray-600">
+                      <input
+                        type="checkbox"
+                        checked={filters.years.includes(year)}
+                        onChange={() => toggleFilter('years', year)}
+                        className="h-3 w-3 rounded border-gray-300 text-blue-600"
+                      />
+                      {year}
+                    </label>
+                  ))}
+                </div>
+              </div>
+              <div>
+                <div className="text-xs font-semibold text-gray-500 mb-2">Month</div>
+                <div className="flex flex-wrap gap-2">
+                  {Array.from(filterOptions.months)
+                    .sort((a, b) => Number(a) - Number(b))
+                    .map((month) => (
+                      <label key={month} className="flex items-center gap-1 text-xs text-gray-600">
+                        <input
+                          type="checkbox"
+                          checked={filters.months.includes(month)}
+                          onChange={() => toggleFilter('months', month)}
+                          className="h-3 w-3 rounded border-gray-300 text-blue-600"
+                        />
+                        {month}
+                      </label>
+                    ))}
+                </div>
+              </div>
+              <div>
+                <div className="text-xs font-semibold text-gray-500 mb-2">Day</div>
+                <div className="flex flex-wrap gap-2">
+                  {Array.from(filterOptions.days)
+                    .sort((a, b) => Number(a) - Number(b))
+                    .map((dayValue) => (
+                      <label key={dayValue} className="flex items-center gap-1 text-xs text-gray-600">
+                        <input
+                          type="checkbox"
+                          checked={filters.days.includes(dayValue)}
+                          onChange={() => toggleFilter('days', dayValue)}
+                          className="h-3 w-3 rounded border-gray-300 text-blue-600"
+                        />
+                        {dayValue}
+                      </label>
+                    ))}
+                </div>
+              </div>
+            </div>
+          </div>
+          {filteredSukuk.length === 0 ? (
+            <div className="rounded-xl border border-gray-200 bg-white p-6 text-sm text-gray-600">
+              No deals match the selected filters.
+            </div>
+          ) : (
+            <Table className="text-[11px]">
+              <TableHeader>
             <TableRow>
               <TableHead className="px-2 py-2 text-[11px]">Company</TableHead>
               <TableHead className="px-2 py-2 text-[11px]">Total Investment</TableHead>
@@ -361,13 +591,13 @@ export function SukukList({ initialSukuk, userRole }: SukukListProps) {
               <TableHead className="px-2 py-2 text-[11px]">Status</TableHead>
               {userRole === 'OWNER' && <TableHead className="px-2 py-2 text-[11px]">Actions</TableHead>}
             </TableRow>
-          </TableHeader>
-          <TableBody>
-            {sukuk.map((inv: any) => {
-              const metrics = getMetrics(inv)
+              </TableHeader>
+              <TableBody>
+                {filteredSukuk.map((inv: any) => {
+                  const metrics = getMetrics(inv)
 
-              return (
-                <TableRow key={inv.id} className="hover:bg-blue-50 transition-colors duration-150">
+                  return (
+                    <TableRow key={inv.id} className="hover:bg-blue-50 transition-colors duration-150">
                   <TableCell className="px-2 py-2 font-semibold text-gray-900">
                     <button
                       type="button"
@@ -426,9 +656,9 @@ export function SukukList({ initialSukuk, userRole }: SukukListProps) {
                       {metrics.progress.percent.toFixed(2)}%
                     </span>
                   </TableCell>
-                  {userRole === 'OWNER' && (
-                    <TableCell className="px-2 py-2">
-                      <div className="flex flex-wrap items-center gap-2">
+                      {userRole === 'OWNER' && (
+                        <TableCell className="px-2 py-2">
+                          <div className="flex flex-wrap items-center gap-2">
                         <Button
                           size="sm"
                           variant="secondary"
@@ -459,13 +689,15 @@ export function SukukList({ initialSukuk, userRole }: SukukListProps) {
                           {deletingId === inv.id ? 'Deleting...' : 'Delete'}
                         </Button>
                       </div>
-                    </TableCell>
-                  )}
-                </TableRow>
-              )
-            })}
-          </TableBody>
-        </Table>
+                        </TableCell>
+                      )}
+                    </TableRow>
+                  )
+                })}
+              </TableBody>
+            </Table>
+          )}
+        </>
       )}
 
       {/* Create Modal */}
