@@ -19,7 +19,9 @@ export default async function DashboardPage({
     return null
   }
 
-  const selectedYear = Number(searchParams?.year) || new Date().getFullYear()
+  const yearParam = searchParams?.year
+  const parsedYear = yearParam ? Number(yearParam) : NaN
+  const selectedYear = Number.isFinite(parsedYear) ? parsedYear : new Date().getFullYear()
   const yearStart = new Date(selectedYear, 0, 1)
   const yearEnd = new Date(selectedYear + 1, 0, 1)
 
