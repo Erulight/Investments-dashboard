@@ -97,11 +97,25 @@ export function SukukList({ initialSukuk, userRole }: SukukListProps) {
     return Math.max(0, months)
   }
 
-  const getDaysRemaining = (end?: string | Date | null) => {
+  const startOfDay = (date: Date) => new Date(date.getFullYear(), date.getMonth(), date.getDate())
+
+  const getLatestReceiptDate = (inv: any) => {
+    const transactions = Array.isArray(inv.transactions) ? inv.transactions : []
+    const profitReceipts = transactions.filter((tx: any) => tx.type === 'WITHDRAW_PROFIT')
+    if (profitReceipts.length === 0) return null
+    return profitReceipts.reduce((latest: Date | null, tx: any) => {
+      const txDate = toDate(tx.date)
+      if (!txDate) return latest
+      if (!latest || txDate > latest) return txDate
+      return latest
+    }, null)
+  }
+
+  const getDaysRemaining = (end?: string | Date | null, reference?: Date | null) => {
     const endDate = toDate(end)
     if (!endDate) return null
-    const asOf = new Date(asOfDate.getFullYear(), asOfDate.getMonth(), asOfDate.getDate())
-    const endDay = new Date(endDate.getFullYear(), endDate.getMonth(), endDate.getDate())
+    const asOf = startOfDay(reference ?? asOfDate)
+    const endDay = startOfDay(endDate)
     const diffMs = endDay.getTime() - asOf.getTime()
     const diffDays = Math.ceil(diffMs / (1000 * 60 * 60 * 24))
     return diffDays
@@ -133,7 +147,12 @@ export function SukukList({ initialSukuk, userRole }: SukukListProps) {
       : Math.max(0, grossProfit - fees)
     const aprAfterFees = totalInvestment > 0 ? (netProfit / totalInvestment) * 100 : 0
     const receivable = Math.max(0, netProfit - totalReceived)
-    const daysRemaining = getDaysRemaining(inv.maturityDate)
+    const receiptDate = getLatestReceiptDate(inv)
+    const isFullyReceived = netProfit > 0 && totalReceived >= netProfit - 0.01
+    const referenceDate = isFullyReceived
+      ? receiptDate ?? toDate(inv.maturityDate) ?? asOfDate
+      : asOfDate
+    const daysRemaining = getDaysRemaining(inv.maturityDate, referenceDate)
     const progress = getProgress(netProfit, totalReceived)
     const currency = inv.account?.currency || ''
 
@@ -150,13 +169,14 @@ export function SukukList({ initialSukuk, userRole }: SukukListProps) {
       receivable,
       daysRemaining,
       paymentStatus:
-        daysRemaining !== null && daysRemaining < 0 && receivable > 0
+        daysRemaining !== null && daysRemaining < 0
           ? 'delayed'
-          : daysRemaining !== null && daysRemaining > 0 && totalReceived > 0
+          : isFullyReceived && daysRemaining !== null && daysRemaining > 0
             ? 'early'
             : 'on-time',
       progress,
       currency,
+      isFullyReceived,
     }
   }
 
@@ -625,11 +645,11 @@ export function SukukList({ initialSukuk, userRole }: SukukListProps) {
                   <TableCell className="px-2 py-2 text-gray-700 tabular-nums">
                     {metrics.daysRemaining === null ? (
                       '—'
-                    ) : metrics.daysRemaining < 0 && metrics.receivable > 0 ? (
+                    ) : metrics.paymentStatus === 'delayed' ? (
                       <span className="text-red-600 font-semibold">
                         Delayed {Math.abs(metrics.daysRemaining)}d
                       </span>
-                    ) : metrics.daysRemaining > 0 && metrics.totalReceived > 0 ? (
+                    ) : metrics.paymentStatus === 'early' ? (
                       <span className="text-emerald-600 font-semibold">
                         Early {metrics.daysRemaining}d
                       </span>
@@ -788,7 +808,13 @@ export function SukukList({ initialSukuk, userRole }: SukukListProps) {
                 <div>
                   <p className="text-gray-500">Maturity Days Remaining</p>
                   <p className="font-semibold text-gray-900">
-                    {metrics.daysRemaining === null ? '—' : metrics.daysRemaining}
+                    {metrics.daysRemaining === null
+                      ? '—'
+                      : metrics.paymentStatus === 'delayed'
+                        ? `Delayed ${Math.abs(metrics.daysRemaining)}d`
+                        : metrics.paymentStatus === 'early'
+                          ? `Early ${metrics.daysRemaining}d`
+                          : metrics.daysRemaining}
                   </p>
                 </div>
                 <div>

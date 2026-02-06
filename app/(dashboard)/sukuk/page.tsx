@@ -25,6 +25,12 @@ export default async function InvestmentsPage() {
         dealParticipants: {
           include: { person: true },
         },
+        transactions: {
+          where: {
+            type: { in: ['WITHDRAW_PROFIT', 'WITHDRAW_PRINCIPAL'] },
+          },
+          orderBy: { date: 'asc' },
+        },
       },
       orderBy: { createdAt: 'desc' },
     })
@@ -41,7 +47,15 @@ export default async function InvestmentsPage() {
       },
       include: {
         investment: {
-          include: { account: true },
+          include: {
+            account: true,
+            transactions: {
+              where: {
+                type: { in: ['WITHDRAW_PROFIT', 'WITHDRAW_PRINCIPAL'] },
+              },
+              orderBy: { date: 'asc' },
+            },
+          },
         },
       },
     })

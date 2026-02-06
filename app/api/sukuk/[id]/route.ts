@@ -21,6 +21,12 @@ export async function GET(
             person: true,
           },
         },
+        transactions: {
+          where: {
+            type: { in: ['WITHDRAW_PROFIT', 'WITHDRAW_PRINCIPAL'] },
+          },
+          orderBy: { date: 'asc' },
+        },
       },
     })
     

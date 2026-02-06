@@ -41,6 +41,16 @@ export function SukukForm({ mode, initialData, onSuccess, onCancel }: SukukFormP
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState('')
   const [loadError, setLoadError] = useState('')
+  const [receiptForm, setReceiptForm] = useState({
+    source: 'PROFIT',
+    amount: '',
+    date: new Date().toISOString().split('T')[0],
+    notes: '',
+  })
+  const [receiptHistory, setReceiptHistory] = useState<any[]>(initialData?.transactions ?? [])
+  const [receiptLoading, setReceiptLoading] = useState(false)
+  const [receiptError, setReceiptError] = useState('')
+  const [receiptMessage, setReceiptMessage] = useState('')
 
   // Fetch accounts on mount
   useEffect(() => {
@@ -66,6 +76,12 @@ export function SukukForm({ mode, initialData, onSuccess, onCancel }: SukukFormP
     }
     fetchData()
   }, [])
+
+  useEffect(() => {
+    if (Array.isArray(initialData?.transactions)) {
+      setReceiptHistory(initialData.transactions)
+    }
+  }, [initialData?.transactions])
 
   useEffect(() => {
     const principal = parseFloat(formData.principalAmount || '0')
@@ -186,6 +202,59 @@ export function SukukForm({ mode, initialData, onSuccess, onCancel }: SukukFormP
     }
   }
 
+  const handleReceipt = async (e?: React.FormEvent | React.MouseEvent) => {
+    e?.preventDefault()
+    if (mode !== 'edit' || !initialData?.id) return
+    if (!receiptForm.amount) {
+      setReceiptError('Amount is required')
+      return
+    }
+    if (!receiptForm.date) {
+      setReceiptError('Date is required')
+      return
+    }
+    setReceiptLoading(true)
+    setReceiptError('')
+    setReceiptMessage('')
+    try {
+      const res = await fetch(`/api/sukuk/${initialData.id}/withdraw`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          source: receiptForm.source,
+          amount: parseFloat(receiptForm.amount),
+          date: receiptForm.date,
+          notes: receiptForm.notes,
+        }),
+      })
+      const data = await res.json().catch(() => ({}))
+      if (!res.ok) {
+        throw new Error(data.error || 'Failed to record receipt')
+      }
+      const updated = data.investment
+      setFormData((prev: any) => ({
+        ...prev,
+        totalReceived: updated?.totalReceived ?? prev.totalReceived,
+        principalAmount: updated?.principalAmount ?? prev.principalAmount,
+        currentValue: updated?.currentValue ?? prev.currentValue,
+      }))
+      const entry = {
+        id: `local-${Date.now()}`,
+        type: receiptForm.source === 'PROFIT' ? 'WITHDRAW_PROFIT' : 'WITHDRAW_PRINCIPAL',
+        amount: Math.abs(parseFloat(receiptForm.amount)),
+        date: receiptForm.date,
+        description: receiptForm.notes || null,
+      }
+      setReceiptHistory((prev) => [entry, ...prev])
+      setReceiptForm((prev) => ({ ...prev, amount: '', notes: '' }))
+      setReceiptMessage('Recorded')
+    } catch (err) {
+      setReceiptError(err instanceof Error ? err.message : 'Failed to record receipt')
+    } finally {
+      setReceiptLoading(false)
+    }
+  }
+
   const addParticipant = () => {
     setParticipants([...participants, { personId: '', investedAmount: '', sharePercentage: '', notes: '' }])
   }
@@ -199,6 +268,11 @@ export function SukukForm({ mode, initialData, onSuccess, onCancel }: SukukFormP
     updated[index] = { ...updated[index], [field]: value }
     setParticipants(updated)
   }
+
+  const receiptRows = receiptHistory
+    .filter((tx) => tx.type === 'WITHDRAW_PROFIT' || tx.type === 'WITHDRAW_PRINCIPAL')
+    .slice()
+    .sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime())
 
   return (
     <form onSubmit={handleSubmit} className="space-y-6">
@@ -371,6 +445,11 @@ export function SukukForm({ mode, initialData, onSuccess, onCancel }: SukukFormP
               placeholder="0.00"
             />
             {errors.totalReceived && <p className="text-sm text-red-600 mt-1">{errors.totalReceived}</p>}
+            {mode === 'edit' && (
+              <p className="text-xs text-gray-500 mt-1">
+                Use receipts below for dated entries; this total will update automatically.
+              </p>
+            )}
           </div>
         </div>
 
@@ -395,6 +474,84 @@ export function SukukForm({ mode, initialData, onSuccess, onCancel }: SukukFormP
           </p>
         </div>
       </div>
+
+      {mode === 'edit' && (
+        <div className="space-y-4">
+          <h3 className="text-lg font-semibold text-gray-900">Record Receipts</h3>
+          <p className="text-xs text-gray-500">
+            Log partial profit receipts with dates so maturity timing stays accurate.
+          </p>
+          <div className="space-y-3">
+            {receiptError && (
+              <div className="rounded-lg bg-red-50 p-3 text-sm text-red-700 border border-red-200">
+                {receiptError}
+              </div>
+            )}
+            {receiptMessage && (
+              <div className="rounded-lg bg-green-50 p-3 text-sm text-green-700 border border-green-200">
+                {receiptMessage}
+              </div>
+            )}
+            <div className="grid grid-cols-1 md:grid-cols-4 gap-3">
+              <select
+                value={receiptForm.source}
+                onChange={(e) => setReceiptForm((prev) => ({ ...prev, source: e.target.value }))}
+                className="w-full px-4 py-2 border border-gray-300 rounded-lg bg-white focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+              >
+                <option value="PROFIT">Profit</option>
+                <option value="PRINCIPAL">Principal</option>
+              </select>
+              <input
+                type="number"
+                min="0"
+                step="0.01"
+                value={receiptForm.amount}
+                onChange={(e) => setReceiptForm((prev) => ({ ...prev, amount: e.target.value }))}
+                className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                placeholder="Amount"
+              />
+              <input
+                type="date"
+                value={receiptForm.date}
+                onChange={(e) => setReceiptForm((prev) => ({ ...prev, date: e.target.value }))}
+                className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+              />
+              <input
+                type="text"
+                value={receiptForm.notes}
+                onChange={(e) => setReceiptForm((prev) => ({ ...prev, notes: e.target.value }))}
+                className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                placeholder="Notes (optional)"
+              />
+            </div>
+            <div className="flex justify-end">
+              <Button type="button" variant="primary" size="sm" disabled={receiptLoading} onClick={handleReceipt}>
+                {receiptLoading ? 'Saving...' : 'Add Receipt'}
+              </Button>
+            </div>
+          </div>
+
+          {receiptRows.length > 0 && (
+            <div className="rounded-xl border border-gray-200">
+              <div className="px-4 py-2 border-b text-xs font-semibold text-gray-500">
+                Recent Receipts
+              </div>
+              <div className="divide-y text-xs">
+                {receiptRows.slice(0, 6).map((tx) => (
+                  <div key={tx.id} className="flex items-center justify-between px-4 py-2">
+                    <div className="text-gray-700">
+                      {new Date(tx.date).toLocaleDateString()} • {tx.type}
+                    </div>
+                    <div className="text-green-600">
+                      +{Math.abs(tx.amount).toLocaleString()}
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+        </div>
+      )}
 
       {/* Dates */}
       <div className="space-y-4">
