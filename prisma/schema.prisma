@@ -91,6 +91,7 @@ model Investment {
   dealParticipants  DealParticipant[]
   transactions      Transaction[]
   bucketAllocations InvestmentBucketAllocation[]
+  cashBucketMovements CashBucketMovement[]
 
   @@index([accountId])
   @@index([category])
