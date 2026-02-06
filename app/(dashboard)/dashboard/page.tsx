@@ -90,19 +90,6 @@ export default async function DashboardPage({
           ],
         }
 
-  const recentTransactions = await prisma.transaction.findMany({
-    where: {
-      ...transactionWhere,
-      date: { gte: yearStart, lt: yearEnd },
-    },
-    take: 10,
-    orderBy: { date: 'desc' },
-    include: {
-      investment: true,
-      account: true,
-    },
-  })
-
   const yearlyProfit = await prisma.transaction.aggregate({
     where: {
       ...transactionWhere,
@@ -113,21 +100,6 @@ export default async function DashboardPage({
   })
 
   const yearlyProfitValue = Math.abs(yearlyProfit._sum.amount || 0)
-
-  const dedupedTransactions = (() => {
-    const seen = new Set<string>()
-    return recentTransactions.filter((tx) => {
-      const key = [
-        tx.type,
-        tx.amount,
-        tx.investmentId || 'none',
-        new Date(tx.date).toISOString(),
-      ].join('|')
-      if (seen.has(key)) return false
-      seen.add(key)
-      return true
-    })
-  })()
 
   const totalPortfolioValue = cashBalance + totalValue
   const returnPercentage = totalInvested > 0 ? ((totalValue - totalInvested) / totalInvested * 100) : 0
@@ -223,64 +195,7 @@ export default async function DashboardPage({
         </Card>
       </div>
 
-      {/* Recent Transactions */}
-      <Card>
-        <CardHeader>
-          <div className="flex items-center justify-between">
-            <div>
-              <CardTitle className="text-2xl font-bold text-gray-900">Recent Transactions</CardTitle>
-              <p className="text-sm text-gray-500 mt-1">Latest activity in your portfolio</p>
-            </div>
-            <span className="text-3xl">📊</span>
-          </div>
-        </CardHeader>
-        <CardContent>
-          {dedupedTransactions.length === 0 ? (
-            <div className="text-center py-16">
-              <div className="text-6xl mb-4">📭</div>
-              <p className="text-gray-500 text-lg font-medium">No transactions yet</p>
-              <p className="text-gray-400 text-sm mt-2">
-                Start by adding investments or importing data
-              </p>
-            </div>
-          ) : (
-            <div className="space-y-3">
-              {dedupedTransactions.map((tx) => (
-                <div 
-                  key={tx.id} 
-                  className="flex justify-between items-center p-4 bg-gradient-to-r from-gray-50 to-blue-50 rounded-xl hover:shadow-md transition-all duration-200 border border-gray-100"
-                >
-                  <div className="flex items-center space-x-4">
-                    <div className={`w-12 h-12 rounded-xl flex items-center justify-center text-xl ${
-                      tx.amount >= 0 ? 'bg-green-100' : 'bg-red-100'
-                    }`}>
-                      {tx.amount >= 0 ? '💵' : '💸'}
-                    </div>
-                    <div>
-                      <div className="font-semibold text-gray-900">
-                        {tx.investment?.name || tx.account.name}
-                      </div>
-                      <div className="text-sm text-gray-600 flex items-center space-x-2">
-                        <span>{new Date(tx.date).toLocaleDateString()}</span>
-                        <span>•</span>
-                        <span className="px-2 py-0.5 bg-blue-100 text-blue-700 rounded-full text-xs font-medium">
-                          {tx.type}
-                        </span>
-                      </div>
-                    </div>
-                  </div>
-                  <div className="text-right">
-                    <div className={`text-xl font-bold ${tx.amount >= 0 ? 'text-green-600' : 'text-red-600'}`}>
-                      {tx.amount >= 0 ? '+' : '-'}{tx.account.currency} {Math.abs(tx.amount).toLocaleString()}
-                    </div>
-                  </div>
-                </div>
-              ))}
-            </div>
-          )}
-        </CardContent>
-      </Card>
-
+      {/* Recent Transactions removed per user request */}
       {/* Quick Actions */}
       {user.role === 'OWNER' && (
         <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
