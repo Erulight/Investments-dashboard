@@ -62,6 +62,17 @@ export async function POST(req: NextRequest) {
         throw new Error('INSUFFICIENT_CASH')
       }
 
+      const cashAccount = await tx.account.findFirst({
+        where: { type: 'CASH', isActive: true },
+      }) ?? await tx.account.create({
+        data: {
+          name: 'Cash Balance',
+          type: 'CASH',
+          currency: account.currency || 'SAR',
+          description: 'Cash ledger account',
+        },
+      })
+
       // Create the investment
       const newSukuk = await tx.investment.create({
         data: {
@@ -95,6 +106,18 @@ export async function POST(req: NextRequest) {
           },
         })
       }
+
+      await tx.transaction.create({
+        data: {
+          accountId: cashAccount.id,
+          investmentId: newSukuk.id,
+          personId: user.personId || null,
+          type: 'CASH_INVEST',
+          amount: -Math.abs(data.principalAmount),
+          date: startDate,
+          description: 'Cash used to create Sukuk',
+        },
+      })
 
       // Create participants if provided
       if (data.participants && data.participants.length > 0) {

@@ -30,7 +30,7 @@ export async function POST(
 
     const investment = await prisma.investment.findUnique({
       where: { id },
-      include: { dealParticipants: true },
+      include: { dealParticipants: true, account: true },
     })
 
     if (!investment) {
@@ -111,10 +111,21 @@ export async function POST(
         })
       }
 
+      const cashAccount = await tx.account.findFirst({
+        where: { type: 'CASH', isActive: true },
+      }) ?? await tx.account.create({
+        data: {
+          name: 'Cash Balance',
+          type: 'CASH',
+          currency: investment.account?.currency || 'SAR',
+          description: 'Cash ledger account',
+        },
+      })
+
       await tx.transaction.createMany({
         data: [
           {
-            accountId: investment.accountId,
+            accountId: cashAccount.id,
             investmentId: investment.id,
             personId: user.personId,
             type: 'SELL_TO_PARTNER',

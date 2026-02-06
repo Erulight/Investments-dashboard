@@ -4,6 +4,9 @@ import { prisma } from '@/lib/db'
 import { DEMO_INVESTMENT_NAMES } from '@/lib/demo'
 import { YearFilter } from '@/components/dashboard/YearFilter'
 import { CashBalanceCard } from '@/components/dashboard/CashBalanceCard'
+import { ReportButton } from '@/components/dashboard/ReportButton'
+
+export const dynamic = 'force-dynamic'
 
 export default async function DashboardPage({
   searchParams,
@@ -102,6 +105,21 @@ export default async function DashboardPage({
 
   const yearlyProfitValue = Math.abs(yearlyProfit._sum.amount || 0)
 
+  const dedupedTransactions = (() => {
+    const seen = new Set<string>()
+    return recentTransactions.filter((tx) => {
+      const key = [
+        tx.type,
+        tx.amount,
+        tx.investmentId || 'none',
+        new Date(tx.date).toISOString(),
+      ].join('|')
+      if (seen.has(key)) return false
+      seen.add(key)
+      return true
+    })
+  })()
+
   const totalPortfolioValue = cashBalance + totalValue
   const returnPercentage = totalInvested > 0 ? ((totalValue - totalInvested) / totalInvested * 100) : 0
 
@@ -128,14 +146,19 @@ export default async function DashboardPage({
 
       <div className="flex flex-wrap items-center justify-between gap-4">
         <YearFilter selectedYear={selectedYear} />
-        <div className="text-sm text-gray-500">
-          Showing gains for {selectedYear}
+        <div className="flex items-center gap-3">
+          <ReportButton selectedYear={selectedYear} />
+          <div className="text-sm text-gray-500">
+            Showing gains for {selectedYear}
+          </div>
         </div>
       </div>
 
       {/* Stats Grid */}
       <div className="grid grid-cols-1 gap-6 sm:grid-cols-2 lg:grid-cols-5">
-        <CashBalanceCard initialCash={Number.isFinite(cashBalance) ? cashBalance : 0} />
+        {user.role === 'OWNER' && (
+          <CashBalanceCard initialCash={Number.isFinite(cashBalance) ? cashBalance : 0} />
+        )}
         <Card hover className="sukuk-card-hover">
           <CardContent>
             <div className="flex items-center justify-between mb-2">
@@ -203,7 +226,7 @@ export default async function DashboardPage({
           </div>
         </CardHeader>
         <CardContent>
-          {recentTransactions.length === 0 ? (
+          {dedupedTransactions.length === 0 ? (
             <div className="text-center py-16">
               <div className="text-6xl mb-4">📭</div>
               <p className="text-gray-500 text-lg font-medium">No transactions yet</p>
@@ -213,7 +236,7 @@ export default async function DashboardPage({
             </div>
           ) : (
             <div className="space-y-3">
-              {recentTransactions.map((tx) => (
+              {dedupedTransactions.map((tx) => (
                 <div 
                   key={tx.id} 
                   className="flex justify-between items-center p-4 bg-gradient-to-r from-gray-50 to-blue-50 rounded-xl hover:shadow-md transition-all duration-200 border border-gray-100"

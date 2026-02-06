@@ -23,6 +23,7 @@ export async function POST(
 
     const investment = await prisma.investment.findUnique({
       where: { id },
+      include: { account: true },
     })
 
     if (!investment) {
@@ -42,7 +43,7 @@ export async function POST(
       where: {
         investmentId: investment.id,
         type: source === 'PROFIT' ? 'WITHDRAW_PROFIT' : 'WITHDRAW_PRINCIPAL',
-        amount: -Math.abs(amount),
+        amount: Math.abs(amount),
         date: {
           gte: dayStart,
           lt: dayEnd,
@@ -92,13 +93,24 @@ export async function POST(
         })
       }
 
+      const cashAccount = await tx.account.findFirst({
+        where: { type: 'CASH', isActive: true },
+      }) ?? await tx.account.create({
+        data: {
+          name: 'Cash Balance',
+          type: 'CASH',
+          currency: investment.account?.currency || 'SAR',
+          description: 'Cash ledger account',
+        },
+      })
+
       await tx.transaction.create({
         data: {
-          accountId: investment.accountId,
+          accountId: cashAccount.id,
           investmentId: investment.id,
           personId: user.personId || null,
           type: source === 'PROFIT' ? 'WITHDRAW_PROFIT' : 'WITHDRAW_PRINCIPAL',
-          amount: -Math.abs(amount),
+          amount: Math.abs(amount),
           date,
           description: notes || null,
           metadata: JSON.stringify({ source }),
