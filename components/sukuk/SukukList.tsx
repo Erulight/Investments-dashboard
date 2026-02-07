@@ -439,6 +439,28 @@ export function SukukList({ initialSukuk, userRole }: SukukListProps) {
     }
   }
 
+  const handleReopen = async (investment: any) => {
+    if (actionLoading) return
+    const confirmed = confirm('Reopen will remove all receipts for this deal and reverse cash. Continue?')
+    if (!confirmed) return
+    setActionLoading(true)
+    try {
+      const res = await fetch(`/api/sukuk/${investment.id}/reopen`, {
+        method: 'POST',
+      })
+      const data = await res.json().catch(() => ({}))
+      if (!res.ok) {
+        alert(data.error || 'Failed to reopen deal')
+        return
+      }
+      router.refresh()
+    } catch (error) {
+      alert('Failed to reopen deal')
+    } finally {
+      setActionLoading(false)
+    }
+  }
+
   const handleCreateSuccess = () => {
     setIsCreateModalOpen(false)
     router.refresh()
@@ -749,6 +771,14 @@ export function SukukList({ initialSukuk, userRole }: SukukListProps) {
                           disabled={actionLoading}
                         >
                           Rollback
+                        </Button>
+                        <Button
+                          size="sm"
+                          variant="secondary"
+                          onClick={() => handleReopen(inv)}
+                          disabled={actionLoading}
+                        >
+                          Reopen
                         </Button>
                         <Button
                           size="sm"
