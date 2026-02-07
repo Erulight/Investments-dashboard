@@ -146,6 +146,24 @@ export function ZakatDashboard({ buckets }: { buckets: BucketRow[] }) {
                       Pay Zakat
                     </Button>
                   </div>
+                {bucket.dueReceipts.length > 0 && (
+                  <div className="mt-3 border-t border-gray-200 pt-3 text-xs text-gray-600">
+                    <div className="font-semibold text-gray-700 mb-2">Receipts after haul</div>
+                    <div className="space-y-1">
+                      {bucket.dueReceipts.map((receipt, idx) => (
+                        <div key={`${bucket.id}-${idx}`} className="flex items-center justify-between">
+                          <span>
+                            {receipt.date} • {receipt.type}
+                            {receipt.investmentName ? ` • ${receipt.investmentName}` : ''}
+                          </span>
+                          <span className="text-emerald-700">
+                            {bucket.currency} {receipt.amount.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                          </span>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
                 </div>
               ))}
             </div>
