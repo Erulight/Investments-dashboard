@@ -11,7 +11,6 @@ const addDays = (date: Date, days: number) => {
 }
 
 const receiptTypes = new Set([
-  'CASH_IN',
   'WITHDRAW_PROFIT',
   'WITHDRAW_PRINCIPAL',
   'ROLLBACK_PRINCIPAL',
@@ -48,6 +47,7 @@ export default async function ZakatPage() {
     const haulCompleteDate = addDays(effectiveStart, 354)
     const dueReceipts = bucket.movements.filter((movement) => {
       if (!receiptTypes.has(movement.type)) return false
+      if (!movement.investmentId) return false
       if (movement.investment?.isIjarah) return false
       return new Date(movement.date) >= haulCompleteDate
     })
