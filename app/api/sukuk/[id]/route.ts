@@ -137,6 +137,9 @@ export async function PUT(
     const principalDelta = data.principalAmount !== undefined
       ? data.principalAmount - existingSukuk.principalAmount
       : 0
+    const totalReceivedDelta = data.totalReceived !== undefined
+      ? data.totalReceived - existingSukuk.totalReceived
+      : 0
     
     // Update the Sukuk in a transaction
     const updatedSukuk = await prisma.$transaction(async (tx) => {
@@ -161,6 +164,9 @@ export async function PUT(
       if (data.totalReceived !== undefined) updateData.totalReceived = data.totalReceived
       if (data.receivableAmount !== undefined) updateData.receivableAmount = data.receivableAmount
       if (data.isIjarah !== undefined) updateData.isIjarah = data.isIjarah
+      if (principalDelta > 0 || totalReceivedDelta < 0) {
+        updateData.reopenedAt = new Date()
+      }
 
       const principalAmount = data.principalAmount ?? existingSukuk.principalAmount
       const fees = data.fees ?? existingSukuk.fees

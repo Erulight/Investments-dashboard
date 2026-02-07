@@ -27,7 +27,6 @@ export default async function ZakatPage() {
     orderBy: { haulStartDate: 'asc' },
     include: {
       movements: {
-        where: { amount: { gt: 0 } },
         orderBy: { date: 'asc' },
         include: {
           investment: {
@@ -35,6 +34,7 @@ export default async function ZakatPage() {
               id: true,
               name: true,
               isIjarah: true,
+              reopenedAt: true,
             },
           },
         },
@@ -49,6 +49,10 @@ export default async function ZakatPage() {
       if (!receiptTypes.has(movement.type)) return false
       if (!movement.investmentId) return false
       if (movement.investment?.isIjarah) return false
+      if (movement.investment?.reopenedAt) {
+        const reopenedAt = new Date(movement.investment.reopenedAt)
+        if (new Date(movement.date) < reopenedAt) return false
+      }
       return new Date(movement.date) >= haulCompleteDate
     })
     const dedupedMap = new Map<string, typeof rawReceipts[number]>()

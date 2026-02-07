@@ -82,6 +82,7 @@ model Investment {
   totalReceived     Float    @default(0)
   receivableAmount  Float    @default(0)
   isIjarah          Boolean  @default(false)
+  reopenedAt        DateTime?
   
   notes             String?
   metadata          String?
