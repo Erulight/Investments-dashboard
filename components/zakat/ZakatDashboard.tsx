@@ -92,6 +92,10 @@ export function ZakatDashboard({ buckets }: { buckets: BucketRow[] }) {
           <div className="text-2xl font-bold text-gray-900">
             Total Zakat Due: SAR {totalDue.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
           </div>
+          <p className="text-xs text-gray-500 mt-2">
+            Receipts after haul are the zakat base (gross receipts). Balance is current cash remaining
+            after reinvestments and can be lower than receipts.
+          </p>
         </CardContent>
       </Card>
 
@@ -120,13 +124,13 @@ export function ZakatDashboard({ buckets }: { buckets: BucketRow[] }) {
                       </div>
                     </div>
                     <div className="text-right">
-                      <div className="text-sm text-gray-500">Balance</div>
+                      <div className="text-sm text-gray-500">Balance (current)</div>
                       <div className="text-lg font-semibold">
                         {bucket.currency} {bucket.balance.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
                       </div>
                     </div>
                     <div className="text-right">
-                      <div className="text-sm text-gray-500">Receipts after haul</div>
+                      <div className="text-sm text-gray-500">Receipts after haul (zakat base)</div>
                       <div className="text-lg font-semibold">
                         {bucket.currency} {bucket.receiptsTotal.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
                       </div>
