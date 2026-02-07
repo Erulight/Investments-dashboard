@@ -53,7 +53,7 @@ export default async function ZakatPage() {
       if (movement.investment?.isIjarah) return false
       if (movement.investment?.reopenedAt) {
         const reopenedAt = new Date(movement.investment.reopenedAt)
-        if (new Date(movement.date) < reopenedAt) return false
+        if (new Date(movement.createdAt) < reopenedAt) return false
       }
       const bucketStart = bucket.lastZakatPaidDate
         ? new Date(bucket.lastZakatPaidDate)
