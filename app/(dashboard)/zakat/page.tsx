@@ -85,6 +85,12 @@ export default async function ZakatPage() {
     const receiptsTotal = dueReceipts.reduce((sum, m) => sum + m.amount, 0)
     const zakatDue = receiptsTotal * 0.025
 
+    const payments = bucket.movements
+      .filter((movement) => movement.type === 'ZAKAT_PAID')
+      .sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime())
+
+    const lastPayment = payments[0]
+
     return {
       id: bucket.id,
       label: bucket.label,
@@ -97,6 +103,13 @@ export default async function ZakatPage() {
       haulCompleteDate: haulCompleteDate.toISOString().split('T')[0],
       receiptsTotal,
       zakatDue,
+      lastPayment: lastPayment
+        ? {
+            id: lastPayment.id,
+            date: new Date(lastPayment.date).toISOString().split('T')[0],
+            amount: Math.abs(lastPayment.amount),
+          }
+        : null,
       dueReceipts: dueReceipts.map((m) => ({
         date: new Date(m.date).toISOString().split('T')[0],
         amount: m.amount,

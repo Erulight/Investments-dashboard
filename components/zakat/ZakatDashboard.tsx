@@ -23,6 +23,11 @@ type BucketRow = {
   haulCompleteDate: string
   receiptsTotal: number
   zakatDue: number
+  lastPayment: null | {
+    id: string
+    date: string
+    amount: number
+  }
   dueReceipts: ReceiptEntry[]
 }
 
@@ -33,6 +38,8 @@ export function ZakatDashboard({ buckets }: { buckets: BucketRow[] }) {
   const [payNotes, setPayNotes] = useState('')
   const [payError, setPayError] = useState('')
   const [payLoading, setPayLoading] = useState(false)
+  const [rollbackLoading, setRollbackLoading] = useState(false)
+  const [rollbackError, setRollbackError] = useState('')
 
   const totalDue = buckets.reduce((sum, b) => sum + b.zakatDue, 0)
 
@@ -79,6 +86,33 @@ export function ZakatDashboard({ buckets }: { buckets: BucketRow[] }) {
       setPayError(err instanceof Error ? err.message : 'Failed to pay zakat')
     } finally {
       setPayLoading(false)
+    }
+  }
+
+  const handleRollback = async (bucket: BucketRow) => {
+    if (!bucket.lastPayment) return
+    const confirmed = confirm('Undo last zakat payment and restore cash?')
+    if (!confirmed) return
+    setRollbackLoading(true)
+    setRollbackError('')
+    try {
+      const res = await fetch('/api/zakat/rollback', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          bucketId: bucket.id,
+          movementId: bucket.lastPayment.id,
+        }),
+      })
+      const data = await res.json().catch(() => ({}))
+      if (!res.ok) {
+        throw new Error(data.error || 'Failed to rollback zakat')
+      }
+      router.refresh()
+    } catch (err) {
+      setRollbackError(err instanceof Error ? err.message : 'Failed to rollback zakat')
+    } finally {
+      setRollbackLoading(false)
     }
   }
 
@@ -141,6 +175,7 @@ export function ZakatDashboard({ buckets }: { buckets: BucketRow[] }) {
                         {bucket.currency} {bucket.zakatDue.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
                       </div>
                     </div>
+                  <div className="flex flex-col items-end gap-2">
                     <Button
                       size="sm"
                       variant="primary"
@@ -149,7 +184,29 @@ export function ZakatDashboard({ buckets }: { buckets: BucketRow[] }) {
                     >
                       Pay Zakat
                     </Button>
+                    {bucket.lastPayment && (
+                      <Button
+                        size="sm"
+                        variant="secondary"
+                        disabled={rollbackLoading}
+                        onClick={() => handleRollback(bucket)}
+                      >
+                        Undo Last Payment
+                      </Button>
+                    )}
                   </div>
+                  </div>
+                {bucket.lastPayment && (
+                  <div className="mt-2 text-xs text-gray-500">
+                    Last payment: {bucket.lastPayment.date} • {bucket.currency}{' '}
+                    {bucket.lastPayment.amount.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                  </div>
+                )}
+                {rollbackError && (
+                  <div className="mt-2 text-xs text-red-600">
+                    {rollbackError}
+                  </div>
+                )}
                 {bucket.dueReceipts.length > 0 && (
                   <div className="mt-3 border-t border-gray-200 pt-3 text-xs text-gray-600">
                     <div className="font-semibold text-gray-700 mb-2">Receipts after haul</div>

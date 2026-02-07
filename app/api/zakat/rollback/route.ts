@@ -1,40 +1,19 @@
 import { NextRequest, NextResponse } from 'next/server'
-import type { Prisma } from '@prisma/client'
 import { prisma } from '@/lib/db'
 import { requireAuth } from '@/lib/rbac'
 import { logAudit } from '@/lib/audit'
 
 const CASH_BALANCE_KEY = 'CASH_BALANCE'
 
-const getCashAccount = async (tx: Prisma.TransactionClient, currency = 'SAR') => {
-  const existing = await tx.account.findFirst({
-    where: { type: 'CASH', isActive: true },
-  })
-  if (existing) return existing
-  return tx.account.create({
-    data: {
-      name: 'Cash Balance',
-      type: 'CASH',
-      currency,
-      description: 'Cash ledger account',
-    },
-  })
-}
-
 export async function POST(req: NextRequest) {
   try {
     const user = await requireAuth(['OWNER'])
     const body = await req.json().catch(() => ({}))
     const bucketId = typeof body.bucketId === 'string' ? body.bucketId : ''
-    const amount = Number(body.amount)
-    const date = body.date ? new Date(body.date) : new Date()
-    const notes = typeof body.notes === 'string' ? body.notes : ''
+    const movementId = typeof body.movementId === 'string' ? body.movementId : ''
 
     if (!bucketId) {
       return NextResponse.json({ error: 'Bucket is required' }, { status: 400 })
-    }
-    if (!Number.isFinite(amount) || amount <= 0) {
-      return NextResponse.json({ error: 'Amount must be greater than 0' }, { status: 400 })
     }
 
     const result = await prisma.$transaction(async (tx) => {
@@ -42,25 +21,26 @@ export async function POST(req: NextRequest) {
       if (!bucket) {
         return NextResponse.json({ error: 'Bucket not found' }, { status: 404 })
       }
-      if (bucket.balance < amount) {
-        return NextResponse.json({ error: 'Bucket balance is too low' }, { status: 400 })
+
+      const targetMovement = movementId
+        ? await tx.cashBucketMovement.findFirst({
+            where: { id: movementId, cashBucketId: bucketId, type: 'ZAKAT_PAID' },
+          })
+        : await tx.cashBucketMovement.findFirst({
+            where: { cashBucketId: bucketId, type: 'ZAKAT_PAID' },
+            orderBy: [{ date: 'desc' }, { createdAt: 'desc' }],
+          })
+
+      if (!targetMovement) {
+        return NextResponse.json({ error: 'No zakat payment found to rollback' }, { status: 404 })
       }
+
+      const amount = Math.abs(targetMovement.amount)
 
       await tx.cashBucket.update({
         where: { id: bucketId },
         data: {
-          balance: { decrement: amount },
-          lastZakatPaidDate: date,
-        },
-      })
-
-      const movement = await tx.cashBucketMovement.create({
-        data: {
-          cashBucketId: bucketId,
-          amount: -amount,
-          type: 'ZAKAT_PAID',
-          date,
-          notes: notes || null,
+          balance: { increment: amount },
         },
       })
 
@@ -68,10 +48,7 @@ export async function POST(req: NextRequest) {
         where: { key: CASH_BALANCE_KEY },
       })
       const currentCash = cashSetting ? Number(cashSetting.value) : 0
-      const nextCash = currentCash - amount
-      if (nextCash < 0) {
-        throw new Error('INSUFFICIENT_CASH')
-      }
+      const nextCash = currentCash + amount
 
       if (cashSetting) {
         await tx.systemSetting.update({
@@ -88,21 +65,33 @@ export async function POST(req: NextRequest) {
         })
       }
 
-      const cashAccount = await getCashAccount(tx, bucket.currency)
+      await tx.cashBucketMovement.delete({
+        where: { id: targetMovement.id },
+      })
 
-      await tx.transaction.create({
-        data: {
-          accountId: cashAccount.id,
-          investmentId: null,
-          personId: user.personId || null,
+      const dayStart = new Date(targetMovement.date.getFullYear(), targetMovement.date.getMonth(), targetMovement.date.getDate())
+      const dayEnd = new Date(targetMovement.date.getFullYear(), targetMovement.date.getMonth(), targetMovement.date.getDate() + 1)
+
+      await tx.transaction.deleteMany({
+        where: {
           type: 'ZAKAT_PAID',
           amount: -amount,
-          date,
-          description: notes || 'Zakat payment',
-          metadata: JSON.stringify({
-            bucketId,
-            movementId: movement.id,
-          }),
+          OR: [
+            { metadata: { contains: targetMovement.id } },
+            { date: { gte: dayStart, lt: dayEnd } },
+          ],
+        },
+      })
+
+      const remainingPayment = await tx.cashBucketMovement.findFirst({
+        where: { cashBucketId: bucketId, type: 'ZAKAT_PAID' },
+        orderBy: [{ date: 'desc' }, { createdAt: 'desc' }],
+      })
+
+      await tx.cashBucket.update({
+        where: { id: bucketId },
+        data: {
+          lastZakatPaidDate: remainingPayment ? remainingPayment.date : null,
         },
       })
 
@@ -112,8 +101,10 @@ export async function POST(req: NextRequest) {
         entityType: 'ZAKAT',
         entityId: bucketId,
         changes: JSON.stringify({
-          amount,
-          date,
+          rollback: {
+            amount,
+            movementId: targetMovement.id,
+          },
         }),
       })
 
@@ -126,28 +117,18 @@ export async function POST(req: NextRequest) {
 
     return NextResponse.json(result)
   } catch (error) {
-    console.error('Zakat payment error:', error)
-
+    console.error('Zakat rollback error:', error)
     let statusCode = 500
     if (error instanceof Error) {
       if (error.message === 'Unauthorized') {
         statusCode = 401
       } else if (error.message === 'Forbidden') {
         statusCode = 403
-      } else if (error.message === 'INSUFFICIENT_CASH') {
-        statusCode = 400
       }
     }
 
     return NextResponse.json(
-      {
-        error:
-          error instanceof Error && error.message === 'INSUFFICIENT_CASH'
-            ? 'Insufficient cash balance'
-            : error instanceof Error
-              ? error.message
-              : 'Failed to pay zakat',
-      },
+      { error: error instanceof Error ? error.message : 'Failed to rollback zakat' },
       { status: statusCode }
     )
   }
