@@ -49,6 +49,7 @@ export default async function ZakatPage() {
     const rawReceipts = bucket.movements.filter((movement) => {
       if (!receiptTypes.has(movement.type)) return false
       if (!movement.investmentId) return false
+      if (!movement.investment) return false
       if (movement.investment?.isIjarah) return false
       if (movement.investment?.reopenedAt) {
         const reopenedAt = new Date(movement.investment.reopenedAt)
