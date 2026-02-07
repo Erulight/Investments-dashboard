@@ -34,6 +34,7 @@ export default async function ZakatPage() {
               id: true,
               name: true,
               isIjarah: true,
+              startDate: true,
               reopenedAt: true,
             },
           },
@@ -53,7 +54,19 @@ export default async function ZakatPage() {
         const reopenedAt = new Date(movement.investment.reopenedAt)
         if (new Date(movement.date) < reopenedAt) return false
       }
-      return new Date(movement.date) >= haulCompleteDate
+      const bucketStart = bucket.lastZakatPaidDate
+        ? new Date(bucket.lastZakatPaidDate)
+        : new Date(bucket.haulStartDate)
+      const investmentStart = movement.investment?.startDate
+        ? new Date(movement.investment.startDate)
+        : null
+      const effectiveStart = bucket.lastZakatPaidDate
+        ? bucketStart
+        : investmentStart && investmentStart < bucketStart
+          ? investmentStart
+          : bucketStart
+      const effectiveHaulComplete = addDays(effectiveStart, 354)
+      return new Date(movement.date) >= effectiveHaulComplete
     })
     const dedupedMap = new Map<string, typeof rawReceipts[number]>()
     rawReceipts.forEach((movement) => {

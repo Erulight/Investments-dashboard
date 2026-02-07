@@ -21,6 +21,7 @@ export const createCashBucket = async (
     label,
     date,
     notes,
+    investmentId,
     type = 'CASH_IN',
   }: {
     amount: number
@@ -29,6 +30,7 @@ export const createCashBucket = async (
     label?: string | null
     date: Date
     notes?: string | null
+    investmentId?: string | null
     type?: MovementType
   }
 ) => {
@@ -44,6 +46,7 @@ export const createCashBucket = async (
   await tx.cashBucketMovement.create({
     data: {
       cashBucketId: bucket.id,
+      investmentId: investmentId || null,
       amount,
       type,
       date,
@@ -164,26 +167,35 @@ export const creditBucketsForReceipt = async (
   const allocations = await tx.investmentBucketAllocation.findMany({
     where: {
       investmentId,
-      principalRemaining: { gt: 0 },
     },
   })
 
-  if (allocations.length === 0) {
+  const principalFocused = principalReduction > 0
+  const usableAllocations = principalFocused
+    ? allocations.filter((alloc) => alloc.principalRemaining > 0)
+    : allocations.filter((alloc) => alloc.principalAllocated > 0)
+
+  if (usableAllocations.length === 0) {
     await createCashBucket(tx, {
       amount,
       haulStartDate: date,
       date,
       notes,
       type,
+      investmentId,
     })
     return
   }
 
-  const totalRemaining = allocations.reduce((sum, alloc) => sum + alloc.principalRemaining, 0)
-  const cappedReduction = Math.min(principalReduction, totalRemaining)
+  const totalRemaining = usableAllocations.reduce(
+    (sum, alloc) => sum + (principalFocused ? alloc.principalRemaining : alloc.principalAllocated),
+    0
+  )
+  const cappedReduction = principalFocused ? Math.min(principalReduction, totalRemaining) : 0
 
-  for (const alloc of allocations) {
-    const ratio = totalRemaining > 0 ? alloc.principalRemaining / totalRemaining : 0
+  for (const alloc of usableAllocations) {
+    const ratioBasis = principalFocused ? alloc.principalRemaining : alloc.principalAllocated
+    const ratio = totalRemaining > 0 ? ratioBasis / totalRemaining : 0
     const cashShare = amount * ratio
     const principalShare = cappedReduction * ratio
 
