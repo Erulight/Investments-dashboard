@@ -14,6 +14,7 @@ interface NavItem {
 
 const navigation: NavItem[] = [
   { name: 'Dashboard', href: '/dashboard', icon: '📊' },
+  { name: 'Zakat', href: '/zakat', roles: ['OWNER'], icon: '🧾' },
   { 
     name: 'Investments', 
     href: '/investments', 

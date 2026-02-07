@@ -8,6 +8,7 @@ type MovementType =
   | 'WITHDRAW_PRINCIPAL'
   | 'ROLLBACK_PRINCIPAL'
   | 'SELL_RECEIPT'
+  | 'ZAKAT_PAID'
 
 const DEFAULT_CURRENCY = 'SAR'
 

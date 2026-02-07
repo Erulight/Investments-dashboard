@@ -81,6 +81,7 @@ model Investment {
   fees              Float    @default(0)
   totalReceived     Float    @default(0)
   receivableAmount  Float    @default(0)
+  isIjarah          Boolean  @default(false)
   
   notes             String?
   metadata          String?

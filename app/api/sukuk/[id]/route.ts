@@ -160,6 +160,7 @@ export async function PUT(
       if (data.fees !== undefined) updateData.fees = data.fees
       if (data.totalReceived !== undefined) updateData.totalReceived = data.totalReceived
       if (data.receivableAmount !== undefined) updateData.receivableAmount = data.receivableAmount
+      if (data.isIjarah !== undefined) updateData.isIjarah = data.isIjarah
 
       const principalAmount = data.principalAmount ?? existingSukuk.principalAmount
       const fees = data.fees ?? existingSukuk.fees

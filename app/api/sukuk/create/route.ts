@@ -25,6 +25,7 @@ export async function POST(req: NextRequest) {
     
     const data = validationResult.data
     const receivableAmount = data.receivableAmount ?? 0
+    const isIjarah = data.isIjarah ?? false
     const fees = data.fees ?? 0
     const startDate = new Date(data.startDate)
     const maturityDate = data.maturityDate ? new Date(data.maturityDate) : null
@@ -88,6 +89,7 @@ export async function POST(req: NextRequest) {
           fees,
           totalReceived: data.totalReceived ?? 0,
           receivableAmount,
+          isIjarah,
           notes: data.notes,
           metadata: data.metadata,
         },

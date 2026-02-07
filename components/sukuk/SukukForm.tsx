@@ -16,6 +16,7 @@ export function SukukForm({ mode, initialData, onSuccess, onCancel }: SukukFormP
     accountId: initialData?.accountId || '',
     name: initialData?.name || '',
     category: initialData?.category || '',
+    isIjarah: initialData?.isIjarah ?? false,
     principalAmount: initialData?.principalAmount || '',
     currentValue: initialData?.currentValue || '',
     startDate: initialData?.startDate ? new Date(initialData.startDate).toISOString().split('T')[0] : '',
@@ -107,8 +108,11 @@ export function SukukForm({ mode, initialData, onSuccess, onCancel }: SukukFormP
   }, [formData.principalAmount, formData.fees, formData.receivableAmount, formData.startDate, formData.maturityDate])
 
   const handleChange = (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement>) => {
-    const { name, value } = e.target
-    setFormData((prev: any) => ({ ...prev, [name]: value }))
+    const { name, value, type } = e.target
+    const nextValue = name === 'isIjarah' && type === 'select-one'
+      ? value === 'true'
+      : value
+    setFormData((prev: any) => ({ ...prev, [name]: nextValue }))
     // Clear error for this field
     if (errors[name]) {
       setErrors((prev: any) => ({ ...prev, [name]: undefined }))
@@ -148,6 +152,7 @@ export function SukukForm({ mode, initialData, onSuccess, onCancel }: SukukFormP
         fees,
         totalReceived: parseOptionalNumber(formData.totalReceived),
         receivableAmount,
+        isIjarah: Boolean(formData.isIjarah),
         participants: participants.map(p => ({
           ...p,
           investedAmount: parseFloat(p.investedAmount),
@@ -345,6 +350,21 @@ export function SukukForm({ mode, initialData, onSuccess, onCancel }: SukukFormP
             className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
             placeholder="e.g., Corporate, Sovereign"
           />
+        </div>
+        <div>
+          <label htmlFor="isIjarah" className="block text-sm font-medium text-gray-700 mb-1">
+            Sukuk Type
+          </label>
+          <select
+            id="isIjarah"
+            name="isIjarah"
+            value={String(formData.isIjarah)}
+            onChange={handleChange}
+            className="w-full px-4 py-2 border border-gray-300 rounded-lg bg-white focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+          >
+            <option value="false">Standard (Zakat applies)</option>
+            <option value="true">Ijarah (Zakat excluded)</option>
+          </select>
         </div>
       </div>
 
