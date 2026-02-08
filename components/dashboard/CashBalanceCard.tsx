@@ -48,15 +48,19 @@ export function CashBalanceCard({ initialCash }: { initialCash: number }) {
     setMessage('')
 
     try {
+      const entryDate = direction === 'IN' ? toIsoDateInput(haulStartDate) : null
+      if (direction === 'IN' && !entryDate) {
+        throw new Error('Invalid ownership date')
+      }
       const res = await fetch('/api/cash', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           direction,
           amount: Number(amount),
-          date: new Date().toISOString().split('T')[0],
+          date: direction === 'IN' ? entryDate : new Date().toISOString().split('T')[0],
           notes,
-          haulStartDate: direction === 'IN' ? toIsoDateInput(haulStartDate) : undefined,
+          haulStartDate: direction === 'IN' ? entryDate : undefined,
         }),
       })
       const data = await res.json().catch(() => ({}))
