@@ -4,6 +4,7 @@ import { useEffect, useState } from 'react'
 import { useSearchParams } from 'next/navigation'
 import { Card, CardContent } from '@/components/ui/Card'
 import { Button } from '@/components/ui/Button'
+import { DateInput } from '@/components/ui/DateInput'
 import { formatDateInput, toIsoDateInput } from '@/lib/date'
 
 export function CashBalanceCard({ initialCash }: { initialCash: number }) {
@@ -110,15 +111,12 @@ export function CashBalanceCard({ initialCash }: { initialCash: number }) {
               className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:border-blue-500 focus:ring-2 focus:ring-blue-500"
               placeholder="Amount"
             />
-            <input
-              type="text"
+            <DateInput
               value={direction === 'IN' ? haulStartDate : entryDate}
-              onChange={(e) => (
-                direction === 'IN' ? setHaulStartDate(e.target.value) : setEntryDate(e.target.value)
+              onChange={(value) => (
+                direction === 'IN' ? setHaulStartDate(value) : setEntryDate(value)
               )}
-              className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:border-blue-500 focus:ring-2 focus:ring-blue-500"
-              aria-label={direction === 'IN' ? 'Ownership date' : 'Withdrawal date'}
-              placeholder="DD/MM/YYYY"
+              ariaLabel={direction === 'IN' ? 'Ownership date' : 'Withdrawal date'}
             />
           </div>
           <input

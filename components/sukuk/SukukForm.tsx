@@ -2,6 +2,7 @@
 
 import { useState, useEffect } from 'react'
 import { Button } from '@/components/ui/Button'
+import { DateInput } from '@/components/ui/DateInput'
 import { createSukukSchema, type CreateSukukInput } from '@/lib/validation'
 import { formatDateInput, parseDateInput, toIsoDateInput } from '@/lib/date'
 
@@ -553,11 +554,10 @@ export function SukukForm({ mode, initialData, onSuccess, onCancel }: SukukFormP
                 className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
                 placeholder="Amount"
               />
-              <input
-                type="date"
+              <DateInput
                 value={receiptForm.date}
-                onChange={(e) => setReceiptForm((prev) => ({ ...prev, date: e.target.value }))}
-                className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                onChange={(value) => setReceiptForm((prev) => ({ ...prev, date: value }))}
+                ariaLabel="Receipt date"
               />
               <input
                 type="text"
@@ -605,16 +605,11 @@ export function SukukForm({ mode, initialData, onSuccess, onCancel }: SukukFormP
             <label htmlFor="startDate" className="block text-sm font-medium text-gray-700 mb-1">
               Start Date *
             </label>
-          <input
-            type="text"
-              id="startDate"
-              name="startDate"
-              required
-              value={formData.startDate}
-              onChange={handleChange}
-              className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-            placeholder="DD/MM/YYYY"
-            />
+          <DateInput
+            value={formData.startDate}
+            onChange={(value) => setFormData((prev: any) => ({ ...prev, startDate: value }))}
+            ariaLabel="Start Date"
+          />
             {errors.startDate && <p className="text-sm text-red-600 mt-1">{errors.startDate}</p>}
           </div>
 
@@ -622,15 +617,11 @@ export function SukukForm({ mode, initialData, onSuccess, onCancel }: SukukFormP
             <label htmlFor="maturityDate" className="block text-sm font-medium text-gray-700 mb-1">
               Maturity Date
             </label>
-          <input
-            type="text"
-              id="maturityDate"
-              name="maturityDate"
-              value={formData.maturityDate}
-              onChange={handleChange}
-              className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-            placeholder="DD/MM/YYYY"
-            />
+          <DateInput
+            value={formData.maturityDate}
+            onChange={(value) => setFormData((prev: any) => ({ ...prev, maturityDate: value }))}
+            ariaLabel="Maturity Date"
+          />
             {errors.maturityDate && <p className="text-sm text-red-600 mt-1">{errors.maturityDate}</p>}
           </div>
         </div>

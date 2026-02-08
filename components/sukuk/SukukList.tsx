@@ -5,6 +5,7 @@ import { useRouter } from 'next/navigation'
 import { Table, TableHeader, TableBody, TableRow, TableHead, TableCell } from '@/components/ui/Table'
 import { Button } from '@/components/ui/Button'
 import { Modal } from './SukukModal'
+import { DateInput } from '@/components/ui/DateInput'
 import { formatDateInput, toIsoDateInput } from '@/lib/date'
 import { SukukForm } from './SukukForm'
 
@@ -1049,13 +1050,10 @@ export function SukukList({ initialSukuk, userRole }: SukukListProps) {
             <label className="block text-sm font-medium text-gray-700 mb-1">
               Date
             </label>
-            <input
-              type="text"
+            <DateInput
               value={withdrawForm.date}
-              onChange={(e) => setWithdrawForm((prev) => ({ ...prev, date: e.target.value }))}
-              className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-              placeholder="DD/MM/YYYY"
-              required
+              onChange={(value) => setWithdrawForm((prev) => ({ ...prev, date: value }))}
+              ariaLabel="Withdrawal date"
             />
           </div>
           <div>
@@ -1141,13 +1139,10 @@ export function SukukList({ initialSukuk, userRole }: SukukListProps) {
             <label className="block text-sm font-medium text-gray-700 mb-1">
               Date
             </label>
-            <input
-              type="text"
+            <DateInput
               value={sellForm.date}
-              onChange={(e) => setSellForm((prev) => ({ ...prev, date: e.target.value }))}
-              className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-              placeholder="DD/MM/YYYY"
-              required
+              onChange={(value) => setSellForm((prev) => ({ ...prev, date: value }))}
+              ariaLabel="Sell date"
             />
           </div>
           <div>

@@ -5,6 +5,7 @@ import { useRouter } from 'next/navigation'
 import { Card, CardHeader, CardTitle, CardContent } from '@/components/ui/Card'
 import { Button } from '@/components/ui/Button'
 import { Modal } from '@/components/sukuk/SukukModal'
+import { DateInput } from '@/components/ui/DateInput'
 import { formatDateInput, toIsoDateInput } from '@/lib/date'
 
 type ReceiptEntry = {
@@ -262,12 +263,10 @@ export function ZakatDashboard({ buckets }: { buckets: BucketRow[] }) {
               Bucket {payTarget.id.slice(0, 8)} • Due {payTarget.currency} {payTarget.zakatDue.toFixed(2)}
             </div>
           )}
-          <input
-            type="text"
+          <DateInput
             value={payDate}
-            onChange={(e) => setPayDate(e.target.value)}
-            className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:border-blue-500 focus:ring-2 focus:ring-blue-500"
-            placeholder="Payment date (DD/MM/YYYY)"
+            onChange={setPayDate}
+            ariaLabel="Payment date"
           />
           <input
             type="number"
