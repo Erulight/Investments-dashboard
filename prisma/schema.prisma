@@ -3,13 +3,13 @@ generator client {
 }
 
 datasource db {
-  provider = "sqlite"
+  provider = "postgresql"
   url      = env("DATABASE_URL")
 }
 
-// Note: This schema uses PostgreSQL for production.
-// For local development with SQLite, change provider to "sqlite"
-// and update DATABASE_URL (e.g., "file:./dev.db").
+// Note: This schema uses PostgreSQL for production deployments (Railway, Vercel, etc.).
+// For local development, you can use PostgreSQL via Docker (see docker-compose.yml)
+// or use a local PostgreSQL installation.
 
 model User {
   id                String   @id @default(cuid())

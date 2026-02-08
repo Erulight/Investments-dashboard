@@ -8,6 +8,8 @@ This guide explains how to deploy the Investments Dashboard to Railway.app.
 2. A GitHub account with access to this repository
 3. PostgreSQL database (Railway can provision one automatically)
 
+**Important**: This application uses PostgreSQL. The Prisma schema is configured with `provider = "postgresql"`. Ensure your DATABASE_URL points to a PostgreSQL database, not SQLite.
+
 ## Environment Variables
 
 The following environment variables must be configured in Railway:
@@ -140,6 +142,15 @@ This allows:
 - Runtime to use the same variables
 
 ## Troubleshooting
+
+### Build Fails: "Provider 'sqlite' is not supported"
+
+**Cause**: Prisma schema has wrong database provider or DATABASE_URL doesn't match the provider.
+
+**Solution**: 
+1. Ensure `prisma/schema.prisma` has `provider = "postgresql"` (not "sqlite")
+2. Verify DATABASE_URL points to a PostgreSQL database
+3. Railway automatically provides a PostgreSQL DATABASE_URL when you add the PostgreSQL service
 
 ### Build Fails: "JWT_SECRET environment variable is required"
 

@@ -98,22 +98,21 @@ cp .env.example .env
 Edit `.env` with your configuration:
 
 ```env
-# Database
-DATABASE_URL="file:./dev.db"
-# For PostgreSQL:
-# DATABASE_URL="postgresql://user:password@localhost:5432/investments_dashboard?schema=public"
+# Database - PostgreSQL (recommended for all environments)
+DATABASE_URL="postgresql://investments:investments_password@localhost:5432/investments_dashboard?schema=public"
 
-# JWT Secret (generate with: openssl rand -base64 32)
-JWT_SECRET="your-super-secret-jwt-key"
+# JWT Secret (generate with: openssl rand -hex 32)
+JWT_SECRET="your-super-secret-jwt-key-change-this-in-production"
 
 # App Configuration
 NODE_ENV="development"
-NEXT_PUBLIC_APP_URL="http://localhost:3000"
 
 # Cookie Configuration
 COOKIE_SECURE="false"  # Set to "true" in production with HTTPS
 COOKIE_SAME_SITE="lax"
 ```
+
+**Note**: The application uses PostgreSQL. You can run PostgreSQL locally via Docker (see Development with Docker Compose below) or install it directly.
 
 ### 3. Database Setup
 
