@@ -142,6 +142,7 @@ export async function POST(req: NextRequest) {
           date,
           type: 'CASH_OUT',
           notes,
+          availableOnOrBefore: date,
         })
       }
 

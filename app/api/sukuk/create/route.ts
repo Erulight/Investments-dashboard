@@ -118,6 +118,7 @@ export async function POST(req: NextRequest) {
         investmentId: newSukuk.id,
         notes: 'Investment principal',
         allocateToInvestment: true,
+        availableOnOrBefore: startDate,
       })
 
       await tx.transaction.create({

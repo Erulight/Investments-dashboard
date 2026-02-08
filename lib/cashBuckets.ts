@@ -67,6 +67,7 @@ export const withdrawFromBuckets = async (
     investmentId,
     notes,
     allocateToInvestment,
+    availableOnOrBefore,
   }: {
     amount: number
     currency?: string
@@ -75,14 +76,17 @@ export const withdrawFromBuckets = async (
     investmentId?: string | null
     notes?: string | null
     allocateToInvestment?: boolean
+    availableOnOrBefore?: Date
   }
 ) => {
   let remaining = amount
+  const cutoff = availableOnOrBefore ?? date
 
   const buckets = await tx.cashBucket.findMany({
     where: {
       currency,
       balance: { gt: 0 },
+      ...(cutoff ? { haulStartDate: { lte: cutoff } } : {}),
     },
     orderBy: [{ haulStartDate: 'asc' }, { createdAt: 'asc' }],
   })

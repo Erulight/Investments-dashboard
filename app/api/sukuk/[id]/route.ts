@@ -220,11 +220,12 @@ export async function PUT(
           await withdrawFromBuckets(tx, {
             amount: principalDelta,
             currency: account?.currency || 'SAR',
-            date: new Date(),
+            date: startDate,
             type: 'INVEST_OUT',
             investmentId: id,
             notes: 'Principal increase',
             allocateToInvestment: true,
+            availableOnOrBefore: startDate,
           })
         } else {
           await creditBucketsForReceipt(tx, {
