@@ -1,10 +1,10 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { prisma } from '@/lib/db'
-import { requireAuth } from '@/lib/rbac'
+import { requireModuleAccess } from '@/lib/rbac'
 
 export async function GET(req: NextRequest) {
   try {
-    const user = await requireAuth()
+    const user = await requireModuleAccess('sukuk')
     
     const { searchParams } = new URL(req.url)
     const page = parseInt(searchParams.get('page') || '1')

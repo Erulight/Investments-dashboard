@@ -99,15 +99,21 @@ async function main() {
 
   console.log('Ensured users:', { owner: owner.email, partner: partner.email })
 
-  await prisma.recoveryAssumption.createMany({
-    data: [
-      { status: 'ACTIVE', recoveryRate: 1.0, description: 'Full recovery expected' },
-      { status: 'LATE', recoveryRate: 0.9, description: '90% recovery expected' },
-      { status: 'DEFAULT_LEGAL', recoveryRate: 0.5, description: '50% recovery via legal' },
-      { status: 'WRITTEN_OFF', recoveryRate: 0.0, description: 'No recovery expected' },
-    ],
-    skipDuplicates: true,
-  })
+  // Create recovery assumptions one by one for SQLite compatibility
+  const recoveryData = [
+    { status: 'ACTIVE', recoveryRate: 1.0, description: 'Full recovery expected' },
+    { status: 'LATE', recoveryRate: 0.9, description: '90% recovery expected' },
+    { status: 'DEFAULT_LEGAL', recoveryRate: 0.5, description: '50% recovery via legal' },
+    { status: 'WRITTEN_OFF', recoveryRate: 0.0, description: 'No recovery expected' },
+  ]
+  
+  for (const data of recoveryData) {
+    await prisma.recoveryAssumption.upsert({
+      where: { status: data.status },
+      update: {},
+      create: data,
+    })
+  }
 
   console.log('Created recovery assumptions')
 
