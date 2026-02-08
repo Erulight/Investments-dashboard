@@ -22,6 +22,7 @@ type BucketRow = {
   haulStartDate: string
   lastZakatPaidDate?: string | null
   haulCompleteDate: string
+  idleBase: number
   receiptsTotal: number
   zakatDue: number
   lastPayment: null | {
@@ -135,8 +136,7 @@ export function ZakatDashboard({ buckets }: { buckets: BucketRow[] }) {
             Total Zakat Due: SAR {totalDue.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
           </div>
           <p className="text-xs text-gray-500 mt-2">
-            Zakat is due only after the bucket haul completes (354 days from initial cash receipt).
-            Receipts shown below are already filtered for that rule.
+            Zakat base = idle cash held through haul completion + receipts after haul.
           </p>
         </CardContent>
       </Card>
@@ -172,7 +172,13 @@ export function ZakatDashboard({ buckets }: { buckets: BucketRow[] }) {
                       </div>
                     </div>
                     <div className="text-right">
-                      <div className="text-sm text-gray-500">Receipts after haul (zakat base)</div>
+                      <div className="text-sm text-gray-500">Idle cash at haul</div>
+                      <div className="text-lg font-semibold">
+                        {bucket.currency} {bucket.idleBase.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                      </div>
+                    </div>
+                    <div className="text-right">
+                      <div className="text-sm text-gray-500">Receipts after haul</div>
                       <div className="text-lg font-semibold">
                         {bucket.currency} {bucket.receiptsTotal.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
                       </div>

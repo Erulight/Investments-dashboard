@@ -48,6 +48,18 @@ export default async function ZakatPage() {
       : new Date(bucket.haulStartDate)
     const haulCompleteDate = addDays(effectiveStart, 354)
 
+    const idleMovements = bucket.movements.filter((movement) => {
+      const movementDate = new Date(movement.date)
+      if (movement.type === 'ZAKAT_PAID') return false
+      if (movementDate < effectiveStart) return false
+      return movementDate <= haulCompleteDate
+    })
+
+    const idleBase = Math.max(
+      0,
+      idleMovements.reduce((sum, movement) => sum + movement.amount, 0)
+    )
+
     const rawReceipts = bucket.movements.filter((movement) => {
       if (!receiptTypes.has(movement.type)) return false
       if (!movement.investmentId) return false
@@ -57,7 +69,9 @@ export default async function ZakatPage() {
         const reopenedAt = new Date(movement.investment.reopenedAt)
         if (new Date(movement.createdAt) < reopenedAt) return false
       }
-      return new Date(movement.date) >= haulCompleteDate
+      const movementDate = new Date(movement.date)
+      if (movementDate < effectiveStart) return false
+      return movementDate >= haulCompleteDate
     })
     const dedupedMap = new Map<string, typeof rawReceipts[number]>()
     rawReceipts.forEach((movement) => {
@@ -73,7 +87,8 @@ export default async function ZakatPage() {
     })
     const dueReceipts = Array.from(dedupedMap.values())
     const receiptsTotal = dueReceipts.reduce((sum, m) => sum + m.amount, 0)
-    const zakatDue = receiptsTotal * 0.025
+    const zakatBase = idleBase + receiptsTotal
+    const zakatDue = zakatBase * 0.025
 
     const payments = bucket.movements
       .filter((movement) => movement.type === 'ZAKAT_PAID')
@@ -100,6 +115,7 @@ export default async function ZakatPage() {
           }
         : null,
       haulCompleteDate: haulCompleteDate.toISOString().split('T')[0],
+      idleBase,
       dueReceipts: dueReceipts.map((m) => ({
         date: new Date(m.date).toISOString().split('T')[0],
         amount: m.amount,
