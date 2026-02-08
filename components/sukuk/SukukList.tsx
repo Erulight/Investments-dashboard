@@ -49,6 +49,8 @@ export function SukukList({ initialSukuk, userRole }: SukukListProps) {
     days: [] as string[],
     statuses: [] as string[],
   })
+  const [filtersOpen, setFiltersOpen] = useState(false)
+  const [filterTab, setFilterTab] = useState<'platforms' | 'terms' | 'statuses' | 'dates'>('platforms')
   const list = Array.isArray(sukuk) ? sukuk : []
   const isEmpty = list.length === 0
 
@@ -203,6 +205,8 @@ export function SukukList({ initialSukuk, userRole }: SukukListProps) {
       statuses: [],
     })
   }
+
+  const activeFilterCount = Object.values(filters).reduce((sum, list) => sum + list.length, 0)
 
   const filterOptions = list.reduce<{
     platforms: Set<string>
@@ -559,118 +563,160 @@ export function SukukList({ initialSukuk, userRole }: SukukListProps) {
         <>
           <div className="mb-4 rounded-xl border border-gray-200 bg-white p-4">
             <div className="flex flex-wrap items-center justify-between gap-3">
-              <div className="text-sm font-semibold text-gray-700">Filters</div>
+              <div className="flex items-center gap-3">
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  onClick={() => setFiltersOpen((prev) => !prev)}
+                >
+                  {filtersOpen ? 'Hide Filters' : 'Show Filters'}
+                </Button>
+                <span className="text-xs text-gray-500">
+                  {activeFilterCount} active
+                </span>
+              </div>
               <Button variant="ghost" size="sm" onClick={clearFilters}>
                 Clear all
               </Button>
             </div>
-            <div className="mt-4 grid grid-cols-1 gap-4 md:grid-cols-2 lg:grid-cols-3">
-              <div>
-                <div className="text-xs font-semibold text-gray-500 mb-2">Platforms</div>
-                <div className="flex flex-wrap gap-2">
-                  {Array.from(filterOptions.platforms).map((platform) => (
-                    <label key={platform} className="flex items-center gap-1 text-xs text-gray-600">
-                      <input
-                        type="checkbox"
-                        checked={filters.platforms.includes(platform)}
-                        onChange={() => toggleFilter('platforms', platform)}
-                        className="h-3 w-3 rounded border-gray-300 text-blue-600"
-                      />
-                      {platform}
-                    </label>
-                  ))}
-                </div>
-              </div>
-              <div>
-                <div className="text-xs font-semibold text-gray-500 mb-2">Term</div>
-                <div className="flex flex-wrap gap-2">
-                  {['short', 'long'].map((term) => (
-                    <label key={term} className="flex items-center gap-1 text-xs text-gray-600 capitalize">
-                      <input
-                        type="checkbox"
-                        checked={filters.terms.includes(term)}
-                        onChange={() => toggleFilter('terms', term)}
-                        className="h-3 w-3 rounded border-gray-300 text-blue-600"
-                      />
-                      {term} term
-                    </label>
-                  ))}
-                </div>
-              </div>
-              <div>
-                <div className="text-xs font-semibold text-gray-500 mb-2">Status</div>
-                <div className="flex flex-wrap gap-2">
+
+            {filtersOpen && (
+              <div className="mt-4 rounded-lg border border-gray-200">
+                <div className="flex flex-wrap gap-2 border-b border-gray-200 bg-gray-50 px-3 py-2 text-xs">
                   {[
-                    { key: 'receivable', label: 'Receivable' },
-                    { key: 'received', label: 'Received' },
-                    { key: 'nearClose', label: 'Near Close' },
-                    { key: 'closing', label: 'Closing' },
-                  ].map((status) => (
-                    <label key={status.key} className="flex items-center gap-1 text-xs text-gray-600">
-                      <input
-                        type="checkbox"
-                        checked={filters.statuses.includes(status.key)}
-                        onChange={() => toggleFilter('statuses', status.key)}
-                        className="h-3 w-3 rounded border-gray-300 text-blue-600"
-                      />
-                      {status.label}
-                    </label>
+                    { key: 'platforms', label: 'Platforms' },
+                    { key: 'terms', label: 'Term' },
+                    { key: 'statuses', label: 'Status' },
+                    { key: 'dates', label: 'Maturity' },
+                  ].map((tab) => (
+                    <button
+                      key={tab.key}
+                      type="button"
+                      onClick={() => setFilterTab(tab.key as typeof filterTab)}
+                      className={`rounded-full px-3 py-1 font-semibold ${
+                        filterTab === tab.key
+                          ? 'bg-blue-600 text-white'
+                          : 'bg-white text-gray-600 border border-gray-200'
+                      }`}
+                    >
+                      {tab.label}
+                    </button>
                   ))}
                 </div>
-              </div>
-              <div>
-                <div className="text-xs font-semibold text-gray-500 mb-2">Year</div>
-                <div className="flex flex-wrap gap-2">
-                  {Array.from(filterOptions.years).sort().map((year) => (
-                    <label key={year} className="flex items-center gap-1 text-xs text-gray-600">
-                      <input
-                        type="checkbox"
-                        checked={filters.years.includes(year)}
-                        onChange={() => toggleFilter('years', year)}
-                        className="h-3 w-3 rounded border-gray-300 text-blue-600"
-                      />
-                      {year}
-                    </label>
-                  ))}
+
+                <div className="p-4 text-xs text-gray-600">
+                  {filterTab === 'platforms' && (
+                    <div className="flex flex-wrap gap-2">
+                      {Array.from(filterOptions.platforms).map((platform) => (
+                        <label key={platform} className="flex items-center gap-1">
+                          <input
+                            type="checkbox"
+                            checked={filters.platforms.includes(platform)}
+                            onChange={() => toggleFilter('platforms', platform)}
+                            className="h-3 w-3 rounded border-gray-300 text-blue-600"
+                          />
+                          {platform}
+                        </label>
+                      ))}
+                    </div>
+                  )}
+
+                  {filterTab === 'terms' && (
+                    <div className="flex flex-wrap gap-2">
+                      {['short', 'long'].map((term) => (
+                        <label key={term} className="flex items-center gap-1 capitalize">
+                          <input
+                            type="checkbox"
+                            checked={filters.terms.includes(term)}
+                            onChange={() => toggleFilter('terms', term)}
+                            className="h-3 w-3 rounded border-gray-300 text-blue-600"
+                          />
+                          {term} term
+                        </label>
+                      ))}
+                    </div>
+                  )}
+
+                  {filterTab === 'statuses' && (
+                    <div className="flex flex-wrap gap-2">
+                      {[
+                        { key: 'receivable', label: 'Receivable' },
+                        { key: 'received', label: 'Received' },
+                        { key: 'nearClose', label: 'Near Close' },
+                        { key: 'closing', label: 'Closing' },
+                      ].map((status) => (
+                        <label key={status.key} className="flex items-center gap-1">
+                          <input
+                            type="checkbox"
+                            checked={filters.statuses.includes(status.key)}
+                            onChange={() => toggleFilter('statuses', status.key)}
+                            className="h-3 w-3 rounded border-gray-300 text-blue-600"
+                          />
+                          {status.label}
+                        </label>
+                      ))}
+                    </div>
+                  )}
+
+                  {filterTab === 'dates' && (
+                    <div className="grid grid-cols-1 gap-4 md:grid-cols-3">
+                      <div>
+                        <div className="font-semibold text-gray-500 mb-2">Year</div>
+                        <div className="flex flex-wrap gap-2">
+                          {Array.from(filterOptions.years).sort().map((year) => (
+                            <label key={year} className="flex items-center gap-1">
+                              <input
+                                type="checkbox"
+                                checked={filters.years.includes(year)}
+                                onChange={() => toggleFilter('years', year)}
+                                className="h-3 w-3 rounded border-gray-300 text-blue-600"
+                              />
+                              {year}
+                            </label>
+                          ))}
+                        </div>
+                      </div>
+                      <div>
+                        <div className="font-semibold text-gray-500 mb-2">Month</div>
+                        <div className="flex flex-wrap gap-2">
+                          {Array.from(filterOptions.months)
+                            .sort((a, b) => Number(a) - Number(b))
+                            .map((month) => (
+                              <label key={month} className="flex items-center gap-1">
+                                <input
+                                  type="checkbox"
+                                  checked={filters.months.includes(month)}
+                                  onChange={() => toggleFilter('months', month)}
+                                  className="h-3 w-3 rounded border-gray-300 text-blue-600"
+                                />
+                                {month}
+                              </label>
+                            ))}
+                        </div>
+                      </div>
+                      <div>
+                        <div className="font-semibold text-gray-500 mb-2">Day</div>
+                        <div className="flex flex-wrap gap-2">
+                          {Array.from(filterOptions.days)
+                            .sort((a, b) => Number(a) - Number(b))
+                            .map((dayValue) => (
+                              <label key={dayValue} className="flex items-center gap-1">
+                                <input
+                                  type="checkbox"
+                                  checked={filters.days.includes(dayValue)}
+                                  onChange={() => toggleFilter('days', dayValue)}
+                                  className="h-3 w-3 rounded border-gray-300 text-blue-600"
+                                />
+                                {dayValue}
+                              </label>
+                            ))}
+                        </div>
+                      </div>
+                    </div>
+                  )}
                 </div>
               </div>
-              <div>
-                <div className="text-xs font-semibold text-gray-500 mb-2">Month</div>
-                <div className="flex flex-wrap gap-2">
-                  {Array.from(filterOptions.months)
-                    .sort((a, b) => Number(a) - Number(b))
-                    .map((month) => (
-                      <label key={month} className="flex items-center gap-1 text-xs text-gray-600">
-                        <input
-                          type="checkbox"
-                          checked={filters.months.includes(month)}
-                          onChange={() => toggleFilter('months', month)}
-                          className="h-3 w-3 rounded border-gray-300 text-blue-600"
-                        />
-                        {month}
-                      </label>
-                    ))}
-                </div>
-              </div>
-              <div>
-                <div className="text-xs font-semibold text-gray-500 mb-2">Day</div>
-                <div className="flex flex-wrap gap-2">
-                  {Array.from(filterOptions.days)
-                    .sort((a, b) => Number(a) - Number(b))
-                    .map((dayValue) => (
-                      <label key={dayValue} className="flex items-center gap-1 text-xs text-gray-600">
-                        <input
-                          type="checkbox"
-                          checked={filters.days.includes(dayValue)}
-                          onChange={() => toggleFilter('days', dayValue)}
-                          className="h-3 w-3 rounded border-gray-300 text-blue-600"
-                        />
-                        {dayValue}
-                      </label>
-                    ))}
-                </div>
-              </div>
-            </div>
+            )}
           </div>
           {filteredSukuk.length === 0 ? (
             <div className="rounded-xl border border-gray-200 bg-white p-6 text-sm text-gray-600">
