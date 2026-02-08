@@ -91,10 +91,32 @@ export const withdrawFromBuckets = async (
     orderBy: [{ haulStartDate: 'asc' }, { createdAt: 'asc' }],
   })
 
+  let availableByBucket: Map<string, number> | null = null
+  if (cutoff) {
+    const movements = await tx.cashBucketMovement.groupBy({
+      by: ['cashBucketId'],
+      where: {
+        cashBucketId: { in: buckets.map((b) => b.id) },
+        date: { lte: cutoff },
+      },
+      _sum: { amount: true },
+    })
+    availableByBucket = new Map(
+      movements.map((movement) => [movement.cashBucketId, movement._sum.amount || 0])
+    )
+  }
+
   for (const bucket of buckets) {
     if (remaining <= 0) break
-    const used = Math.min(bucket.balance, remaining)
+    const availableBalance = availableByBucket
+      ? Math.max(0, availableByBucket.get(bucket.id) ?? 0)
+      : bucket.balance
+    const used = Math.min(availableBalance, remaining)
     if (used <= 0) continue
+
+    if (availableByBucket) {
+      availableByBucket.set(bucket.id, availableBalance - used)
+    }
 
     await tx.cashBucket.update({
       where: { id: bucket.id },
