@@ -92,6 +92,7 @@ export const withdrawFromBuckets = async (
   })
 
   let availableByBucket: Map<string, number> | null = null
+  let maxWithdrawableByBucket: Map<string, number> | null = null
   if (cutoff) {
     const movements = await tx.cashBucketMovement.groupBy({
       by: ['cashBucketId'],
@@ -104,12 +105,42 @@ export const withdrawFromBuckets = async (
     availableByBucket = new Map(
       movements.map((movement) => [movement.cashBucketId, movement._sum.amount || 0])
     )
+
+    const futureMovements = await tx.cashBucketMovement.findMany({
+      where: {
+        cashBucketId: { in: buckets.map((b) => b.id) },
+        date: { gt: cutoff },
+      },
+      orderBy: { date: 'asc' },
+    })
+
+    const futureByBucket = new Map<string, typeof futureMovements>()
+    for (const movement of futureMovements) {
+      const list = futureByBucket.get(movement.cashBucketId) || []
+      list.push(movement)
+      futureByBucket.set(movement.cashBucketId, list)
+    }
+
+    maxWithdrawableByBucket = new Map()
+    for (const bucket of buckets) {
+      const balanceAtCutoff = availableByBucket.get(bucket.id) ?? 0
+      let running = balanceAtCutoff
+      let minBalance = balanceAtCutoff
+      const future = futureByBucket.get(bucket.id) || []
+      for (const movement of future) {
+        running += movement.amount
+        if (running < minBalance) {
+          minBalance = running
+        }
+      }
+      maxWithdrawableByBucket.set(bucket.id, Math.max(0, minBalance))
+    }
   }
 
   for (const bucket of buckets) {
     if (remaining <= 0) break
     const availableBalance = availableByBucket
-      ? Math.max(0, availableByBucket.get(bucket.id) ?? 0)
+      ? Math.max(0, maxWithdrawableByBucket?.get(bucket.id) ?? 0)
       : bucket.balance
     const used = Math.min(availableBalance, remaining)
     if (used <= 0) continue
