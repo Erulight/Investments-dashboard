@@ -58,7 +58,7 @@ These variables must be set as **both build-time and runtime variables**:
 3. Add the following variables:
 
 **Build and Runtime Variables:**
-- `JWT_SECRET`: Your JWT secret key (generate with `openssl rand -hex 32`)
+- `JWT_SECRET`: Your JWT secret key (generate with `openssl rand -base64 32`)
 
 **Runtime-Only Variables:**
 - `COOKIE_SECURE`: `true`
@@ -210,7 +210,7 @@ After seeding the database, you can log in with:
 
 1. **Use Strong JWT Secret**: Generate a secure random string:
    ```bash
-   openssl rand -hex 32
+   openssl rand -base64 32
    ```
 
 2. **Enable HTTPS**: Railway provides HTTPS by default

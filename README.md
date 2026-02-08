@@ -101,7 +101,7 @@ Edit `.env` with your configuration:
 # Database - PostgreSQL (recommended for all environments)
 DATABASE_URL="postgresql://investments:investments_password@localhost:5432/investments_dashboard?schema=public"
 
-# JWT Secret (generate with: openssl rand -hex 32)
+# JWT Secret (generate with: openssl rand -base64 32)
 JWT_SECRET="your-super-secret-jwt-key-change-this-in-production"
 
 # App Configuration
