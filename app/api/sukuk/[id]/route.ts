@@ -359,19 +359,75 @@ export async function DELETE(
       )
     }
     
-    // Delete the sukuk (participants will be cascade deleted)
+    // Delete the sukuk and reverse cash/bucket effects
     await prisma.$transaction(async (tx) => {
+      const movements = await tx.cashBucketMovement.findMany({
+        where: { investmentId: id },
+      })
+
+      const netMovement = movements.reduce((sum, m) => sum + m.amount, 0)
+
+      for (const movement of movements) {
+        const bucket = await tx.cashBucket.findUnique({
+          where: { id: movement.cashBucketId },
+        })
+        if (bucket) {
+          const nextBalance = bucket.balance - movement.amount
+          if (nextBalance < -0.0001) {
+            throw new Error('INSUFFICIENT_CASH')
+          }
+          await tx.cashBucket.update({
+            where: { id: bucket.id },
+            data: { balance: nextBalance },
+          })
+        }
+      }
+
+      const cashSetting = await tx.systemSetting.findUnique({
+        where: { key: 'CASH_BALANCE' },
+      })
+      const currentCash = cashSetting ? Number(cashSetting.value) : 0
+      const nextCash = currentCash - netMovement
+      if (nextCash < -0.0001) {
+        throw new Error('INSUFFICIENT_CASH')
+      }
+
+      if (cashSetting) {
+        await tx.systemSetting.update({
+          where: { key: 'CASH_BALANCE' },
+          data: { value: Math.max(0, nextCash).toString() },
+        })
+      } else {
+        await tx.systemSetting.create({
+          data: {
+            key: 'CASH_BALANCE',
+            value: Math.max(0, nextCash).toString(),
+            description: 'Available cash balance for investments',
+          },
+        })
+      }
+
+      await tx.cashBucketMovement.deleteMany({
+        where: { investmentId: id },
+      })
+      await tx.investmentBucketAllocation.deleteMany({
+        where: { investmentId: id },
+      })
+      await tx.transaction.deleteMany({
+        where: { investmentId: id },
+      })
+
       await tx.investment.delete({
         where: { id },
       })
-      
+
       // Log audit
       await logAudit(tx, {
         userId: user.id,
         action: 'DELETE',
         entityType: 'SUKUK',
         entityId: id,
-        changes: JSON.stringify({ deleted: existingSukuk }),
+        changes: JSON.stringify({ deleted: existingSukuk, reversedCash: netMovement }),
       })
     })
     
@@ -388,11 +444,20 @@ export async function DELETE(
         statusCode = 401
       } else if (error.message === 'Forbidden') {
         statusCode = 403
+      } else if (error.message === 'INSUFFICIENT_CASH') {
+        statusCode = 400
       }
     }
     
     return NextResponse.json(
-      { error: error instanceof Error ? error.message : 'Failed to delete Sukuk' },
+      {
+        error:
+          error instanceof Error && error.message === 'INSUFFICIENT_CASH'
+            ? 'Cash balance is lower than the deleted deal effects'
+            : error instanceof Error
+              ? error.message
+              : 'Failed to delete Sukuk',
+      },
       { status: statusCode }
     )
   }
