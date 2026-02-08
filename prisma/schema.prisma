@@ -3,7 +3,7 @@ generator client {
 }
 
 datasource db {
-  provider = "postgresql"
+  provider = "sqlite"
   url      = env("DATABASE_URL")
 }
 
@@ -18,6 +18,10 @@ model User {
   name              String
   role              String   @default("VIEWER")
   canEditAsPartner  Boolean  @default(false)
+  
+  // Module permissions - if null, inherits from role (OWNER has all, VIEWER has none)
+  permissions       String?  // JSON string: {"sukuk": true, "crypto": true, "sip": false, ...}
+  
   createdAt         DateTime @default(now())
   updatedAt         DateTime @updatedAt
 

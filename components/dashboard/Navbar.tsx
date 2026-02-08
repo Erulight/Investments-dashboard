@@ -8,27 +8,29 @@ interface NavItem {
   name: string
   href: string
   roles?: string[]
+  module?: string  // Module permission required
   icon?: string
   children?: NavItem[]
 }
 
 const navigation: NavItem[] = [
   { name: 'Dashboard', href: '/dashboard', icon: '📊' },
-  { name: 'Zakat', href: '/zakat', roles: ['OWNER'], icon: '🧾' },
+  { name: 'Zakat', href: '/zakat', module: 'zakat', icon: '🧾' },
   { 
     name: 'Investments', 
     href: '/investments', 
     icon: '💼',
     children: [
-      { name: 'Sukuk', href: '/sukuk', icon: '💎' },
-      { name: 'Crypto', href: '/crypto', icon: '₿' },
-      { name: 'Business Deals', href: '/business-deals', icon: '🤝' },
-      { name: 'SIP', href: '/sip', icon: '📈' },
-      { name: 'Savings', href: '/savings', icon: '💰' },
+      { name: 'Sukuk', href: '/sukuk', module: 'sukuk', icon: '💎' },
+      { name: 'Crypto', href: '/crypto', module: 'crypto', icon: '₿' },
+      { name: 'Business Deals', href: '/business-deals', module: 'business-deals', icon: '🤝' },
+      { name: 'SIP', href: '/sip', module: 'sip', icon: '📈' },
+      { name: 'Savings', href: '/savings', module: 'savings', icon: '💰' },
     ]
   },
-  { name: 'Import', href: '/import', roles: ['OWNER'], icon: '📥' },
-  { name: 'Settings', href: '/settings', roles: ['OWNER'], icon: '⚙️' },
+  { name: 'Import', href: '/import', module: 'import', icon: '📥' },
+  { name: 'Users', href: '/users', roles: ['OWNER'], icon: '👥' },
+  { name: 'Settings', href: '/settings', module: 'settings', icon: '⚙️' },
 ]
 
 interface NavbarProps {
@@ -36,6 +38,36 @@ interface NavbarProps {
     name: string
     email: string
     role: string
+    permissions?: string | null
+  }
+}
+
+function hasAccess(user: NavbarProps['user'], item: NavItem): boolean {
+  // Check role-based access
+  if (item.roles && !item.roles.includes(user.role)) {
+    return false
+  }
+  
+  // OWNER has access to everything
+  if (user.role === 'OWNER') {
+    return true
+  }
+  
+  // If no module permission is required, allow access
+  if (!item.module) {
+    return true
+  }
+  
+  // Check module permission
+  if (!user.permissions) {
+    return false
+  }
+  
+  try {
+    const permissions = JSON.parse(user.permissions)
+    return permissions[item.module] === true
+  } catch {
+    return false
   }
 }
 
@@ -58,9 +90,30 @@ export function Navbar({ user }: NavbarProps) {
     }
   }
 
-  const filteredNav = navigation.filter(
-    (item) => !item.roles || item.roles.includes(user.role)
-  )
+  const filteredNav = navigation
+    .map(item => {
+      if (!hasAccess(user, item)) {
+        return null
+      }
+      
+      // Filter children if item has children
+      if (item.children) {
+        const filteredChildren = item.children.filter(child => hasAccess(user, child))
+        
+        // Only show parent if it has accessible children
+        if (filteredChildren.length === 0) {
+          return null
+        }
+        
+        return {
+          ...item,
+          children: filteredChildren
+        }
+      }
+      
+      return item
+    })
+    .filter(Boolean) as NavItem[]
 
   const isActiveLink = (href: string, children?: NavItem[]) => {
     if (pathname === href) return true

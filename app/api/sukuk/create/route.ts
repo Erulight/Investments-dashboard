@@ -1,13 +1,13 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { prisma } from '@/lib/db'
-import { requireAuth } from '@/lib/rbac'
+import { requireModuleAccess } from '@/lib/rbac'
 import { createSukukSchema } from '@/lib/validation'
 import { logAudit } from '@/lib/audit'
 import { withdrawFromBuckets } from '@/lib/cashBuckets'
 
 export async function POST(req: NextRequest) {
   try {
-    const user = await requireAuth(['OWNER'])
+    const user = await requireModuleAccess('sukuk')
     
     const body = await req.json()
     
