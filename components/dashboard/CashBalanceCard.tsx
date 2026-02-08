@@ -14,6 +14,7 @@ export function CashBalanceCard({ initialCash }: { initialCash: number }) {
   const [notes, setNotes] = useState('')
   const [direction, setDirection] = useState<'IN' | 'OUT'>('IN')
   const [haulStartDate, setHaulStartDate] = useState(formatDateInput(new Date()))
+  const [entryDate, setEntryDate] = useState(formatDateInput(new Date()))
   const [loading, setLoading] = useState(false)
   const [message, setMessage] = useState('')
   const [error, setError] = useState('')
@@ -48,9 +49,10 @@ export function CashBalanceCard({ initialCash }: { initialCash: number }) {
     setMessage('')
 
     try {
-      const entryDate = direction === 'IN' ? toIsoDateInput(haulStartDate) : null
-      if (direction === 'IN' && !entryDate) {
-        throw new Error('Invalid ownership date')
+      const selectedDate = direction === 'IN' ? haulStartDate : entryDate
+      const isoDate = toIsoDateInput(selectedDate)
+      if (!isoDate) {
+        throw new Error('Invalid date format')
       }
       const res = await fetch('/api/cash', {
         method: 'POST',
@@ -58,9 +60,9 @@ export function CashBalanceCard({ initialCash }: { initialCash: number }) {
         body: JSON.stringify({
           direction,
           amount: Number(amount),
-          date: direction === 'IN' ? entryDate : new Date().toISOString().split('T')[0],
+          date: isoDate,
           notes,
-          haulStartDate: direction === 'IN' ? entryDate : undefined,
+          haulStartDate: direction === 'IN' ? isoDate : undefined,
         }),
       })
       const data = await res.json().catch(() => ({}))
@@ -108,34 +110,24 @@ export function CashBalanceCard({ initialCash }: { initialCash: number }) {
               className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:border-blue-500 focus:ring-2 focus:ring-blue-500"
               placeholder="Amount"
             />
-            {direction === 'IN' ? (
-              <input
-                type="text"
-                value={haulStartDate}
-                onChange={(e) => setHaulStartDate(e.target.value)}
-                className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:border-blue-500 focus:ring-2 focus:ring-blue-500"
-                aria-label="Ownership date"
-                placeholder="DD/MM/YYYY"
-              />
-            ) : (
-              <input
-                type="text"
-                value={notes}
-                onChange={(e) => setNotes(e.target.value)}
-                className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:border-blue-500 focus:ring-2 focus:ring-blue-500"
-                placeholder="Notes"
-              />
-            )}
-          </div>
-          {direction === 'IN' && (
             <input
               type="text"
-              value={notes}
-              onChange={(e) => setNotes(e.target.value)}
+              value={direction === 'IN' ? haulStartDate : entryDate}
+              onChange={(e) => (
+                direction === 'IN' ? setHaulStartDate(e.target.value) : setEntryDate(e.target.value)
+              )}
               className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:border-blue-500 focus:ring-2 focus:ring-blue-500"
-              placeholder="Notes (optional)"
+              aria-label={direction === 'IN' ? 'Ownership date' : 'Withdrawal date'}
+              placeholder="DD/MM/YYYY"
             />
-          )}
+          </div>
+          <input
+            type="text"
+            value={notes}
+            onChange={(e) => setNotes(e.target.value)}
+            className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:border-blue-500 focus:ring-2 focus:ring-blue-500"
+            placeholder="Notes (optional)"
+          />
           <div className="flex items-center gap-2">
             <Button type="submit" variant="primary" size="sm" disabled={loading}>
               {loading ? 'Saving...' : 'Log Cash'}
