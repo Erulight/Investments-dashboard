@@ -5,6 +5,7 @@ import { useRouter } from 'next/navigation'
 import { Card, CardHeader, CardTitle, CardContent } from '@/components/ui/Card'
 import { Button } from '@/components/ui/Button'
 import { Modal } from '@/components/sukuk/SukukModal'
+import { formatDateInput, toIsoDateInput } from '@/lib/date'
 
 type ReceiptEntry = {
   date: string
@@ -35,6 +36,7 @@ export function ZakatDashboard({ buckets }: { buckets: BucketRow[] }) {
   const router = useRouter()
   const [payTarget, setPayTarget] = useState<BucketRow | null>(null)
   const [payAmount, setPayAmount] = useState('')
+  const [payDate, setPayDate] = useState(formatDateInput(new Date()))
   const [payNotes, setPayNotes] = useState('')
   const [payError, setPayError] = useState('')
   const [payLoading, setPayLoading] = useState(false)
@@ -46,6 +48,7 @@ export function ZakatDashboard({ buckets }: { buckets: BucketRow[] }) {
   const openPay = (bucket: BucketRow) => {
     setPayTarget(bucket)
     setPayAmount(bucket.zakatDue.toFixed(2))
+    setPayDate(formatDateInput(new Date()))
     setPayNotes('')
     setPayError('')
   }
@@ -63,6 +66,11 @@ export function ZakatDashboard({ buckets }: { buckets: BucketRow[] }) {
       setPayError('Enter a valid amount')
       return
     }
+    const isoDate = toIsoDateInput(payDate)
+    if (!isoDate) {
+      setPayError('Invalid payment date format')
+      return
+    }
     setPayLoading(true)
     setPayError('')
     try {
@@ -72,7 +80,7 @@ export function ZakatDashboard({ buckets }: { buckets: BucketRow[] }) {
         body: JSON.stringify({
           bucketId: payTarget.id,
           amount,
-          date: new Date().toISOString().split('T')[0],
+          date: isoDate,
           notes: payNotes,
         }),
       })
@@ -248,6 +256,13 @@ export function ZakatDashboard({ buckets }: { buckets: BucketRow[] }) {
               Bucket {payTarget.id.slice(0, 8)} • Due {payTarget.currency} {payTarget.zakatDue.toFixed(2)}
             </div>
           )}
+          <input
+            type="text"
+            value={payDate}
+            onChange={(e) => setPayDate(e.target.value)}
+            className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:border-blue-500 focus:ring-2 focus:ring-blue-500"
+            placeholder="Payment date (DD/MM/YYYY)"
+          />
           <input
             type="number"
             min="0"
