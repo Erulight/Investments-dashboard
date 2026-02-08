@@ -4,6 +4,12 @@ import { ZakatDashboard } from '@/components/zakat/ZakatDashboard'
 
 export const dynamic = 'force-dynamic'
 
+const addDays = (date: Date, days: number) => {
+  const next = new Date(date)
+  next.setDate(next.getDate() + days)
+  return next
+}
+
 const receiptTypes = new Set([
   'WITHDRAW_PROFIT',
   'WITHDRAW_PRINCIPAL',
@@ -28,7 +34,6 @@ export default async function ZakatPage() {
               id: true,
               name: true,
               isIjarah: true,
-              startDate: true,
               reopenedAt: true,
             },
           },
@@ -38,6 +43,11 @@ export default async function ZakatPage() {
   })
 
   const rows = buckets.map((bucket) => {
+    const effectiveStart = bucket.lastZakatPaidDate
+      ? new Date(bucket.lastZakatPaidDate)
+      : new Date(bucket.haulStartDate)
+    const haulCompleteDate = addDays(effectiveStart, 354)
+
     const rawReceipts = bucket.movements.filter((movement) => {
       if (!receiptTypes.has(movement.type)) return false
       if (!movement.investmentId) return false
@@ -47,13 +57,7 @@ export default async function ZakatPage() {
         const reopenedAt = new Date(movement.investment.reopenedAt)
         if (new Date(movement.createdAt) < reopenedAt) return false
       }
-      const investmentStart = movement.investment?.startDate
-        ? new Date(movement.investment.startDate)
-        : null
-      if (!investmentStart) return false
-      const durationMs = new Date(movement.date).getTime() - investmentStart.getTime()
-      const durationDays = durationMs / (1000 * 60 * 60 * 24)
-      return durationDays >= 354
+      return new Date(movement.date) >= haulCompleteDate
     })
     const dedupedMap = new Map<string, typeof rawReceipts[number]>()
     rawReceipts.forEach((movement) => {
@@ -95,6 +99,7 @@ export default async function ZakatPage() {
             amount: Math.abs(lastPayment.amount),
           }
         : null,
+      haulCompleteDate: haulCompleteDate.toISOString().split('T')[0],
       dueReceipts: dueReceipts.map((m) => ({
         date: new Date(m.date).toISOString().split('T')[0],
         amount: m.amount,

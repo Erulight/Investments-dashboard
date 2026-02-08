@@ -20,6 +20,7 @@ type BucketRow = {
   balance: number
   haulStartDate: string
   lastZakatPaidDate?: string | null
+  haulCompleteDate: string
   receiptsTotal: number
   zakatDue: number
   lastPayment: null | {
@@ -126,7 +127,7 @@ export function ZakatDashboard({ buckets }: { buckets: BucketRow[] }) {
             Total Zakat Due: SAR {totalDue.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
           </div>
           <p className="text-xs text-gray-500 mt-2">
-            Zakat is due only when investment duration is 12 lunar months or more.
+            Zakat is due only after the bucket haul completes (354 days from initial cash receipt).
             Receipts shown below are already filtered for that rule.
           </p>
         </CardContent>
@@ -151,6 +152,9 @@ export function ZakatDashboard({ buckets }: { buckets: BucketRow[] }) {
                       <div className="text-xs text-gray-500">
                         Bucket start: {bucket.haulStartDate}
                         {bucket.lastZakatPaidDate ? ` • Last zakat paid: ${bucket.lastZakatPaidDate}` : ''}
+                      </div>
+                      <div className="text-xs text-gray-500">
+                        Haul complete: {bucket.haulCompleteDate}
                       </div>
                     </div>
                     <div className="text-right">
