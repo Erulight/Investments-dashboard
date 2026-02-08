@@ -4,6 +4,7 @@ import { useEffect, useState } from 'react'
 import { useSearchParams } from 'next/navigation'
 import { Card, CardContent } from '@/components/ui/Card'
 import { Button } from '@/components/ui/Button'
+import { formatDateInput, toIsoDateInput } from '@/lib/date'
 
 export function CashBalanceCard({ initialCash }: { initialCash: number }) {
   const searchParams = useSearchParams()
@@ -12,7 +13,7 @@ export function CashBalanceCard({ initialCash }: { initialCash: number }) {
   const [amount, setAmount] = useState('')
   const [notes, setNotes] = useState('')
   const [direction, setDirection] = useState<'IN' | 'OUT'>('IN')
-  const [haulStartDate, setHaulStartDate] = useState(new Date().toISOString().split('T')[0])
+  const [haulStartDate, setHaulStartDate] = useState(formatDateInput(new Date()))
   const [loading, setLoading] = useState(false)
   const [message, setMessage] = useState('')
   const [error, setError] = useState('')
@@ -55,7 +56,7 @@ export function CashBalanceCard({ initialCash }: { initialCash: number }) {
           amount: Number(amount),
           date: new Date().toISOString().split('T')[0],
           notes,
-          haulStartDate: direction === 'IN' ? haulStartDate : undefined,
+          haulStartDate: direction === 'IN' ? toIsoDateInput(haulStartDate) : undefined,
         }),
       })
       const data = await res.json().catch(() => ({}))
@@ -105,11 +106,12 @@ export function CashBalanceCard({ initialCash }: { initialCash: number }) {
             />
             {direction === 'IN' ? (
               <input
-                type="date"
+                type="text"
                 value={haulStartDate}
                 onChange={(e) => setHaulStartDate(e.target.value)}
                 className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:border-blue-500 focus:ring-2 focus:ring-blue-500"
                 aria-label="Ownership date"
+                placeholder="DD/MM/YYYY"
               />
             ) : (
               <input

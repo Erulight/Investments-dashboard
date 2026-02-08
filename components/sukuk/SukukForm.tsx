@@ -3,6 +3,7 @@
 import { useState, useEffect } from 'react'
 import { Button } from '@/components/ui/Button'
 import { createSukukSchema, type CreateSukukInput } from '@/lib/validation'
+import { formatDateInput, parseDateInput, toIsoDateInput } from '@/lib/date'
 
 interface SukukFormProps {
   mode: 'create' | 'edit'
@@ -19,8 +20,8 @@ export function SukukForm({ mode, initialData, onSuccess, onCancel }: SukukFormP
     isIjarah: initialData?.isIjarah ?? false,
     principalAmount: initialData?.principalAmount || '',
     currentValue: initialData?.currentValue || '',
-    startDate: initialData?.startDate ? new Date(initialData.startDate).toISOString().split('T')[0] : '',
-    maturityDate: initialData?.maturityDate ? new Date(initialData.maturityDate).toISOString().split('T')[0] : '',
+    startDate: formatDateInput(initialData?.startDate),
+    maturityDate: formatDateInput(initialData?.maturityDate),
     interestRate: initialData?.interestRate || '',
     fees: initialData?.fees ?? '',
     totalReceived: initialData?.totalReceived ?? '',
@@ -45,7 +46,7 @@ export function SukukForm({ mode, initialData, onSuccess, onCancel }: SukukFormP
   const [receiptForm, setReceiptForm] = useState({
     source: 'PROFIT',
     amount: '',
-    date: new Date().toISOString().split('T')[0],
+    date: formatDateInput(new Date()),
     notes: '',
   })
   const [receiptHistory, setReceiptHistory] = useState<any[]>(initialData?.transactions ?? [])
@@ -92,8 +93,12 @@ export function SukukForm({ mode, initialData, onSuccess, onCancel }: SukukFormP
       setFormData((prev: any) => ({ ...prev, interestRate: '' }))
       return
     }
-    const startDate = new Date(formData.startDate)
-    const maturityDate = new Date(formData.maturityDate)
+    const startDate = parseDateInput(formData.startDate)
+    const maturityDate = parseDateInput(formData.maturityDate)
+    if (!startDate || !maturityDate) {
+      setFormData((prev: any) => ({ ...prev, interestRate: '' }))
+      return
+    }
     const periodMonths = (maturityDate.getFullYear() - startDate.getFullYear()) * 12
       + (maturityDate.getMonth() - startDate.getMonth())
       + (maturityDate.getDate() - startDate.getDate()) / 30
@@ -132,8 +137,18 @@ export function SukukForm({ mode, initialData, onSuccess, onCancel }: SukukFormP
       const principalAmount = parseFloat(formData.principalAmount)
       const fees = parseOptionalNumber(formData.fees) ?? 0
       const receivableAmount = parseOptionalNumber(formData.receivableAmount)
-      const startDate = formData.startDate ? new Date(formData.startDate) : null
-      const maturityDate = formData.maturityDate ? new Date(formData.maturityDate) : null
+      const startDate = formData.startDate ? parseDateInput(formData.startDate) : null
+      const maturityDate = formData.maturityDate ? parseDateInput(formData.maturityDate) : null
+      if (!startDate) {
+        setErrors((prev: any) => ({ ...prev, startDate: 'Invalid date format' }))
+        setError('Please fix the validation errors')
+        return
+      }
+      if (formData.maturityDate && !maturityDate) {
+        setErrors((prev: any) => ({ ...prev, maturityDate: 'Invalid date format' }))
+        setError('Please fix the validation errors')
+        return
+      }
       const periodMonths = startDate && maturityDate
         ? (maturityDate.getFullYear() - startDate.getFullYear()) * 12
           + (maturityDate.getMonth() - startDate.getMonth())
@@ -153,6 +168,8 @@ export function SukukForm({ mode, initialData, onSuccess, onCancel }: SukukFormP
         totalReceived: parseOptionalNumber(formData.totalReceived),
         receivableAmount,
         isIjarah: Boolean(formData.isIjarah),
+        startDate: toIsoDateInput(formData.startDate),
+        maturityDate: formData.maturityDate ? toIsoDateInput(formData.maturityDate) : undefined,
         participants: participants.map(p => ({
           ...p,
           investedAmount: parseFloat(p.investedAmount),
@@ -222,13 +239,19 @@ export function SukukForm({ mode, initialData, onSuccess, onCancel }: SukukFormP
     setReceiptError('')
     setReceiptMessage('')
     try {
+      const isoDate = toIsoDateInput(receiptForm.date)
+      if (!isoDate) {
+        setReceiptError('Invalid date format')
+        setReceiptLoading(false)
+        return
+      }
       const res = await fetch(`/api/sukuk/${initialData.id}/withdraw`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           source: receiptForm.source,
           amount: parseFloat(receiptForm.amount),
-          date: receiptForm.date,
+          date: isoDate,
           notes: receiptForm.notes,
         }),
       })
@@ -247,7 +270,7 @@ export function SukukForm({ mode, initialData, onSuccess, onCancel }: SukukFormP
         id: `local-${Date.now()}`,
         type: receiptForm.source === 'PROFIT' ? 'WITHDRAW_PROFIT' : 'WITHDRAW_PRINCIPAL',
         amount: Math.abs(parseFloat(receiptForm.amount)),
-        date: receiptForm.date,
+        date: isoDate,
         description: receiptForm.notes || null,
       }
       setReceiptHistory((prev) => [entry, ...prev])
@@ -582,14 +605,15 @@ export function SukukForm({ mode, initialData, onSuccess, onCancel }: SukukFormP
             <label htmlFor="startDate" className="block text-sm font-medium text-gray-700 mb-1">
               Start Date *
             </label>
-            <input
-              type="date"
+          <input
+            type="text"
               id="startDate"
               name="startDate"
               required
               value={formData.startDate}
               onChange={handleChange}
               className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+            placeholder="DD/MM/YYYY"
             />
             {errors.startDate && <p className="text-sm text-red-600 mt-1">{errors.startDate}</p>}
           </div>
@@ -598,13 +622,14 @@ export function SukukForm({ mode, initialData, onSuccess, onCancel }: SukukFormP
             <label htmlFor="maturityDate" className="block text-sm font-medium text-gray-700 mb-1">
               Maturity Date
             </label>
-            <input
-              type="date"
+          <input
+            type="text"
               id="maturityDate"
               name="maturityDate"
               value={formData.maturityDate}
               onChange={handleChange}
               className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+            placeholder="DD/MM/YYYY"
             />
             {errors.maturityDate && <p className="text-sm text-red-600 mt-1">{errors.maturityDate}</p>}
           </div>

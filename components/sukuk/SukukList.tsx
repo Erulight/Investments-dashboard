@@ -5,6 +5,7 @@ import { useRouter } from 'next/navigation'
 import { Table, TableHeader, TableBody, TableRow, TableHead, TableCell } from '@/components/ui/Table'
 import { Button } from '@/components/ui/Button'
 import { Modal } from './SukukModal'
+import { formatDateInput, toIsoDateInput } from '@/lib/date'
 import { SukukForm } from './SukukForm'
 
 interface SukukListProps {
@@ -27,14 +28,14 @@ export function SukukList({ initialSukuk, userRole }: SukukListProps) {
   const [withdrawForm, setWithdrawForm] = useState({
     source: 'PROFIT',
     amount: '',
-    date: new Date().toISOString().split('T')[0],
+    date: formatDateInput(new Date()),
     notes: '',
   })
   const [sellForm, setSellForm] = useState({
     buyerPersonId: '',
     amount: '',
     salePrice: '',
-    date: new Date().toISOString().split('T')[0],
+    date: formatDateInput(new Date()),
     notes: '',
   })
   const [partners, setPartners] = useState<any[]>([])
@@ -292,7 +293,7 @@ export function SukukList({ initialSukuk, userRole }: SukukListProps) {
     setWithdrawForm({
       source: 'PROFIT',
       amount: '',
-      date: new Date().toISOString().split('T')[0],
+      date: formatDateInput(new Date()),
       notes: '',
     })
   }
@@ -302,7 +303,7 @@ export function SukukList({ initialSukuk, userRole }: SukukListProps) {
       buyerPersonId: '',
       amount: '',
       salePrice: '',
-      date: new Date().toISOString().split('T')[0],
+      date: formatDateInput(new Date()),
       notes: '',
     })
   }
@@ -344,13 +345,19 @@ export function SukukList({ initialSukuk, userRole }: SukukListProps) {
         setActionLoading(false)
         return
       }
+      const isoDate = toIsoDateInput(withdrawForm.date)
+      if (!isoDate) {
+        setActionError('Invalid date format')
+        setActionLoading(false)
+        return
+      }
       const res = await fetch(`/api/sukuk/${withdrawTarget.id}/withdraw`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           source: withdrawForm.source,
           amount: parseFloat(withdrawForm.amount),
-          date: withdrawForm.date,
+          date: isoDate,
           notes: withdrawForm.notes,
         }),
       })
@@ -375,6 +382,12 @@ export function SukukList({ initialSukuk, userRole }: SukukListProps) {
     setActionError('')
     setActionLoading(true)
     try {
+      const isoDate = toIsoDateInput(sellForm.date)
+      if (!isoDate) {
+        setActionError('Invalid date format')
+        setActionLoading(false)
+        return
+      }
       const res = await fetch(`/api/sukuk/${sellTarget.id}/sell`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -382,7 +395,7 @@ export function SukukList({ initialSukuk, userRole }: SukukListProps) {
           buyerPersonId: sellForm.buyerPersonId,
           amount: parseFloat(sellForm.amount),
           salePrice: sellForm.salePrice ? parseFloat(sellForm.salePrice) : undefined,
-          date: sellForm.date,
+          date: isoDate,
           notes: sellForm.notes,
         }),
       })
@@ -991,10 +1004,11 @@ export function SukukList({ initialSukuk, userRole }: SukukListProps) {
               Date
             </label>
             <input
-              type="date"
+              type="text"
               value={withdrawForm.date}
               onChange={(e) => setWithdrawForm((prev) => ({ ...prev, date: e.target.value }))}
               className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+              placeholder="DD/MM/YYYY"
               required
             />
           </div>
@@ -1082,10 +1096,11 @@ export function SukukList({ initialSukuk, userRole }: SukukListProps) {
               Date
             </label>
             <input
-              type="date"
+              type="text"
               value={sellForm.date}
               onChange={(e) => setSellForm((prev) => ({ ...prev, date: e.target.value }))}
               className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+              placeholder="DD/MM/YYYY"
               required
             />
           </div>
