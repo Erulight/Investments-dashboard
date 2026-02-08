@@ -20,7 +20,6 @@ type BucketRow = {
   balance: number
   haulStartDate: string
   lastZakatPaidDate?: string | null
-  haulCompleteDate: string
   receiptsTotal: number
   zakatDue: number
   lastPayment: null | {
@@ -127,8 +126,8 @@ export function ZakatDashboard({ buckets }: { buckets: BucketRow[] }) {
             Total Zakat Due: SAR {totalDue.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
           </div>
           <p className="text-xs text-gray-500 mt-2">
-            Receipts after haul are the zakat base (gross receipts). Balance is current cash remaining
-            after reinvestments and can be lower than receipts.
+            Zakat is due only when investment duration is 12 lunar months or more.
+            Receipts shown below are already filtered for that rule.
           </p>
         </CardContent>
       </Card>
@@ -150,11 +149,8 @@ export function ZakatDashboard({ buckets }: { buckets: BucketRow[] }) {
                         Bucket {bucket.id.slice(0, 8)}
                       </div>
                       <div className="text-xs text-gray-500">
-                        Haul start: {bucket.haulStartDate}
+                        Bucket start: {bucket.haulStartDate}
                         {bucket.lastZakatPaidDate ? ` • Last zakat paid: ${bucket.lastZakatPaidDate}` : ''}
-                      </div>
-                      <div className="text-xs text-gray-500">
-                        Haul complete: {bucket.haulCompleteDate}
                       </div>
                     </div>
                     <div className="text-right">
