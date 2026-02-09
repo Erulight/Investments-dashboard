@@ -68,7 +68,7 @@ export async function POST(req: NextRequest) {
         ...(validatedData.participants && validatedData.participants.length > 0
           ? {
               dealParticipants: {
-                create: validatedData.participants.map((p: CreateSavingsInput['participants'][number]) => ({
+                create: validatedData.participants.map((p: NonNullable<CreateSavingsInput['participants']>[number]) => ({
                   personId: p.personId,
                   investedAmount: p.investedAmount,
                   currentValue: p.investedAmount,
