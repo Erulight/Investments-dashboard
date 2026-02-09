@@ -122,11 +122,18 @@ export default async function ZakatPage() {
       ? bucket.label.split(' • ').slice(0, 2).join(' • ')
       : source
 
+    // Subtract Circlys receipt payout from displayed balance so it
+    // reflects only the actual monthly contributions, not the full ROSCA pot.
+    const receiptInBucket = bucket.movements
+      .filter((m: any) => m.type === 'CASH_IN' && m.notes && String(m.notes).includes('Circlys receipt'))
+      .reduce((s: number, m: any) => s + m.amount, 0)
+    const displayBalance = bucket.balance - receiptInBucket
+
     return {
       id: bucket.id,
       label: bucket.label,
       currency: bucket.currency,
-      balance: bucket.balance,
+      balance: displayBalance,
       haulStartDate: bucket.haulStartDate.toISOString().split('T')[0],
       lastZakatPaidDate: bucket.lastZakatPaidDate
         ? bucket.lastZakatPaidDate.toISOString().split('T')[0]
