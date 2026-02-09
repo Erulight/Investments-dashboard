@@ -3,6 +3,9 @@ import { getCurrentUser } from '@/lib/auth'
 import { prisma } from '@/lib/db'
 import { requireModuleAccess } from '@/lib/rbac'
 import { createAuditLog } from '@/lib/audit'
+import { withdrawFromBuckets } from '@/lib/cashBuckets'
+
+const CASH_BALANCE_KEY = 'CASH_BALANCE'
 
 type PayBody = {
   monthIndex: number
@@ -90,37 +93,79 @@ export async function POST(
     const monthLabel = `${dueDate.getFullYear()}-${String(dueDate.getMonth() + 1).padStart(2, '0')}`
     const contributionDate = dueDate
 
-    const bucket = await prisma.cashBucket.create({
-      data: {
-        label: `Circlys • ${investment.name} • ${monthLabel}`,
-        currency: investment.account?.currency || 'SAR',
-        haulStartDate: contributionDate,
-        balance: amount + reward,
-        movements: {
-          create: [
-            {
-              investmentId: investment.id,
-              amount,
-              type: 'SAVINGS_CONTRIBUTION',
-              date: contributionDate,
-              notes: `Month ${monthIndex + 1}`,
-            },
-            ...(reward > 0
-              ? [
-                  {
-                    investmentId: investment.id,
-                    amount: reward,
-                    type: 'SAVINGS_REWARD',
-                    date: contributionDate,
-                    notes: `Month ${monthIndex + 1}`,
-                  },
-                ]
-              : []),
-          ],
+    // Determine if this is a post-receipt month (deducts from cash instead of creating a new bucket)
+    const isPostReceipt =
+      meta.received?.date &&
+      meta.receiptMonth &&
+      (monthIndex + 1) > Number(meta.receiptMonth)
+
+    let bucketId: string
+
+    if (isPostReceipt) {
+      // Post-receipt: withdraw contribution from existing cash balance
+      const totalDeduct = amount + reward
+      const currency = investment.account?.currency || 'SAR'
+
+      const result = await prisma.$transaction(async (tx: any) => {
+        await withdrawFromBuckets(tx, {
+          amount: totalDeduct,
+          currency,
+          date: contributionDate,
+          type: 'CASH_OUT',
+          investmentId: investment.id,
+          notes: `Circlys payback • ${investment.name} • Month ${monthIndex + 1}`,
+          availableOnOrBefore: contributionDate,
+        })
+
+        // Update system cash balance
+        const setting = await tx.systemSetting.findUnique({ where: { key: CASH_BALANCE_KEY } })
+        const currentCash = setting ? Number(setting.value) : 0
+        const nextCash = currentCash - totalDeduct
+        if (nextCash < 0) throw new Error('INSUFFICIENT_CASH')
+        if (setting) {
+          await tx.systemSetting.update({ where: { key: CASH_BALANCE_KEY }, data: { value: nextCash.toString() } })
+        }
+
+        return null
+      })
+
+      // Use a placeholder bucket ID to mark as paid without a real bucket
+      bucketId = `post-receipt-${investment.id}-${monthIndex}`
+    } else {
+      // Normal pre-receipt: create a new cash bucket with its own haul
+      const bucket = await prisma.cashBucket.create({
+        data: {
+          label: `Circlys • ${investment.name} • ${monthLabel}`,
+          currency: investment.account?.currency || 'SAR',
+          haulStartDate: contributionDate,
+          balance: amount + reward,
+          movements: {
+            create: [
+              {
+                investmentId: investment.id,
+                amount,
+                type: 'SAVINGS_CONTRIBUTION',
+                date: contributionDate,
+                notes: `Month ${monthIndex + 1}`,
+              },
+              ...(reward > 0
+                ? [
+                    {
+                      investmentId: investment.id,
+                      amount: reward,
+                      type: 'SAVINGS_REWARD',
+                      date: contributionDate,
+                      notes: `Month ${monthIndex + 1}`,
+                    },
+                  ]
+                : []),
+            ],
+          },
         },
-      },
-      select: { id: true, label: true, currency: true, haulStartDate: true, balance: true },
-    })
+        select: { id: true, label: true, currency: true, haulStartDate: true, balance: true },
+      })
+      bucketId = bucket.id
+    }
 
     const nextPayments = {
       ...payments,
@@ -130,7 +175,8 @@ export async function POST(
         paidDate: dueDate.toISOString(),
         amount,
         reward,
-        bucketId: bucket.id,
+        bucketId,
+        postReceipt: isPostReceipt || false,
       },
     }
 
@@ -154,15 +200,15 @@ export async function POST(
       include: { account: true },
     })
 
-    await createAuditLog(user.id, 'CREATE', 'CASH_BUCKET', bucket.id, {
-      type: 'CIRCLYS_CONTRIBUTION',
+    await createAuditLog(user.id, 'CREATE', 'CASH_BUCKET', bucketId, {
+      type: isPostReceipt ? 'CIRCLYS_PAYBACK' : 'CIRCLYS_CONTRIBUTION',
       investmentId: investment.id,
       monthIndex,
       amount,
       reward,
     })
 
-    return NextResponse.json({ investment: updated, bucket })
+    return NextResponse.json({ investment: updated, bucketId })
   } catch (error) {
     console.error('Error paying savings month:', error)
     return NextResponse.json({ error: 'Failed to record payment' }, { status: 500 })
@@ -224,7 +270,51 @@ export async function DELETE(
       return NextResponse.json({ error: 'This month is not paid' }, { status: 400 })
     }
 
-    await prisma.cashBucket.delete({ where: { id: bucketId } })
+    const isPostReceipt = existing?.postReceipt === true
+
+    if (isPostReceipt) {
+      // Reverse: re-credit the cash that was withdrawn
+      const refundAmount = (Number(existing.amount) || 0) + (Number(existing.reward) || 0)
+      const currency = investment.account?.currency || 'SAR'
+      const dueDate = addMonths(new Date(investment.startDate), monthIndex)
+
+      await prisma.$transaction(async (tx: any) => {
+        // Find the bucket that the receipt went into and credit it back
+        const receivedBucketId = meta.received?.bucketId
+        if (receivedBucketId) {
+          const bucket = await tx.cashBucket.findUnique({ where: { id: receivedBucketId } })
+          if (bucket) {
+            await tx.cashBucket.update({
+              where: { id: receivedBucketId },
+              data: { balance: { increment: refundAmount } },
+            })
+            await tx.cashBucketMovement.create({
+              data: {
+                cashBucketId: receivedBucketId,
+                investmentId: investment.id,
+                amount: refundAmount,
+                type: 'CASH_IN',
+                date: dueDate,
+                notes: `Undo Circlys payback • Month ${monthIndex + 1}`,
+              },
+            })
+          }
+        }
+
+        // Update system cash balance
+        const setting = await tx.systemSetting.findUnique({ where: { key: CASH_BALANCE_KEY } })
+        const currentCash = setting ? Number(setting.value) : 0
+        if (setting) {
+          await tx.systemSetting.update({
+            where: { key: CASH_BALANCE_KEY },
+            data: { value: (currentCash + refundAmount).toString() },
+          })
+        }
+      })
+    } else {
+      // Normal: delete the cash bucket that was created
+      await prisma.cashBucket.delete({ where: { id: bucketId } })
+    }
 
     const nextPayments = { ...payments }
     delete nextPayments[String(monthIndex)]
@@ -256,7 +346,7 @@ export async function DELETE(
     })
 
     await createAuditLog(user.id, 'DELETE', 'CASH_BUCKET', bucketId, {
-      type: 'CIRCLYS_CONTRIBUTION_UNDO',
+      type: isPostReceipt ? 'CIRCLYS_PAYBACK_UNDO' : 'CIRCLYS_CONTRIBUTION_UNDO',
       investmentId: investment.id,
       monthIndex,
     })

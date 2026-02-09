@@ -52,6 +52,8 @@ export function CirclysClient({ initialInvestments, userRole }: CirclysClientPro
   const [payErrorByKey, setPayErrorByKey] = useState<Record<string, string>>({})
   const [payAmountByKey, setPayAmountByKey] = useState<Record<string, string>>({})
   const [payRewardByKey, setPayRewardByKey] = useState<Record<string, string>>({})
+  const [receiveLoadingId, setReceiveLoadingId] = useState<string | null>(null)
+  const [receiveError, setReceiveError] = useState<string>('')
 
   // Year filter
   const [yearFilter, setYearFilter] = useState<string>('all')
@@ -391,11 +393,47 @@ export function CirclysClient({ initialInvestments, userRole }: CirclysClientPro
               const totalMonths = Number(meta.totalMonths || 0)
               const startDate = new Date(expandedInvestment.startDate)
               const payments: Record<string, any> = meta.payments && typeof meta.payments === 'object' ? meta.payments : {}
+              const receiptMo = Number(meta.receiptMonth || 0)
+              const hasReceived = Boolean(meta.received?.date)
+              const receiveAmt = Number(meta.monthlyContribution || 0) * totalMonths
+              const rcvLoading = receiveLoadingId === expandedInvestment.id
 
               const rows = Array.from({ length: totalMonths }, (_, i) => {
                 const due = addMonths(startDate, i)
                 return { monthIndex: i, due, label: fmtMonth(due), payment: payments[String(i)] || null }
               })
+
+              const handleReceive = async () => {
+                setReceiveError('')
+                setReceiveLoadingId(expandedInvestment.id)
+                try {
+                  const res = await fetch(`/api/savings/${expandedInvestment.id}/receive`, { method: 'POST' })
+                  if (!res.ok) {
+                    const d = await res.json().catch(() => ({}))
+                    throw new Error(d.error || 'Failed to receive')
+                  }
+                  const d = await res.json()
+                  setInvestments((prev: any[]) => prev.map((inv: any) => inv.id === expandedInvestment.id ? d.investment : inv))
+                } catch (e) {
+                  setReceiveError(e instanceof Error ? e.message : 'Failed to receive')
+                } finally { setReceiveLoadingId(null) }
+              }
+
+              const handleUndoReceive = async () => {
+                setReceiveError('')
+                setReceiveLoadingId(expandedInvestment.id)
+                try {
+                  const res = await fetch(`/api/savings/${expandedInvestment.id}/receive`, { method: 'DELETE' })
+                  if (!res.ok) {
+                    const d = await res.json().catch(() => ({}))
+                    throw new Error(d.error || 'Failed to undo receive')
+                  }
+                  const d = await res.json()
+                  setInvestments((prev: any[]) => prev.map((inv: any) => inv.id === expandedInvestment.id ? d.investment : inv))
+                } catch (e) {
+                  setReceiveError(e instanceof Error ? e.message : 'Failed to undo receive')
+                } finally { setReceiveLoadingId(null) }
+              }
 
               return (
                 <div className="mx-4 mb-4 mt-2 rounded-xl border border-gray-200 bg-gray-50/50 p-4">
@@ -403,6 +441,50 @@ export function CirclysClient({ initialInvestments, userRole }: CirclysClientPro
                     <h4 className="text-sm font-bold text-gray-800">Monthly Contributions — {expandedInvestment.name}</h4>
                     <span className="text-[11px] text-gray-400">Click plan row to collapse</span>
                   </div>
+
+                  {/* Receive payout banner */}
+                  {receiptMo > 0 && (
+                    <div className={`mb-3 rounded-lg p-3 border ${hasReceived ? 'bg-emerald-50 border-emerald-200' : 'bg-amber-50 border-amber-200'}`}>
+                      <div className="flex items-center justify-between flex-wrap gap-2">
+                        <div className="text-sm">
+                          {hasReceived ? (
+                            <span className="font-semibold text-emerald-800">
+                              Received SAR {fmt(Number(meta.received.amount))} on {new Date(meta.received.date).toISOString().split('T')[0]}
+                            </span>
+                          ) : (
+                            <span className="font-semibold text-amber-800">
+                              Receipt due at Month {receiptMo} — SAR {fmt(receiveAmt)}
+                            </span>
+                          )}
+                        </div>
+                        {userRole === 'OWNER' && (
+                          hasReceived ? (
+                            <button
+                              disabled={rcvLoading}
+                              onClick={handleUndoReceive}
+                              className="px-3 py-1 text-xs font-medium text-red-700 bg-red-100 hover:bg-red-200 rounded transition-colors disabled:opacity-50"
+                            >
+                              {rcvLoading ? '...' : 'Undo Receive'}
+                            </button>
+                          ) : (
+                            <button
+                              disabled={rcvLoading}
+                              onClick={handleReceive}
+                              className="px-3 py-1 text-xs font-medium text-white bg-emerald-600 hover:bg-emerald-700 rounded transition-colors disabled:opacity-50"
+                            >
+                              {rcvLoading ? '...' : 'Receive Money'}
+                            </button>
+                          )
+                        )}
+                      </div>
+                      {receiveError && <div className="text-xs text-red-600 mt-1">{receiveError}</div>}
+                      {!hasReceived && (
+                        <p className="text-[11px] text-amber-700 mt-1">
+                          Receiving adds to your cash balance. Months after receipt will deduct from cash.
+                        </p>
+                      )}
+                    </div>
+                  )}
 
                   <div className="overflow-auto max-h-[400px]">
                     <table className="min-w-full text-sm">
@@ -424,10 +506,28 @@ export function CirclysClient({ initialInvestments, userRole }: CirclysClientPro
                           const defaultAmount = meta.monthlyContribution ? String(meta.monthlyContribution) : ''
                           const amountValue = payAmountByKey[key] ?? (isPaid ? String(r.payment.amount || '') : defaultAmount)
                           const rewardValue = payRewardByKey[key] ?? (isPaid ? String(r.payment.reward || 0) : '0')
+                          const isReceiptRow = receiptMo > 0 && (r.monthIndex + 1) === receiptMo
+                          const isPostReceiptRow = hasReceived && receiptMo > 0 && (r.monthIndex + 1) > receiptMo
+                          const isPostReceiptPaid = r.payment?.postReceipt === true
 
                           return (
-                            <tr key={key} className={`text-gray-700 ${isPaid ? 'bg-emerald-50/40' : ''}`}>
-                              <td className="py-2 pr-3 whitespace-nowrap font-medium">{r.label}</td>
+                            <tr
+                              key={key}
+                              className={`text-gray-700 ${
+                                isReceiptRow ? 'bg-blue-50/60 border-l-2 border-l-blue-400' :
+                                isPaid ? (isPostReceiptPaid ? 'bg-orange-50/40' : 'bg-emerald-50/40') :
+                                isPostReceiptRow ? 'bg-orange-50/20' : ''
+                              }`}
+                            >
+                              <td className="py-2 pr-3 whitespace-nowrap font-medium">
+                                {r.label}
+                                {isReceiptRow && (
+                                  <span className="ml-1.5 px-1.5 py-0.5 text-[10px] font-bold bg-blue-100 text-blue-700 rounded">RECEIPT</span>
+                                )}
+                                {isPostReceiptRow && !isReceiptRow && (
+                                  <span className="ml-1.5 px-1.5 py-0.5 text-[10px] font-medium bg-orange-100 text-orange-600 rounded">from cash</span>
+                                )}
+                              </td>
                               <td className="py-2 pr-3 whitespace-nowrap text-gray-500 tabular-nums">
                                 {r.due.toISOString().split('T')[0]}
                               </td>
@@ -459,9 +559,9 @@ export function CirclysClient({ initialInvestments, userRole }: CirclysClientPro
                               </td>
                               <td className="py-2 pr-3 whitespace-nowrap">
                                 {isPaid ? (
-                                  <span className="inline-flex items-center gap-1 text-emerald-700 font-semibold text-xs">
-                                    <span className="w-1.5 h-1.5 bg-emerald-500 rounded-full"></span>
-                                    Paid
+                                  <span className={`inline-flex items-center gap-1 font-semibold text-xs ${isPostReceiptPaid ? 'text-orange-700' : 'text-emerald-700'}`}>
+                                    <span className={`w-1.5 h-1.5 rounded-full ${isPostReceiptPaid ? 'bg-orange-500' : 'bg-emerald-500'}`}></span>
+                                    {isPostReceiptPaid ? 'Deducted' : 'Paid'}
                                   </span>
                                 ) : (
                                   <span className="text-gray-400 text-xs">Unpaid</span>
@@ -486,7 +586,7 @@ export function CirclysClient({ initialInvestments, userRole }: CirclysClientPro
                                           })
                                           if (!response.ok) {
                                             const data = await response.json().catch(() => ({}))
-                                            throw new Error(data.error || 'Failed to undo payment')
+                                            throw new Error(data.error || 'Failed to undo')
                                           }
                                           const data = await response.json()
                                           setInvestments((prev: any[]) =>
@@ -494,7 +594,7 @@ export function CirclysClient({ initialInvestments, userRole }: CirclysClientPro
                                           )
                                         } catch (e) {
                                           setPayErrorByKey((prev: Record<string, string>) => ({
-                                            ...prev, [key]: e instanceof Error ? e.message : 'Failed to undo payment',
+                                            ...prev, [key]: e instanceof Error ? e.message : 'Failed to undo',
                                           }))
                                         } finally { setPayLoadingKey(null) }
                                       }}
@@ -507,7 +607,11 @@ export function CirclysClient({ initialInvestments, userRole }: CirclysClientPro
                                 ) : userRole === 'OWNER' ? (
                                   <button
                                     disabled={loading}
-                                    className="px-2.5 py-1 text-xs font-medium text-white bg-slate-800 hover:bg-slate-700 rounded transition-colors disabled:opacity-50"
+                                    className={`px-2.5 py-1 text-xs font-medium rounded transition-colors disabled:opacity-50 ${
+                                      isPostReceiptRow
+                                        ? 'text-white bg-orange-600 hover:bg-orange-700'
+                                        : 'text-white bg-slate-800 hover:bg-slate-700'
+                                    }`}
                                     onClick={async () => {
                                       setPayErrorByKey((prev: Record<string, string>) => {
                                         const next = { ...prev }; delete next[key]; return next
@@ -534,7 +638,7 @@ export function CirclysClient({ initialInvestments, userRole }: CirclysClientPro
                                       } finally { setPayLoadingKey(null) }
                                     }}
                                   >
-                                    {loading ? '...' : 'Pay'}
+                                    {loading ? '...' : isPostReceiptRow ? 'Pay (cash)' : 'Pay'}
                                   </button>
                                 ) : (
                                   <span className="text-xs text-gray-400">—</span>
