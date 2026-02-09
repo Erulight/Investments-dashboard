@@ -15,7 +15,7 @@ export default async function SavingsPage() {
   // Get all savings-related investments (we'll use CIRCLYS type for now)
   let circlysInvestments: any[] = []
   let totalSavings = 0
-  let totalInterest = 0
+  let totalReward = 0
 
   if (user.role === 'OWNER') {
     circlysInvestments = await prisma.investment.findMany({
@@ -58,7 +58,7 @@ export default async function SavingsPage() {
   }
 
   totalSavings = circlysInvestments.reduce((sum, inv) => sum + inv.principalAmount, 0)
-  totalInterest = circlysInvestments.reduce((sum, inv) => sum + (inv.currentValue - inv.principalAmount), 0)
+  totalReward = circlysInvestments.reduce((sum, inv) => sum + (inv.currentValue - inv.principalAmount), 0)
 
   return (
     <div className="space-y-8 animate-fade-in">
@@ -83,9 +83,9 @@ export default async function SavingsPage() {
             <p className="text-2xl font-bold">SAR {totalSavings.toLocaleString()}</p>
           </div>
           <div className="bg-white/10 backdrop-blur-lg rounded-xl p-4 border border-white/20">
-            <p className="text-sm text-emerald-100 mb-1">Total Interest Earned</p>
+            <p className="text-sm text-emerald-100 mb-1">Total Reward Earned</p>
             <p className="text-2xl font-bold">
-              SAR {totalInterest.toLocaleString()}
+              SAR {totalReward.toLocaleString()}
             </p>
           </div>
         </div>
@@ -142,7 +142,7 @@ export default async function SavingsPage() {
                     <div>
                       <div className="font-semibold text-gray-900">{inv.name}</div>
                       <div className="text-sm text-gray-600">
-                        {inv.interestRate ? `${inv.interestRate}% interest rate` : 'Savings plan'}
+                        {inv.interestRate ? `${inv.interestRate}% reward rate` : 'Savings plan'}
                       </div>
                     </div>
                   </div>

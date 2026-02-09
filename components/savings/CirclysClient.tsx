@@ -13,6 +13,33 @@ interface CirclysClientProps {
   userRole: string
 }
 
+const parseRoscaMetadata = (inv: any) => {
+  try { return JSON.parse(inv.metadata || '{}') } catch { return {} }
+}
+
+const addMonths = (date: Date, months: number) => {
+  const d = new Date(date); d.setMonth(d.getMonth() + months); return d
+}
+
+const fmtMonth = (date: Date) => {
+  const m = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec']
+  return `${m[date.getMonth()]} ${date.getFullYear()}`
+}
+
+const fmt = (n: number) => n.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })
+
+function getPlanStatus(meta: any): { label: string; color: string } {
+  const total = Number(meta.totalMonths || 0)
+  const paid = Number(meta.monthsPaid || 0)
+  if (total > 0 && paid >= total) return { label: 'Completed', color: 'bg-emerald-50 text-emerald-700' }
+  if (paid > 0) return { label: 'Ongoing', color: 'bg-blue-50 text-blue-700' }
+  return { label: 'Pending', color: 'bg-amber-50 text-amber-700' }
+}
+
+function getStartYear(inv: any): number {
+  return new Date(inv.startDate).getFullYear()
+}
+
 export function CirclysClient({ initialInvestments, userRole }: CirclysClientProps) {
   const [investments, setInvestments] = useState(initialInvestments)
   const [showCreateForm, setShowCreateForm] = useState(false)
@@ -26,48 +53,50 @@ export function CirclysClient({ initialInvestments, userRole }: CirclysClientPro
   const [payAmountByKey, setPayAmountByKey] = useState<Record<string, string>>({})
   const [payRewardByKey, setPayRewardByKey] = useState<Record<string, string>>({})
 
-  // Helper to parse ROSCA metadata
-  const parseRoscaMetadata = (inv: any) => {
-    try {
-      return JSON.parse(inv.metadata || '{}')
-    } catch {
-      return {}
-    }
+  // Year filter
+  const [yearFilter, setYearFilter] = useState<string>('all')
+  // Checkbox selection for stats
+  const [selectedIds, setSelectedIds] = useState<Set<string>>(() => new Set(initialInvestments.map((i: any) => i.id)))
+
+  const years = useMemo(() => {
+    const s = new Set(investments.map((i: any) => getStartYear(i)))
+    return Array.from(s).sort()
+  }, [investments])
+
+  const filteredInvestments = useMemo(() => {
+    if (yearFilter === 'all') return investments
+    return investments.filter((i: any) => getStartYear(i) === Number(yearFilter))
+  }, [investments, yearFilter])
+
+  // Stats based on selected (checked) plans within the filtered list
+  const stats = useMemo(() => {
+    const list = filteredInvestments.filter((i: any) => selectedIds.has(i.id))
+    let totalSaved = 0, totalReward = 0
+    list.forEach((inv: any) => {
+      const meta = parseRoscaMetadata(inv)
+      totalSaved += Number(meta.totalPaid) || 0
+      totalReward += Number(meta.totalRewardPaid) || 0
+    })
+    const totalValue = totalSaved + totalReward
+    const rewardPct = totalSaved > 0 ? (totalReward / totalSaved) * 100 : 0
+    return { totalSaved, totalReward, totalValue, rewardPct, count: list.length }
+  }, [filteredInvestments, selectedIds])
+
+  const toggleSelected = (id: string) => {
+    setSelectedIds(prev => {
+      const next = new Set(prev)
+      if (next.has(id)) next.delete(id); else next.add(id)
+      return next
+    })
   }
-
-  const totalInvested = investments.reduce((sum: number, inv: any) => {
-    const meta = parseRoscaMetadata(inv)
-    const totalPaidFromMeta = Number(meta.totalPaid)
-    const principal = Number.isFinite(totalPaidFromMeta)
-      ? totalPaidFromMeta
-      : (inv.myParticipation?.investedAmount || inv.principalAmount)
-    return sum + (Number(principal) || 0)
-  }, 0)
-
-  const totalValue = investments.reduce((sum: number, inv: any) => {
-    const meta = parseRoscaMetadata(inv)
-    const totalPaidFromMeta = Number(meta.totalPaid)
-    const totalRewardPaidFromMeta = Number(meta.totalRewardPaid)
-    const hasMetaTotals = meta.totalPaid !== undefined || meta.totalRewardPaid !== undefined
-    const valueFromMeta = (Number.isFinite(totalPaidFromMeta) ? totalPaidFromMeta : 0) +
-      (Number.isFinite(totalRewardPaidFromMeta) ? totalRewardPaidFromMeta : 0)
-    const current = hasMetaTotals
-      ? valueFromMeta
-      : (inv.myParticipation?.currentValue || inv.currentValue)
-    return sum + (Number(current) || 0)
-  }, 0)
-
-  const totalReturn = totalValue - totalInvested
-
-  const addMonths = (date: Date, months: number) => {
-    const d = new Date(date)
-    d.setMonth(d.getMonth() + months)
-    return d
-  }
-
-  const formatMonthLabel = (date: Date) => {
-    const monthNames = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec']
-    return `${monthNames[date.getMonth()]} ${date.getFullYear()}`
+  const toggleAll = () => {
+    const allIds = filteredInvestments.map((i: any) => i.id)
+    const allSelected = allIds.every((id: string) => selectedIds.has(id))
+    setSelectedIds(prev => {
+      const next = new Set(prev)
+      allIds.forEach((id: string) => allSelected ? next.delete(id) : next.add(id))
+      return next
+    })
   }
 
   const handleCreatePlan = async (data: CreateSavingsInput) => {
@@ -137,173 +166,187 @@ export function CirclysClient({ initialInvestments, userRole }: CirclysClientPro
   }, [expandedId, investments])
 
   return (
-    <div className="space-y-8 animate-fade-in">
-      {/* Header Section */}
-      <div className="bg-gradient-to-r from-emerald-600 to-cyan-600 rounded-2xl shadow-xl p-8 text-white">
-        <div className="flex items-center justify-between">
+    <div className="space-y-6 animate-fade-in">
+      {/* Header */}
+      <div className="bg-gradient-to-r from-slate-800 to-slate-900 rounded-2xl shadow-xl p-6 lg:p-8 text-white">
+        <div className="flex items-center justify-between mb-6">
           <div>
-            <h1 className="text-4xl font-bold mb-2">Circlys Savings Plans</h1>
-            <p className="text-lg text-emerald-100">
-              Track your Circlys savings and interest
-            </p>
+            <h1 className="text-3xl font-bold tracking-tight">Circlys Savings</h1>
+            <p className="text-sm text-slate-400 mt-1">Track your savings plans and rewards</p>
           </div>
-          <div className="hidden lg:block text-7xl">
-            🔄
-          </div>
+          {userRole === 'OWNER' && (
+            <Button variant="primary" onClick={() => setShowCreateForm(true)}>
+              + New Plan
+            </Button>
+          )}
         </div>
 
-        {/* Summary Stats in Header */}
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mt-8">
-          <div className="bg-white/10 backdrop-blur-lg rounded-xl p-4 border border-white/20">
-            <p className="text-sm text-emerald-100 mb-1">Total Savings</p>
-            <p className="text-2xl font-bold">SAR {totalInvested.toLocaleString()}</p>
+        {/* Year filter pills */}
+        <div className="flex items-center gap-2 mb-6 flex-wrap">
+          <span className="text-xs text-slate-400 mr-1 font-medium uppercase tracking-wider">Year:</span>
+          <button
+            onClick={() => setYearFilter('all')}
+            className={`px-3 py-1 rounded-full text-xs font-semibold transition-colors ${yearFilter === 'all' ? 'bg-white text-slate-900' : 'bg-white/10 text-slate-300 hover:bg-white/20'}`}
+          >
+            All
+          </button>
+          {years.map((y) => (
+            <button
+              key={y}
+              onClick={() => setYearFilter(String(y))}
+              className={`px-3 py-1 rounded-full text-xs font-semibold transition-colors ${yearFilter === String(y) ? 'bg-white text-slate-900' : 'bg-white/10 text-slate-300 hover:bg-white/20'}`}
+            >
+              {y}
+            </button>
+          ))}
+        </div>
+
+        {/* Stats */}
+        <div className="grid grid-cols-2 lg:grid-cols-5 gap-3">
+          <div className="bg-white/5 backdrop-blur rounded-xl p-4 border border-white/10">
+            <p className="text-[11px] text-slate-400 uppercase tracking-wider mb-1">Total Saved</p>
+            <p className="text-xl font-bold">SAR {fmt(stats.totalSaved)}</p>
           </div>
-          <div className="bg-white/10 backdrop-blur-lg rounded-xl p-4 border border-white/20">
-            <p className="text-sm text-emerald-100 mb-1">Current Value</p>
-            <p className="text-2xl font-bold">
-              SAR {totalValue.toLocaleString()}
-            </p>
+          <div className="bg-white/5 backdrop-blur rounded-xl p-4 border border-white/10">
+            <p className="text-[11px] text-slate-400 uppercase tracking-wider mb-1">Total Reward</p>
+            <p className="text-xl font-bold text-emerald-400">SAR {fmt(stats.totalReward)}</p>
           </div>
-          <div className="bg-white/10 backdrop-blur-lg rounded-xl p-4 border border-white/20">
-            <p className="text-sm text-emerald-100 mb-1">Interest Earned</p>
-            <p className="text-2xl font-bold">
-              SAR {totalReturn.toLocaleString()}
-            </p>
+          <div className="bg-white/5 backdrop-blur rounded-xl p-4 border border-white/10">
+            <p className="text-[11px] text-slate-400 uppercase tracking-wider mb-1">Current Value</p>
+            <p className="text-xl font-bold">SAR {fmt(stats.totalValue)}</p>
+          </div>
+          <div className="bg-white/5 backdrop-blur rounded-xl p-4 border border-white/10">
+            <p className="text-[11px] text-slate-400 uppercase tracking-wider mb-1">Reward %</p>
+            <p className="text-xl font-bold text-emerald-400">{stats.rewardPct.toFixed(1)}%</p>
+          </div>
+          <div className="bg-white/5 backdrop-blur rounded-xl p-4 border border-white/10">
+            <p className="text-[11px] text-slate-400 uppercase tracking-wider mb-1">Plans Selected</p>
+            <p className="text-xl font-bold">{stats.count} / {filteredInvestments.length}</p>
           </div>
         </div>
       </div>
 
-      {/* Investments List */}
-      <div className="grid grid-cols-1 gap-6">
-        {investments.length === 0 ? (
-          <Card>
-            <CardContent className="py-20 text-center">
-              <div className="text-7xl mb-6">🔄</div>
-              <h3 className="text-2xl font-bold text-gray-900 mb-2">No Circlys Plans Yet</h3>
-              <p className="text-gray-500 text-lg">
-                {userRole === 'OWNER' 
-                  ? 'Start by creating your first Circlys savings plan.' 
-                  : 'Contact the owner to add you to Circlys savings plans.'}
-              </p>
-              {userRole === 'OWNER' && (
-                <Button
-                  variant="primary"
-                  className="mt-6"
-                  onClick={() => setShowCreateForm(true)}
-                >
-                  + Create Your First Plan
-                </Button>
-              )}
-            </CardContent>
-          </Card>
-        ) : (
-          <Card>
-            <CardHeader>
-              <div className="flex items-center justify-between">
-                <div>
-                  <CardTitle className="text-2xl font-bold text-gray-900">All Circlys Plans</CardTitle>
-                  <p className="text-sm text-gray-500 mt-1">{investments.length} active plans</p>
-                </div>
-                {userRole === 'OWNER' && (
-                  <Button
-                    variant="primary"
-                    onClick={() => setShowCreateForm(true)}
-                  >
-                    + Add New Plan
-                  </Button>
-                )}
-              </div>
-            </CardHeader>
-            <CardContent>
+      {/* Plans table */}
+      {filteredInvestments.length === 0 ? (
+        <Card>
+          <CardContent className="py-16 text-center">
+            <h3 className="text-xl font-bold text-gray-900 mb-2">No Plans Found</h3>
+            <p className="text-gray-500">
+              {investments.length === 0
+                ? (userRole === 'OWNER' ? 'Create your first Circlys plan to get started.' : 'No plans available.')
+                : 'No plans match the selected year filter.'}
+            </p>
+          </CardContent>
+        </Card>
+      ) : (
+        <Card>
+          <CardContent className="p-0">
+            <div className="overflow-x-auto">
               <Table>
                 <TableHeader>
-                  <TableRow>
-                    <TableHead>Plan Name</TableHead>
-                    <TableHead>Account</TableHead>
-                    <TableHead>Monthly</TableHead>
-                    <TableHead>Total Months</TableHead>
-                    <TableHead>Paid/Remaining</TableHead>
-                    <TableHead>Receipt Month</TableHead>
-                    <TableHead>Reward</TableHead>
-                    <TableHead>Booking Fee</TableHead>
-                    <TableHead>Status</TableHead>
-                    {userRole === 'OWNER' && <TableHead className="text-right">Actions</TableHead>}
+                  <TableRow className="bg-gray-50">
+                    <TableHead className="w-10">
+                      <input
+                        type="checkbox"
+                        checked={filteredInvestments.every((i: any) => selectedIds.has(i.id))}
+                        onChange={toggleAll}
+                        className="rounded border-gray-300 text-slate-800 focus:ring-slate-500"
+                      />
+                    </TableHead>
+                    <TableHead className="font-semibold text-gray-700">Plan</TableHead>
+                    <TableHead className="font-semibold text-gray-700">Account</TableHead>
+                    <TableHead className="font-semibold text-gray-700 text-right">Monthly</TableHead>
+                    <TableHead className="font-semibold text-gray-700 text-center">Progress</TableHead>
+                    <TableHead className="font-semibold text-gray-700 text-center">Receipt</TableHead>
+                    <TableHead className="font-semibold text-gray-700 text-right">Reward Earned</TableHead>
+                    <TableHead className="font-semibold text-gray-700 text-right">Booking Fee</TableHead>
+                    <TableHead className="font-semibold text-gray-700 text-center">Status</TableHead>
+                    {userRole === 'OWNER' && <TableHead className="font-semibold text-gray-700 text-right">Actions</TableHead>}
                   </TableRow>
                 </TableHeader>
                 <TableBody>
-                  {investments.map((inv: any) => {
+                  {filteredInvestments.map((inv: any) => {
                     const meta = parseRoscaMetadata(inv)
-                    const monthsPaid = meta.monthsPaid || 0
-                    const remainingMonths = (meta.totalMonths || 0) - monthsPaid
+                    const monthsPaid = Number(meta.monthsPaid || 0)
+                    const totalMo = Number(meta.totalMonths || 0)
+                    const remainingMonths = totalMo - monthsPaid
                     const receiptMonth = meta.receiptMonth
-                    const reward = meta.totalReward || 0
-                    const bookingFee = meta.bookingFee || 0
+                    const rewardEarned = Number(meta.totalRewardPaid) || 0
+                    const bookingFee = Number(meta.bookingFee) || 0
                     const isExpanded = expandedId === inv.id
+                    const status = getPlanStatus(meta)
+                    const checked = selectedIds.has(inv.id)
+                    const progressPct = totalMo > 0 ? Math.round((monthsPaid / totalMo) * 100) : 0
 
                     return (
                       <TableRow
                         key={inv.id}
-                        className="hover:bg-emerald-50 transition-colors duration-150 cursor-pointer"
-                        onClick={() =>
-                          setExpandedId((prev: string | null) => (prev === inv.id ? null : inv.id))
-                        }
+                        className={`transition-colors duration-150 cursor-pointer ${isExpanded ? 'bg-slate-50' : 'hover:bg-gray-50'}`}
+                        onClick={() => setExpandedId((prev: string | null) => (prev === inv.id ? null : inv.id))}
                       >
+                        <TableCell onClick={(e: MouseEvent<HTMLTableCellElement>) => e.stopPropagation()}>
+                          <input
+                            type="checkbox"
+                            checked={checked}
+                            onChange={() => toggleSelected(inv.id)}
+                            className="rounded border-gray-300 text-slate-800 focus:ring-slate-500"
+                          />
+                        </TableCell>
                         <TableCell className="font-semibold text-gray-900">
-                          <div className="flex items-center space-x-2">
-                            <span className="text-xl">💵</span>
-                            <span>{inv.name}</span>
-                            <span className="text-xs text-gray-400">{isExpanded ? '▲' : '▼'}</span>
+                          <div className="flex items-center gap-2">
+                            <span className="truncate max-w-[160px]">{inv.name}</span>
+                            <span className="text-[10px] text-gray-400">{isExpanded ? '▲' : '▼'}</span>
                           </div>
                         </TableCell>
                         <TableCell>
-                          <span className="px-3 py-1 bg-emerald-100 text-emerald-700 rounded-full text-xs font-medium">
+                          <span className="px-2 py-0.5 bg-slate-100 text-slate-600 rounded text-xs font-medium">
                             {inv.account?.name}
                           </span>
                         </TableCell>
-                        <TableCell className="font-semibold text-gray-700">
+                        <TableCell className="text-right font-medium text-gray-700 tabular-nums">
                           {inv.account?.currency} {meta.monthlyContribution?.toLocaleString() || 0}
                         </TableCell>
-                        <TableCell className="font-semibold text-gray-700">
-                          {meta.totalMonths || 0}
-                        </TableCell>
                         <TableCell>
-                          <div className="text-sm">
-                            <span className="font-medium text-green-600">{monthsPaid}</span>
-                            <span className="text-gray-400"> / </span>
-                            <span className="font-medium text-gray-600">{remainingMonths}</span>
+                          <div className="flex flex-col items-center gap-1">
+                            <div className="w-full bg-gray-200 rounded-full h-1.5 max-w-[80px]">
+                              <div
+                                className={`h-1.5 rounded-full ${progressPct >= 100 ? 'bg-emerald-500' : 'bg-blue-500'}`}
+                                style={{ width: `${Math.min(progressPct, 100)}%` }}
+                              />
+                            </div>
+                            <span className="text-[11px] text-gray-500 tabular-nums">{monthsPaid}/{totalMo}</span>
                           </div>
                         </TableCell>
-                        <TableCell>
+                        <TableCell className="text-center">
                           {receiptMonth ? (
-                            <span className="px-2 py-1 bg-blue-100 text-blue-700 rounded text-xs font-medium">
-                              Month {receiptMonth}
+                            <span className="px-2 py-0.5 bg-blue-50 text-blue-700 rounded text-xs font-medium">
+                              Mo {receiptMonth}
                             </span>
                           ) : (
                             <span className="text-gray-400 text-xs">—</span>
                           )}
                         </TableCell>
-                        <TableCell>
-                          {reward > 0 ? (
-                            <span className="text-sm font-bold text-green-600">
-                              +{inv.account?.currency} {reward.toLocaleString()}
+                        <TableCell className="text-right tabular-nums">
+                          {rewardEarned > 0 ? (
+                            <span className="font-semibold text-emerald-600">
+                              +{inv.account?.currency} {fmt(rewardEarned)}
                             </span>
                           ) : (
                             <span className="text-gray-400 text-xs">—</span>
                           )}
                         </TableCell>
-                        <TableCell>
+                        <TableCell className="text-right tabular-nums">
                           {bookingFee > 0 ? (
-                            <span className="text-sm font-medium text-red-600">
-                              {inv.account?.currency} {bookingFee.toLocaleString()}
+                            <span className="text-red-600 font-medium">
+                              {inv.account?.currency} {fmt(bookingFee)}
                             </span>
                           ) : (
                             <span className="text-gray-400 text-xs">—</span>
                           )}
                         </TableCell>
-                        <TableCell>
-                          <span className="px-3 py-1.5 inline-flex items-center text-xs leading-5 font-semibold rounded-full bg-green-100 text-green-800 shadow-sm">
-                            <span className="w-2 h-2 bg-green-500 rounded-full mr-2 animate-pulse"></span>
-                            {meta.status || 'Active'}
+                        <TableCell className="text-center">
+                          <span className={`px-2.5 py-1 inline-flex items-center text-[11px] font-semibold rounded-full ${status.color}`}>
+                            {status.label}
                           </span>
                         </TableCell>
                         {userRole === 'OWNER' && (
@@ -311,23 +354,23 @@ export function CirclysClient({ initialInvestments, userRole }: CirclysClientPro
                             className="text-right"
                             onClick={(e: MouseEvent<HTMLTableCellElement>) => e.stopPropagation()}
                           >
-                            <div className="flex justify-end gap-2">
-                              <Button
-                                variant="secondary"
+                            <div className="flex justify-end gap-1">
+                              <button
+                                className="px-2 py-1 text-xs font-medium text-gray-600 bg-gray-100 hover:bg-gray-200 rounded transition-colors"
                                 onClick={() => setEditingInvestment(inv)}
                               >
                                 Edit
-                              </Button>
-                              <Button
-                                variant="danger"
+                              </button>
+                              <button
+                                className="px-2 py-1 text-xs font-medium text-red-600 bg-red-50 hover:bg-red-100 rounded transition-colors"
                                 disabled={deleteLoadingId === inv.id}
                                 onClick={() => {
                                   const ok = window.confirm('Delete this plan? This will also delete any monthly zakat buckets created from its payments.')
                                   if (ok) void handleDeletePlan(inv.id)
                                 }}
                               >
-                                {deleteLoadingId === inv.id ? 'Deleting...' : 'Delete'}
-                              </Button>
+                                {deleteLoadingId === inv.id ? '...' : 'Delete'}
+                              </button>
                             </div>
                           </TableCell>
                         )}
@@ -336,227 +379,192 @@ export function CirclysClient({ initialInvestments, userRole }: CirclysClientPro
                   })}
                 </TableBody>
               </Table>
+            </div>
 
-              {deleteError && (
-                <div className="mt-3 text-sm text-red-600">{deleteError}</div>
-              )}
+            {deleteError && (
+              <div className="mx-4 mt-3 mb-2 text-sm text-red-600">{deleteError}</div>
+            )}
 
-              {expandedInvestment && (() => {
-                const meta = parseRoscaMetadata(expandedInvestment)
-                const totalMonths = Number(meta.totalMonths || 0)
-                const startDate = new Date(expandedInvestment.startDate)
-                const payments: Record<string, any> = meta.payments && typeof meta.payments === 'object' ? meta.payments : {}
+            {/* Expanded monthly details */}
+            {expandedInvestment && (() => {
+              const meta = parseRoscaMetadata(expandedInvestment)
+              const totalMonths = Number(meta.totalMonths || 0)
+              const startDate = new Date(expandedInvestment.startDate)
+              const payments: Record<string, any> = meta.payments && typeof meta.payments === 'object' ? meta.payments : {}
 
-                const rows = Array.from({ length: totalMonths }, (_, i) => {
-                  const due = addMonths(startDate, i)
-                  return {
-                    monthIndex: i,
-                    due,
-                    label: formatMonthLabel(due),
-                    payment: payments[String(i)] || null,
-                  }
-                })
+              const rows = Array.from({ length: totalMonths }, (_, i) => {
+                const due = addMonths(startDate, i)
+                return { monthIndex: i, due, label: fmtMonth(due), payment: payments[String(i)] || null }
+              })
 
-                return (
-                  <div className="mt-6 rounded-xl border border-gray-200 p-4">
-                    <div className="flex items-center justify-between mb-3">
-                      <div className="text-sm font-semibold text-gray-900">Monthly contributions</div>
-                      <div className="text-xs text-gray-500">Click a plan row to collapse</div>
-                    </div>
+              return (
+                <div className="mx-4 mb-4 mt-2 rounded-xl border border-gray-200 bg-gray-50/50 p-4">
+                  <div className="flex items-center justify-between mb-3">
+                    <h4 className="text-sm font-bold text-gray-800">Monthly Contributions — {expandedInvestment.name}</h4>
+                    <span className="text-[11px] text-gray-400">Click plan row to collapse</span>
+                  </div>
 
-                    <div className="overflow-auto">
-                      <table className="min-w-full text-sm">
-                        <thead>
-                          <tr className="text-left text-xs text-gray-500 border-b">
-                            <th className="py-2 pr-3">Month</th>
-                            <th className="py-2 pr-3">Due</th>
-                            <th className="py-2 pr-3">Amount</th>
-                            <th className="py-2 pr-3">Reward</th>
-                            <th className="py-2 pr-3">Status</th>
-                            <th className="py-2 text-right">Action</th>
-                          </tr>
-                        </thead>
-                        <tbody className="divide-y">
-                          {rows.map((r) => {
-                            const key = `${expandedInvestment.id}-${r.monthIndex}`
-                            const isPaid = Boolean(r.payment?.bucketId)
-                            const loading = payLoadingKey === key
-                            const defaultAmount = meta.monthlyContribution ? String(meta.monthlyContribution) : ''
-                            const amountValue = payAmountByKey[key] ?? (isPaid ? String(r.payment.amount || '') : defaultAmount)
-                            const rewardValue = payRewardByKey[key] ?? (isPaid ? String(r.payment.reward || 0) : '0')
+                  <div className="overflow-auto max-h-[400px]">
+                    <table className="min-w-full text-sm">
+                      <thead className="sticky top-0 bg-gray-50 z-10">
+                        <tr className="text-left text-[11px] text-gray-500 border-b uppercase tracking-wider">
+                          <th className="py-2 pr-3 font-semibold">Month</th>
+                          <th className="py-2 pr-3 font-semibold">Due Date</th>
+                          <th className="py-2 pr-3 font-semibold">Amount</th>
+                          <th className="py-2 pr-3 font-semibold">Reward</th>
+                          <th className="py-2 pr-3 font-semibold">Status</th>
+                          <th className="py-2 text-right font-semibold">Action</th>
+                        </tr>
+                      </thead>
+                      <tbody className="divide-y divide-gray-100">
+                        {rows.map((r) => {
+                          const key = `${expandedInvestment.id}-${r.monthIndex}`
+                          const isPaid = Boolean(r.payment?.bucketId)
+                          const loading = payLoadingKey === key
+                          const defaultAmount = meta.monthlyContribution ? String(meta.monthlyContribution) : ''
+                          const amountValue = payAmountByKey[key] ?? (isPaid ? String(r.payment.amount || '') : defaultAmount)
+                          const rewardValue = payRewardByKey[key] ?? (isPaid ? String(r.payment.reward || 0) : '0')
 
-                            return (
-                              <tr key={key} className="text-gray-700">
-                                <td className="py-2 pr-3 whitespace-nowrap font-medium">{r.label}</td>
-                                <td className="py-2 pr-3 whitespace-nowrap">
-                                  {r.due.toISOString().split('T')[0]}
-                                </td>
-                                <td className="py-2 pr-3">
-                                  <input
-                                    type="number"
-                                    step="0.01"
-                                    min="0"
-                                    disabled={isPaid || userRole !== 'OWNER'}
-                                    value={amountValue}
-                                    onChange={(e: ChangeEvent<HTMLInputElement>) =>
-                                      setPayAmountByKey((prev: Record<string, string>) => ({
-                                        ...prev,
-                                        [key]: e.target.value,
-                                      }))
-                                    }
-                                    className="w-32 rounded-lg border border-gray-200 px-2 py-1 text-sm"
-                                  />
-                                </td>
-                                <td className="py-2 pr-3">
-                                  <input
-                                    type="number"
-                                    step="0.01"
-                                    min="0"
-                                    disabled={isPaid || userRole !== 'OWNER'}
-                                    value={rewardValue}
-                                    onChange={(e: ChangeEvent<HTMLInputElement>) =>
-                                      setPayRewardByKey((prev: Record<string, string>) => ({
-                                        ...prev,
-                                        [key]: e.target.value,
-                                      }))
-                                    }
-                                    className="w-24 rounded-lg border border-gray-200 px-2 py-1 text-sm"
-                                  />
-                                </td>
-                                <td className="py-2 pr-3 whitespace-nowrap">
-                                  {isPaid ? (
-                                    <span className="text-emerald-700 font-semibold">Paid</span>
-                                  ) : (
-                                    <span className="text-gray-500">Unpaid</span>
-                                  )}
-                                </td>
-                                <td className="py-2 text-right whitespace-nowrap">
-                                  {isPaid ? (
-                                    userRole === 'OWNER' ? (
-                                      <Button
-                                        variant="secondary"
-                                        disabled={loading}
-                                        onClick={async () => {
-                                          setPayErrorByKey((prev: Record<string, string>) => {
-                                            const next = { ...prev }
-                                            delete next[key]
-                                            return next
-                                          })
-                                          setPayLoadingKey(key)
-                                          try {
-                                            const response = await fetch(
-                                              `/api/savings/${expandedInvestment.id}/pay`,
-                                              {
-                                                method: 'DELETE',
-                                                headers: { 'Content-Type': 'application/json' },
-                                                body: JSON.stringify({ monthIndex: r.monthIndex }),
-                                              }
-                                            )
-                                            if (!response.ok) {
-                                              const data = await response.json().catch(() => ({}))
-                                              throw new Error(data.error || 'Failed to undo payment')
-                                            }
-                                            const data = await response.json()
-                                            setInvestments((prev: any[]) =>
-                                              prev.map((inv: any) =>
-                                                inv.id === expandedInvestment.id
-                                                  ? data.investment
-                                                  : inv
-                                              )
-                                            )
-                                          } catch (e) {
-                                            setPayErrorByKey((prev: Record<string, string>) => ({
-                                              ...prev,
-                                              [key]: e instanceof Error ? e.message : 'Failed to undo payment',
-                                            }))
-                                          } finally {
-                                            setPayLoadingKey(null)
-                                          }
-                                        }}
-                                      >
-                                        {loading ? 'Undoing...' : 'Undo'}
-                                      </Button>
-                                    ) : (
-                                      <span className="text-xs text-gray-500">Paid</span>
-                                    )
-                                  ) : userRole === 'OWNER' ? (
-                                    <Button
-                                      variant="primary"
+                          return (
+                            <tr key={key} className={`text-gray-700 ${isPaid ? 'bg-emerald-50/40' : ''}`}>
+                              <td className="py-2 pr-3 whitespace-nowrap font-medium">{r.label}</td>
+                              <td className="py-2 pr-3 whitespace-nowrap text-gray-500 tabular-nums">
+                                {r.due.toISOString().split('T')[0]}
+                              </td>
+                              <td className="py-2 pr-3">
+                                <input
+                                  type="number"
+                                  step="0.01"
+                                  min="0"
+                                  disabled={isPaid || userRole !== 'OWNER'}
+                                  value={amountValue}
+                                  onChange={(e: ChangeEvent<HTMLInputElement>) =>
+                                    setPayAmountByKey((prev: Record<string, string>) => ({ ...prev, [key]: e.target.value }))
+                                  }
+                                  className="w-28 rounded border border-gray-200 px-2 py-1 text-sm tabular-nums disabled:bg-gray-100 disabled:text-gray-500"
+                                />
+                              </td>
+                              <td className="py-2 pr-3">
+                                <input
+                                  type="number"
+                                  step="0.01"
+                                  min="0"
+                                  disabled={isPaid || userRole !== 'OWNER'}
+                                  value={rewardValue}
+                                  onChange={(e: ChangeEvent<HTMLInputElement>) =>
+                                    setPayRewardByKey((prev: Record<string, string>) => ({ ...prev, [key]: e.target.value }))
+                                  }
+                                  className="w-24 rounded border border-gray-200 px-2 py-1 text-sm tabular-nums disabled:bg-gray-100 disabled:text-gray-500"
+                                />
+                              </td>
+                              <td className="py-2 pr-3 whitespace-nowrap">
+                                {isPaid ? (
+                                  <span className="inline-flex items-center gap-1 text-emerald-700 font-semibold text-xs">
+                                    <span className="w-1.5 h-1.5 bg-emerald-500 rounded-full"></span>
+                                    Paid
+                                  </span>
+                                ) : (
+                                  <span className="text-gray-400 text-xs">Unpaid</span>
+                                )}
+                              </td>
+                              <td className="py-2 text-right whitespace-nowrap">
+                                {isPaid ? (
+                                  userRole === 'OWNER' ? (
+                                    <button
                                       disabled={loading}
+                                      className="px-2.5 py-1 text-xs font-medium text-gray-600 bg-gray-100 hover:bg-gray-200 rounded transition-colors disabled:opacity-50"
                                       onClick={async () => {
                                         setPayErrorByKey((prev: Record<string, string>) => {
-                                          const next = { ...prev }
-                                          delete next[key]
-                                          return next
+                                          const next = { ...prev }; delete next[key]; return next
                                         })
                                         setPayLoadingKey(key)
                                         try {
-                                          const response = await fetch(
-                                            `/api/savings/${expandedInvestment.id}/pay`,
-                                            {
-                                              method: 'POST',
-                                              headers: { 'Content-Type': 'application/json' },
-                                              body: JSON.stringify({
-                                                monthIndex: r.monthIndex,
-                                                amount: Number(amountValue),
-                                                reward: Number(rewardValue),
-                                              }),
-                                            }
-                                          )
+                                          const response = await fetch(`/api/savings/${expandedInvestment.id}/pay`, {
+                                            method: 'DELETE',
+                                            headers: { 'Content-Type': 'application/json' },
+                                            body: JSON.stringify({ monthIndex: r.monthIndex }),
+                                          })
                                           if (!response.ok) {
                                             const data = await response.json().catch(() => ({}))
-                                            throw new Error(data.error || 'Failed to pay month')
+                                            throw new Error(data.error || 'Failed to undo payment')
                                           }
                                           const data = await response.json()
                                           setInvestments((prev: any[]) =>
-                                            prev.map((inv: any) =>
-                                              inv.id === expandedInvestment.id
-                                                ? data.investment
-                                                : inv
-                                            )
+                                            prev.map((inv: any) => inv.id === expandedInvestment.id ? data.investment : inv)
                                           )
                                         } catch (e) {
                                           setPayErrorByKey((prev: Record<string, string>) => ({
-                                            ...prev,
-                                            [key]: e instanceof Error ? e.message : 'Failed to pay month',
+                                            ...prev, [key]: e instanceof Error ? e.message : 'Failed to undo payment',
                                           }))
-                                        } finally {
-                                          setPayLoadingKey(null)
-                                        }
+                                        } finally { setPayLoadingKey(null) }
                                       }}
                                     >
-                                      {loading ? 'Paying...' : 'Pay'}
-                                    </Button>
+                                      {loading ? '...' : 'Undo'}
+                                    </button>
                                   ) : (
-                                    <span className="text-xs text-gray-500">—</span>
-                                  )}
-                                </td>
-                              </tr>
-                            )
-                          })}
-                        </tbody>
-                      </table>
-                    </div>
-
-                    {Object.keys(payErrorByKey).some((k) => k.startsWith(`${expandedInvestment.id}-`)) && (
-                      <div className="mt-3 text-sm text-red-600">
-                        {Object.entries(payErrorByKey)
-                          .filter(([k]) => k.startsWith(`${expandedInvestment.id}-`))
-                          .map(([, msg]) => msg)
-                          .slice(0, 1)[0]}
-                      </div>
-                    )}
+                                    <span className="text-xs text-gray-400">Paid</span>
+                                  )
+                                ) : userRole === 'OWNER' ? (
+                                  <button
+                                    disabled={loading}
+                                    className="px-2.5 py-1 text-xs font-medium text-white bg-slate-800 hover:bg-slate-700 rounded transition-colors disabled:opacity-50"
+                                    onClick={async () => {
+                                      setPayErrorByKey((prev: Record<string, string>) => {
+                                        const next = { ...prev }; delete next[key]; return next
+                                      })
+                                      setPayLoadingKey(key)
+                                      try {
+                                        const response = await fetch(`/api/savings/${expandedInvestment.id}/pay`, {
+                                          method: 'POST',
+                                          headers: { 'Content-Type': 'application/json' },
+                                          body: JSON.stringify({ monthIndex: r.monthIndex, amount: Number(amountValue), reward: Number(rewardValue) }),
+                                        })
+                                        if (!response.ok) {
+                                          const data = await response.json().catch(() => ({}))
+                                          throw new Error(data.error || 'Failed to pay month')
+                                        }
+                                        const data = await response.json()
+                                        setInvestments((prev: any[]) =>
+                                          prev.map((inv: any) => inv.id === expandedInvestment.id ? data.investment : inv)
+                                        )
+                                      } catch (e) {
+                                        setPayErrorByKey((prev: Record<string, string>) => ({
+                                          ...prev, [key]: e instanceof Error ? e.message : 'Failed to pay month',
+                                        }))
+                                      } finally { setPayLoadingKey(null) }
+                                    }}
+                                  >
+                                    {loading ? '...' : 'Pay'}
+                                  </button>
+                                ) : (
+                                  <span className="text-xs text-gray-400">—</span>
+                                )}
+                              </td>
+                            </tr>
+                          )
+                        })}
+                      </tbody>
+                    </table>
                   </div>
-                )
-              })()}
-            </CardContent>
-          </Card>
-        )}
-      </div>
+
+                  {Object.keys(payErrorByKey).some((k) => k.startsWith(`${expandedInvestment.id}-`)) && (
+                    <div className="mt-3 text-sm text-red-600">
+                      {Object.entries(payErrorByKey)
+                        .filter(([k]) => k.startsWith(`${expandedInvestment.id}-`))
+                        .map(([, msg]) => msg)
+                        .slice(0, 1)[0]}
+                    </div>
+                  )}
+                </div>
+              )
+            })()}
+          </CardContent>
+        </Card>
+      )}
 
       {/* Create Plan Modal */}
       {showCreateForm && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
+        <div className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center p-4 z-50">
           <div className="bg-white rounded-xl shadow-2xl max-h-[90vh] overflow-y-auto">
             <SavingsForm
               onSubmit={handleCreatePlan}
@@ -569,7 +577,7 @@ export function CirclysClient({ initialInvestments, userRole }: CirclysClientPro
 
       {/* Edit Plan Modal */}
       {editingInvestment && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
+        <div className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center p-4 z-50">
           <div className="bg-white rounded-xl shadow-2xl max-h-[90vh] overflow-y-auto">
             <SavingsForm
               initialData={(() => {
