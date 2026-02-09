@@ -65,15 +65,20 @@ export async function POST(req: NextRequest) {
         receivableAmount: 0,
         isIjarah: false,
         category: 'SAVINGS_ROSCA',
-        // Create participants if provided
-        dealParticipants: validatedData.participants?.map(p => ({
-          personId: p.personId,
-          investedAmount: p.investedAmount,
-          currentValue: p.investedAmount, // Initially same as invested
-          profit: 0, // No profit initially
-          sharePercentage: p.sharePercentage,
-          notes: p.notes,
-        })) ?? [],
+        ...(validatedData.participants && validatedData.participants.length > 0
+          ? {
+              dealParticipants: {
+                create: validatedData.participants.map((p: CreateSavingsInput['participants'][number]) => ({
+                  personId: p.personId,
+                  investedAmount: p.investedAmount,
+                  currentValue: p.investedAmount,
+                  profit: 0,
+                  sharePercentage: p.sharePercentage,
+                  notes: p.notes,
+                })),
+              },
+            }
+          : {}),
       },
       include: {
         account: true,
