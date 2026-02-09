@@ -19,8 +19,7 @@ export function CashBalanceCard({ initialCash }: { initialCash: number }) {
   const [loading, setLoading] = useState(false)
   const [message, setMessage] = useState('')
   const [error, setError] = useState('')
-  const [transactions, setTransactions] = useState<any[]>([])
-  const [buckets, setBuckets] = useState<any[]>([])
+  const [showForm, setShowForm] = useState(false)
 
   const loadCash = async () => {
     setError('')
@@ -32,8 +31,6 @@ export function CashBalanceCard({ initialCash }: { initialCash: number }) {
         throw new Error(data.error || 'Failed to load cash balance')
       }
       setCashBalance(String(data.cashBalance ?? 0))
-      setTransactions(Array.isArray(data.transactions) ? data.transactions : [])
-      setBuckets(Array.isArray(data.buckets) ? data.buckets : [])
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to load cash balance')
     }
@@ -74,6 +71,7 @@ export function CashBalanceCard({ initialCash }: { initialCash: number }) {
       setAmount('')
       setNotes('')
       setMessage('Saved')
+      setShowForm(false)
       await loadCash()
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to update cash balance')
@@ -83,89 +81,69 @@ export function CashBalanceCard({ initialCash }: { initialCash: number }) {
   }
 
   return (
-    <Card hover className="sukuk-card-hover">
+    <Card>
       <CardContent>
-        <form onSubmit={handleSubmit} className="space-y-3">
-          <div className="flex items-center justify-between">
-            <p className="text-sm font-medium text-gray-500">Cash Balance</p>
-            <span className="text-2xl">🏦</span>
-          </div>
-          <div className="text-2xl font-bold text-gray-900">
-            SAR {Number(cashBalance || 0).toLocaleString()}
-          </div>
-          <div className="grid grid-cols-1 gap-2 md:grid-cols-3">
-            <select
-              value={direction}
-              onChange={(e) => setDirection(e.target.value as 'IN' | 'OUT')}
-              className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:border-blue-500 focus:ring-2 focus:ring-blue-500"
+        <p className="text-xs font-medium text-gray-500 uppercase tracking-wider">Cash Balance</p>
+        <div className="text-2xl font-bold text-gray-900 mt-1">
+          SAR {Number(cashBalance || 0).toLocaleString()}
+        </div>
+        <div className="mt-2">
+          {!showForm ? (
+            <button
+              type="button"
+              onClick={() => setShowForm(true)}
+              className="text-[11px] text-slate-500 hover:text-slate-700 font-medium"
             >
-              <option value="IN">Add Cash</option>
-              <option value="OUT">Withdraw Cash</option>
-            </select>
-            <input
-              type="number"
-              min="0"
-              step="0.01"
-              value={amount}
-              onChange={(e) => setAmount(e.target.value)}
-              className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:border-blue-500 focus:ring-2 focus:ring-blue-500"
-              placeholder="Amount"
-            />
-            <DateInput
-              value={direction === 'IN' ? haulStartDate : entryDate}
-              onChange={(value) => (
-                direction === 'IN' ? setHaulStartDate(value) : setEntryDate(value)
-              )}
-              ariaLabel={direction === 'IN' ? 'Ownership date' : 'Withdrawal date'}
-            />
-          </div>
-          <input
-            type="text"
-            value={notes}
-            onChange={(e) => setNotes(e.target.value)}
-            className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:border-blue-500 focus:ring-2 focus:ring-blue-500"
-            placeholder="Notes (optional)"
-          />
-          <div className="flex items-center gap-2">
-            <Button type="submit" variant="primary" size="sm" disabled={loading}>
-              {loading ? 'Saving...' : 'Log Cash'}
-            </Button>
-            {message && <span className="text-xs text-green-600">{message}</span>}
-            {error && <span className="text-xs text-red-600">{error}</span>}
-          </div>
-          {transactions.length > 0 && (
-            <div className="pt-3 border-t border-gray-200">
-              <p className="text-xs font-semibold text-gray-500 mb-2">Recent Cash Entries</p>
-              <div className="space-y-1 text-xs text-gray-600">
-                {transactions.map((tx) => (
-                  <div key={tx.id} className="flex items-center justify-between">
-                    <span>{new Date(tx.date).toLocaleDateString()} • {tx.type}</span>
-                    <span className={tx.amount >= 0 ? 'text-green-600' : 'text-red-600'}>
-                      {tx.amount >= 0 ? '+' : '-'}SAR {Math.abs(tx.amount).toLocaleString()}
-                    </span>
-                  </div>
-                ))}
+              + Log cash in/out
+            </button>
+          ) : (
+            <form onSubmit={handleSubmit} className="space-y-2 pt-2 border-t border-gray-100">
+              <div className="flex gap-2">
+                <select
+                  value={direction}
+                  onChange={(e) => setDirection(e.target.value as 'IN' | 'OUT')}
+                  className="rounded-md border border-gray-200 px-2 py-1.5 text-xs focus:border-slate-500 focus:ring-1 focus:ring-slate-500 outline-none"
+                >
+                  <option value="IN">Add</option>
+                  <option value="OUT">Withdraw</option>
+                </select>
+                <input
+                  type="number"
+                  min="0"
+                  step="0.01"
+                  value={amount}
+                  onChange={(e) => setAmount(e.target.value)}
+                  className="flex-1 rounded-md border border-gray-200 px-2 py-1.5 text-xs focus:border-slate-500 focus:ring-1 focus:ring-slate-500 outline-none"
+                  placeholder="Amount"
+                />
               </div>
-            </div>
-          )}
-          {buckets.length > 0 && (
-            <div className="pt-3 border-t border-gray-200">
-              <p className="text-xs font-semibold text-gray-500 mb-2">Haul Buckets</p>
-              <div className="space-y-1 text-xs text-gray-600">
-                {buckets.map((bucket) => (
-                  <div key={bucket.id} className="flex items-center justify-between">
-                    <span>
-                      {new Date(bucket.haulStartDate).toLocaleDateString()} • {bucket.id.slice(0, 6)}
-                    </span>
-                    <span className="text-gray-800">
-                      {bucket.currency} {Number(bucket.balance).toLocaleString()}
-                    </span>
-                  </div>
-                ))}
+              <div className="flex gap-2">
+                <DateInput
+                  value={direction === 'IN' ? haulStartDate : entryDate}
+                  onChange={(value) => (
+                    direction === 'IN' ? setHaulStartDate(value) : setEntryDate(value)
+                  )}
+                  ariaLabel={direction === 'IN' ? 'Ownership date' : 'Withdrawal date'}
+                />
+                <input
+                  type="text"
+                  value={notes}
+                  onChange={(e) => setNotes(e.target.value)}
+                  className="flex-1 rounded-md border border-gray-200 px-2 py-1.5 text-xs focus:border-slate-500 focus:ring-1 focus:ring-slate-500 outline-none"
+                  placeholder="Notes"
+                />
               </div>
-            </div>
+              <div className="flex items-center gap-2">
+                <Button type="submit" variant="primary" size="sm" disabled={loading}>
+                  {loading ? 'Saving...' : 'Save'}
+                </Button>
+                <button type="button" onClick={() => setShowForm(false)} className="text-xs text-gray-400 hover:text-gray-600">Cancel</button>
+                {message && <span className="text-xs text-green-600">{message}</span>}
+                {error && <span className="text-xs text-red-600">{error}</span>}
+              </div>
+            </form>
           )}
-        </form>
+        </div>
       </CardContent>
     </Card>
   )

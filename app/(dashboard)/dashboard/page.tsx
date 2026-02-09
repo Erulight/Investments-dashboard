@@ -46,6 +46,13 @@ export default async function DashboardPage({
     OR: [{ maturityDate: null }, { maturityDate: { gte: yearStart } }],
   }
 
+  // Per-type breakdown
+  type TypeBreakdown = { type: string; invested: number; value: number; count: number }
+  let typeBreakdowns: TypeBreakdown[] = []
+
+  // ROSCA / Circlys debt tracking
+  let roscaDebt = 0
+
   if (user.role === 'OWNER') {
     const investments = await prisma.investment.findMany({
       where: {
@@ -53,6 +60,7 @@ export default async function DashboardPage({
         name: { notIn: DEMO_INVESTMENT_NAMES },
         ...investmentDateFilter,
       },
+      include: { account: { select: { type: true } } },
     })
 
     totalInvested = investments.reduce((sum, inv) => sum + inv.principalAmount, 0)
@@ -62,6 +70,38 @@ export default async function DashboardPage({
       0
     )
     activeInvestments = investments.length
+
+    // Build per-type breakdown
+    const typeMap = new Map<string, { invested: number; value: number; count: number }>()
+    for (const inv of investments) {
+      const t = inv.account.type
+      const existing = typeMap.get(t) || { invested: 0, value: 0, count: 0 }
+      existing.invested += inv.principalAmount
+      existing.value += inv.currentValue
+      existing.count += 1
+      typeMap.set(t, existing)
+    }
+    typeBreakdowns = Array.from(typeMap.entries())
+      .map(([type, data]) => ({ type, ...data }))
+      .sort((a, b) => b.value - a.value)
+
+    // Calculate ROSCA / Circlys remaining payback debt
+    // For ROSCA plans: if totalPaid < (monthlyAmount * durationMonths), the remainder is debt
+    const roscaInvestments = investments.filter(inv => inv.account.type === 'CIRCLYS')
+    for (const inv of roscaInvestments) {
+      try {
+        const meta = inv.metadata ? JSON.parse(inv.metadata as string) : {}
+        const monthlyAmount = Number(meta.monthlyAmount) || 0
+        const durationMonths = Number(meta.durationMonths) || 0
+        const totalPaid = Number(meta.totalPaid) || 0
+        const totalRequired = monthlyAmount * durationMonths
+        if (totalRequired > totalPaid) {
+          roscaDebt += (totalRequired - totalPaid)
+        }
+      } catch {
+        // skip invalid metadata
+      }
+    }
   } else if (user.role === 'PARTNER' && user.personId) {
     const participants = await prisma.dealParticipant.findMany({
       where: {
@@ -71,13 +111,26 @@ export default async function DashboardPage({
           ...investmentDateFilter,
         },
       },
-      include: { investment: true },
+      include: { investment: { include: { account: { select: { type: true } } } } },
     })
 
     totalInvested = participants.reduce((sum, p) => sum + p.investedAmount, 0)
     totalValue = participants.reduce((sum, p) => sum + p.currentValue, 0)
     totalProfit = participants.reduce((sum, p) => sum + p.profit, 0)
     activeInvestments = participants.length
+
+    const typeMap = new Map<string, { invested: number; value: number; count: number }>()
+    for (const p of participants) {
+      const t = p.investment.account.type
+      const existing = typeMap.get(t) || { invested: 0, value: 0, count: 0 }
+      existing.invested += p.investedAmount
+      existing.value += p.currentValue
+      existing.count += 1
+      typeMap.set(t, existing)
+    }
+    typeBreakdowns = Array.from(typeMap.entries())
+      .map(([type, data]) => ({ type, ...data }))
+      .sort((a, b) => b.value - a.value)
   }
 
   const transactionWhere =
@@ -109,6 +162,7 @@ export default async function DashboardPage({
 
   const displayedValue = user.role === 'OWNER' ? cashBalance + totalValue : totalValue
   const returnPercentage = totalInvested > 0 ? ((totalValue - totalInvested) / totalInvested * 100) : 0
+  const netWorth = displayedValue - roscaDebt
 
   return (
     <div className="space-y-6 animate-fade-in">
@@ -126,83 +180,117 @@ export default async function DashboardPage({
         </div>
       </div>
 
-      {/* Stats Grid */}
-      <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-5">
+      {/* Top Stats Row */}
+      <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
         {user.role === 'OWNER' && (
           <CashBalanceCard initialCash={Number.isFinite(cashBalance) ? cashBalance : 0} />
         )}
         <Card>
           <CardContent>
             <p className="text-xs font-medium text-gray-500 uppercase tracking-wider">Total Invested</p>
-            <div className="text-2xl font-bold text-gray-900 mt-1">
+            <div className="text-xl font-bold text-gray-900 mt-1 tabular-nums">
               SAR {totalInvested.toLocaleString()}
             </div>
-            <p className="text-[11px] text-gray-400 mt-1">Principal Amount</p>
+            <p className="text-[11px] text-gray-400 mt-0.5">Principal</p>
           </CardContent>
         </Card>
-
         <Card>
           <CardContent>
             <p className="text-xs font-medium text-gray-500 uppercase tracking-wider">
               {user.role === 'OWNER' ? 'Portfolio Value' : 'Investment Value'}
             </p>
-            <div className="text-2xl font-bold text-gray-900 mt-1">
+            <div className="text-xl font-bold text-gray-900 mt-1 tabular-nums">
               SAR {displayedValue.toLocaleString()}
             </div>
-            <p className="text-[11px] text-gray-400 mt-1">
+            <p className="text-[11px] text-gray-400 mt-0.5">
               {user.role === 'OWNER' ? 'Cash + Investments' : 'Your share'}
             </p>
           </CardContent>
         </Card>
-
         <Card>
           <CardContent>
             <p className="text-xs font-medium text-gray-500 uppercase tracking-wider">Yearly Return</p>
-            <div className={`text-2xl font-bold mt-1 ${yearlyProfitValue >= 0 ? 'text-emerald-600' : 'text-red-600'}`}>
+            <div className={`text-xl font-bold mt-1 tabular-nums ${yearlyProfitValue >= 0 ? 'text-emerald-600' : 'text-red-600'}`}>
               SAR {yearlyProfitValue.toLocaleString()}
             </div>
-            <p className={`text-[11px] mt-1 font-semibold ${returnPercentage >= 0 ? 'text-emerald-600' : 'text-red-600'}`}>
+            <p className={`text-[11px] mt-0.5 font-semibold ${returnPercentage >= 0 ? 'text-emerald-600' : 'text-red-600'}`}>
               {returnPercentage >= 0 ? '↑' : '↓'} {Math.abs(returnPercentage).toFixed(2)}%
             </p>
           </CardContent>
         </Card>
+      </div>
 
+      {/* Second Row: Deals + Debt + Net Worth */}
+      <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
         <Card>
           <CardContent>
             <p className="text-xs font-medium text-gray-500 uppercase tracking-wider">Active Deals</p>
-            <div className="text-2xl font-bold text-gray-900 mt-1">
-              {activeInvestments}
-            </div>
-            <p className="text-[11px] text-gray-400 mt-1">Investment Deals</p>
+            <div className="text-xl font-bold text-gray-900 mt-1">{activeInvestments}</div>
+            <p className="text-[11px] text-gray-400 mt-0.5">Across all types</p>
           </CardContent>
         </Card>
+        {user.role === 'OWNER' && roscaDebt > 0 && (
+          <Card>
+            <CardContent>
+              <p className="text-xs font-medium text-red-500 uppercase tracking-wider">ROSCA Remaining</p>
+              <div className="text-xl font-bold text-red-600 mt-1 tabular-nums">
+                SAR {roscaDebt.toLocaleString()}
+              </div>
+              <p className="text-[11px] text-red-400 mt-0.5">Unpaid commitments</p>
+            </CardContent>
+          </Card>
+        )}
+        {user.role === 'OWNER' && (
+          <Card>
+            <CardContent>
+              <p className="text-xs font-medium text-gray-500 uppercase tracking-wider">Net Worth</p>
+              <div className={`text-xl font-bold mt-1 tabular-nums ${netWorth >= 0 ? 'text-gray-900' : 'text-red-600'}`}>
+                SAR {netWorth.toLocaleString()}
+              </div>
+              <p className="text-[11px] text-gray-400 mt-0.5">Portfolio − Debt</p>
+            </CardContent>
+          </Card>
+        )}
       </div>
 
-      {/* Quick Actions */}
-      {user.role === 'OWNER' && (
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-          <Card hover variant="bordered">
-            <CardContent className="text-center py-6">
-              <div className="text-3xl mb-3">📥</div>
-              <h3 className="text-sm font-semibold text-gray-900 mb-1">Import Data</h3>
-              <p className="text-xs text-gray-500">Upload CSV files to import investments</p>
-            </CardContent>
-          </Card>
-          <Card hover variant="bordered">
-            <CardContent className="text-center py-6">
-              <div className="text-3xl mb-3">➕</div>
-              <h3 className="text-sm font-semibold text-gray-900 mb-1">Add Investment</h3>
-              <p className="text-xs text-gray-500">Manually create a new deal</p>
-            </CardContent>
-          </Card>
-          <Card hover variant="bordered">
-            <CardContent className="text-center py-6">
-              <div className="text-3xl mb-3">📊</div>
-              <h3 className="text-sm font-semibold text-gray-900 mb-1">View Reports</h3>
-              <p className="text-xs text-gray-500">Generate portfolio reports</p>
-            </CardContent>
-          </Card>
-        </div>
+      {/* Per-Type Breakdown */}
+      {typeBreakdowns.length > 0 && (
+        <Card>
+          <CardHeader>
+            <CardTitle className="text-sm font-bold text-gray-800">Balance by Investment Type</CardTitle>
+          </CardHeader>
+          <CardContent>
+            <div className="space-y-2">
+              {typeBreakdowns.map((tb) => {
+                const returnPct = tb.invested > 0 ? ((tb.value - tb.invested) / tb.invested * 100) : 0
+                return (
+                  <div key={tb.type} className="flex items-center justify-between p-3 bg-gray-50 rounded-lg">
+                    <div className="flex items-center gap-3">
+                      <span className="text-sm font-semibold text-gray-900">{tb.type}</span>
+                      <span className="text-[11px] text-gray-400">{tb.count} deal{tb.count !== 1 ? 's' : ''}</span>
+                    </div>
+                    <div className="flex items-center gap-6">
+                      <div className="text-right">
+                        <div className="text-xs text-gray-400">Invested</div>
+                        <div className="text-sm font-medium text-gray-700 tabular-nums">SAR {tb.invested.toLocaleString()}</div>
+                      </div>
+                      <div className="text-right">
+                        <div className="text-xs text-gray-400">Value</div>
+                        <div className="text-sm font-bold text-gray-900 tabular-nums">SAR {tb.value.toLocaleString()}</div>
+                      </div>
+                      <div className="text-right min-w-[60px]">
+                        <div className="text-xs text-gray-400">Return</div>
+                        <div className={`text-sm font-semibold tabular-nums ${returnPct >= 0 ? 'text-emerald-600' : 'text-red-600'}`}>
+                          {returnPct >= 0 ? '+' : ''}{returnPct.toFixed(1)}%
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                )
+              })}
+            </div>
+          </CardContent>
+        </Card>
       )}
     </div>
   )

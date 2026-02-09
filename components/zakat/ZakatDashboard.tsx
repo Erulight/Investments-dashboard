@@ -308,35 +308,32 @@ export function ZakatDashboard({ buckets }: { buckets: BucketRow[] }) {
         </Card>
       </div>
 
-      {/* Tabs */}
-      <div className="flex flex-wrap items-center gap-1 border-b border-gray-200 pb-1">
-        <button
-          onClick={() => setActiveTab('all')}
-          className={`px-3 py-1.5 text-sm rounded-t-md font-medium transition-colors ${
-            activeTab === 'all'
-              ? 'bg-emerald-50 text-emerald-700 border border-b-0 border-gray-200'
-              : 'text-gray-500 hover:text-gray-700 hover:bg-gray-50'
-          }`}
+      {/* Source Filter */}
+      <div className="flex items-center gap-3">
+        <label className="text-xs font-medium text-gray-500">Source:</label>
+        <select
+          value={activeTab}
+          onChange={(e) => setActiveTab(e.target.value)}
+          className="rounded-md border border-gray-200 px-3 py-1.5 text-sm text-gray-700 focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500 outline-none max-w-[300px]"
         >
-          All ({buckets.length})
-        </button>
-        {sources.map(src => {
-          const count = buckets.filter(b => b.source === src).length
-          return (
-            <button
-              key={src}
-              onClick={() => setActiveTab(src)}
-              className={`px-3 py-1.5 text-sm rounded-t-md font-medium transition-colors truncate max-w-[180px] ${
-                activeTab === src
-                  ? 'bg-emerald-50 text-emerald-700 border border-b-0 border-gray-200'
-                  : 'text-gray-500 hover:text-gray-700 hover:bg-gray-50'
-              }`}
-              title={src}
-            >
-              {src} ({count})
-            </button>
-          )
-        })}
+          <option value="all">All sources ({buckets.length})</option>
+          {sources.map(src => {
+            const count = buckets.filter(b => b.source === src).length
+            return (
+              <option key={src} value={src}>
+                {src} ({count})
+              </option>
+            )
+          })}
+        </select>
+        {activeTab !== 'all' && (
+          <button
+            onClick={() => setActiveTab('all')}
+            className="text-xs text-gray-400 hover:text-gray-600"
+          >
+            Clear
+          </button>
+        )}
       </div>
 
       {/* Filters */}
