@@ -1,7 +1,31 @@
 'use client'
 
 import { useEffect, useState } from 'react'
+import type { ChangeEvent } from 'react'
 import { useRouter } from 'next/navigation'
+import { Button } from '@/components/ui/Button'
+
+interface ModulePermissions {
+  sukuk?: boolean
+  crypto?: boolean
+  sip?: boolean
+  savings?: boolean
+  'business-deals'?: boolean
+  zakat?: boolean
+  import?: boolean
+  settings?: boolean
+}
+
+const modules = [
+  { id: 'sukuk', label: 'Sukuk', icon: '💎' },
+  { id: 'crypto', label: 'Crypto', icon: '₿' },
+  { id: 'sip', label: 'SIP', icon: '📈' },
+  { id: 'savings', label: 'Savings', icon: '💰' },
+  { id: 'business-deals', label: 'Business Deals', icon: '🤝' },
+  { id: 'zakat', label: 'Zakat', icon: '🧾' },
+  { id: 'import', label: 'Import', icon: '📥' },
+  { id: 'settings', label: 'Settings', icon: '⚙️' },
+]
 
 interface User {
   id: string
@@ -16,6 +40,25 @@ export function UserList() {
   const router = useRouter()
   const [users, setUsers] = useState<User[]>([])
   const [loading, setLoading] = useState(true)
+  const [editingUserId, setEditingUserId] = useState<string | null>(null)
+  const [editLoading, setEditLoading] = useState(false)
+  const [editError, setEditError] = useState<string | null>(null)
+  const [editForm, setEditForm] = useState({
+    name: '',
+    email: '',
+    password: '',
+    role: 'PARTNER' as 'OWNER' | 'PARTNER' | 'VIEWER',
+  })
+  const [editPermissions, setEditPermissions] = useState<ModulePermissions>({
+    sukuk: false,
+    crypto: false,
+    sip: false,
+    savings: false,
+    'business-deals': false,
+    zakat: false,
+    import: false,
+    settings: false,
+  })
 
   useEffect(() => {
     fetchUsers()
@@ -30,6 +73,88 @@ export function UserList() {
       console.error('Failed to fetch users:', error)
     } finally {
       setLoading(false)
+    }
+  }
+
+  const startEdit = (user: User) => {
+    setEditError(null)
+    setEditingUserId(user.id)
+    setEditForm({
+      name: user.name || '',
+      email: user.email || '',
+      password: '',
+      role: (user.role as any) || 'PARTNER',
+    })
+
+    const basePermissions: ModulePermissions = {
+      sukuk: false,
+      crypto: false,
+      sip: false,
+      savings: false,
+      'business-deals': false,
+      zakat: false,
+      import: false,
+      settings: false,
+    }
+
+    if (user.permissions && typeof user.permissions === 'object') {
+      setEditPermissions({
+        ...basePermissions,
+        ...(user.permissions as any),
+      })
+    } else {
+      setEditPermissions(basePermissions)
+    }
+  }
+
+  const cancelEdit = () => {
+    setEditError(null)
+    setEditingUserId(null)
+    setEditLoading(false)
+  }
+
+  const toggleEditPermission = (module: keyof ModulePermissions) => {
+    setEditPermissions((prev: ModulePermissions) => ({
+      ...prev,
+      [module]: !prev[module],
+    }))
+  }
+
+  const saveEdit = async (userId: string) => {
+    setEditLoading(true)
+    setEditError(null)
+
+    try {
+      const payload: any = {
+        name: editForm.name,
+        email: editForm.email,
+        role: editForm.role,
+        permissions: editPermissions,
+      }
+
+      if (editForm.password.trim().length > 0) {
+        payload.password = editForm.password
+      }
+
+      const response = await fetch(`/api/users/${userId}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload),
+      })
+
+      const data = await response.json()
+
+      if (!response.ok) {
+        throw new Error(data.error || 'Failed to update user')
+      }
+
+      setEditingUserId(null)
+      await fetchUsers()
+      router.refresh()
+    } catch (err) {
+      setEditError(err instanceof Error ? err.message : 'Failed to update user')
+    } finally {
+      setEditLoading(false)
     }
   }
 
@@ -72,7 +197,7 @@ export function UserList() {
 
   return (
     <div className="space-y-3">
-      {users.map((user) => (
+      {users.map((user: User) => (
         <div
           key={user.id}
           className="p-4 bg-gray-50 rounded-lg hover:bg-gray-100 transition-colors"
@@ -97,10 +222,134 @@ export function UserList() {
                 )}
               </div>
             </div>
-            <div className="text-xs text-gray-400">
-              {new Date(user.createdAt).toLocaleDateString()}
+            <div className="flex flex-col items-end space-y-2">
+              <div className="text-xs text-gray-400">
+                {new Date(user.createdAt).toLocaleDateString()}
+              </div>
+              <Button
+                type="button"
+                variant="ghost"
+                size="sm"
+                onClick={() => (editingUserId === user.id ? cancelEdit() : startEdit(user))}
+              >
+                {editingUserId === user.id ? 'Cancel' : 'Edit'}
+              </Button>
             </div>
           </div>
+
+          {editingUserId === user.id && (
+            <div className="mt-4 p-4 bg-white rounded-lg border border-gray-200">
+              {editError && (
+                <div className="mb-4 p-3 bg-red-50 border border-red-200 rounded text-sm text-red-700">
+                  {editError}
+                </div>
+              )}
+
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">
+                    Name
+                  </label>
+                  <input
+                    type="text"
+                    required
+                    value={editForm.name}
+                    onChange={(e: ChangeEvent<HTMLInputElement>) =>
+                      setEditForm({ ...editForm, name: e.target.value })
+                    }
+                    className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">
+                    Email
+                  </label>
+                  <input
+                    type="email"
+                    required
+                    value={editForm.email}
+                    onChange={(e: ChangeEvent<HTMLInputElement>) =>
+                      setEditForm({ ...editForm, email: e.target.value })
+                    }
+                    className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">
+                    New Password (optional)
+                  </label>
+                  <input
+                    type="password"
+                    minLength={8}
+                    value={editForm.password}
+                    onChange={(e: ChangeEvent<HTMLInputElement>) =>
+                      setEditForm({ ...editForm, password: e.target.value })
+                    }
+                    className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                    placeholder="Leave blank to keep current"
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">
+                    Role
+                  </label>
+                  <select
+                    value={editForm.role}
+                    onChange={(e: ChangeEvent<HTMLSelectElement>) =>
+                      setEditForm({ ...editForm, role: e.target.value as any })
+                    }
+                    className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                  >
+                    <option value="PARTNER">Partner</option>
+                    <option value="VIEWER">Viewer</option>
+                    <option value="OWNER">Owner</option>
+                  </select>
+                </div>
+              </div>
+
+              {editForm.role !== 'OWNER' && (
+                <div className="mt-4">
+                  <label className="block text-sm font-medium text-gray-700 mb-3">
+                    Module Permissions
+                  </label>
+
+                  <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+                    {modules.map((module) => (
+                      <label
+                        key={module.id}
+                        className="flex items-center space-x-3 p-3 border border-gray-200 rounded-lg hover:bg-gray-50 cursor-pointer transition-colors"
+                      >
+                        <input
+                          type="checkbox"
+                          checked={editPermissions[module.id as keyof ModulePermissions] || false}
+                          onChange={() =>
+                            toggleEditPermission(module.id as keyof ModulePermissions)
+                          }
+                          className="w-4 h-4 text-blue-600 border-gray-300 rounded focus:ring-blue-500"
+                        />
+                        <span className="flex items-center space-x-2 text-sm font-medium text-gray-700">
+                          <span>{module.icon}</span>
+                          <span>{module.label}</span>
+                        </span>
+                      </label>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              <div className="mt-4 flex justify-end space-x-2">
+                <Button type="button" variant="secondary" onClick={cancelEdit} disabled={editLoading}>
+                  Cancel
+                </Button>
+                <Button type="button" onClick={() => saveEdit(user.id)} disabled={editLoading}>
+                  {editLoading ? 'Saving...' : 'Save'}
+                </Button>
+              </div>
+            </div>
+          )}
         </div>
       ))}
     </div>
