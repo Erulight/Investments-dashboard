@@ -3,7 +3,7 @@ import { getCurrentUser } from '@/lib/auth'
 import { prisma } from '@/lib/db'
 import { requireModuleAccess } from '@/lib/rbac'
 import { createSavingsSchema, CreateSavingsInput } from '@/lib/validation'
-import { auditLog } from '@/lib/audit'
+import { createAuditLog } from '@/lib/audit'
 
 export async function POST(req: NextRequest) {
   try {
@@ -83,19 +83,24 @@ export async function POST(req: NextRequest) {
       },
     })
 
-    // Log the creation
-    await auditLog({
-      userId: user.id,
-      action: 'CREATE',
-      entityType: 'SAVINGS_PLAN',
-      entityId: investment.id,
-      details: `Created savings plan: ${investment.name}`,
-      metadata: {
-        planName: investment.name,
-        principalAmount: investment.principalAmount,
+    // Log the action
+    await createAuditLog(
+      user.id,
+      'CREATE',
+      'INVESTMENT',
+      investment.id,
+      {
+        type: 'ROSCA',
+        name: investment.name,
         accountId: investment.accountId,
-      },
-    })
+        monthlyContribution: JSON.parse(investment.metadata || '{}').monthlyContribution,
+        totalMonths: JSON.parse(investment.metadata || '{}').totalMonths,
+        bookingFee: JSON.parse(investment.metadata || '{}').bookingFee,
+        rewardProgram: JSON.parse(investment.metadata || '{}').rewardProgram,
+        rewardAmount: JSON.parse(investment.metadata || '{}').rewardAmount,
+        receiptMonth: JSON.parse(investment.metadata || '{}').receiptMonth,
+      }
+    )
 
     return NextResponse.json(investment)
   } catch (error) {
