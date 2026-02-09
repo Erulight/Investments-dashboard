@@ -581,7 +581,7 @@ export function CirclysClient({ initialInvestments, userRole }: CirclysClientPro
                   totalMonths: meta.totalMonths || 12,
                   bookingFee: meta.bookingFee ?? 0,
                   rewardProgram: meta.rewardProgram ?? 'NONE',
-                  rewardAmount: meta.rewardAmount,
+                  rewardAmount: meta.rewardAmount ?? 0,
                   receiptMonth: meta.receiptMonth ?? undefined,
                   startDate: new Date(editingInvestment.startDate).toISOString().split('T')[0],
                   notes: editingInvestment.notes || '',

@@ -80,9 +80,6 @@ export function SavingsForm({ onSubmit, onCancel, initialData, isLoading }: Savi
     if (formData.receiptMonth && formData.receiptMonth > formData.totalMonths) {
       newErrors.receiptMonth = 'Receipt month cannot exceed total months'
     }
-    if (formData.rewardProgram && formData.rewardProgram !== 'NONE' && (!formData.rewardAmount || formData.rewardAmount <= 0)) {
-      newErrors.rewardAmount = 'Reward amount is required when reward program is selected'
-    }
     
     if (Object.keys(newErrors).length > 0) {
       setErrors(newErrors)
@@ -212,46 +209,27 @@ export function SavingsForm({ onSubmit, onCancel, initialData, isLoading }: Savi
             </p>
           </div>
 
-          {/* Reward Program */}
+          {/* Reward Amount (optional) */}
           <div>
-            <label htmlFor="rewardProgram" className="block text-sm font-medium text-gray-700 mb-2">
-              Reward Program
+            <label htmlFor="rewardAmount" className="block text-sm font-medium text-gray-700 mb-2">
+              Reward (SAR)
             </label>
-            <select
-              id="rewardProgram"
-              name="rewardProgram"
-              value={formData.rewardProgram}
+            <input
+              id="rewardAmount"
+              name="rewardAmount"
+              type="number"
+              step="0.01"
+              min="0"
+              value={formData.rewardAmount ?? ''}
               onChange={handleChange}
+              placeholder="0"
               className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500"
-            >
-              <option value="NONE">None</option>
-              <option value="FIXED">Fixed Amount</option>
-              <option value="PERCENTAGE">Percentage</option>
-            </select>
+            />
+            <p className="mt-1 text-sm text-gray-500">
+              Optional: Fixed reward amount per month. Leave empty or 0 for no reward.
+            </p>
+            {errors.rewardAmount && <p className="mt-1 text-sm text-red-600">{errors.rewardAmount}</p>}
           </div>
-
-          {/* Reward Amount (conditional) */}
-          {(formData.rewardProgram === 'FIXED' || formData.rewardProgram === 'PERCENTAGE') && (
-            <div>
-              <label htmlFor="rewardAmount" className="block text-sm font-medium text-gray-700 mb-2">
-                Reward {formData.rewardProgram === 'PERCENTAGE' ? '(%)' : '(SAR)'} *
-              </label>
-              <input
-                id="rewardAmount"
-                name="rewardAmount"
-                type="number"
-                step={formData.rewardProgram === 'PERCENTAGE' ? '0.01' : '0.01'}
-                min="0"
-                max={formData.rewardProgram === 'PERCENTAGE' ? '100' : undefined}
-                value={formData.rewardAmount ?? ''}
-                onChange={handleChange}
-                placeholder={formData.rewardProgram === 'PERCENTAGE' ? 'e.g., 5' : 'e.g., 500'}
-                className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500"
-                required
-              />
-              {errors.rewardAmount && <p className="mt-1 text-sm text-red-600">{errors.rewardAmount}</p>}
-            </div>
-          )}
 
           {/* Receipt Month (optional) */}
           <div>

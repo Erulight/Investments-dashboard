@@ -55,9 +55,6 @@ export async function PATCH(
       ...(validated.receiptMonth !== undefined ? { receiptMonth: validated.receiptMonth } : {}),
     }
 
-    const monthly = nextMeta.monthlyContribution ?? currentMeta.monthlyContribution ?? 0
-    const totalMonths = nextMeta.totalMonths ?? currentMeta.totalMonths ?? 0
-
     const updated = await prisma.investment.update({
       where: { id },
       data: {
@@ -65,7 +62,6 @@ export async function PATCH(
         ...(validated.name ? { name: validated.name } : {}),
         ...(validated.startDate ? { startDate: new Date(validated.startDate) } : {}),
         ...(validated.notes !== undefined ? { notes: validated.notes } : {}),
-        principalAmount: monthly * totalMonths,
         metadata: JSON.stringify(nextMeta),
       },
       include: {
