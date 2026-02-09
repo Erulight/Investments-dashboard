@@ -178,123 +178,100 @@ export default async function InvestmentsPage() {
   ).sort((a, b) => b[1] - a[1])
 
   return (
-    <div className="space-y-8 animate-fade-in">
-      {/* Header Section */}
-      <div className="bg-gradient-to-r from-blue-600 to-purple-600 rounded-2xl shadow-xl p-8 text-white">
-        <div className="flex items-center justify-between">
+    <div className="space-y-6 animate-fade-in">
+      {/* Header */}
+      <div className="bg-gradient-to-r from-slate-800 to-slate-900 rounded-xl shadow-md p-6 text-white">
+        <div className="flex items-center justify-between mb-5">
           <div>
-            <h1 className="text-4xl font-bold mb-2">Sukuk Investments</h1>
-            <p className="text-lg text-blue-100">
-              Islamic investment portfolio tracking and management
-            </p>
+            <h1 className="text-2xl font-bold">Sukuk Investments</h1>
+            <p className="text-sm text-slate-400 mt-1">Islamic investment portfolio tracking</p>
           </div>
-          <div className="hidden lg:block text-7xl">
-            💎
-          </div>
+          <span className="hidden lg:block text-4xl opacity-80">💎</span>
         </div>
 
-        {/* Summary Stats in Header */}
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mt-8">
-          <div className="bg-white/10 backdrop-blur-lg rounded-xl p-4 border border-white/20">
-            <p className="text-sm text-blue-100 mb-1">Total Portfolio Value</p>
-            <p className="text-2xl font-bold">
-              SAR {totalValue.toLocaleString(undefined, { maximumFractionDigits: 0 })}
-            </p>
+        <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+          <div className="bg-white/5 rounded-lg p-3 border border-white/10">
+            <p className="text-[11px] text-slate-400 uppercase tracking-wider">Portfolio Value</p>
+            <p className="text-lg font-bold mt-0.5">SAR {totalValue.toLocaleString(undefined, { maximumFractionDigits: 0 })}</p>
           </div>
-          <div className="bg-white/10 backdrop-blur-lg rounded-xl p-4 border border-white/20">
-            <p className="text-sm text-blue-100 mb-1">Total Return</p>
-            <p className="text-2xl font-bold">
-              SAR {totalReturn.toLocaleString()}
-            </p>
+          <div className="bg-white/5 rounded-lg p-3 border border-white/10">
+            <p className="text-[11px] text-slate-400 uppercase tracking-wider">Total Return</p>
+            <p className="text-lg font-bold mt-0.5">SAR {totalReturn.toLocaleString()}</p>
           </div>
-          <div className="bg-white/10 backdrop-blur-lg rounded-xl p-4 border border-white/20">
-            <p className="text-sm text-blue-100 mb-1">Return Percentage</p>
-            <p className="text-2xl font-bold">
+          <div className="bg-white/5 rounded-lg p-3 border border-white/10">
+            <p className="text-[11px] text-slate-400 uppercase tracking-wider">Return %</p>
+            <p className={`text-lg font-bold mt-0.5 ${returnPercentage >= 0 ? 'text-emerald-400' : 'text-red-400'}`}>
               {returnPercentage >= 0 ? '+' : ''}{returnPercentage.toFixed(2)}%
             </p>
           </div>
-        </div>
-
-        <div className="grid grid-cols-1 md:grid-cols-5 gap-4 mt-4">
-          <div className="bg-white/10 backdrop-blur-lg rounded-xl p-4 border border-white/20">
-            <p className="text-sm text-blue-100 mb-1">Total Received</p>
-            <p className="text-xl font-bold">
-              SAR {totalWithdrawn.toLocaleString(undefined, { maximumFractionDigits: 0 })}
-            </p>
-          </div>
-          <div className="bg-white/10 backdrop-blur-lg rounded-xl p-4 border border-white/20">
-            <p className="text-sm text-blue-100 mb-1">Total Fees Paid</p>
-            <p className="text-xl font-bold">
-              SAR {totalFeesPaid.toLocaleString(undefined, { maximumFractionDigits: 0 })}
-            </p>
-          </div>
-          <div className="bg-white/10 backdrop-blur-lg rounded-xl p-4 border border-white/20">
-            <p className="text-sm text-blue-100 mb-1">Receivable</p>
-            <p className="text-xl font-bold">
-              SAR {totalReceivable.toLocaleString(undefined, { maximumFractionDigits: 0 })}
-            </p>
-          </div>
-          <div className="bg-white/10 backdrop-blur-lg rounded-xl p-4 border border-white/20">
-            <p className="text-sm text-blue-100 mb-1">Active Deals</p>
-            <p className="text-xl font-bold">{activeDealsCount}</p>
-          </div>
-          <div className="bg-white/10 backdrop-blur-lg rounded-xl p-4 border border-white/20">
-            <p className="text-sm text-blue-100 mb-1">Avg Days to Maturity</p>
-            <p className="text-xl font-bold">
-              {avgDaysToMaturity === null ? '—' : Math.round(avgDaysToMaturity).toLocaleString()}
-            </p>
+          <div className="bg-white/5 rounded-lg p-3 border border-white/10">
+            <p className="text-[11px] text-slate-400 uppercase tracking-wider">Active Deals</p>
+            <p className="text-lg font-bold mt-0.5">{activeDealsCount}</p>
           </div>
         </div>
 
-        <div className="mt-4 bg-white/10 backdrop-blur-lg rounded-xl p-4 border border-white/20">
-          <p className="text-sm text-blue-100 mb-3">By Platform (Active Invested)</p>
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
-            {platformTotals.length === 0 ? (
-              <p className="text-sm text-blue-100">—</p>
-            ) : (
-              platformTotals.map(([platform, value]) => (
-                <div key={platform} className="flex items-center justify-between rounded-lg bg-white/5 px-3 py-2">
-                  <span className="text-sm text-white/90 truncate">{platform}</span>
-                  <span className="text-sm font-semibold tabular-nums">
-                    SAR {value.toLocaleString(undefined, { maximumFractionDigits: 0 })}
-                  </span>
+        <div className="grid grid-cols-2 md:grid-cols-4 gap-3 mt-3">
+          <div className="bg-white/5 rounded-lg p-3 border border-white/10">
+            <p className="text-[11px] text-slate-400 uppercase tracking-wider">Received</p>
+            <p className="text-sm font-bold mt-0.5">SAR {totalWithdrawn.toLocaleString(undefined, { maximumFractionDigits: 0 })}</p>
+          </div>
+          <div className="bg-white/5 rounded-lg p-3 border border-white/10">
+            <p className="text-[11px] text-slate-400 uppercase tracking-wider">Fees Paid</p>
+            <p className="text-sm font-bold mt-0.5">SAR {totalFeesPaid.toLocaleString(undefined, { maximumFractionDigits: 0 })}</p>
+          </div>
+          <div className="bg-white/5 rounded-lg p-3 border border-white/10">
+            <p className="text-[11px] text-slate-400 uppercase tracking-wider">Receivable</p>
+            <p className="text-sm font-bold mt-0.5">SAR {totalReceivable.toLocaleString(undefined, { maximumFractionDigits: 0 })}</p>
+          </div>
+          <div className="bg-white/5 rounded-lg p-3 border border-white/10">
+            <p className="text-[11px] text-slate-400 uppercase tracking-wider">Avg Days to Maturity</p>
+            <p className="text-sm font-bold mt-0.5">{avgDaysToMaturity === null ? '—' : Math.round(avgDaysToMaturity).toLocaleString()}</p>
+          </div>
+        </div>
+
+        {platformTotals.length > 0 && (
+          <div className="mt-3 bg-white/5 rounded-lg p-3 border border-white/10">
+            <p className="text-[11px] text-slate-400 uppercase tracking-wider mb-2">By Platform</p>
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-1.5">
+              {platformTotals.map(([platform, value]) => (
+                <div key={platform} className="flex items-center justify-between rounded-md bg-white/5 px-3 py-1.5">
+                  <span className="text-xs text-white/80 truncate">{platform}</span>
+                  <span className="text-xs font-semibold tabular-nums">SAR {value.toLocaleString(undefined, { maximumFractionDigits: 0 })}</span>
                 </div>
-              ))
-            )}
+              ))}
+            </div>
           </div>
-        </div>
+        )}
       </div>
 
       {/* Investments List */}
-      <div className="grid grid-cols-1 gap-6">
-        <Card>
-          <CardContent>
-            <SukukList initialSukuk={investments} userRole={user.role} />
-          </CardContent>
-        </Card>
-      </div>
+      <Card>
+        <CardContent>
+          <SukukList initialSukuk={investments} userRole={user.role} />
+        </CardContent>
+      </Card>
 
       {/* Performance Overview for Owner */}
       {user.role === 'OWNER' && investments.length > 0 && (
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-          <Card hover className="sukuk-card-hover">
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+          <Card>
             <CardHeader>
-              <CardTitle className="text-xl font-bold text-gray-900">Portfolio Distribution</CardTitle>
+              <CardTitle className="text-sm font-bold text-gray-800">Portfolio Distribution</CardTitle>
             </CardHeader>
             <CardContent>
-              <div className="space-y-4">
+              <div className="space-y-3">
                 {activeInvestments.slice(0, 5).map((inv: any) => {
                   const principal = inv.principalAmount
                   const percentage = totalInvested > 0 ? (principal / totalInvested * 100) : 0
                   return (
                     <div key={inv.id}>
-                      <div className="flex items-center justify-between mb-2">
-                        <span className="text-sm font-medium text-gray-700">{inv.name}</span>
-                        <span className="text-sm font-semibold text-gray-900">{percentage.toFixed(1)}%</span>
+                      <div className="flex items-center justify-between mb-1">
+                        <span className="text-xs font-medium text-gray-600 truncate pr-2">{inv.name}</span>
+                        <span className="text-xs font-semibold text-gray-800 tabular-nums">{percentage.toFixed(1)}%</span>
                       </div>
-                      <div className="w-full bg-gray-200 rounded-full h-2">
+                      <div className="w-full bg-gray-100 rounded-full h-1.5">
                         <div 
-                          className="bg-gradient-to-r from-blue-500 to-purple-600 h-2 rounded-full transition-all duration-500"
+                          className="bg-slate-700 h-1.5 rounded-full transition-all duration-500"
                           style={{ width: `${percentage}%` }}
                         ></div>
                       </div>
@@ -305,63 +282,33 @@ export default async function InvestmentsPage() {
             </CardContent>
           </Card>
 
-          <Card hover className="sukuk-card-hover">
+          <Card>
             <CardHeader>
-              <CardTitle className="text-xl font-bold text-gray-900">Quick Stats</CardTitle>
+              <CardTitle className="text-sm font-bold text-gray-800">Quick Stats</CardTitle>
             </CardHeader>
             <CardContent>
-              <div className="space-y-4">
-                <div className="flex items-center justify-between p-4 bg-blue-50 rounded-xl">
-                  <div className="flex items-center space-x-3">
-                    <div className="w-12 h-12 bg-blue-500 rounded-xl flex items-center justify-center text-white text-xl">
-                      📊
-                    </div>
-                    <div>
-                      <p className="text-sm text-gray-600">Avg. Deal Size</p>
-                      <p className="text-xl font-bold text-gray-900">
-                        SAR {(totalInvested / Math.max(1, activeDealsCount)).toLocaleString(undefined, { maximumFractionDigits: 0 })}
-                      </p>
-                    </div>
-                  </div>
+              <div className="space-y-2">
+                <div className="flex items-center justify-between p-3 bg-gray-50 rounded-lg">
+                  <span className="text-xs text-gray-500">Avg. Deal Size</span>
+                  <span className="text-sm font-bold text-gray-900">
+                    SAR {(totalInvested / Math.max(1, activeDealsCount)).toLocaleString(undefined, { maximumFractionDigits: 0 })}
+                  </span>
                 </div>
-                
-                <div className="flex items-center justify-between p-4 bg-green-50 rounded-xl">
-                  <div className="flex items-center space-x-3">
-                    <div className="w-12 h-12 bg-green-500 rounded-xl flex items-center justify-center text-white text-xl">
-                      ✅
-                    </div>
-                    <div>
-                      <p className="text-sm text-gray-600">Active Deals</p>
-                      <p className="text-xl font-bold text-gray-900">{activeDealsCount}</p>
-                    </div>
-                  </div>
+                <div className="flex items-center justify-between p-3 bg-gray-50 rounded-lg">
+                  <span className="text-xs text-gray-500">Active Deals</span>
+                  <span className="text-sm font-bold text-gray-900">{activeDealsCount}</span>
                 </div>
-
-                <div className="flex items-center justify-between p-4 bg-purple-50 rounded-xl">
-                  <div className="flex items-center space-x-3">
-                    <div className="w-12 h-12 bg-purple-500 rounded-xl flex items-center justify-center text-white text-xl">
-                      💵
-                    </div>
-                    <div>
-                      <p className="text-sm text-gray-600">Total Withdrawn</p>
-                      <p className="text-xl font-bold text-gray-900">
-                        SAR {totalWithdrawn.toLocaleString(undefined, { maximumFractionDigits: 0 })}
-                      </p>
-                    </div>
-                  </div>
+                <div className="flex items-center justify-between p-3 bg-gray-50 rounded-lg">
+                  <span className="text-xs text-gray-500">Total Withdrawn</span>
+                  <span className="text-sm font-bold text-gray-900">
+                    SAR {totalWithdrawn.toLocaleString(undefined, { maximumFractionDigits: 0 })}
+                  </span>
                 </div>
-                <div className="flex items-center justify-between p-4 bg-yellow-50 rounded-xl">
-                  <div className="flex items-center space-x-3">
-                    <div className="w-12 h-12 bg-yellow-500 rounded-xl flex items-center justify-center text-white text-xl">
-                      🧾
-                    </div>
-                    <div>
-                      <p className="text-sm text-gray-600">Receivable</p>
-                      <p className="text-xl font-bold text-gray-900">
-                        SAR {totalReceivable.toLocaleString(undefined, { maximumFractionDigits: 0 })}
-                      </p>
-                    </div>
-                  </div>
+                <div className="flex items-center justify-between p-3 bg-gray-50 rounded-lg">
+                  <span className="text-xs text-gray-500">Receivable</span>
+                  <span className="text-sm font-bold text-gray-900">
+                    SAR {totalReceivable.toLocaleString(undefined, { maximumFractionDigits: 0 })}
+                  </span>
                 </div>
               </div>
             </CardContent>

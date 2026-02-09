@@ -125,24 +125,24 @@ export function Navbar({ user }: NavbarProps) {
   }
 
   return (
-    <nav className="bg-white border-b border-gray-200 sticky top-0 z-50 backdrop-blur-lg bg-white/80">
-      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-        <div className="flex justify-between h-16">
-          <div className="flex items-center space-x-8">
+    <nav className="bg-slate-900 sticky top-0 z-50 shadow-lg">
+      <div className="w-full px-4 sm:px-6 lg:px-8">
+        <div className="flex justify-between h-14">
+          <div className="flex items-center space-x-6">
             <div className="flex-shrink-0 flex items-center">
-              <div className="flex items-center space-x-2">
-                <div className="w-10 h-10 bg-gradient-to-br from-blue-500 to-purple-600 rounded-lg flex items-center justify-center text-white font-bold text-lg">
+              <div className="flex items-center space-x-2.5">
+                <div className="w-8 h-8 bg-white/10 rounded-lg flex items-center justify-center text-white font-bold text-sm">
                   S
                 </div>
                 <div>
-                  <h1 className="text-xl font-bold bg-gradient-to-r from-blue-600 to-purple-600 bg-clip-text text-transparent">
+                  <h1 className="text-sm font-bold text-white tracking-wide">
                     Sukuk Portfolio
                   </h1>
-                  <p className="text-xs text-gray-500">Investment Tracker</p>
+                  <p className="text-[10px] text-slate-400 -mt-0.5">Investment Tracker</p>
                 </div>
               </div>
             </div>
-            <div className="hidden md:flex md:space-x-2">
+            <div className="hidden md:flex md:space-x-1">
               {filteredNav.map((item) => (
                 <div
                   key={item.name}
@@ -153,32 +153,32 @@ export function Navbar({ user }: NavbarProps) {
                   {item.children ? (
                     <>
                       <button
-                        className={`inline-flex items-center px-4 py-2 rounded-lg text-sm font-medium transition-all duration-200 ${
+                        className={`inline-flex items-center px-3 py-1.5 rounded-md text-xs font-medium transition-all duration-150 ${
                           isActiveLink(item.href, item.children)
-                            ? 'bg-gradient-to-r from-blue-500 to-purple-600 text-white shadow-md'
-                            : 'text-gray-600 hover:bg-gray-100 hover:text-gray-900'
+                            ? 'bg-white/15 text-white'
+                            : 'text-slate-300 hover:bg-white/10 hover:text-white'
                         }`}
                       >
-                        <span className="mr-2">{item.icon}</span>
+                        <span className="mr-1.5 text-sm">{item.icon}</span>
                         {item.name}
-                        <svg className="ml-1 w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <svg className="ml-1 w-3 h-3 opacity-50" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                           <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
                         </svg>
                       </button>
                       {openDropdown === item.name && (
-                        <div className="absolute left-0 mt-2 w-56 rounded-xl shadow-xl bg-white ring-1 ring-black ring-opacity-5 overflow-hidden">
-                          <div className="py-2">
+                        <div className="absolute left-0 mt-1 w-52 rounded-lg shadow-xl bg-slate-800 ring-1 ring-white/10 overflow-hidden">
+                          <div className="py-1">
                             {item.children.map((child) => (
                               <Link
                                 key={child.name}
                                 href={child.href}
-                                className={`flex items-center px-4 py-3 text-sm font-medium transition-colors duration-150 ${
+                                className={`flex items-center px-3 py-2.5 text-xs font-medium transition-colors duration-100 ${
                                   pathname === child.href || pathname?.startsWith(child.href + '/')
-                                    ? 'bg-gradient-to-r from-blue-50 to-purple-50 text-blue-700'
-                                    : 'text-gray-700 hover:bg-gray-50'
+                                    ? 'bg-white/10 text-white'
+                                    : 'text-slate-300 hover:bg-white/5 hover:text-white'
                                 }`}
                               >
-                                <span className="mr-3 text-lg">{child.icon}</span>
+                                <span className="mr-2.5 text-sm">{child.icon}</span>
                                 {child.name}
                               </Link>
                             ))}
@@ -189,13 +189,13 @@ export function Navbar({ user }: NavbarProps) {
                   ) : (
                     <Link
                       href={item.href}
-                      className={`inline-flex items-center px-4 py-2 rounded-lg text-sm font-medium transition-all duration-200 ${
+                      className={`inline-flex items-center px-3 py-1.5 rounded-md text-xs font-medium transition-all duration-150 ${
                         isActiveLink(item.href)
-                          ? 'bg-gradient-to-r from-blue-500 to-purple-600 text-white shadow-md'
-                          : 'text-gray-600 hover:bg-gray-100 hover:text-gray-900'
+                          ? 'bg-white/15 text-white'
+                          : 'text-slate-300 hover:bg-white/10 hover:text-white'
                       }`}
                     >
-                      <span className="mr-2">{item.icon}</span>
+                      <span className="mr-1.5 text-sm">{item.icon}</span>
                       {item.name}
                     </Link>
                   )}
@@ -203,20 +203,20 @@ export function Navbar({ user }: NavbarProps) {
               ))}
             </div>
           </div>
-          <div className="flex items-center space-x-4">
+          <div className="flex items-center space-x-3">
             <div className="hidden sm:block text-right">
-              <div className="text-sm font-semibold text-gray-900">{user.name}</div>
-              <div className="text-xs text-gray-500 capitalize">{user.role.toLowerCase()}</div>
+              <div className="text-xs font-semibold text-white">{user.name}</div>
+              <div className="text-[10px] text-slate-400 capitalize">{user.role.toLowerCase()}</div>
             </div>
-            <div className="w-10 h-10 bg-gradient-to-br from-blue-400 to-purple-500 rounded-full flex items-center justify-center text-white font-semibold shadow-md">
+            <div className="w-8 h-8 bg-white/10 rounded-full flex items-center justify-center text-white text-xs font-semibold">
               {user.name.charAt(0).toUpperCase()}
             </div>
             <button
               onClick={handleLogout}
               disabled={loading}
-              className="inline-flex items-center px-4 py-2 border border-gray-300 text-sm font-medium rounded-lg text-gray-700 bg-white hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 disabled:opacity-50 transition-all duration-200"
+              className="px-3 py-1.5 text-xs font-medium rounded-md text-slate-300 bg-white/5 hover:bg-white/10 hover:text-white border border-white/10 disabled:opacity-50 transition-all duration-150"
             >
-              {loading ? 'Logging out...' : 'Logout'}
+              {loading ? '...' : 'Logout'}
             </button>
           </div>
         </div>

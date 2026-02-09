@@ -9,9 +9,9 @@ export function Card({ children, className = '', variant = 'default', hover = fa
   const baseClasses = 'rounded-xl p-6 transition-all duration-300'
   
   const variantClasses = {
-    default: 'bg-white shadow-md border border-gray-100',
-    gradient: 'bg-gradient-to-br from-blue-500 to-purple-600 text-white shadow-lg',
-    bordered: 'bg-white border-2 border-gray-200 shadow-sm',
+    default: 'bg-white shadow-sm border border-gray-200',
+    gradient: 'bg-gradient-to-br from-slate-800 to-slate-900 text-white shadow-md',
+    bordered: 'bg-white border border-gray-200 shadow-sm',
   }
   
   const hoverClass = hover ? 'hover:shadow-xl hover:-translate-y-1 cursor-pointer' : ''

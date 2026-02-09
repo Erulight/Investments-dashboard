@@ -8,17 +8,15 @@ export default async function UsersPage() {
   await requireAuth(['OWNER'])
 
   return (
-    <div className="space-y-8">
-      <div>
-        <h1 className="text-3xl font-bold text-gray-900">User Management</h1>
-        <p className="mt-2 text-gray-600">
-          Create and manage user accounts with granular permissions
-        </p>
+    <div className="space-y-6">
+      <div className="bg-gradient-to-r from-slate-800 to-slate-900 rounded-xl shadow-md p-6 text-white">
+        <h1 className="text-2xl font-bold">User Management</h1>
+        <p className="text-sm text-slate-400 mt-1">Create and manage user accounts with granular permissions</p>
       </div>
 
       <Card>
         <CardHeader>
-          <CardTitle>Create New User</CardTitle>
+          <CardTitle className="text-sm font-bold text-gray-800">Create New User</CardTitle>
         </CardHeader>
         <CardContent>
           <CreateUserForm />
@@ -27,7 +25,7 @@ export default async function UsersPage() {
 
       <Card>
         <CardHeader>
-          <CardTitle>Existing Users</CardTitle>
+          <CardTitle className="text-sm font-bold text-gray-800">Existing Users</CardTitle>
         </CardHeader>
         <CardContent>
           <UserList />

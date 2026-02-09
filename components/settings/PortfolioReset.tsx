@@ -57,10 +57,10 @@ export function PortfolioReset() {
   return (
     <Card>
       <CardHeader>
-        <CardTitle>Reset Portfolio Data</CardTitle>
+        <CardTitle className="text-sm font-bold text-gray-800">Reset Portfolio Data</CardTitle>
       </CardHeader>
       <CardContent className="space-y-4">
-        <p className="text-sm text-gray-600">
+        <p className="text-xs text-gray-500">
           This will delete all Sukuk deals, transactions, and reset cash balance to 0.
           Use this only if you want a completely clean start.
         </p>
@@ -89,14 +89,14 @@ export function PortfolioReset() {
               type="text"
               value={confirmText}
               onChange={(e) => setConfirmText(e.target.value)}
-              className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:border-blue-500 focus:ring-2 focus:ring-blue-500"
+              className="w-full rounded-lg border border-gray-200 px-3 py-2 text-sm focus:border-red-500 focus:ring-1 focus:ring-red-500 outline-none"
               placeholder="Type RESET"
             />
             <input
               type="password"
               value={password}
               onChange={(e) => setPassword(e.target.value)}
-              className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:border-blue-500 focus:ring-2 focus:ring-blue-500"
+              className="w-full rounded-lg border border-gray-200 px-3 py-2 text-sm focus:border-red-500 focus:ring-1 focus:ring-red-500 outline-none"
               placeholder="Owner password"
             />
           </div>

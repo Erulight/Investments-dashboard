@@ -165,39 +165,39 @@ export function SukukPlatformManager() {
   return (
     <Card>
       <CardHeader>
-        <CardTitle>Sukuk Platforms</CardTitle>
+        <CardTitle className="text-sm font-bold text-gray-800">Sukuk Platforms</CardTitle>
       </CardHeader>
       <CardContent className="space-y-6">
         <form onSubmit={handleSubmit} className="grid grid-cols-1 gap-4 md:grid-cols-4">
           <div className="md:col-span-2">
-            <label className="block text-sm font-medium text-gray-700 mb-1">Platform Name</label>
+            <label className="block text-xs font-medium text-gray-500 mb-1">Platform Name</label>
             <input
               type="text"
               required
               value={form.name}
               onChange={(e) => setForm((prev) => ({ ...prev, name: e.target.value }))}
-              className="w-full rounded-lg border border-gray-300 px-3 py-2 focus:border-blue-500 focus:ring-2 focus:ring-blue-500"
+              className="w-full rounded-lg border border-gray-200 px-3 py-2 text-sm focus:border-slate-500 focus:ring-1 focus:ring-slate-500 outline-none"
               placeholder="e.g., Sukuk Capital"
             />
           </div>
           <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">Currency</label>
+            <label className="block text-xs font-medium text-gray-500 mb-1">Currency</label>
             <input
               type="text"
               required
               value={form.currency}
               onChange={(e) => setForm((prev) => ({ ...prev, currency: e.target.value.toUpperCase() }))}
-              className="w-full rounded-lg border border-gray-300 px-3 py-2 focus:border-blue-500 focus:ring-2 focus:ring-blue-500"
+              className="w-full rounded-lg border border-gray-200 px-3 py-2 text-sm focus:border-slate-500 focus:ring-1 focus:ring-slate-500 outline-none"
               placeholder="SAR"
             />
           </div>
           <div className="md:col-span-4">
-            <label className="block text-sm font-medium text-gray-700 mb-1">Description (optional)</label>
+            <label className="block text-xs font-medium text-gray-500 mb-1">Description (optional)</label>
             <input
               type="text"
               value={form.description}
               onChange={(e) => setForm((prev) => ({ ...prev, description: e.target.value }))}
-              className="w-full rounded-lg border border-gray-300 px-3 py-2 focus:border-blue-500 focus:ring-2 focus:ring-blue-500"
+              className="w-full rounded-lg border border-gray-200 px-3 py-2 text-sm focus:border-slate-500 focus:ring-1 focus:ring-slate-500 outline-none"
               placeholder="Short description for this platform"
             />
           </div>
@@ -227,7 +227,7 @@ export function SukukPlatformManager() {
                         type="text"
                         value={editForm.name}
                         onChange={(e) => setEditForm((prev) => ({ ...prev, name: e.target.value }))}
-                        className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:border-blue-500 focus:ring-2 focus:ring-blue-500"
+                        className="w-full rounded-lg border border-gray-200 px-3 py-2 text-sm focus:border-slate-500 focus:ring-1 focus:ring-slate-500 outline-none"
                       />
                     </div>
                     <div>
@@ -241,7 +241,7 @@ export function SukukPlatformManager() {
                             currency: e.target.value.toUpperCase(),
                           }))
                         }
-                        className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:border-blue-500 focus:ring-2 focus:ring-blue-500"
+                        className="w-full rounded-lg border border-gray-200 px-3 py-2 text-sm focus:border-slate-500 focus:ring-1 focus:ring-slate-500 outline-none"
                       />
                     </div>
                   </div>
@@ -253,7 +253,7 @@ export function SukukPlatformManager() {
                       onChange={(e) =>
                         setEditForm((prev) => ({ ...prev, description: e.target.value }))
                       }
-                      className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:border-blue-500 focus:ring-2 focus:ring-blue-500"
+                      className="w-full rounded-lg border border-gray-200 px-3 py-2 text-sm focus:border-slate-500 focus:ring-1 focus:ring-slate-500 outline-none"
                     />
                   </div>
                   <div className="flex items-center gap-2">
@@ -301,21 +301,21 @@ export function SukukPlatformManager() {
             or enter your owner password to confirm.
           </p>
           <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">Type DELETE</label>
+            <label className="block text-xs font-medium text-gray-600 mb-1">Type DELETE</label>
             <input
               type="text"
               value={deleteConfirmText}
               onChange={(e) => setDeleteConfirmText(e.target.value)}
-              className="w-full rounded-lg border border-gray-300 px-3 py-2 focus:border-blue-500 focus:ring-2 focus:ring-blue-500"
+              className="w-full rounded-lg border border-gray-200 px-3 py-2 text-sm focus:border-red-500 focus:ring-1 focus:ring-red-500 outline-none"
             />
           </div>
           <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">Owner Password</label>
+            <label className="block text-xs font-medium text-gray-600 mb-1">Owner Password</label>
             <input
               type="password"
               value={deletePassword}
               onChange={(e) => setDeletePassword(e.target.value)}
-              className="w-full rounded-lg border border-gray-300 px-3 py-2 focus:border-blue-500 focus:ring-2 focus:ring-blue-500"
+              className="w-full rounded-lg border border-gray-200 px-3 py-2 text-sm focus:border-red-500 focus:ring-1 focus:ring-red-500 outline-none"
             />
           </div>
           {deleteError && <p className="text-sm text-red-600">{deleteError}</p>}

@@ -111,125 +111,95 @@ export default async function DashboardPage({
   const returnPercentage = totalInvested > 0 ? ((totalValue - totalInvested) / totalInvested * 100) : 0
 
   return (
-    <div className="space-y-8 animate-fade-in">
-      {/* Welcome Header */}
-      <div className="bg-white rounded-2xl shadow-lg p-8 border border-gray-100">
+    <div className="space-y-6 animate-fade-in">
+      {/* Header */}
+      <div className="bg-gradient-to-r from-slate-800 to-slate-900 rounded-xl shadow-md p-6 text-white">
         <div className="flex items-center justify-between">
           <div>
-            <h1 className="text-4xl font-bold bg-gradient-to-r from-blue-600 to-purple-600 bg-clip-text text-transparent">
-              Welcome back, {user.name}!
-            </h1>
-            <p className="mt-2 text-lg text-gray-600">
-              Here&apos;s an overview of your Sukuk portfolio performance
-            </p>
+            <h1 className="text-2xl font-bold">Welcome back, {user.name}</h1>
+            <p className="text-sm text-slate-400 mt-1">Portfolio overview for {selectedYear}</p>
           </div>
-          <div className="hidden lg:block">
-            <div className="w-20 h-20 bg-gradient-to-br from-blue-500 to-purple-600 rounded-2xl flex items-center justify-center shadow-lg">
-              <span className="text-4xl">💎</span>
-            </div>
-          </div>
-        </div>
-      </div>
-
-      <div className="flex flex-wrap items-center justify-between gap-4">
-        <YearFilter selectedYear={selectedYear} />
-        <div className="flex items-center gap-3">
-          <ReportButton selectedYear={selectedYear} />
-          <div className="text-sm text-gray-500">
-            Showing gains for {selectedYear}
+          <div className="flex items-center gap-3">
+            <ReportButton selectedYear={selectedYear} />
+            <YearFilter selectedYear={selectedYear} />
           </div>
         </div>
       </div>
 
       {/* Stats Grid */}
-      <div className="grid grid-cols-1 gap-6 sm:grid-cols-2 lg:grid-cols-5">
+      <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-5">
         {user.role === 'OWNER' && (
           <CashBalanceCard initialCash={Number.isFinite(cashBalance) ? cashBalance : 0} />
         )}
-        <Card hover className="sukuk-card-hover">
+        <Card>
           <CardContent>
-            <div className="flex items-center justify-between mb-2">
-              <p className="text-sm font-medium text-gray-500">Total Invested</p>
-              <span className="text-2xl">📈</span>
-            </div>
-            <div className="text-3xl font-bold text-gray-900">
+            <p className="text-xs font-medium text-gray-500 uppercase tracking-wider">Total Invested</p>
+            <div className="text-2xl font-bold text-gray-900 mt-1">
               SAR {totalInvested.toLocaleString()}
             </div>
-            <p className="text-xs text-gray-500 mt-2">Principal Amount</p>
+            <p className="text-[11px] text-gray-400 mt-1">Principal Amount</p>
           </CardContent>
         </Card>
 
-        <Card hover className="sukuk-card-hover">
+        <Card>
           <CardContent>
-            <div className="flex items-center justify-between mb-2">
-              <p className="text-sm font-medium text-gray-500">
-                {user.role === 'OWNER' ? 'Portfolio Value' : 'Investment Value'}
-              </p>
-              <span className="text-2xl">💰</span>
-            </div>
-            <div className="text-3xl font-bold text-blue-600">
+            <p className="text-xs font-medium text-gray-500 uppercase tracking-wider">
+              {user.role === 'OWNER' ? 'Portfolio Value' : 'Investment Value'}
+            </p>
+            <div className="text-2xl font-bold text-gray-900 mt-1">
               SAR {displayedValue.toLocaleString()}
             </div>
-            <p className="text-xs text-gray-500 mt-2">
-              {user.role === 'OWNER' ? 'Cash + Investments' : 'Your share in investments'}
+            <p className="text-[11px] text-gray-400 mt-1">
+              {user.role === 'OWNER' ? 'Cash + Investments' : 'Your share'}
             </p>
           </CardContent>
         </Card>
 
-        <Card hover className="sukuk-card-hover">
+        <Card>
           <CardContent>
-            <div className="flex items-center justify-between mb-2">
-              <p className="text-sm font-medium text-gray-500">Yearly Return</p>
-              <span className="text-2xl">{yearlyProfitValue >= 0 ? '✨' : '📉'}</span>
-            </div>
-            <div className={`text-3xl font-bold ${yearlyProfitValue >= 0 ? 'text-green-600' : 'text-red-600'}`}>
+            <p className="text-xs font-medium text-gray-500 uppercase tracking-wider">Yearly Return</p>
+            <div className={`text-2xl font-bold mt-1 ${yearlyProfitValue >= 0 ? 'text-emerald-600' : 'text-red-600'}`}>
               SAR {yearlyProfitValue.toLocaleString()}
             </div>
-            <p className={`text-xs mt-2 font-semibold ${returnPercentage >= 0 ? 'text-green-600' : 'text-red-600'}`}>
-              {returnPercentage >= 0 ? '↑' : '↓'} {Math.abs(returnPercentage).toFixed(2)}% Return
+            <p className={`text-[11px] mt-1 font-semibold ${returnPercentage >= 0 ? 'text-emerald-600' : 'text-red-600'}`}>
+              {returnPercentage >= 0 ? '↑' : '↓'} {Math.abs(returnPercentage).toFixed(2)}%
             </p>
           </CardContent>
         </Card>
 
-        <Card variant="gradient" className="sukuk-card-hover">
+        <Card>
           <CardContent>
-            <div className="flex items-center justify-between mb-2">
-              <p className="text-sm font-medium text-white/90">Active Sukuk</p>
-              <span className="text-2xl">🎯</span>
-            </div>
-            <div className="text-3xl font-bold text-white">
+            <p className="text-xs font-medium text-gray-500 uppercase tracking-wider">Active Deals</p>
+            <div className="text-2xl font-bold text-gray-900 mt-1">
               {activeInvestments}
             </div>
-            <p className="text-xs text-white/80 mt-2">Investment Deals</p>
+            <p className="text-[11px] text-gray-400 mt-1">Investment Deals</p>
           </CardContent>
         </Card>
       </div>
 
-      {/* Recent Transactions removed per user request */}
       {/* Quick Actions */}
       {user.role === 'OWNER' && (
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-          <Card hover variant="bordered" className="sukuk-card-hover">
-            <CardContent className="text-center py-8">
-              <div className="text-5xl mb-4">📥</div>
-              <h3 className="text-lg font-semibold text-gray-900 mb-2">Import Data</h3>
-              <p className="text-sm text-gray-600">Upload CSV files to import Sukuk investments</p>
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+          <Card hover variant="bordered">
+            <CardContent className="text-center py-6">
+              <div className="text-3xl mb-3">📥</div>
+              <h3 className="text-sm font-semibold text-gray-900 mb-1">Import Data</h3>
+              <p className="text-xs text-gray-500">Upload CSV files to import investments</p>
             </CardContent>
           </Card>
-          
-          <Card hover variant="bordered" className="sukuk-card-hover">
-            <CardContent className="text-center py-8">
-              <div className="text-5xl mb-4">➕</div>
-              <h3 className="text-lg font-semibold text-gray-900 mb-2">Add Investment</h3>
-              <p className="text-sm text-gray-600">Manually create a new Sukuk deal</p>
+          <Card hover variant="bordered">
+            <CardContent className="text-center py-6">
+              <div className="text-3xl mb-3">➕</div>
+              <h3 className="text-sm font-semibold text-gray-900 mb-1">Add Investment</h3>
+              <p className="text-xs text-gray-500">Manually create a new deal</p>
             </CardContent>
           </Card>
-          
-          <Card hover variant="bordered" className="sukuk-card-hover">
-            <CardContent className="text-center py-8">
-              <div className="text-5xl mb-4">📊</div>
-              <h3 className="text-lg font-semibold text-gray-900 mb-2">View Reports</h3>
-              <p className="text-sm text-gray-600">Generate detailed portfolio reports</p>
+          <Card hover variant="bordered">
+            <CardContent className="text-center py-6">
+              <div className="text-3xl mb-3">📊</div>
+              <h3 className="text-sm font-semibold text-gray-900 mb-1">View Reports</h3>
+              <p className="text-xs text-gray-500">Generate portfolio reports</p>
             </CardContent>
           </Card>
         </div>

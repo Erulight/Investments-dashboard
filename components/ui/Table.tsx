@@ -24,7 +24,7 @@ export const Table: FC<TableProps> = ({ children, className = '' }) => {
 
 export const TableHeader: FC<TableProps> = ({ children }) => {
   return (
-    <thead className="bg-gradient-to-r from-gray-50 to-blue-50">
+    <thead className="bg-gray-50">
       {children}
     </thead>
   )

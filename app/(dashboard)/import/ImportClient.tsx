@@ -50,10 +50,10 @@ export default function ImportClient() {
   }
 
   return (
-    <div className="space-y-8">
-      <div>
-        <h1 className="text-3xl font-bold text-gray-900">Import Data</h1>
-        <p className="mt-2 text-gray-600">Import investment data from CSV files</p>
+    <div className="space-y-6">
+      <div className="bg-gradient-to-r from-slate-800 to-slate-900 rounded-xl shadow-md p-6 text-white">
+        <h1 className="text-2xl font-bold">Import Data</h1>
+        <p className="text-sm text-slate-400 mt-1">Import investment data from CSV files</p>
       </div>
 
       <Card>

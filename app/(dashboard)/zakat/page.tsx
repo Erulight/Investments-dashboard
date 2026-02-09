@@ -145,9 +145,9 @@ export default async function ZakatPage() {
 
   return (
     <div className="space-y-6">
-      <div>
-        <h1 className="text-3xl font-bold text-gray-900">Zakat Dashboard</h1>
-        <p className="text-sm text-gray-600 mt-2">
+      <div className="bg-gradient-to-r from-slate-800 to-slate-900 rounded-xl shadow-md p-6 text-white">
+        <h1 className="text-2xl font-bold">Zakat Dashboard</h1>
+        <p className="text-sm text-slate-400 mt-1">
           Zakat is calculated only on cash received after the haul is completed.
         </p>
       </div>
