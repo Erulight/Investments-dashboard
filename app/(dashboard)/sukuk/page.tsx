@@ -140,6 +140,7 @@ export default async function InvestmentsPage() {
   const totalValue = totalInvested
   const totalReturn = totalNetProfit
   const returnPercentage = totalInvested > 0 ? ((totalReturn / totalInvested) * 100) : 0
+  const activeDealsCount = activeInvestments.length
 
   return (
     <div className="space-y-8 animate-fade-in">
@@ -198,7 +199,7 @@ export default async function InvestmentsPage() {
             </CardHeader>
             <CardContent>
               <div className="space-y-4">
-                {investments.slice(0, 5).map((inv: any) => {
+                {activeInvestments.slice(0, 5).map((inv: any) => {
                   const principal = inv.principalAmount
                   const percentage = totalInvested > 0 ? (principal / totalInvested * 100) : 0
                   return (
@@ -234,7 +235,7 @@ export default async function InvestmentsPage() {
                     <div>
                       <p className="text-sm text-gray-600">Avg. Deal Size</p>
                       <p className="text-xl font-bold text-gray-900">
-                        SAR {(totalInvested / investments.length).toLocaleString(undefined, { maximumFractionDigits: 0 })}
+                        SAR {(totalInvested / Math.max(1, activeDealsCount)).toLocaleString(undefined, { maximumFractionDigits: 0 })}
                       </p>
                     </div>
                   </div>
@@ -246,8 +247,8 @@ export default async function InvestmentsPage() {
                       ✅
                     </div>
                     <div>
-                      <p className="text-sm text-gray-600">Total Deals</p>
-                      <p className="text-xl font-bold text-gray-900">{investments.length}</p>
+                      <p className="text-sm text-gray-600">Active Deals</p>
+                      <p className="text-xl font-bold text-gray-900">{activeDealsCount}</p>
                     </div>
                   </div>
                 </div>
