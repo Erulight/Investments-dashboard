@@ -1,6 +1,7 @@
 'use client'
 
 import { useState } from 'react'
+import type { ReactNode } from 'react'
 import { useRouter } from 'next/navigation'
 import { Table, TableHeader, TableBody, TableRow, TableHead, TableCell } from '@/components/ui/Table'
 import { Button } from '@/components/ui/Button'
@@ -8,6 +9,56 @@ import { Modal } from './SukukModal'
 import { DateInput } from '@/components/ui/DateInput'
 import { formatDateInput, toIsoDateInput } from '@/lib/date'
 import { SukukForm } from './SukukForm'
+
+const Icon = ({ children }: { children: ReactNode }) => (
+  <span className="inline-flex h-4 w-4 items-center justify-center">{children}</span>
+)
+
+const EditIcon = () => (
+  <svg viewBox="0 0 24 24" className="h-4 w-4" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+    <path d="M12 20h9" />
+    <path d="M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4Z" />
+  </svg>
+)
+
+const WithdrawIcon = () => (
+  <svg viewBox="0 0 24 24" className="h-4 w-4" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+    <path d="M12 3v12" />
+    <path d="m7 10 5 5 5-5" />
+    <path d="M4 21h16" />
+  </svg>
+)
+
+const RollbackIcon = () => (
+  <svg viewBox="0 0 24 24" className="h-4 w-4" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+    <path d="M3 12a9 9 0 1 0 3-6.7" />
+    <path d="M3 4v6h6" />
+  </svg>
+)
+
+const ReopenIcon = () => (
+  <svg viewBox="0 0 24 24" className="h-4 w-4" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+    <path d="M21 12a9 9 0 1 1-2.64-6.36" />
+    <path d="M21 3v7h-7" />
+  </svg>
+)
+
+const SellIcon = () => (
+  <svg viewBox="0 0 24 24" className="h-4 w-4" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+    <path d="M20 12H4" />
+    <path d="m14 6 6 6-6 6" />
+  </svg>
+)
+
+const TrashIcon = () => (
+  <svg viewBox="0 0 24 24" className="h-4 w-4" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+    <path d="M3 6h18" />
+    <path d="M8 6V4h8v2" />
+    <path d="M6 6l1 16h10l1-16" />
+    <path d="M10 11v6" />
+    <path d="M14 11v6" />
+  </svg>
+)
 
 interface SukukListProps {
   initialSukuk: any[]
@@ -813,54 +864,71 @@ export function SukukList({ initialSukuk, userRole }: SukukListProps) {
                       {userRole === 'OWNER' && (
                         <TableCell className="px-2 py-1.5 align-middle">
                           <div className="flex flex-wrap items-center gap-1.5">
-                        <Button
-                          size="sm"
-                          variant="secondary"
-                          onClick={() => handleEdit(inv)}
-                        >
-                          Edit
-                        </Button>
-                        <Button
-                          size="sm"
-                          variant="ghost"
-                          onClick={() => openWithdrawModal(inv)}
-                          disabled={actionLoading}
-                        >
-                          Withdraw
-                        </Button>
-                        <Button
-                          size="sm"
-                          variant="secondary"
-                          onClick={() => handleRollback(inv)}
-                          disabled={actionLoading}
-                        >
-                          Rollback
-                        </Button>
-                        <Button
-                          size="sm"
-                          variant="secondary"
-                          onClick={() => handleReopen(inv)}
-                          disabled={actionLoading}
-                        >
-                          Reopen
-                        </Button>
-                        <Button
-                          size="sm"
-                          variant="ghost"
-                          onClick={() => openSellModal(inv)}
-                          disabled={actionLoading}
-                        >
-                          Sell
-                        </Button>
-                        <Button
-                          size="sm"
-                          variant="danger"
-                          onClick={() => handleDelete(inv.id)}
-                          disabled={deletingId === inv.id}
-                        >
-                          {deletingId === inv.id ? 'Deleting...' : 'Delete'}
-                        </Button>
-                      </div>
+                            <Button
+                              size="sm"
+                              variant="secondary"
+                              onClick={() => handleEdit(inv)}
+                              title="Edit"
+                              aria-label="Edit"
+                            >
+                              <Icon><EditIcon /></Icon>
+                            </Button>
+
+                            <Button
+                              size="sm"
+                              variant="ghost"
+                              onClick={() => openWithdrawModal(inv)}
+                              disabled={actionLoading}
+                              title="Withdraw"
+                              aria-label="Withdraw"
+                            >
+                              <Icon><WithdrawIcon /></Icon>
+                            </Button>
+
+                            <Button
+                              size="sm"
+                              variant="secondary"
+                              onClick={() => handleRollback(inv)}
+                              disabled={actionLoading}
+                              title="Rollback"
+                              aria-label="Rollback"
+                            >
+                              <Icon><RollbackIcon /></Icon>
+                            </Button>
+
+                            <Button
+                              size="sm"
+                              variant="secondary"
+                              onClick={() => handleReopen(inv)}
+                              disabled={actionLoading}
+                              title="Reopen"
+                              aria-label="Reopen"
+                            >
+                              <Icon><ReopenIcon /></Icon>
+                            </Button>
+
+                            <Button
+                              size="sm"
+                              variant="ghost"
+                              onClick={() => openSellModal(inv)}
+                              disabled={actionLoading}
+                              title="Sell"
+                              aria-label="Sell"
+                            >
+                              <Icon><SellIcon /></Icon>
+                            </Button>
+
+                            <Button
+                              size="sm"
+                              variant="danger"
+                              onClick={() => handleDelete(inv.id)}
+                              disabled={deletingId === inv.id}
+                              title={deletingId === inv.id ? 'Deleting…' : 'Delete'}
+                              aria-label={deletingId === inv.id ? 'Deleting…' : 'Delete'}
+                            >
+                              {deletingId === inv.id ? '…' : <Icon><TrashIcon /></Icon>}
+                            </Button>
+                          </div>
                         </TableCell>
                       )}
                     </TableRow>
