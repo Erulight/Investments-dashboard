@@ -142,11 +142,18 @@ export async function DELETE(
 
     const existingUser = await prisma.user.findUnique({
       where: { id },
-      select: { id: true },
+      select: { id: true, role: true },
     })
 
     if (!existingUser) {
       return NextResponse.json({ error: 'User not found' }, { status: 404 })
+    }
+
+    if (existingUser.role === 'OWNER') {
+      return NextResponse.json(
+        { error: 'Owner users cannot be deleted' },
+        { status: 400 }
+      )
     }
 
     await prisma.$transaction([
