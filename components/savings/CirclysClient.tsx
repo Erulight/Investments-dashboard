@@ -30,6 +30,15 @@ export function CirclysClient({ initialInvestments, userRole }: CirclysClientPro
   const totalReturn = totalValue - totalInvested
   const returnPercentage = totalInvested > 0 ? ((totalReturn / totalInvested) * 100) : 0
 
+  // Helper to parse ROSCA metadata
+  const parseRoscaMetadata = (inv: any) => {
+    try {
+      return JSON.parse(inv.metadata || '{}')
+    } catch {
+      return {}
+    }
+  }
+
   const handleCreatePlan = async (data: CreateSavingsInput) => {
     setIsLoading(true)
     try {
@@ -137,18 +146,25 @@ export function CirclysClient({ initialInvestments, userRole }: CirclysClientPro
                   <TableRow>
                     <TableHead>Plan Name</TableHead>
                     <TableHead>Account</TableHead>
-                    <TableHead>Principal</TableHead>
-                    <TableHead>Current Value</TableHead>
-                    <TableHead>Interest</TableHead>
-                    <TableHead>Interest Rate</TableHead>
+                    <TableHead>Monthly</TableHead>
+                    <TableHead>Total Months</TableHead>
+                    <TableHead>Paid/Remaining</TableHead>
+                    <TableHead>Receipt Month</TableHead>
+                    <TableHead>Reward</TableHead>
+                    <TableHead>Booking Fee</TableHead>
                     <TableHead>Status</TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>
                   {investments.map((inv: any) => {
+                    const meta = parseRoscaMetadata(inv)
                     const principal = inv.myParticipation?.investedAmount || inv.principalAmount
                     const current = inv.myParticipation?.currentValue || inv.currentValue
-                    const interest = current - principal
+                    const monthsPaid = meta.monthsPaid || 0
+                    const remainingMonths = (meta.totalMonths || 0) - monthsPaid
+                    const receiptMonth = meta.receiptMonth
+                    const reward = meta.totalReward || 0
+                    const bookingFee = meta.bookingFee || 0
 
                     return (
                       <TableRow key={inv.id} className="hover:bg-emerald-50 transition-colors duration-150">
@@ -164,26 +180,49 @@ export function CirclysClient({ initialInvestments, userRole }: CirclysClientPro
                           </span>
                         </TableCell>
                         <TableCell className="font-semibold text-gray-700">
-                          {inv.account?.currency} {principal.toLocaleString()}
+                          {inv.account?.currency} {meta.monthlyContribution?.toLocaleString() || 0}
                         </TableCell>
-                        <TableCell className="font-semibold text-emerald-600">
-                          {inv.account?.currency} {current.toLocaleString()}
+                        <TableCell className="font-semibold text-gray-700">
+                          {meta.totalMonths || 0}
                         </TableCell>
                         <TableCell>
-                          <div className="flex items-center space-x-1 font-bold text-green-600">
-                            <span>+</span>
-                            <span>{inv.account?.currency} {interest.toLocaleString()}</span>
+                          <div className="text-sm">
+                            <span className="font-medium text-green-600">{monthsPaid}</span>
+                            <span className="text-gray-400"> / </span>
+                            <span className="font-medium text-gray-600">{remainingMonths}</span>
                           </div>
                         </TableCell>
                         <TableCell>
-                          <span className="font-semibold text-gray-900">
-                            {inv.interestRate ? `${inv.interestRate}%` : 'N/A'}
-                          </span>
+                          {receiptMonth ? (
+                            <span className="px-2 py-1 bg-blue-100 text-blue-700 rounded text-xs font-medium">
+                              Month {receiptMonth}
+                            </span>
+                          ) : (
+                            <span className="text-gray-400 text-xs">—</span>
+                          )}
+                        </TableCell>
+                        <TableCell>
+                          {reward > 0 ? (
+                            <span className="text-sm font-bold text-green-600">
+                              +{inv.account?.currency} {reward.toLocaleString()}
+                            </span>
+                          ) : (
+                            <span className="text-gray-400 text-xs">—</span>
+                          )}
+                        </TableCell>
+                        <TableCell>
+                          {bookingFee > 0 ? (
+                            <span className="text-sm font-medium text-red-600">
+                              {inv.account?.currency} {bookingFee.toLocaleString()}
+                            </span>
+                          ) : (
+                            <span className="text-gray-400 text-xs">—</span>
+                          )}
                         </TableCell>
                         <TableCell>
                           <span className="px-3 py-1.5 inline-flex items-center text-xs leading-5 font-semibold rounded-full bg-green-100 text-green-800 shadow-sm">
                             <span className="w-2 h-2 bg-green-500 rounded-full mr-2 animate-pulse"></span>
-                            Active
+                            {meta.status || 'Active'}
                           </span>
                         </TableCell>
                       </TableRow>

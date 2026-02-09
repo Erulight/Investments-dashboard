@@ -30,25 +30,41 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: 'Invalid or non-CIRCLYS account selected' }, { status: 400 })
     }
 
-    // Create the savings plan as an investment
+    // Create the savings plan as an investment with ROSCA fields
     const investment = await prisma.investment.create({
       data: {
         accountId: validatedData.accountId,
         name: validatedData.name,
-        principalAmount: validatedData.principalAmount,
-        currentValue: validatedData.currentValue ?? validatedData.principalAmount,
+        // Use metadata to store ROSCA-specific fields
+        principalAmount: validatedData.monthlyContribution * validatedData.totalMonths,
+        currentValue: validatedData.monthlyContribution * validatedData.totalMonths, // Initially same as principal
         startDate: new Date(validatedData.startDate),
-        interestRate: validatedData.interestRate,
-        notes: validatedData.notes,
-        // Savings plans don't have maturity dates by default
-        maturityDate: null,
+        // ROSCA fields in metadata
+        metadata: JSON.stringify({
+          type: 'ROSCA',
+          monthlyContribution: validatedData.monthlyContribution,
+          totalMonths: validatedData.totalMonths,
+          bookingFee: validatedData.bookingFee ?? 0,
+          rewardProgram: validatedData.rewardProgram ?? 'NONE',
+          rewardAmount: validatedData.rewardAmount ?? 0,
+          receiptMonth: validatedData.receiptMonth ?? null,
+          monthsPaid: 0,
+          currentMonth: 0,
+          status: 'ACTIVE',
+          totalPayout: validatedData.monthlyContribution * validatedData.totalMonths,
+          // Add reward to payout if applicable
+          totalReward: validatedData.rewardProgram && validatedData.rewardAmount
+            ? validatedData.rewardProgram === 'PERCENTAGE'
+              ? (validatedData.monthlyContribution * validatedData.totalMonths) * (validatedData.rewardAmount / 100)
+              : validatedData.rewardAmount
+            : 0,
+        }),
         // Initialize other fields
         totalReceived: 0,
-        fees: 0,
+        fees: validatedData.bookingFee ?? 0,
         receivableAmount: 0,
         isIjarah: false,
-        metadata: null,
-        category: 'SAVINGS',
+        category: 'SAVINGS_ROSCA',
         // Create participants if provided
         dealParticipants: validatedData.participants?.map(p => ({
           personId: p.personId,

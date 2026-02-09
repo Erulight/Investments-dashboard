@@ -23,10 +23,13 @@ export function SavingsForm({ onSubmit, onCancel, initialData, isLoading }: Savi
   const [formData, setFormData] = useState<CreateSavingsInput>({
     accountId: initialData?.accountId || '',
     name: initialData?.name || '',
-    principalAmount: initialData?.principalAmount || 0,
-    currentValue: initialData?.currentValue,
+    monthlyContribution: initialData?.monthlyContribution || 0,
+    totalMonths: initialData?.totalMonths || 12,
+    bookingFee: initialData?.bookingFee ?? 0,
+    rewardProgram: initialData?.rewardProgram ?? 'NONE',
+    rewardAmount: initialData?.rewardAmount,
+    receiptMonth: initialData?.receiptMonth,
     startDate: initialData?.startDate || new Date().toISOString().split('T')[0],
-    interestRate: initialData?.interestRate,
     notes: initialData?.notes || '',
     participants: initialData?.participants || [],
   })
@@ -71,8 +74,15 @@ export function SavingsForm({ onSubmit, onCancel, initialData, isLoading }: Savi
     const newErrors: Record<string, string> = {}
     if (!formData.accountId) newErrors.accountId = 'Account is required'
     if (!formData.name) newErrors.name = 'Plan name is required'
-    if (formData.principalAmount <= 0) newErrors.principalAmount = 'Principal amount must be positive'
+    if (formData.monthlyContribution <= 0) newErrors.monthlyContribution = 'Monthly contribution must be positive'
+    if (formData.totalMonths <= 0) newErrors.totalMonths = 'Total months must be at least 1'
     if (!formData.startDate) newErrors.startDate = 'Start date is required'
+    if (formData.receiptMonth && formData.receiptMonth > formData.totalMonths) {
+      newErrors.receiptMonth = 'Receipt month cannot exceed total months'
+    }
+    if (formData.rewardProgram && formData.rewardProgram !== 'NONE' && (!formData.rewardAmount || formData.rewardAmount <= 0)) {
+      newErrors.rewardAmount = 'Reward amount is required when reward program is selected'
+    }
     
     if (Object.keys(newErrors).length > 0) {
       setErrors(newErrors)
@@ -142,45 +152,127 @@ export function SavingsForm({ onSubmit, onCancel, initialData, isLoading }: Savi
             {errors.name && <p className="mt-1 text-sm text-red-600">{errors.name}</p>}
           </div>
 
-          {/* Principal Amount */}
+          {/* Monthly Contribution */}
           <div>
-            <label htmlFor="principalAmount" className="block text-sm font-medium text-gray-700 mb-2">
-              Principal Amount (SAR) *
+            <label htmlFor="monthlyContribution" className="block text-sm font-medium text-gray-700 mb-2">
+              Monthly Contribution (SAR) *
             </label>
             <input
-              id="principalAmount"
-              name="principalAmount"
+              id="monthlyContribution"
+              name="monthlyContribution"
               type="number"
               step="0.01"
               min="0"
-              value={formData.principalAmount}
+              value={formData.monthlyContribution}
               onChange={handleChange}
-              placeholder="10000"
+              placeholder="1000"
               className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500"
               required
             />
-            {errors.principalAmount && <p className="mt-1 text-sm text-red-600">{errors.principalAmount}</p>}
+            {errors.monthlyContribution && <p className="mt-1 text-sm text-red-600">{errors.monthlyContribution}</p>}
           </div>
 
-          {/* Current Value (optional) */}
+          {/* Total Months */}
           <div>
-            <label htmlFor="currentValue" className="block text-sm font-medium text-gray-700 mb-2">
-              Current Value (SAR)
+            <label htmlFor="totalMonths" className="block text-sm font-medium text-gray-700 mb-2">
+              Total Months *
             </label>
             <input
-              id="currentValue"
-              name="currentValue"
+              id="totalMonths"
+              name="totalMonths"
+              type="number"
+              min="1"
+              value={formData.totalMonths}
+              onChange={handleChange}
+              placeholder="12"
+              className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500"
+              required
+            />
+            {errors.totalMonths && <p className="mt-1 text-sm text-red-600">{errors.totalMonths}</p>}
+          </div>
+
+          {/* Booking Fee (optional) */}
+          <div>
+            <label htmlFor="bookingFee" className="block text-sm font-medium text-gray-700 mb-2">
+              Booking Fee (SAR)
+            </label>
+            <input
+              id="bookingFee"
+              name="bookingFee"
               type="number"
               step="0.01"
               min="0"
-              value={formData.currentValue ?? ''}
+              value={formData.bookingFee ?? ''}
               onChange={handleChange}
-              placeholder="Leave empty to use principal amount"
+              placeholder="One-time booking fee"
               className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500"
             />
             <p className="mt-1 text-sm text-gray-500">
-              Leave empty to use principal amount as current value
+              One-time fee for joining the ROSCA
             </p>
+          </div>
+
+          {/* Reward Program */}
+          <div>
+            <label htmlFor="rewardProgram" className="block text-sm font-medium text-gray-700 mb-2">
+              Reward Program
+            </label>
+            <select
+              id="rewardProgram"
+              name="rewardProgram"
+              value={formData.rewardProgram}
+              onChange={handleChange}
+              className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500"
+            >
+              <option value="NONE">None</option>
+              <option value="FIXED">Fixed Amount</option>
+              <option value="PERCENTAGE">Percentage</option>
+            </select>
+          </div>
+
+          {/* Reward Amount (conditional) */}
+          {(formData.rewardProgram === 'FIXED' || formData.rewardProgram === 'PERCENTAGE') && (
+            <div>
+              <label htmlFor="rewardAmount" className="block text-sm font-medium text-gray-700 mb-2">
+                Reward {formData.rewardProgram === 'PERCENTAGE' ? '(%)' : '(SAR)'} *
+              </label>
+              <input
+                id="rewardAmount"
+                name="rewardAmount"
+                type="number"
+                step={formData.rewardProgram === 'PERCENTAGE' ? '0.01' : '0.01'}
+                min="0"
+                max={formData.rewardProgram === 'PERCENTAGE' ? '100' : undefined}
+                value={formData.rewardAmount ?? ''}
+                onChange={handleChange}
+                placeholder={formData.rewardProgram === 'PERCENTAGE' ? 'e.g., 5' : 'e.g., 500'}
+                className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500"
+                required
+              />
+              {errors.rewardAmount && <p className="mt-1 text-sm text-red-600">{errors.rewardAmount}</p>}
+            </div>
+          )}
+
+          {/* Receipt Month (optional) */}
+          <div>
+            <label htmlFor="receiptMonth" className="block text-sm font-medium text-gray-700 mb-2">
+              Receipt Month (Early Receipt)
+            </label>
+            <input
+              id="receiptMonth"
+              name="receiptMonth"
+              type="number"
+              min="1"
+              max={formData.totalMonths}
+              value={formData.receiptMonth ?? ''}
+              onChange={handleChange}
+              placeholder={`1-${formData.totalMonths}`}
+              className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500"
+            />
+            <p className="mt-1 text-sm text-gray-500">
+              Optional: Month you want to receive the payout (1-{formData.totalMonths}). You'll pay back remaining months.
+            </p>
+            {errors.receiptMonth && <p className="mt-1 text-sm text-red-600">{errors.receiptMonth}</p>}
           </div>
 
           {/* Start Date */}
@@ -198,28 +290,6 @@ export function SavingsForm({ onSubmit, onCancel, initialData, isLoading }: Savi
               required
             />
             {errors.startDate && <p className="mt-1 text-sm text-red-600">{errors.startDate}</p>}
-          </div>
-
-          {/* Interest Rate (optional) */}
-          <div>
-            <label htmlFor="interestRate" className="block text-sm font-medium text-gray-700 mb-2">
-              Annual Interest Rate (%)
-            </label>
-            <input
-              id="interestRate"
-              name="interestRate"
-              type="number"
-              step="0.01"
-              min="0"
-              max="100"
-              value={formData.interestRate ?? ''}
-              onChange={handleChange}
-              placeholder="e.g., 4.5"
-              className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500"
-            />
-            <p className="mt-1 text-sm text-gray-500">
-              Optional: Annual interest rate for tracking purposes
-            </p>
           </div>
 
           {/* Notes */}

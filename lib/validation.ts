@@ -59,16 +59,20 @@ export const updateSukukSchema = z.object({
 export type CreateSukukInput = z.infer<typeof createSukukSchema>
 export type UpdateSukukInput = z.infer<typeof updateSukukSchema>
 
-// Savings (Circlys) validation schemas
+// Savings (Circlys/ROSCA) validation schemas
 export const createSavingsSchema = z.object({
   accountId: z.string().min(1, 'Account is required'),
   name: z.string().min(1, 'Plan name is required'),
-  principalAmount: z.number().positive('Principal amount must be positive'),
-  currentValue: z.number().min(0, 'Current value cannot be negative').optional(),
+  // ROSCA fields
+  monthlyContribution: z.number().positive('Monthly contribution must be positive'),
+  totalMonths: z.number().int().min(1, 'Total months must be at least 1'),
+  bookingFee: z.number().min(0, 'Booking fee cannot be negative').optional(),
+  rewardProgram: z.enum(['NONE', 'FIXED', 'PERCENTAGE']).optional(),
+  rewardAmount: z.number().min(0, 'Reward amount cannot be negative').optional(),
+  receiptMonth: z.number().int().min(1, 'Receipt month must be at least 1').optional(),
   startDate: z.string().refine((date) => !isNaN(Date.parse(date)), {
     message: 'Invalid start date',
   }),
-  interestRate: z.number().min(0).max(100).optional(),
   notes: z.string().optional(),
   participants: z.array(z.object({
     personId: z.string().min(1, 'Person ID is required'),
@@ -81,12 +85,15 @@ export const createSavingsSchema = z.object({
 export const updateSavingsSchema = z.object({
   accountId: z.string().min(1, 'Account is required').optional(),
   name: z.string().min(1, 'Plan name is required').optional(),
-  principalAmount: z.number().positive('Principal amount must be positive').optional(),
-  currentValue: z.number().min(0, 'Current value cannot be negative').optional(),
+  monthlyContribution: z.number().positive('Monthly contribution must be positive').optional(),
+  totalMonths: z.number().int().min(1, 'Total months must be at least 1').optional(),
+  bookingFee: z.number().min(0, 'Booking fee cannot be negative').optional(),
+  rewardProgram: z.enum(['NONE', 'FIXED', 'PERCENTAGE']).optional(),
+  rewardAmount: z.number().min(0, 'Reward amount cannot be negative').optional(),
+  receiptMonth: z.number().int().min(1, 'Receipt month must be at least 1').optional(),
   startDate: z.string().optional().refine((date) => !date || !isNaN(Date.parse(date)), {
     message: 'Invalid start date',
   }),
-  interestRate: z.number().min(0).max(100).optional(),
   notes: z.string().optional(),
   participants: z.array(z.object({
     personId: z.string().min(1, 'Person ID is required'),
