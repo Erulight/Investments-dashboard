@@ -29,6 +29,7 @@ type BucketRow = {
   zakatDue: number
   haulCompleted: boolean
   source: string
+  sourceGroup: string
   sourceType: string
   lastPayment: null | {
     id: string
@@ -117,16 +118,27 @@ export function ZakatDashboard({ buckets }: { buckets: BucketRow[] }) {
     }>
   }>(null)
 
+  // --- Expand state for grouped rows ---
+  const [expandedGroups, setExpandedGroups] = useState<Set<string>>(new Set())
+  const toggleGroup = (group: string) => {
+    setExpandedGroups(prev => {
+      const next = new Set(prev)
+      if (next.has(group)) next.delete(group)
+      else next.add(group)
+      return next
+    })
+  }
+
   // --- Derived data ---
-  const sources = useMemo(() => {
-    const set = new Set(buckets.map(b => b.source))
+  const sourceGroups = useMemo(() => {
+    const set = new Set(buckets.map(b => b.sourceGroup))
     return Array.from(set).sort()
   }, [buckets])
 
   const filteredBuckets = useMemo(() => {
     let list = buckets
     if (activeTab !== 'all') {
-      list = list.filter(b => b.source === activeTab)
+      list = list.filter(b => b.sourceGroup === activeTab)
     }
     if (statusFilter === 'completed') {
       list = list.filter(b => b.haulCompleted)
@@ -303,7 +315,7 @@ export function ZakatDashboard({ buckets }: { buckets: BucketRow[] }) {
         <Card>
           <CardContent className="py-3 px-4">
             <div className="text-xs text-gray-500">Sources</div>
-            <div className="text-lg font-bold text-gray-900">{sources.length}</div>
+            <div className="text-lg font-bold text-gray-900">{sourceGroups.length}</div>
           </CardContent>
         </Card>
       </div>
@@ -313,15 +325,15 @@ export function ZakatDashboard({ buckets }: { buckets: BucketRow[] }) {
         <label className="text-xs font-medium text-gray-500">Source:</label>
         <select
           value={activeTab}
-          onChange={(e) => setActiveTab(e.target.value)}
+          onChange={(e: ChangeEvent<HTMLSelectElement>) => setActiveTab(e.target.value)}
           className="rounded-md border border-gray-200 px-3 py-1.5 text-sm text-gray-700 focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500 outline-none max-w-[300px]"
         >
           <option value="all">All sources ({buckets.length})</option>
-          {sources.map(src => {
-            const count = buckets.filter(b => b.source === src).length
+          {sourceGroups.map((grp: string) => {
+            const count = buckets.filter(b => b.sourceGroup === grp).length
             return (
-              <option key={src} value={src}>
-                {src} ({count})
+              <option key={grp} value={grp}>
+                {grp} ({count})
               </option>
             )
           })}
@@ -408,46 +420,164 @@ export function ZakatDashboard({ buckets }: { buckets: BucketRow[] }) {
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-gray-100">
-                  {filteredBuckets.map(bucket => (
-                    <tr key={bucket.id} className="hover:bg-gray-50 transition-colors">
-                      <td className="py-2.5 px-3">
-                        <div className="font-medium text-gray-900 truncate max-w-[200px]" title={bucket.label || bucket.source}>
-                          {bucket.label || bucket.source}
-                        </div>
-                        {activeTab === 'all' && (
-                          <div className="text-[11px] text-gray-400 truncate max-w-[200px]">{bucket.source}</div>
-                        )}
-                      </td>
-                      <td className="py-2.5 px-3 text-gray-600 whitespace-nowrap">{bucket.haulStartDate}</td>
-                      <td className="py-2.5 px-3 text-gray-600 whitespace-nowrap">{bucket.haulCompleteDate}</td>
-                      <td className="py-2.5 px-3 text-right font-medium text-gray-900 whitespace-nowrap">{bucket.currency} {fmt(bucket.balance)}</td>
-                      <td className="py-2.5 px-3 text-right text-gray-700 whitespace-nowrap">{bucket.currency} {fmt(bucket.idleBase)}</td>
-                      <td className="py-2.5 px-3 text-right text-gray-700 whitespace-nowrap">{bucket.currency} {fmt(bucket.receiptsTotal)}</td>
-                      <td className="py-2.5 px-3 text-right font-semibold whitespace-nowrap">
-                        <span className={bucket.zakatDue > 0 ? 'text-emerald-700' : 'text-gray-400'}>
-                          {bucket.currency} {fmt(bucket.zakatDue)}
-                        </span>
-                      </td>
-                      <td className="py-2.5 px-3 text-center">
-                        <span className={`inline-flex px-2 py-0.5 rounded-full text-[11px] font-medium ${
-                          bucket.haulCompleted
-                            ? 'bg-green-50 text-green-700'
-                            : 'bg-amber-50 text-amber-700'
-                        }`}>
-                          {bucket.haulCompleted ? 'Complete' : 'Pending'}
-                        </span>
-                      </td>
-                      <td className="py-2.5 px-3 text-right">
-                        <div className="flex items-center justify-end gap-1">
-                          <Button size="sm" variant="secondary" onClick={() => openDetails(bucket)}>Details</Button>
-                          <Button size="sm" variant="primary" disabled={bucket.zakatDue <= 0} onClick={() => openPay(bucket)}>Pay</Button>
-                          {bucket.lastPayment && (
-                            <Button size="sm" variant="ghost" disabled={rollbackLoading} onClick={() => handleRollback(bucket)}>Undo</Button>
-                          )}
-                        </div>
-                      </td>
-                    </tr>
-                  ))}
+                  {(() => {
+                    // Group buckets: Circlys groups are collapsible, others show directly
+                    const groups = new Map<string, BucketRow[]>()
+                    const singles: BucketRow[] = []
+                    filteredBuckets.forEach(b => {
+                      if (b.sourceGroup !== b.source) {
+                        // This is a grouped Circlys bucket
+                        const existing = groups.get(b.sourceGroup) || []
+                        existing.push(b)
+                        groups.set(b.sourceGroup, existing)
+                      } else {
+                        singles.push(b)
+                      }
+                    })
+
+                    const rows: React.ReactNode[] = []
+
+                    // Render grouped Circlys rows
+                    groups.forEach((groupBuckets, groupName) => {
+                      const isExpanded = expandedGroups.has(groupName)
+                      const gBalance = groupBuckets.reduce((s, b) => s + b.balance, 0)
+                      const gIdle = groupBuckets.reduce((s, b) => s + b.idleBase, 0)
+                      const gReceipts = groupBuckets.reduce((s, b) => s + b.receiptsTotal, 0)
+                      const gZakat = groupBuckets.reduce((s, b) => s + b.zakatDue, 0)
+                      const allComplete = groupBuckets.every(b => b.haulCompleted)
+                      const someComplete = groupBuckets.some(b => b.haulCompleted)
+                      const cur = groupBuckets[0]?.currency || 'SAR'
+
+                      rows.push(
+                        <tr
+                          key={`group-${groupName}`}
+                          className="bg-slate-50 hover:bg-slate-100 cursor-pointer transition-colors"
+                          onClick={() => toggleGroup(groupName)}
+                        >
+                          <td className="py-2.5 px-3">
+                            <div className="flex items-center gap-2">
+                              <span className="text-gray-400 text-xs">{isExpanded ? '▾' : '▸'}</span>
+                              <div>
+                                <div className="font-semibold text-gray-900">{groupName}</div>
+                                <div className="text-[11px] text-gray-400">{groupBuckets.length} payment{groupBuckets.length !== 1 ? 's' : ''}</div>
+                              </div>
+                            </div>
+                          </td>
+                          <td className="py-2.5 px-3 text-gray-400 text-xs whitespace-nowrap">—</td>
+                          <td className="py-2.5 px-3 text-gray-400 text-xs whitespace-nowrap">—</td>
+                          <td className="py-2.5 px-3 text-right font-medium text-gray-900 whitespace-nowrap">{cur} {fmt(gBalance)}</td>
+                          <td className="py-2.5 px-3 text-right text-gray-700 whitespace-nowrap">{cur} {fmt(gIdle)}</td>
+                          <td className="py-2.5 px-3 text-right text-gray-700 whitespace-nowrap">{cur} {fmt(gReceipts)}</td>
+                          <td className="py-2.5 px-3 text-right font-semibold whitespace-nowrap">
+                            <span className={gZakat > 0 ? 'text-emerald-700' : 'text-gray-400'}>
+                              {cur} {fmt(gZakat)}
+                            </span>
+                          </td>
+                          <td className="py-2.5 px-3 text-center">
+                            <span className={`inline-flex px-2 py-0.5 rounded-full text-[11px] font-medium ${
+                              allComplete
+                                ? 'bg-green-50 text-green-700'
+                                : someComplete
+                                ? 'bg-blue-50 text-blue-700'
+                                : 'bg-amber-50 text-amber-700'
+                            }`}>
+                              {allComplete ? 'Complete' : someComplete ? 'Partial' : 'Pending'}
+                            </span>
+                          </td>
+                          <td className="py-2.5 px-3"></td>
+                        </tr>
+                      )
+
+                      // Expanded child rows
+                      if (isExpanded) {
+                        groupBuckets.forEach(bucket => {
+                          // Extract month label (last part after •)
+                          const monthLabel = bucket.label?.split(' • ').slice(2).join(' • ') || bucket.label || ''
+                          rows.push(
+                            <tr key={bucket.id} className="hover:bg-gray-50 transition-colors bg-white">
+                              <td className="py-2 px-3 pl-10">
+                                <div className="text-sm text-gray-700" title={bucket.label || ''}>
+                                  {monthLabel || bucket.id.slice(0, 8)}
+                                </div>
+                              </td>
+                              <td className="py-2 px-3 text-gray-600 text-xs whitespace-nowrap">{bucket.haulStartDate}</td>
+                              <td className="py-2 px-3 text-gray-600 text-xs whitespace-nowrap">{bucket.haulCompleteDate}</td>
+                              <td className="py-2 px-3 text-right text-sm text-gray-900 whitespace-nowrap">{bucket.currency} {fmt(bucket.balance)}</td>
+                              <td className="py-2 px-3 text-right text-sm text-gray-700 whitespace-nowrap">{bucket.currency} {fmt(bucket.idleBase)}</td>
+                              <td className="py-2 px-3 text-right text-sm text-gray-700 whitespace-nowrap">{bucket.currency} {fmt(bucket.receiptsTotal)}</td>
+                              <td className="py-2 px-3 text-right text-sm font-semibold whitespace-nowrap">
+                                <span className={bucket.zakatDue > 0 ? 'text-emerald-700' : 'text-gray-400'}>
+                                  {bucket.currency} {fmt(bucket.zakatDue)}
+                                </span>
+                              </td>
+                              <td className="py-2 px-3 text-center">
+                                <span className={`inline-flex px-2 py-0.5 rounded-full text-[11px] font-medium ${
+                                  bucket.haulCompleted ? 'bg-green-50 text-green-700' : 'bg-amber-50 text-amber-700'
+                                }`}>
+                                  {bucket.haulCompleted ? 'Complete' : 'Pending'}
+                                </span>
+                              </td>
+                              <td className="py-2 px-3 text-right">
+                                <div className="flex items-center justify-end gap-1">
+                                  <Button size="sm" variant="secondary" onClick={() => openDetails(bucket)}>Details</Button>
+                                  <Button size="sm" variant="primary" disabled={bucket.zakatDue <= 0} onClick={() => openPay(bucket)}>Pay</Button>
+                                  {bucket.lastPayment && (
+                                    <Button size="sm" variant="ghost" disabled={rollbackLoading} onClick={() => handleRollback(bucket)}>Undo</Button>
+                                  )}
+                                </div>
+                              </td>
+                            </tr>
+                          )
+                        })
+                      }
+                    })
+
+                    // Render non-grouped (single) rows
+                    singles.forEach(bucket => {
+                      rows.push(
+                        <tr key={bucket.id} className="hover:bg-gray-50 transition-colors">
+                          <td className="py-2.5 px-3">
+                            <div className="font-medium text-gray-900 truncate max-w-[200px]" title={bucket.label || bucket.source}>
+                              {bucket.label || bucket.source}
+                            </div>
+                            {activeTab === 'all' && (
+                              <div className="text-[11px] text-gray-400 truncate max-w-[200px]">{bucket.source}</div>
+                            )}
+                          </td>
+                          <td className="py-2.5 px-3 text-gray-600 whitespace-nowrap">{bucket.haulStartDate}</td>
+                          <td className="py-2.5 px-3 text-gray-600 whitespace-nowrap">{bucket.haulCompleteDate}</td>
+                          <td className="py-2.5 px-3 text-right font-medium text-gray-900 whitespace-nowrap">{bucket.currency} {fmt(bucket.balance)}</td>
+                          <td className="py-2.5 px-3 text-right text-gray-700 whitespace-nowrap">{bucket.currency} {fmt(bucket.idleBase)}</td>
+                          <td className="py-2.5 px-3 text-right text-gray-700 whitespace-nowrap">{bucket.currency} {fmt(bucket.receiptsTotal)}</td>
+                          <td className="py-2.5 px-3 text-right font-semibold whitespace-nowrap">
+                            <span className={bucket.zakatDue > 0 ? 'text-emerald-700' : 'text-gray-400'}>
+                              {bucket.currency} {fmt(bucket.zakatDue)}
+                            </span>
+                          </td>
+                          <td className="py-2.5 px-3 text-center">
+                            <span className={`inline-flex px-2 py-0.5 rounded-full text-[11px] font-medium ${
+                              bucket.haulCompleted
+                                ? 'bg-green-50 text-green-700'
+                                : 'bg-amber-50 text-amber-700'
+                            }`}>
+                              {bucket.haulCompleted ? 'Complete' : 'Pending'}
+                            </span>
+                          </td>
+                          <td className="py-2.5 px-3 text-right">
+                            <div className="flex items-center justify-end gap-1">
+                              <Button size="sm" variant="secondary" onClick={() => openDetails(bucket)}>Details</Button>
+                              <Button size="sm" variant="primary" disabled={bucket.zakatDue <= 0} onClick={() => openPay(bucket)}>Pay</Button>
+                              {bucket.lastPayment && (
+                                <Button size="sm" variant="ghost" disabled={rollbackLoading} onClick={() => handleRollback(bucket)}>Undo</Button>
+                              )}
+                            </div>
+                          </td>
+                        </tr>
+                      )
+                    })
+
+                    return rows
+                  })()}
                 </tbody>
               </table>
             </div>

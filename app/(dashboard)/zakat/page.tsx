@@ -61,7 +61,11 @@ export default async function ZakatPage() {
       const movementDate = new Date(movement.date)
       if (movement.type === 'ZAKAT_PAID') return false
       if (movementDate < effectiveStart) return false
-      return movementDate <= haulCompleteDate
+      if (movementDate > haulCompleteDate) return false
+      // Exclude Circlys receipt payout — it shouldn't count as idle cash
+      // for this bucket's haul period (it arrived later and inflates the balance)
+      if (movement.type === 'CASH_IN' && movement.notes && String(movement.notes).includes('Circlys receipt')) return false
+      return true
     })
 
     const idleBase = Math.max(
@@ -111,6 +115,13 @@ export default async function ZakatPage() {
       || 'General'
     const sourceType = alloc?.investment?.account?.type || 'OTHER'
 
+    // Group Circlys monthly buckets by investment name
+    // Labels look like "Circlys • February 2025 • 2025-03"
+    const isCirclys = typeof bucket.label === 'string' && bucket.label.startsWith('Circlys')
+    const sourceGroup = isCirclys && bucket.label
+      ? bucket.label.split(' • ').slice(0, 2).join(' • ')
+      : source
+
     return {
       id: bucket.id,
       label: bucket.label,
@@ -133,6 +144,7 @@ export default async function ZakatPage() {
       idleBase,
       haulCompleted,
       source,
+      sourceGroup,
       sourceType,
       dueReceipts: dueReceipts.map((m) => ({
         date: new Date(m.date).toISOString().split('T')[0],
