@@ -121,7 +121,15 @@ export default async function InvestmentsPage() {
   }, 0)
 
   const totalReceivable = Math.max(0, totalNetProfit - totalWithdrawn)
-  const totalValue = totalInvested + totalReceivable
+
+  const totalValue = investments.reduce((sum, inv) => {
+    const current =
+      inv.myParticipation?.currentValue ??
+      inv.currentValue ??
+      inv.myParticipation?.investedAmount ??
+      inv.principalAmount
+    return sum + (Number.isFinite(current) ? current : 0)
+  }, 0)
   const totalReturn = totalNetProfit
   const returnPercentage = totalInvested > 0 ? ((totalReturn / totalInvested) * 100) : 0
 
