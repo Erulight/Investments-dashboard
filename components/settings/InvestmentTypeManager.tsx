@@ -221,7 +221,7 @@ export function InvestmentTypeManager() {
             <Button
               type="submit"
               variant="danger"
-              disabled={deleteLoading || (hasInvestments && deleteConfirmText !== 'DELETE')}
+              disabled={deleteLoading || (!!hasInvestments && deleteConfirmText !== 'DELETE')}
             >
               {deleteLoading ? 'Deleting...' : hasInvestments ? 'Permanently Delete' : 'Delete'}
             </Button>
