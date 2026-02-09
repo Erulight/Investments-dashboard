@@ -863,13 +863,14 @@ export function SukukList({ initialSukuk, userRole }: SukukListProps) {
                       </TableCell>
                       {userRole === 'OWNER' && (
                         <TableCell className="px-2 py-1.5 align-middle">
-                          <div className="flex flex-wrap items-center gap-1.5">
+                          <div className="flex flex-nowrap items-center gap-1.5 whitespace-nowrap">
                             <Button
                               size="sm"
                               variant="secondary"
                               onClick={() => handleEdit(inv)}
                               title="Edit"
                               aria-label="Edit"
+                              className="h-8 w-8 px-0 py-0 shrink-0"
                             >
                               <Icon><EditIcon /></Icon>
                             </Button>
@@ -881,6 +882,7 @@ export function SukukList({ initialSukuk, userRole }: SukukListProps) {
                               disabled={actionLoading}
                               title="Withdraw"
                               aria-label="Withdraw"
+                              className="h-8 w-8 px-0 py-0 shrink-0"
                             >
                               <Icon><WithdrawIcon /></Icon>
                             </Button>
@@ -892,6 +894,7 @@ export function SukukList({ initialSukuk, userRole }: SukukListProps) {
                               disabled={actionLoading}
                               title="Rollback"
                               aria-label="Rollback"
+                              className="h-8 w-8 px-0 py-0 shrink-0"
                             >
                               <Icon><RollbackIcon /></Icon>
                             </Button>
@@ -903,6 +906,7 @@ export function SukukList({ initialSukuk, userRole }: SukukListProps) {
                               disabled={actionLoading}
                               title="Reopen"
                               aria-label="Reopen"
+                              className="h-8 w-8 px-0 py-0 shrink-0"
                             >
                               <Icon><ReopenIcon /></Icon>
                             </Button>
@@ -914,6 +918,7 @@ export function SukukList({ initialSukuk, userRole }: SukukListProps) {
                               disabled={actionLoading}
                               title="Sell"
                               aria-label="Sell"
+                              className="h-8 w-8 px-0 py-0 shrink-0"
                             >
                               <Icon><SellIcon /></Icon>
                             </Button>
@@ -925,6 +930,7 @@ export function SukukList({ initialSukuk, userRole }: SukukListProps) {
                               disabled={deletingId === inv.id}
                               title={deletingId === inv.id ? 'Deleting…' : 'Delete'}
                               aria-label={deletingId === inv.id ? 'Deleting…' : 'Delete'}
+                              className="h-8 w-8 px-0 py-0 shrink-0"
                             >
                               {deletingId === inv.id ? '…' : <Icon><TrashIcon /></Icon>}
                             </Button>
