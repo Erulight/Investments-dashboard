@@ -43,6 +43,8 @@ export function UserList() {
   const [editingUserId, setEditingUserId] = useState<string | null>(null)
   const [editLoading, setEditLoading] = useState(false)
   const [editError, setEditError] = useState<string | null>(null)
+  const [deleteLoadingUserId, setDeleteLoadingUserId] = useState<string | null>(null)
+  const [deleteError, setDeleteError] = useState<string | null>(null)
   const [editForm, setEditForm] = useState({
     name: '',
     email: '',
@@ -111,6 +113,40 @@ export function UserList() {
     setEditError(null)
     setEditingUserId(null)
     setEditLoading(false)
+  }
+
+  const deleteUser = async (user: User) => {
+    if (deleteLoadingUserId) return
+
+    setDeleteError(null)
+
+    const ok = window.confirm(`Delete user "${user.name}"? This cannot be undone.`)
+    if (!ok) return
+
+    setDeleteLoadingUserId(user.id)
+
+    try {
+      const response = await fetch(`/api/users/${user.id}`, {
+        method: 'DELETE',
+      })
+
+      const data = await response.json()
+
+      if (!response.ok) {
+        throw new Error(data.error || 'Failed to delete user')
+      }
+
+      if (editingUserId === user.id) {
+        cancelEdit()
+      }
+
+      await fetchUsers()
+      router.refresh()
+    } catch (err) {
+      setDeleteError(err instanceof Error ? err.message : 'Failed to delete user')
+    } finally {
+      setDeleteLoadingUserId(null)
+    }
   }
 
   const toggleEditPermission = (module: keyof ModulePermissions) => {
@@ -197,6 +233,11 @@ export function UserList() {
 
   return (
     <div className="space-y-3">
+      {deleteError && (
+        <div className="p-4 bg-red-50 border border-red-200 rounded-lg text-red-700">
+          {deleteError}
+        </div>
+      )}
       {users.map((user: User) => (
         <div
           key={user.id}
@@ -226,14 +267,26 @@ export function UserList() {
               <div className="text-xs text-gray-400">
                 {new Date(user.createdAt).toLocaleDateString()}
               </div>
-              <Button
-                type="button"
-                variant="ghost"
-                size="sm"
-                onClick={() => (editingUserId === user.id ? cancelEdit() : startEdit(user))}
-              >
-                {editingUserId === user.id ? 'Cancel' : 'Edit'}
-              </Button>
+              <div className="flex items-center space-x-2">
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="sm"
+                  onClick={() => (editingUserId === user.id ? cancelEdit() : startEdit(user))}
+                  disabled={deleteLoadingUserId === user.id}
+                >
+                  {editingUserId === user.id ? 'Cancel' : 'Edit'}
+                </Button>
+                <Button
+                  type="button"
+                  variant="danger"
+                  size="sm"
+                  onClick={() => deleteUser(user)}
+                  disabled={deleteLoadingUserId === user.id}
+                >
+                  {deleteLoadingUserId === user.id ? 'Deleting...' : 'Delete'}
+                </Button>
+              </div>
             </div>
           </div>
 

@@ -123,3 +123,52 @@ export async function PATCH(
     return NextResponse.json({ error: 'Failed to update user' }, { status: 500 })
   }
 }
+
+export async function DELETE(
+  req: NextRequest,
+  { params }: { params: Promise<{ id: string }> }
+) {
+  try {
+    const currentUser = await requireAuth(['OWNER'])
+
+    const { id } = await params
+
+    if (currentUser.id === id) {
+      return NextResponse.json(
+        { error: 'You cannot delete your own account' },
+        { status: 400 }
+      )
+    }
+
+    const existingUser = await prisma.user.findUnique({
+      where: { id },
+      select: { id: true },
+    })
+
+    if (!existingUser) {
+      return NextResponse.json({ error: 'User not found' }, { status: 404 })
+    }
+
+    await prisma.$transaction([
+      prisma.user.update({
+        where: { id },
+        data: { personId: null },
+        select: { id: true },
+      }),
+      prisma.user.delete({ where: { id } }),
+    ])
+
+    return NextResponse.json({ message: 'User deleted successfully' })
+  } catch (error) {
+    console.error('Delete user error:', error)
+
+    if (error instanceof Error && error.message === 'Unauthorized') {
+      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+    }
+    if (error instanceof Error && error.message === 'Forbidden') {
+      return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
+    }
+
+    return NextResponse.json({ error: 'Failed to delete user' }, { status: 500 })
+  }
+}
