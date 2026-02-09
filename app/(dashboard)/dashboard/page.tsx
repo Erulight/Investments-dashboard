@@ -25,10 +25,16 @@ export default async function DashboardPage({
   const yearStart = new Date(selectedYear, 0, 1)
   const yearEnd = new Date(selectedYear + 1, 0, 1)
 
-  const cashSetting = await prisma.systemSetting.findUnique({
-    where: { key: 'CASH_BALANCE' },
-  })
-  const cashBalance = cashSetting ? Number(cashSetting.value) : 0
+  const cashBalance =
+    user.role === 'OWNER'
+      ? Number(
+          (
+            await prisma.systemSetting.findUnique({
+              where: { key: 'CASH_BALANCE' },
+            })
+          )?.value || 0
+        )
+      : 0
 
   let totalInvested = 0
   let totalValue = 0
@@ -101,7 +107,7 @@ export default async function DashboardPage({
 
   const yearlyProfitValue = Math.abs(yearlyProfit._sum.amount || 0)
 
-  const totalPortfolioValue = cashBalance + totalValue
+  const displayedValue = user.role === 'OWNER' ? cashBalance + totalValue : totalValue
   const returnPercentage = totalInvested > 0 ? ((totalValue - totalInvested) / totalInvested * 100) : 0
 
   return (
@@ -156,13 +162,17 @@ export default async function DashboardPage({
         <Card hover className="sukuk-card-hover">
           <CardContent>
             <div className="flex items-center justify-between mb-2">
-              <p className="text-sm font-medium text-gray-500">Portfolio Value</p>
+              <p className="text-sm font-medium text-gray-500">
+                {user.role === 'OWNER' ? 'Portfolio Value' : 'Investment Value'}
+              </p>
               <span className="text-2xl">💰</span>
             </div>
             <div className="text-3xl font-bold text-blue-600">
-              SAR {totalPortfolioValue.toLocaleString()}
+              SAR {displayedValue.toLocaleString()}
             </div>
-            <p className="text-xs text-gray-500 mt-2">Cash + Investments</p>
+            <p className="text-xs text-gray-500 mt-2">
+              {user.role === 'OWNER' ? 'Cash + Investments' : 'Your share in investments'}
+            </p>
           </CardContent>
         </Card>
 
