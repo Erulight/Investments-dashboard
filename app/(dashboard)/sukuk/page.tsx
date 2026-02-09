@@ -97,12 +97,21 @@ export default async function InvestmentsPage() {
     return Math.max(0, months)
   }
 
-  const totalInvested = investments.reduce((sum, inv) => {
+  const startOfDay = (date: Date) => new Date(date.getFullYear(), date.getMonth(), date.getDate())
+  const today = startOfDay(new Date())
+
+  const activeInvestments = investments.filter((inv) => {
+    const maturityDate = toDate(inv.maturityDate)
+    if (!maturityDate) return true
+    return startOfDay(maturityDate) >= today
+  })
+
+  const totalInvested = activeInvestments.reduce((sum, inv) => {
     const principal = inv.myParticipation?.investedAmount || inv.principalAmount
     return sum + (Number.isFinite(principal) ? principal : 0)
   }, 0)
 
-  const totalNetProfit = investments.reduce((sum, inv) => {
+  const totalNetProfit = activeInvestments.reduce((sum, inv) => {
     const principal = inv.myParticipation?.investedAmount ?? inv.principalAmount
     const investment = Number.isFinite(principal) ? principal : 0
     const apr = Number.isFinite(inv.interestRate) ? inv.interestRate : 0
@@ -115,21 +124,14 @@ export default async function InvestmentsPage() {
     return sum + Math.max(0, grossProfit - fees)
   }, 0)
 
-  const totalWithdrawn = investments.reduce((sum, inv) => {
+  const totalWithdrawn = activeInvestments.reduce((sum, inv) => {
     const received = Number.isFinite(inv.totalReceived) ? inv.totalReceived : 0
     return sum + received
   }, 0)
 
   const totalReceivable = Math.max(0, totalNetProfit - totalWithdrawn)
 
-  const totalValue = investments.reduce((sum, inv) => {
-    const current =
-      inv.myParticipation?.currentValue ??
-      inv.currentValue ??
-      inv.myParticipation?.investedAmount ??
-      inv.principalAmount
-    return sum + (Number.isFinite(current) ? current : 0)
-  }, 0)
+  const totalValue = totalInvested
   const totalReturn = totalNetProfit
   const returnPercentage = totalInvested > 0 ? ((totalReturn / totalInvested) * 100) : 0
 
@@ -153,7 +155,9 @@ export default async function InvestmentsPage() {
         <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mt-8">
           <div className="bg-white/10 backdrop-blur-lg rounded-xl p-4 border border-white/20">
             <p className="text-sm text-blue-100 mb-1">Total Portfolio Value</p>
-            <p className="text-2xl font-bold">SAR {totalValue.toLocaleString()}</p>
+            <p className="text-2xl font-bold">
+              SAR {totalValue.toLocaleString(undefined, { maximumFractionDigits: 0 })}
+            </p>
           </div>
           <div className="bg-white/10 backdrop-blur-lg rounded-xl p-4 border border-white/20">
             <p className="text-sm text-blue-100 mb-1">Total Return</p>
