@@ -15,6 +15,7 @@ interface NavItem {
 
 const navigation: NavItem[] = [
   { name: 'Dashboard', href: '/dashboard', icon: '📊' },
+  { name: 'Cash Ledger', href: '/cash-ledger', roles: ['OWNER'], icon: '📒' },
   { name: 'Zakat', href: '/zakat', module: 'zakat', icon: '🧾' },
   { 
     name: 'Investments', 

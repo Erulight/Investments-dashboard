@@ -2,10 +2,19 @@
 
 import { useEffect, useState } from 'react'
 import { useSearchParams } from 'next/navigation'
+import Link from 'next/link'
 import { Card, CardContent } from '@/components/ui/Card'
 import { Button } from '@/components/ui/Button'
 import { DateInput } from '@/components/ui/DateInput'
 import { formatDateInput, toIsoDateInput } from '@/lib/date'
+
+interface RecentTx {
+  id: string
+  type: string
+  amount: number
+  date: string
+  description: string | null
+}
 
 export function CashBalanceCard({ initialCash }: { initialCash: number }) {
   const searchParams = useSearchParams()
@@ -20,6 +29,7 @@ export function CashBalanceCard({ initialCash }: { initialCash: number }) {
   const [message, setMessage] = useState('')
   const [error, setError] = useState('')
   const [showForm, setShowForm] = useState(false)
+  const [recentTxs, setRecentTxs] = useState<RecentTx[]>([])
 
   const loadCash = async () => {
     setError('')
@@ -31,6 +41,8 @@ export function CashBalanceCard({ initialCash }: { initialCash: number }) {
         throw new Error(data.error || 'Failed to load cash balance')
       }
       setCashBalance(String(data.cashBalance ?? 0))
+      const txs = Array.isArray(data.transactions) ? data.transactions.slice(0, 5) : []
+      setRecentTxs(txs)
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to load cash balance')
     }
@@ -84,20 +96,42 @@ export function CashBalanceCard({ initialCash }: { initialCash: number }) {
     <Card>
       <CardContent>
         <p className="text-xs font-medium text-gray-500 uppercase tracking-wider">Cash Balance</p>
-        <div className="text-2xl font-bold text-gray-900 mt-1">
+        <div className="text-xl font-bold text-gray-900 mt-1 tabular-nums">
           SAR {Number(cashBalance || 0).toLocaleString()}
         </div>
-        <div className="mt-2">
+
+        {/* Recent transactions (max 5) */}
+        {recentTxs.length > 0 && (
+          <div className="mt-2 pt-2 border-t border-gray-100 space-y-1">
+            {recentTxs.map(tx => (
+              <div key={tx.id} className="flex items-center justify-between text-[11px]">
+                <span className="text-gray-400 truncate max-w-[120px]">
+                  {new Date(tx.date).toLocaleDateString('en-CA')}
+                </span>
+                <span className={`font-medium tabular-nums ${tx.amount >= 0 ? 'text-emerald-600' : 'text-red-500'}`}>
+                  {tx.amount >= 0 ? '+' : ''}{tx.amount.toLocaleString()}
+                </span>
+              </div>
+            ))}
+          </div>
+        )}
+
+        <div className="mt-2 flex items-center gap-3">
           {!showForm ? (
-            <button
-              type="button"
-              onClick={() => setShowForm(true)}
-              className="text-[11px] text-slate-500 hover:text-slate-700 font-medium"
-            >
-              + Log cash in/out
-            </button>
+            <>
+              <button
+                type="button"
+                onClick={() => setShowForm(true)}
+                className="text-[11px] text-slate-500 hover:text-slate-700 font-medium"
+              >
+                + Log cash
+              </button>
+              <Link href="/cash-ledger" className="text-[11px] text-slate-500 hover:text-slate-700 font-medium">
+                View Ledger →
+              </Link>
+            </>
           ) : (
-            <form onSubmit={handleSubmit} className="space-y-2 pt-2 border-t border-gray-100">
+            <form onSubmit={handleSubmit} className="space-y-2 w-full pt-1 border-t border-gray-100">
               <div className="flex gap-2">
                 <select
                   value={direction}
