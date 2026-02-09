@@ -2,8 +2,10 @@ import { Card, CardHeader, CardTitle, CardContent } from '@/components/ui/Card'
 import { getCurrentUser } from '@/lib/auth'
 import { prisma } from '@/lib/db'
 import { SukukList } from '@/components/sukuk/SukukList'
+import { requireModuleAccess } from '@/lib/rbac'
 
 export default async function InvestmentsPage() {
+  await requireModuleAccess('sukuk')
   const user = await getCurrentUser()
   
   if (!user) {
@@ -60,7 +62,7 @@ export default async function InvestmentsPage() {
       },
     })
     
-    investments = participants.map((p) => ({
+    investments = participants.map((p: any) => ({
       ...p.investment,
       myParticipation: {
         investedAmount: p.investedAmount,

@@ -4,6 +4,11 @@ import { hashPassword, setAuthCookie, Role } from '@/lib/auth'
 
 export async function POST(req: NextRequest) {
   try {
+    return NextResponse.json(
+      { error: 'Signup is disabled. Please contact the owner to create an account.' },
+      { status: 403 }
+    )
+
     const { email, password, name } = await req.json()
     
     if (!email || !password || !name) {

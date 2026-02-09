@@ -3,8 +3,10 @@ import { Table, TableHeader, TableBody, TableRow, TableHead, TableCell } from '@
 import Link from 'next/link'
 import { getCurrentUser } from '@/lib/auth'
 import { prisma } from '@/lib/db'
+import { requireModuleAccess } from '@/lib/rbac'
 
 export default async function CirclysPage() {
+  await requireModuleAccess('savings')
   const user = await getCurrentUser()
   
   if (!user) {
@@ -46,7 +48,7 @@ export default async function CirclysPage() {
       },
     })
     
-    investments = participants.map((p) => ({
+    investments = participants.map((p: any) => ({
       ...p.investment,
       myParticipation: {
         investedAmount: p.investedAmount,

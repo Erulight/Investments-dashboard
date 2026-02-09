@@ -1,10 +1,10 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { requireAuth } from '@/lib/rbac'
+import { requireModuleAccess } from '@/lib/rbac'
 import { parseCSV } from '@/lib/import'
 
 export async function POST(req: NextRequest) {
   try {
-    const user = await requireAuth(['OWNER'])
+    await requireModuleAccess('import')
     
     const { content } = await req.json()
     
