@@ -39,6 +39,13 @@ export default async function ZakatPage() {
           },
         },
       },
+      allocations: {
+        include: {
+          investment: {
+            select: { id: true, name: true, account: { select: { type: true } } },
+          },
+        },
+      },
     },
   })
 
@@ -98,6 +105,12 @@ export default async function ZakatPage() {
 
     const lastPayment = payments[0]
 
+    const alloc = bucket.allocations?.[0]
+    const source = alloc?.investment?.name
+      || bucket.label
+      || 'General'
+    const sourceType = alloc?.investment?.account?.type || 'OTHER'
+
     return {
       id: bucket.id,
       label: bucket.label,
@@ -118,6 +131,9 @@ export default async function ZakatPage() {
         : null,
       haulCompleteDate: haulCompleteDate.toISOString().split('T')[0],
       idleBase,
+      haulCompleted,
+      source,
+      sourceType,
       dueReceipts: dueReceipts.map((m) => ({
         date: new Date(m.date).toISOString().split('T')[0],
         amount: m.amount,

@@ -1,6 +1,6 @@
 'use client'
 
-import { useState } from 'react'
+import { useState, useMemo } from 'react'
 import type { ChangeEvent, FormEvent } from 'react'
 import { useRouter } from 'next/navigation'
 import { Card, CardHeader, CardTitle, CardContent } from '@/components/ui/Card'
@@ -27,6 +27,9 @@ type BucketRow = {
   idleBase: number
   receiptsTotal: number
   zakatDue: number
+  haulCompleted: boolean
+  source: string
+  sourceType: string
   lastPayment: null | {
     id: string
     date: string
@@ -35,8 +38,35 @@ type BucketRow = {
   dueReceipts: ReceiptEntry[]
 }
 
+type SortKey = 'label' | 'balance' | 'idleBase' | 'receiptsTotal' | 'zakatDue' | 'haulStartDate' | 'haulCompleteDate'
+type SortDir = 'asc' | 'desc'
+type StatusFilter = 'all' | 'completed' | 'pending'
+type DueFilter = 'all' | 'due' | 'none'
+
+function SortArrow({ active, dir }: { active: boolean; dir: SortDir }) {
+  return (
+    <span className="inline-flex flex-col ml-1 -space-y-1 text-[10px] leading-none">
+      <span className={active && dir === 'asc' ? 'text-emerald-600' : 'text-gray-300'}>&#9650;</span>
+      <span className={active && dir === 'desc' ? 'text-emerald-600' : 'text-gray-300'}>&#9660;</span>
+    </span>
+  )
+}
+
 export function ZakatDashboard({ buckets }: { buckets: BucketRow[] }) {
   const router = useRouter()
+
+  // --- Tab state ---
+  const [activeTab, setActiveTab] = useState('all')
+
+  // --- Sort state ---
+  const [sortKey, setSortKey] = useState<SortKey>('zakatDue')
+  const [sortDir, setSortDir] = useState<SortDir>('desc')
+
+  // --- Filter state ---
+  const [statusFilter, setStatusFilter] = useState<StatusFilter>('all')
+  const [dueFilter, setDueFilter] = useState<DueFilter>('all')
+
+  // --- Pay modal state ---
   const [payTarget, setPayTarget] = useState<BucketRow | null>(null)
   const [payAmount, setPayAmount] = useState('')
   const [payDate, setPayDate] = useState(formatDateInput(new Date()))
@@ -46,6 +76,7 @@ export function ZakatDashboard({ buckets }: { buckets: BucketRow[] }) {
   const [rollbackLoading, setRollbackLoading] = useState(false)
   const [rollbackError, setRollbackError] = useState('')
 
+  // --- Details modal state ---
   const [detailsTarget, setDetailsTarget] = useState<BucketRow | null>(null)
   const [detailsLoading, setDetailsLoading] = useState(false)
   const [detailsError, setDetailsError] = useState('')
@@ -86,7 +117,59 @@ export function ZakatDashboard({ buckets }: { buckets: BucketRow[] }) {
     }>
   }>(null)
 
-  const totalDue = buckets.reduce((sum, b) => sum + b.zakatDue, 0)
+  // --- Derived data ---
+  const sources = useMemo(() => {
+    const set = new Set(buckets.map(b => b.source))
+    return Array.from(set).sort()
+  }, [buckets])
+
+  const filteredBuckets = useMemo(() => {
+    let list = buckets
+    if (activeTab !== 'all') {
+      list = list.filter(b => b.source === activeTab)
+    }
+    if (statusFilter === 'completed') {
+      list = list.filter(b => b.haulCompleted)
+    } else if (statusFilter === 'pending') {
+      list = list.filter(b => !b.haulCompleted)
+    }
+    if (dueFilter === 'due') {
+      list = list.filter(b => b.zakatDue > 0)
+    } else if (dueFilter === 'none') {
+      list = list.filter(b => b.zakatDue <= 0)
+    }
+    // Sort
+    const sorted = [...list].sort((a, b) => {
+      let va: number | string = 0
+      let vb: number | string = 0
+      if (sortKey === 'label') {
+        va = (a.label || a.source || '').toLowerCase()
+        vb = (b.label || b.source || '').toLowerCase()
+      } else if (sortKey === 'haulStartDate' || sortKey === 'haulCompleteDate') {
+        va = a[sortKey]
+        vb = b[sortKey]
+      } else {
+        va = a[sortKey]
+        vb = b[sortKey]
+      }
+      if (va < vb) return sortDir === 'asc' ? -1 : 1
+      if (va > vb) return sortDir === 'asc' ? 1 : -1
+      return 0
+    })
+    return sorted
+  }, [buckets, activeTab, statusFilter, dueFilter, sortKey, sortDir])
+
+  const totalDue = filteredBuckets.reduce((sum, b) => sum + b.zakatDue, 0)
+  const totalBalance = filteredBuckets.reduce((sum, b) => sum + b.balance, 0)
+
+  const toggleSort = (key: SortKey) => {
+    if (sortKey === key) {
+      setSortDir(prev => (prev === 'asc' ? 'desc' : 'asc'))
+    } else {
+      setSortKey(key)
+      setSortDir('desc')
+    }
+  }
 
   const openPay = (bucket: BucketRow) => {
     setPayTarget(bucket)
@@ -193,148 +276,191 @@ export function ZakatDashboard({ buckets }: { buckets: BucketRow[] }) {
     setDetailsData(null)
   }
 
+  const fmt = (n: number) => n.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })
+
   return (
-    <div className="space-y-6">
-      <Card>
-        <CardHeader>
-          <CardTitle>Summary</CardTitle>
-        </CardHeader>
-        <CardContent>
-          <div className="text-2xl font-bold text-gray-900">
-            Total Zakat Due: SAR {totalDue.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
-          </div>
-          <p className="text-xs text-gray-500 mt-2">
-            Zakat base = idle cash held through haul completion + receipts after haul.
-          </p>
-        </CardContent>
-      </Card>
+    <div className="space-y-4">
+      {/* Summary row */}
+      <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+        <Card>
+          <CardContent className="py-3 px-4">
+            <div className="text-xs text-gray-500">Total Zakat Due</div>
+            <div className="text-lg font-bold text-emerald-700">SAR {fmt(totalDue)}</div>
+          </CardContent>
+        </Card>
+        <Card>
+          <CardContent className="py-3 px-4">
+            <div className="text-xs text-gray-500">Total Balance</div>
+            <div className="text-lg font-bold text-gray-900">SAR {fmt(totalBalance)}</div>
+          </CardContent>
+        </Card>
+        <Card>
+          <CardContent className="py-3 px-4">
+            <div className="text-xs text-gray-500">Buckets</div>
+            <div className="text-lg font-bold text-gray-900">{filteredBuckets.length}</div>
+          </CardContent>
+        </Card>
+        <Card>
+          <CardContent className="py-3 px-4">
+            <div className="text-xs text-gray-500">Sources</div>
+            <div className="text-lg font-bold text-gray-900">{sources.length}</div>
+          </CardContent>
+        </Card>
+      </div>
 
+      {/* Tabs */}
+      <div className="flex flex-wrap items-center gap-1 border-b border-gray-200 pb-1">
+        <button
+          onClick={() => setActiveTab('all')}
+          className={`px-3 py-1.5 text-sm rounded-t-md font-medium transition-colors ${
+            activeTab === 'all'
+              ? 'bg-emerald-50 text-emerald-700 border border-b-0 border-gray-200'
+              : 'text-gray-500 hover:text-gray-700 hover:bg-gray-50'
+          }`}
+        >
+          All ({buckets.length})
+        </button>
+        {sources.map(src => {
+          const count = buckets.filter(b => b.source === src).length
+          return (
+            <button
+              key={src}
+              onClick={() => setActiveTab(src)}
+              className={`px-3 py-1.5 text-sm rounded-t-md font-medium transition-colors truncate max-w-[180px] ${
+                activeTab === src
+                  ? 'bg-emerald-50 text-emerald-700 border border-b-0 border-gray-200'
+                  : 'text-gray-500 hover:text-gray-700 hover:bg-gray-50'
+              }`}
+              title={src}
+            >
+              {src} ({count})
+            </button>
+          )
+        })}
+      </div>
+
+      {/* Filters */}
+      <div className="flex flex-wrap items-center gap-3 text-sm">
+        <div className="flex items-center gap-1.5">
+          <span className="text-gray-500 font-medium">Status:</span>
+          {(['all', 'completed', 'pending'] as StatusFilter[]).map(f => (
+            <button
+              key={f}
+              onClick={() => setStatusFilter(f)}
+              className={`px-2 py-0.5 rounded text-xs font-medium ${
+                statusFilter === f
+                  ? 'bg-emerald-100 text-emerald-700'
+                  : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
+              }`}
+            >
+              {f === 'all' ? 'All' : f === 'completed' ? 'Haul Complete' : 'Pending'}
+            </button>
+          ))}
+        </div>
+        <div className="flex items-center gap-1.5">
+          <span className="text-gray-500 font-medium">Zakat:</span>
+          {(['all', 'due', 'none'] as DueFilter[]).map(f => (
+            <button
+              key={f}
+              onClick={() => setDueFilter(f)}
+              className={`px-2 py-0.5 rounded text-xs font-medium ${
+                dueFilter === f
+                  ? 'bg-emerald-100 text-emerald-700'
+                  : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
+              }`}
+            >
+              {f === 'all' ? 'All' : f === 'due' ? 'Has Due' : 'No Due'}
+            </button>
+          ))}
+        </div>
+      </div>
+
+      {/* Table */}
       <Card>
-        <CardHeader>
-          <CardTitle>Haul Buckets</CardTitle>
-        </CardHeader>
-        <CardContent className="space-y-3">
-          {buckets.length === 0 ? (
-            <p className="text-sm text-gray-500">No buckets found.</p>
+        <CardContent className="p-0">
+          {filteredBuckets.length === 0 ? (
+            <div className="p-6 text-sm text-gray-500 text-center">No buckets match your filters.</div>
           ) : (
-            <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
-              {buckets.map((bucket) => (
-                <div key={bucket.id} className="rounded-lg border border-gray-200 p-4">
-                  <div className="flex items-start justify-between gap-3">
-                    <div>
-                      <div className="text-sm font-semibold text-gray-900">
-                        {bucket.label ? bucket.label : `Bucket ${bucket.id.slice(0, 8)}`}
-                      </div>
-                      <div className="text-xs text-gray-500 mt-1">
-                        Start: {bucket.haulStartDate}
-                        {bucket.lastZakatPaidDate ? ` • Last paid: ${bucket.lastZakatPaidDate}` : ''}
-                      </div>
-                      <div className="text-xs text-gray-500">
-                        Haul complete: {bucket.haulCompleteDate}
-                      </div>
-                    </div>
-
-                    <div className="flex flex-col items-end gap-2">
-                      <Button
-                        size="sm"
-                        variant="secondary"
-                        onClick={() => openDetails(bucket)}
-                      >
-                        Details
-                      </Button>
-                      <Button
-                        size="sm"
-                        variant="primary"
-                        disabled={bucket.zakatDue <= 0}
-                        onClick={() => openPay(bucket)}
-                      >
-                        Pay Zakat
-                      </Button>
-                      {bucket.lastPayment && (
-                        <Button
-                          size="sm"
-                          variant="ghost"
-                          disabled={rollbackLoading}
-                          onClick={() => handleRollback(bucket)}
-                        >
-                          Undo Last Payment
-                        </Button>
-                      )}
-                    </div>
-                  </div>
-
-                  <div className="mt-4 grid grid-cols-2 gap-3">
-                    <div className="rounded-lg bg-white p-3 border border-gray-200">
-                      <div className="text-xs text-gray-500">Balance (current)</div>
-                      <div className="text-base font-semibold text-gray-900">
-                        {bucket.currency}{' '}
-                        {bucket.balance.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
-                      </div>
-                    </div>
-                    <div className="rounded-lg bg-white p-3 border border-gray-200">
-                      <div className="text-xs text-gray-500">Zakat due</div>
-                      <div className="text-base font-semibold text-emerald-700">
-                        {bucket.currency}{' '}
-                        {bucket.zakatDue.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
-                      </div>
-                    </div>
-                    <div className="rounded-lg bg-white p-3 border border-gray-200">
-                      <div className="text-xs text-gray-500">Idle cash at haul</div>
-                      <div className="text-base font-semibold text-gray-900">
-                        {bucket.currency}{' '}
-                        {bucket.idleBase.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
-                      </div>
-                    </div>
-                    <div className="rounded-lg bg-white p-3 border border-gray-200">
-                      <div className="text-xs text-gray-500">Receipts after haul</div>
-                      <div className="text-base font-semibold text-gray-900">
-                        {bucket.currency}{' '}
-                        {bucket.receiptsTotal.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
-                      </div>
-                    </div>
-                  </div>
-                {bucket.lastPayment && (
-                  <div className="mt-2 text-xs text-gray-500">
-                    Last payment: {bucket.lastPayment.date} • {bucket.currency}{' '}
-                    {bucket.lastPayment.amount.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
-                  </div>
-                )}
-                {rollbackError && (
-                  <div className="mt-2 text-xs text-red-600">
-                    {rollbackError}
-                  </div>
-                )}
-                {bucket.dueReceipts.length > 0 && (
-                  <div className="mt-3 border-t border-gray-200 pt-3 text-xs text-gray-600">
-                    <div className="flex items-center justify-between mb-2">
-                      <div className="font-semibold text-gray-700">Receipts after haul</div>
-                      <div className="text-xs text-gray-500">{bucket.dueReceipts.length} items</div>
-                    </div>
-                    <div className="space-y-1 max-h-28 overflow-auto pr-2">
-                      {bucket.dueReceipts.slice(0, 8).map((receipt, idx) => (
-                        <div key={`${bucket.id}-${idx}`} className="flex items-center justify-between gap-3">
-                          <span className="truncate">
-                            {receipt.date} • {receipt.type}
-                            {receipt.investmentName ? ` • ${receipt.investmentName}` : ''}
-                          </span>
-                          <span className="text-emerald-700 whitespace-nowrap">
-                            {bucket.currency}{' '}
-                            {receipt.amount.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
-                          </span>
+            <div className="overflow-x-auto">
+              <table className="min-w-full text-sm">
+                <thead>
+                  <tr className="bg-gray-50 text-left text-xs text-gray-500 border-b border-gray-200">
+                    <th className="py-2.5 px-3 font-medium cursor-pointer select-none whitespace-nowrap" onClick={() => toggleSort('label')}>
+                      Bucket <SortArrow active={sortKey === 'label'} dir={sortDir} />
+                    </th>
+                    <th className="py-2.5 px-3 font-medium cursor-pointer select-none whitespace-nowrap" onClick={() => toggleSort('haulStartDate')}>
+                      Haul Start <SortArrow active={sortKey === 'haulStartDate'} dir={sortDir} />
+                    </th>
+                    <th className="py-2.5 px-3 font-medium cursor-pointer select-none whitespace-nowrap" onClick={() => toggleSort('haulCompleteDate')}>
+                      Haul End <SortArrow active={sortKey === 'haulCompleteDate'} dir={sortDir} />
+                    </th>
+                    <th className="py-2.5 px-3 font-medium text-right cursor-pointer select-none whitespace-nowrap" onClick={() => toggleSort('balance')}>
+                      Balance <SortArrow active={sortKey === 'balance'} dir={sortDir} />
+                    </th>
+                    <th className="py-2.5 px-3 font-medium text-right cursor-pointer select-none whitespace-nowrap" onClick={() => toggleSort('idleBase')}>
+                      Idle Cash <SortArrow active={sortKey === 'idleBase'} dir={sortDir} />
+                    </th>
+                    <th className="py-2.5 px-3 font-medium text-right cursor-pointer select-none whitespace-nowrap" onClick={() => toggleSort('receiptsTotal')}>
+                      Receipts <SortArrow active={sortKey === 'receiptsTotal'} dir={sortDir} />
+                    </th>
+                    <th className="py-2.5 px-3 font-medium text-right cursor-pointer select-none whitespace-nowrap" onClick={() => toggleSort('zakatDue')}>
+                      Zakat Due <SortArrow active={sortKey === 'zakatDue'} dir={sortDir} />
+                    </th>
+                    <th className="py-2.5 px-3 font-medium text-center whitespace-nowrap">Status</th>
+                    <th className="py-2.5 px-3 font-medium text-right whitespace-nowrap">Actions</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-gray-100">
+                  {filteredBuckets.map(bucket => (
+                    <tr key={bucket.id} className="hover:bg-gray-50 transition-colors">
+                      <td className="py-2.5 px-3">
+                        <div className="font-medium text-gray-900 truncate max-w-[200px]" title={bucket.label || bucket.source}>
+                          {bucket.label || bucket.source}
                         </div>
-                      ))}
-                      {bucket.dueReceipts.length > 8 && (
-                        <div className="text-xs text-gray-500">Open Details to see all receipts.</div>
-                      )}
-                    </div>
-                  </div>
-                )}
-                </div>
-              ))}
+                        {activeTab === 'all' && (
+                          <div className="text-[11px] text-gray-400 truncate max-w-[200px]">{bucket.source}</div>
+                        )}
+                      </td>
+                      <td className="py-2.5 px-3 text-gray-600 whitespace-nowrap">{bucket.haulStartDate}</td>
+                      <td className="py-2.5 px-3 text-gray-600 whitespace-nowrap">{bucket.haulCompleteDate}</td>
+                      <td className="py-2.5 px-3 text-right font-medium text-gray-900 whitespace-nowrap">{bucket.currency} {fmt(bucket.balance)}</td>
+                      <td className="py-2.5 px-3 text-right text-gray-700 whitespace-nowrap">{bucket.currency} {fmt(bucket.idleBase)}</td>
+                      <td className="py-2.5 px-3 text-right text-gray-700 whitespace-nowrap">{bucket.currency} {fmt(bucket.receiptsTotal)}</td>
+                      <td className="py-2.5 px-3 text-right font-semibold whitespace-nowrap">
+                        <span className={bucket.zakatDue > 0 ? 'text-emerald-700' : 'text-gray-400'}>
+                          {bucket.currency} {fmt(bucket.zakatDue)}
+                        </span>
+                      </td>
+                      <td className="py-2.5 px-3 text-center">
+                        <span className={`inline-flex px-2 py-0.5 rounded-full text-[11px] font-medium ${
+                          bucket.haulCompleted
+                            ? 'bg-green-50 text-green-700'
+                            : 'bg-amber-50 text-amber-700'
+                        }`}>
+                          {bucket.haulCompleted ? 'Complete' : 'Pending'}
+                        </span>
+                      </td>
+                      <td className="py-2.5 px-3 text-right">
+                        <div className="flex items-center justify-end gap-1">
+                          <Button size="sm" variant="secondary" onClick={() => openDetails(bucket)}>Details</Button>
+                          <Button size="sm" variant="primary" disabled={bucket.zakatDue <= 0} onClick={() => openPay(bucket)}>Pay</Button>
+                          {bucket.lastPayment && (
+                            <Button size="sm" variant="ghost" disabled={rollbackLoading} onClick={() => handleRollback(bucket)}>Undo</Button>
+                          )}
+                        </div>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
             </div>
           )}
         </CardContent>
       </Card>
+
+      {rollbackError && (
+        <div className="text-xs text-red-600 px-1">{rollbackError}</div>
+      )}
 
       <Modal
         isOpen={Boolean(detailsTarget)}
