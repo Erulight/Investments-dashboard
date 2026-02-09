@@ -471,7 +471,7 @@ export function ZakatDashboard({ buckets }: { buckets: BucketRow[] }) {
           )}
           <DateInput
             value={payDate}
-            onChange={(e: ChangeEvent<HTMLInputElement>) => setPayDate(e.target.value)}
+            onChange={(value: string) => setPayDate(value)}
             ariaLabel="Payment date"
           />
           <input
