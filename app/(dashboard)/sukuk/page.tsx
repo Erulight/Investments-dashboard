@@ -97,21 +97,7 @@ export default async function InvestmentsPage() {
     return Math.max(0, months)
   }
 
-  const startOfDay = (date: Date) => new Date(date.getFullYear(), date.getMonth(), date.getDate())
-  const today = startOfDay(new Date())
-
-  const activeInvestments = investments.filter((inv) => {
-    const maturityDate = toDate(inv.maturityDate)
-    if (!maturityDate) return true
-    return startOfDay(maturityDate) >= today
-  })
-
-  const totalInvested = activeInvestments.reduce((sum, inv) => {
-    const principal = inv.myParticipation?.investedAmount || inv.principalAmount
-    return sum + (Number.isFinite(principal) ? principal : 0)
-  }, 0)
-
-  const totalNetProfit = activeInvestments.reduce((sum, inv) => {
+  const getNetProfit = (inv: any) => {
     const principal = inv.myParticipation?.investedAmount ?? inv.principalAmount
     const investment = Number.isFinite(principal) ? principal : 0
     const apr = Number.isFinite(inv.interestRate) ? inv.interestRate : 0
@@ -122,10 +108,26 @@ export default async function InvestmentsPage() {
       ? investment * (apr / 100) * periodYears
       : 0
     const manualReceivable = Number.isFinite(inv.receivableAmount) ? inv.receivableAmount : null
-    const netProfit = manualReceivable !== null && manualReceivable > 0
-      ? manualReceivable
-      : Math.max(0, grossProfit - fees)
-    return sum + netProfit
+    if (manualReceivable !== null && manualReceivable > 0) return manualReceivable
+    return Math.max(0, grossProfit - fees)
+  }
+
+  const isActiveDeal = (inv: any) => {
+    const netProfit = getNetProfit(inv)
+    const totalReceived = Number.isFinite(inv.totalReceived) ? inv.totalReceived : 0
+    const receivable = netProfit - totalReceived
+    return receivable > 0.01
+  }
+
+  const activeInvestments = investments.filter(isActiveDeal)
+
+  const totalInvested = activeInvestments.reduce((sum, inv) => {
+    const principal = inv.myParticipation?.investedAmount || inv.principalAmount
+    return sum + (Number.isFinite(principal) ? principal : 0)
+  }, 0)
+
+  const totalNetProfit = activeInvestments.reduce((sum, inv) => {
+    return sum + getNetProfit(inv)
   }, 0)
 
   const totalWithdrawn = activeInvestments.reduce((sum, inv) => {
