@@ -8,7 +8,6 @@ type PayBody = {
   monthIndex: number
   amount: number
   reward?: number
-  paidDate?: string
 }
 
 type UnpayBody = {
@@ -87,19 +86,15 @@ export async function POST(
       return NextResponse.json({ error: 'This month is already paid' }, { status: 400 })
     }
 
-    const paidDate = body.paidDate ? new Date(body.paidDate) : new Date()
-    if (isNaN(paidDate.getTime())) {
-      return NextResponse.json({ error: 'Invalid paidDate' }, { status: 400 })
-    }
-
     const dueDate = addMonths(new Date(investment.startDate), monthIndex)
     const monthLabel = `${dueDate.getFullYear()}-${String(dueDate.getMonth() + 1).padStart(2, '0')}`
+    const contributionDate = dueDate
 
     const bucket = await prisma.cashBucket.create({
       data: {
         label: `Circlys • ${investment.name} • ${monthLabel}`,
         currency: investment.account?.currency || 'SAR',
-        haulStartDate: paidDate,
+        haulStartDate: contributionDate,
         balance: amount + reward,
         movements: {
           create: [
@@ -107,7 +102,7 @@ export async function POST(
               investmentId: investment.id,
               amount,
               type: 'SAVINGS_CONTRIBUTION',
-              date: paidDate,
+              date: contributionDate,
               notes: `Month ${monthIndex + 1}`,
             },
             ...(reward > 0
@@ -116,7 +111,7 @@ export async function POST(
                     investmentId: investment.id,
                     amount: reward,
                     type: 'SAVINGS_REWARD',
-                    date: paidDate,
+                    date: contributionDate,
                     notes: `Month ${monthIndex + 1}`,
                   },
                 ]
@@ -132,7 +127,7 @@ export async function POST(
       [String(monthIndex)]: {
         monthIndex,
         dueDate: dueDate.toISOString(),
-        paidDate: paidDate.toISOString(),
+        paidDate: dueDate.toISOString(),
         amount,
         reward,
         bucketId: bucket.id,
