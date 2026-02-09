@@ -26,16 +26,18 @@ const updateUserSchema = z.object({
 
 export async function PATCH(
   req: NextRequest,
-  { params }: { params: { id: string } }
+  { params }: { params: Promise<{ id: string }> }
 ) {
   try {
     await requireAuth(['OWNER'])
+
+    const { id } = await params
 
     const body = await req.json()
     const validatedData = updateUserSchema.parse(body)
 
     const existingUser = await prisma.user.findUnique({
-      where: { id: params.id },
+      where: { id },
       select: { id: true, email: true },
     })
 
@@ -80,7 +82,7 @@ export async function PATCH(
     }
 
     const user = await prisma.user.update({
-      where: { id: params.id },
+      where: { id },
       data: updateData,
       select: {
         id: true,
