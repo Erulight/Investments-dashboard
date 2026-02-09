@@ -41,7 +41,7 @@ export const TableRow: FC<TableProps> = ({ children, className = '' }) => {
 
 export const TableHead: FC<TableProps> = ({ children, className = '' }) => {
   return (
-    <th className={`px-6 py-4 text-left text-xs font-bold text-gray-700 uppercase tracking-wider ${className}`}>
+    <th className={`px-3 py-2 text-left text-xs font-bold text-gray-700 uppercase tracking-wider leading-tight ${className}`}>
       {children}
     </th>
   )
@@ -49,7 +49,7 @@ export const TableHead: FC<TableProps> = ({ children, className = '' }) => {
 
 export const TableCell: FC<TableProps> = ({ children, className = '' }) => {
   return (
-    <td className={`px-6 py-4 text-sm text-gray-900 ${className}`}>
+    <td className={`px-3 py-2 text-sm text-gray-900 leading-tight ${className}`}>
       {children}
     </td>
   )
