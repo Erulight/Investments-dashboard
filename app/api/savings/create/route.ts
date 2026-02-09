@@ -36,8 +36,8 @@ export async function POST(req: NextRequest) {
         accountId: validatedData.accountId,
         name: validatedData.name,
         // Use metadata to store ROSCA-specific fields
-        principalAmount: validatedData.monthlyContribution * validatedData.totalMonths,
-        currentValue: validatedData.monthlyContribution * validatedData.totalMonths, // Initially same as principal
+        principalAmount: 0,
+        currentValue: 0,
         startDate: new Date(validatedData.startDate),
         // ROSCA fields in metadata
         metadata: JSON.stringify({
@@ -58,6 +58,9 @@ export async function POST(req: NextRequest) {
               ? (validatedData.monthlyContribution * validatedData.totalMonths) * (validatedData.rewardAmount / 100)
               : validatedData.rewardAmount
             : 0,
+          payments: {},
+          totalPaid: 0,
+          totalRewardPaid: 0,
         }),
         // Initialize other fields
         totalReceived: 0,
