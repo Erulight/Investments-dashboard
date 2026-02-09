@@ -1,6 +1,6 @@
 'use client'
 
-import { useState } from 'react'
+import { useMemo, useState } from 'react'
 import type { ReactNode } from 'react'
 import { useRouter } from 'next/navigation'
 import { Table, TableHeader, TableBody, TableRow, TableHead, TableCell } from '@/components/ui/Table'
@@ -70,6 +70,10 @@ export function SukukList({ initialSukuk, userRole }: SukukListProps) {
   const [sukuk, setSukuk] = useState<any[]>(
     Array.isArray(initialSukuk) ? initialSukuk : []
   )
+  const [sort, setSort] = useState<{ key: string; dir: 'asc' | 'desc' }>(() => ({
+    key: 'maturityDate',
+    dir: 'asc',
+  }))
   const [isCreateModalOpen, setIsCreateModalOpen] = useState(false)
   const [isEditModalOpen, setIsEditModalOpen] = useState(false)
   const [editingSukuk, setEditingSukuk] = useState<any>(null)
@@ -344,6 +348,83 @@ export function SukukList({ initialSukuk, userRole }: SukukListProps) {
 
     return true
   })
+
+  const rows = useMemo(() => {
+    return filteredSukuk.map((inv: any) => ({ inv, metrics: getMetrics(inv) }))
+  }, [filteredSukuk])
+
+  const sortedRows = useMemo(() => {
+    const dirMul = sort.dir === 'asc' ? 1 : -1
+    const normalizeString = (value: unknown) => String(value ?? '').toLowerCase()
+    const normalizeNumber = (value: unknown) => {
+      const n = typeof value === 'number' ? value : Number(value)
+      return Number.isFinite(n) ? n : 0
+    }
+    const normalizeDateMs = (value: unknown) => {
+      const d = toDate(value as any)
+      if (!d) return 0
+      const ms = d.getTime()
+      return Number.isFinite(ms) ? ms : 0
+    }
+
+    const getSortableValue = (row: { inv: any; metrics: any }) => {
+      switch (sort.key) {
+        case 'company':
+          return normalizeString(row.inv?.name)
+        case 'investment':
+          return normalizeNumber(row.metrics?.totalInvestment)
+        case 'apr':
+          return normalizeNumber(row.metrics?.apr)
+        case 'aprAfterFees':
+          return normalizeNumber(row.metrics?.aprAfterFees)
+        case 'period':
+          return normalizeNumber(row.metrics?.periodMonths)
+        case 'maturityDate':
+          return normalizeDateMs(row.inv?.maturityDate)
+        case 'days':
+          return normalizeNumber(row.metrics?.daysRemaining)
+        case 'fees':
+          return normalizeNumber(row.metrics?.fees)
+        case 'profit':
+          return normalizeNumber(row.metrics?.netProfit)
+        case 'received':
+          return normalizeNumber(row.metrics?.totalReceived)
+        case 'receivable':
+          return normalizeNumber(row.metrics?.receivable)
+        case 'status':
+          return normalizeNumber(row.metrics?.progress?.percent)
+        default:
+          return 0
+      }
+    }
+
+    const next = [...rows]
+    next.sort((a, b) => {
+      const av = getSortableValue(a)
+      const bv = getSortableValue(b)
+      if (typeof av === 'string' && typeof bv === 'string') {
+        return av.localeCompare(bv) * dirMul
+      }
+      return (normalizeNumber(av) - normalizeNumber(bv)) * dirMul
+    })
+    return next
+  }, [rows, sort, toDate])
+
+  const toggleSort = (key: string) => {
+    setSort((prev) => {
+      if (prev.key === key) {
+        return { key, dir: prev.dir === 'asc' ? 'desc' : 'asc' }
+      }
+      return { key, dir: 'asc' }
+    })
+  }
+
+  const sortIndicator = (key: string) => {
+    if (sort.key !== key) return null
+    return (
+      <span className="ml-1 text-[10px] text-gray-500">{sort.dir === 'asc' ? '▲' : '▼'}</span>
+    )
+  }
 
   const resetWithdrawForm = () => {
     setWithdrawForm({
@@ -779,26 +860,73 @@ export function SukukList({ initialSukuk, userRole }: SukukListProps) {
               <Table className="text-xs table-auto min-w-[980px]">
                 <TableHeader className="sticky top-0 bg-white">
                   <TableRow>
-                    <TableHead className="px-2 py-1.5 text-xs whitespace-nowrap">Company</TableHead>
-                    <TableHead className="px-2 py-1.5 text-xs whitespace-nowrap text-right">Investment</TableHead>
-                    <TableHead className="px-2 py-1.5 text-xs whitespace-nowrap text-right">APR</TableHead>
-                    <TableHead className="px-2 py-1.5 text-xs whitespace-nowrap text-right">APR (Fees)</TableHead>
-                    <TableHead className="px-2 py-1.5 text-xs whitespace-nowrap text-right">Period</TableHead>
-                    <TableHead className="px-2 py-1.5 text-xs whitespace-nowrap">Maturity</TableHead>
-                    <TableHead className="px-2 py-1.5 text-xs whitespace-nowrap text-right">Days</TableHead>
-                    <TableHead className="px-2 py-1.5 text-xs whitespace-nowrap text-right">Fees</TableHead>
-                    <TableHead className="px-2 py-1.5 text-xs whitespace-nowrap text-right">Profit</TableHead>
-                    <TableHead className="px-2 py-1.5 text-xs whitespace-nowrap text-right">Received</TableHead>
-                    <TableHead className="px-2 py-1.5 text-xs whitespace-nowrap text-right">Receivable</TableHead>
-                    <TableHead className="px-2 py-1.5 text-xs whitespace-nowrap">Status</TableHead>
+                    <TableHead className="px-2 py-1.5 text-xs whitespace-nowrap">
+                      <button type="button" onClick={() => toggleSort('company')} className="inline-flex items-center hover:text-gray-900">
+                        Company{sortIndicator('company')}
+                      </button>
+                    </TableHead>
+                    <TableHead className="px-2 py-1.5 text-xs whitespace-nowrap text-right">
+                      <button type="button" onClick={() => toggleSort('investment')} className="inline-flex items-center hover:text-gray-900">
+                        Investment{sortIndicator('investment')}
+                      </button>
+                    </TableHead>
+                    <TableHead className="px-2 py-1.5 text-xs whitespace-nowrap text-right">
+                      <button type="button" onClick={() => toggleSort('apr')} className="inline-flex items-center hover:text-gray-900">
+                        APR{sortIndicator('apr')}
+                      </button>
+                    </TableHead>
+                    <TableHead className="px-2 py-1.5 text-xs whitespace-nowrap text-right">
+                      <button type="button" onClick={() => toggleSort('aprAfterFees')} className="inline-flex items-center hover:text-gray-900">
+                        APR (Fees){sortIndicator('aprAfterFees')}
+                      </button>
+                    </TableHead>
+                    <TableHead className="px-2 py-1.5 text-xs whitespace-nowrap text-right">
+                      <button type="button" onClick={() => toggleSort('period')} className="inline-flex items-center hover:text-gray-900">
+                        Period{sortIndicator('period')}
+                      </button>
+                    </TableHead>
+                    <TableHead className="px-2 py-1.5 text-xs whitespace-nowrap">
+                      <button type="button" onClick={() => toggleSort('maturityDate')} className="inline-flex items-center hover:text-gray-900">
+                        Maturity{sortIndicator('maturityDate')}
+                      </button>
+                    </TableHead>
+                    <TableHead className="px-2 py-1.5 text-xs whitespace-nowrap text-right">
+                      <button type="button" onClick={() => toggleSort('days')} className="inline-flex items-center hover:text-gray-900">
+                        Days{sortIndicator('days')}
+                      </button>
+                    </TableHead>
+                    <TableHead className="px-2 py-1.5 text-xs whitespace-nowrap text-right">
+                      <button type="button" onClick={() => toggleSort('fees')} className="inline-flex items-center hover:text-gray-900">
+                        Fees{sortIndicator('fees')}
+                      </button>
+                    </TableHead>
+                    <TableHead className="px-2 py-1.5 text-xs whitespace-nowrap text-right">
+                      <button type="button" onClick={() => toggleSort('profit')} className="inline-flex items-center hover:text-gray-900">
+                        Profit{sortIndicator('profit')}
+                      </button>
+                    </TableHead>
+                    <TableHead className="px-2 py-1.5 text-xs whitespace-nowrap text-right">
+                      <button type="button" onClick={() => toggleSort('received')} className="inline-flex items-center hover:text-gray-900">
+                        Received{sortIndicator('received')}
+                      </button>
+                    </TableHead>
+                    <TableHead className="px-2 py-1.5 text-xs whitespace-nowrap text-right">
+                      <button type="button" onClick={() => toggleSort('receivable')} className="inline-flex items-center hover:text-gray-900">
+                        Receivable{sortIndicator('receivable')}
+                      </button>
+                    </TableHead>
+                    <TableHead className="px-2 py-1.5 text-xs whitespace-nowrap">
+                      <button type="button" onClick={() => toggleSort('status')} className="inline-flex items-center hover:text-gray-900">
+                        Status{sortIndicator('status')}
+                      </button>
+                    </TableHead>
                     {userRole === 'OWNER' && (
                       <TableHead className="px-2 py-1.5 text-xs whitespace-nowrap">Actions</TableHead>
                     )}
                   </TableRow>
                 </TableHeader>
                 <TableBody>
-                {filteredSukuk.map((inv: any) => {
-                  const metrics = getMetrics(inv)
+                {sortedRows.map(({ inv, metrics }) => {
 
                   return (
                     <TableRow key={inv.id} className="hover:bg-blue-50 transition-colors duration-150">
