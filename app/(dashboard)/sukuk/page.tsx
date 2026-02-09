@@ -142,6 +142,41 @@ export default async function InvestmentsPage() {
   const returnPercentage = totalInvested > 0 ? ((totalReturn / totalInvested) * 100) : 0
   const activeDealsCount = activeInvestments.length
 
+  const totalFeesPaid = activeInvestments.reduce((sum, inv) => {
+    const fees = Number.isFinite(inv.fees) ? inv.fees : 0
+    return sum + fees
+  }, 0)
+
+  const avgDaysToMaturity = (() => {
+    const now = new Date()
+    const todayStart = new Date(now.getFullYear(), now.getMonth(), now.getDate())
+    const withDays = activeInvestments
+      .map((inv) => {
+        const maturity = toDate(inv.maturityDate)
+        if (!maturity) return null
+        const mStart = new Date(maturity.getFullYear(), maturity.getMonth(), maturity.getDate())
+        const diffMs = mStart.getTime() - todayStart.getTime()
+        const days = Math.ceil(diffMs / (1000 * 60 * 60 * 24))
+        return Number.isFinite(days) ? days : null
+      })
+      .filter((v): v is number => v !== null)
+
+    if (withDays.length === 0) return null
+    return withDays.reduce((sum, v) => sum + v, 0) / withDays.length
+  })()
+
+  const platformTotals: Array<[string, number]> = Array.from(
+    activeInvestments
+      .reduce((map: Map<string, number>, inv: any) => {
+        const platform = inv.account?.name || 'Unknown'
+        const principal = inv.myParticipation?.investedAmount || inv.principalAmount
+        const invested = Number.isFinite(principal) ? principal : 0
+        map.set(platform, (map.get(platform) ?? 0) + invested)
+        return map
+      }, new Map<string, number>())
+      .entries()
+  ).sort((a, b) => b[1] - a[1])
+
   return (
     <div className="space-y-8 animate-fade-in">
       {/* Header Section */}
@@ -177,6 +212,55 @@ export default async function InvestmentsPage() {
             <p className="text-2xl font-bold">
               {returnPercentage >= 0 ? '+' : ''}{returnPercentage.toFixed(2)}%
             </p>
+          </div>
+        </div>
+
+        <div className="grid grid-cols-1 md:grid-cols-5 gap-4 mt-4">
+          <div className="bg-white/10 backdrop-blur-lg rounded-xl p-4 border border-white/20">
+            <p className="text-sm text-blue-100 mb-1">Total Received</p>
+            <p className="text-xl font-bold">
+              SAR {totalWithdrawn.toLocaleString(undefined, { maximumFractionDigits: 0 })}
+            </p>
+          </div>
+          <div className="bg-white/10 backdrop-blur-lg rounded-xl p-4 border border-white/20">
+            <p className="text-sm text-blue-100 mb-1">Total Fees Paid</p>
+            <p className="text-xl font-bold">
+              SAR {totalFeesPaid.toLocaleString(undefined, { maximumFractionDigits: 0 })}
+            </p>
+          </div>
+          <div className="bg-white/10 backdrop-blur-lg rounded-xl p-4 border border-white/20">
+            <p className="text-sm text-blue-100 mb-1">Receivable</p>
+            <p className="text-xl font-bold">
+              SAR {totalReceivable.toLocaleString(undefined, { maximumFractionDigits: 0 })}
+            </p>
+          </div>
+          <div className="bg-white/10 backdrop-blur-lg rounded-xl p-4 border border-white/20">
+            <p className="text-sm text-blue-100 mb-1">Active Deals</p>
+            <p className="text-xl font-bold">{activeDealsCount}</p>
+          </div>
+          <div className="bg-white/10 backdrop-blur-lg rounded-xl p-4 border border-white/20">
+            <p className="text-sm text-blue-100 mb-1">Avg Days to Maturity</p>
+            <p className="text-xl font-bold">
+              {avgDaysToMaturity === null ? '—' : Math.round(avgDaysToMaturity).toLocaleString()}
+            </p>
+          </div>
+        </div>
+
+        <div className="mt-4 bg-white/10 backdrop-blur-lg rounded-xl p-4 border border-white/20">
+          <p className="text-sm text-blue-100 mb-3">By Platform (Active Invested)</p>
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
+            {platformTotals.length === 0 ? (
+              <p className="text-sm text-blue-100">—</p>
+            ) : (
+              platformTotals.map(([platform, value]) => (
+                <div key={platform} className="flex items-center justify-between rounded-lg bg-white/5 px-3 py-2">
+                  <span className="text-sm text-white/90 truncate">{platform}</span>
+                  <span className="text-sm font-semibold tabular-nums">
+                    SAR {value.toLocaleString(undefined, { maximumFractionDigits: 0 })}
+                  </span>
+                </div>
+              ))
+            )}
           </div>
         </div>
       </div>
