@@ -524,20 +524,20 @@ export function SukukList({ initialSukuk, userRole }: SukukListProps) {
 
   return (
     <>
-      <div className="flex flex-wrap items-center justify-between gap-4 mb-4">
+      <div className="flex flex-wrap items-center justify-between gap-3 mb-3">
         <div>
-          <h2 className="text-2xl font-bold text-gray-900">All Sukuk Deals</h2>
-          <p className="text-sm text-gray-500 mt-1">
+          <h2 className="text-xl font-bold text-gray-900">All Sukuk Deals</h2>
+          <p className="text-xs text-gray-500 mt-0.5">
             {filteredSukuk.length} of {list.length} deals
           </p>
         </div>
-        <div className="flex items-center gap-4">
-          <span className="text-sm text-gray-500">As of {asOfLabel}</span>
+        <div className="flex items-center gap-3">
+          <span className="text-xs text-gray-500">As of {asOfLabel}</span>
           {userRole === 'OWNER' && (
             <Button
               onClick={openCreateModal}
               variant="primary"
-              size="lg"
+              size="sm"
             >
               + Add New Deal
             </Button>
@@ -562,7 +562,7 @@ export function SukukList({ initialSukuk, userRole }: SukukListProps) {
         </div>
       ) : (
         <>
-          <div className="mb-4 rounded-xl border border-gray-200 bg-white p-4">
+          <div className="mb-3 rounded-xl border border-gray-200 bg-white p-3">
             <div className="flex flex-wrap items-center justify-between gap-3">
               <div className="flex items-center gap-3">
                 <Button
@@ -724,55 +724,59 @@ export function SukukList({ initialSukuk, userRole }: SukukListProps) {
               No deals match the selected filters.
             </div>
           ) : (
-            <Table className="text-[11px]">
-              <TableHeader>
-            <TableRow>
-              <TableHead className="px-2 py-2 text-[11px]">Company</TableHead>
-              <TableHead className="px-2 py-2 text-[11px]">Total Investment</TableHead>
-              <TableHead className="px-2 py-2 text-[11px]">APR Yearly</TableHead>
-              <TableHead className="px-2 py-2 text-[11px]">APR After Fees</TableHead>
-              <TableHead className="px-2 py-2 text-[11px]">Investment Period</TableHead>
-              <TableHead className="px-2 py-2 text-[11px]">Maturity Date</TableHead>
-              <TableHead className="px-2 py-2 text-[11px]">Days Remaining</TableHead>
-              <TableHead className="px-2 py-2 text-[11px]">Fees</TableHead>
-              <TableHead className="px-2 py-2 text-[11px]">Net Profit</TableHead>
-              <TableHead className="px-2 py-2 text-[11px]">Total Received</TableHead>
-              <TableHead className="px-2 py-2 text-[11px]">Receivable</TableHead>
-              <TableHead className="px-2 py-2 text-[11px]">Status</TableHead>
-              {userRole === 'OWNER' && <TableHead className="px-2 py-2 text-[11px]">Actions</TableHead>}
-            </TableRow>
-              </TableHeader>
-              <TableBody>
+            <div className="overflow-x-auto rounded-xl border border-gray-200 bg-white">
+              <Table className="text-xs table-fixed min-w-[1100px]">
+                <TableHeader className="sticky top-0 bg-white">
+                  <TableRow>
+                    <TableHead className="px-2 py-2 text-xs whitespace-nowrap w-[220px]">Company</TableHead>
+                    <TableHead className="px-2 py-2 text-xs whitespace-nowrap text-right w-[150px]">Total Investment</TableHead>
+                    <TableHead className="px-2 py-2 text-xs whitespace-nowrap text-right w-[95px]">APR</TableHead>
+                    <TableHead className="px-2 py-2 text-xs whitespace-nowrap text-right w-[120px]">APR (Fees)</TableHead>
+                    <TableHead className="px-2 py-2 text-xs whitespace-nowrap text-right w-[120px]">Period (mo)</TableHead>
+                    <TableHead className="px-2 py-2 text-xs whitespace-nowrap w-[120px]">Maturity</TableHead>
+                    <TableHead className="px-2 py-2 text-xs whitespace-nowrap text-right w-[120px]">Days</TableHead>
+                    <TableHead className="px-2 py-2 text-xs whitespace-nowrap text-right w-[120px]">Fees</TableHead>
+                    <TableHead className="px-2 py-2 text-xs whitespace-nowrap text-right w-[130px]">Net Profit</TableHead>
+                    <TableHead className="px-2 py-2 text-xs whitespace-nowrap text-right w-[140px]">Received</TableHead>
+                    <TableHead className="px-2 py-2 text-xs whitespace-nowrap text-right w-[140px]">Receivable</TableHead>
+                    <TableHead className="px-2 py-2 text-xs whitespace-nowrap w-[130px]">Status</TableHead>
+                    {userRole === 'OWNER' && (
+                      <TableHead className="px-2 py-2 text-xs whitespace-nowrap w-[240px]">Actions</TableHead>
+                    )}
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
                 {filteredSukuk.map((inv: any) => {
                   const metrics = getMetrics(inv)
 
                   return (
                     <TableRow key={inv.id} className="hover:bg-blue-50 transition-colors duration-150">
-                  <TableCell className="px-2 py-2 font-semibold text-gray-900">
-                    <button
-                      type="button"
-                      onClick={() => setDetailTarget(inv)}
-                      className="text-left hover:text-blue-600 transition-colors"
-                    >
-                      {inv.name}
-                    </button>
-                  </TableCell>
-                  <TableCell className="px-2 py-2 text-gray-700 tabular-nums">
-                    {formatCurrency(metrics.totalInvestment, metrics.currency)}
-                  </TableCell>
-                  <TableCell className="px-2 py-2 text-gray-700 tabular-nums">
-                    {formatPercent(metrics.apr)}
-                  </TableCell>
-                  <TableCell className="px-2 py-2 text-gray-700 tabular-nums">
-                    {formatPercent(metrics.aprAfterFees)}
-                  </TableCell>
-                  <TableCell className="px-2 py-2 text-gray-700 tabular-nums">
-                    {metrics.periodMonths === null ? '—' : metrics.periodMonths.toFixed(1)}
-                  </TableCell>
-                  <TableCell className="px-2 py-2 text-gray-700 tabular-nums">
-                    {formatDate(inv.maturityDate)}
-                  </TableCell>
-                  <TableCell className="px-2 py-2 text-gray-700 tabular-nums">
+                      <TableCell className="px-2 py-2 font-semibold text-gray-900 align-middle">
+                        <button
+                          type="button"
+                          onClick={() => setDetailTarget(inv)}
+                          className="block w-full text-left hover:text-blue-600 transition-colors truncate"
+                          title={inv.name}
+                        >
+                          {inv.name}
+                        </button>
+                      </TableCell>
+                      <TableCell className="px-2 py-2 text-gray-700 tabular-nums text-right whitespace-nowrap align-middle">
+                        {formatCurrency(metrics.totalInvestment, metrics.currency)}
+                      </TableCell>
+                      <TableCell className="px-2 py-2 text-gray-700 tabular-nums text-right whitespace-nowrap align-middle">
+                        {formatPercent(metrics.apr)}
+                      </TableCell>
+                      <TableCell className="px-2 py-2 text-gray-700 tabular-nums text-right whitespace-nowrap align-middle">
+                        {formatPercent(metrics.aprAfterFees)}
+                      </TableCell>
+                      <TableCell className="px-2 py-2 text-gray-700 tabular-nums text-right whitespace-nowrap align-middle">
+                        {metrics.periodMonths === null ? '—' : metrics.periodMonths.toFixed(1)}
+                      </TableCell>
+                      <TableCell className="px-2 py-2 text-gray-700 tabular-nums whitespace-nowrap align-middle">
+                        {formatDate(inv.maturityDate)}
+                      </TableCell>
+                      <TableCell className="px-2 py-2 text-gray-700 tabular-nums text-right whitespace-nowrap align-middle">
                     {metrics.daysRemaining === null ? (
                       '—'
                     ) : metrics.paymentStatus === 'delayed' ? (
@@ -786,29 +790,29 @@ export function SukukList({ initialSukuk, userRole }: SukukListProps) {
                     ) : (
                       metrics.daysRemaining
                     )}
-                  </TableCell>
-                  <TableCell className="px-2 py-2 text-gray-700 tabular-nums">
-                    {formatCurrency(metrics.fees, metrics.currency)}
-                  </TableCell>
-                  <TableCell className="px-2 py-2 text-gray-700 tabular-nums">
-                    {formatCurrency(metrics.netProfit, metrics.currency)}
-                  </TableCell>
-                  <TableCell className="px-2 py-2 text-gray-700 tabular-nums">
-                    {formatCurrency(metrics.totalReceived, metrics.currency)}
-                  </TableCell>
-                  <TableCell className="px-2 py-2 text-gray-700 tabular-nums">
-                    {formatCurrency(metrics.receivable, metrics.currency)}
-                  </TableCell>
-                  <TableCell className="px-2 py-2">
+                      </TableCell>
+                      <TableCell className="px-2 py-2 text-gray-700 tabular-nums text-right whitespace-nowrap align-middle">
+                        {formatCurrency(metrics.fees, metrics.currency)}
+                      </TableCell>
+                      <TableCell className="px-2 py-2 text-gray-700 tabular-nums text-right whitespace-nowrap align-middle">
+                        {formatCurrency(metrics.netProfit, metrics.currency)}
+                      </TableCell>
+                      <TableCell className="px-2 py-2 text-gray-700 tabular-nums text-right whitespace-nowrap align-middle">
+                        {formatCurrency(metrics.totalReceived, metrics.currency)}
+                      </TableCell>
+                      <TableCell className="px-2 py-2 text-gray-700 tabular-nums text-right whitespace-nowrap align-middle">
+                        {formatCurrency(metrics.receivable, metrics.currency)}
+                      </TableCell>
+                      <TableCell className="px-2 py-2 whitespace-nowrap align-middle">
                     <span className={`px-2 py-1 inline-flex items-center text-[10px] leading-4 font-semibold rounded-full shadow-sm ${metrics.progress.className}`}>
                       <span className="w-2 h-2 bg-current rounded-full mr-2 opacity-70"></span>
                       {metrics.paymentStatus === 'delayed' ? 'Delayed ' : metrics.paymentStatus === 'early' ? 'Early ' : ''}
                       {metrics.progress.percent.toFixed(2)}%
                     </span>
-                  </TableCell>
+                      </TableCell>
                       {userRole === 'OWNER' && (
-                        <TableCell className="px-2 py-2">
-                          <div className="flex flex-wrap items-center gap-2">
+                        <TableCell className="px-2 py-2 align-middle">
+                          <div className="flex flex-wrap items-center gap-1.5">
                         <Button
                           size="sm"
                           variant="secondary"
@@ -862,8 +866,9 @@ export function SukukList({ initialSukuk, userRole }: SukukListProps) {
                     </TableRow>
                   )
                 })}
-              </TableBody>
-            </Table>
+                </TableBody>
+              </Table>
+            </div>
           )}
         </>
       )}
