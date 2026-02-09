@@ -121,7 +121,11 @@ export default async function InvestmentsPage() {
     const grossProfit = investment > 0 && apr > 0 && periodYears > 0
       ? investment * (apr / 100) * periodYears
       : 0
-    return sum + Math.max(0, grossProfit - fees)
+    const manualReceivable = Number.isFinite(inv.receivableAmount) ? inv.receivableAmount : null
+    const netProfit = manualReceivable !== null && manualReceivable > 0
+      ? manualReceivable
+      : Math.max(0, grossProfit - fees)
+    return sum + netProfit
   }, 0)
 
   const totalWithdrawn = activeInvestments.reduce((sum, inv) => {
