@@ -26,18 +26,6 @@ export function CirclysClient({ initialInvestments, userRole }: CirclysClientPro
   const [payAmountByKey, setPayAmountByKey] = useState<Record<string, string>>({})
   const [payRewardByKey, setPayRewardByKey] = useState<Record<string, string>>({})
 
-  const totalInvested = investments.reduce((sum: number, inv: any) => {
-    const principal = inv.myParticipation?.investedAmount || inv.principalAmount
-    return sum + principal
-  }, 0)
-
-  const totalValue = investments.reduce((sum: number, inv: any) => {
-    const current = inv.myParticipation?.currentValue || inv.currentValue
-    return sum + current
-  }, 0)
-
-  const totalReturn = totalValue - totalInvested
-
   // Helper to parse ROSCA metadata
   const parseRoscaMetadata = (inv: any) => {
     try {
@@ -46,6 +34,30 @@ export function CirclysClient({ initialInvestments, userRole }: CirclysClientPro
       return {}
     }
   }
+
+  const totalInvested = investments.reduce((sum: number, inv: any) => {
+    const meta = parseRoscaMetadata(inv)
+    const totalPaidFromMeta = Number(meta.totalPaid)
+    const principal = Number.isFinite(totalPaidFromMeta)
+      ? totalPaidFromMeta
+      : (inv.myParticipation?.investedAmount || inv.principalAmount)
+    return sum + (Number(principal) || 0)
+  }, 0)
+
+  const totalValue = investments.reduce((sum: number, inv: any) => {
+    const meta = parseRoscaMetadata(inv)
+    const totalPaidFromMeta = Number(meta.totalPaid)
+    const totalRewardPaidFromMeta = Number(meta.totalRewardPaid)
+    const hasMetaTotals = meta.totalPaid !== undefined || meta.totalRewardPaid !== undefined
+    const valueFromMeta = (Number.isFinite(totalPaidFromMeta) ? totalPaidFromMeta : 0) +
+      (Number.isFinite(totalRewardPaidFromMeta) ? totalRewardPaidFromMeta : 0)
+    const current = hasMetaTotals
+      ? valueFromMeta
+      : (inv.myParticipation?.currentValue || inv.currentValue)
+    return sum + (Number(current) || 0)
+  }, 0)
+
+  const totalReturn = totalValue - totalInvested
 
   const addMonths = (date: Date, months: number) => {
     const d = new Date(date)
@@ -420,7 +432,53 @@ export function CirclysClient({ initialInvestments, userRole }: CirclysClientPro
                                 </td>
                                 <td className="py-2 text-right whitespace-nowrap">
                                   {isPaid ? (
-                                    <span className="text-xs text-gray-500">Bucket created</span>
+                                    userRole === 'OWNER' ? (
+                                      <Button
+                                        variant="secondary"
+                                        disabled={loading}
+                                        onClick={async () => {
+                                          setPayErrorByKey((prev: Record<string, string>) => {
+                                            const next = { ...prev }
+                                            delete next[key]
+                                            return next
+                                          })
+                                          setPayLoadingKey(key)
+                                          try {
+                                            const response = await fetch(
+                                              `/api/savings/${expandedInvestment.id}/pay`,
+                                              {
+                                                method: 'DELETE',
+                                                headers: { 'Content-Type': 'application/json' },
+                                                body: JSON.stringify({ monthIndex: r.monthIndex }),
+                                              }
+                                            )
+                                            if (!response.ok) {
+                                              const data = await response.json().catch(() => ({}))
+                                              throw new Error(data.error || 'Failed to undo payment')
+                                            }
+                                            const data = await response.json()
+                                            setInvestments((prev: any[]) =>
+                                              prev.map((inv: any) =>
+                                                inv.id === expandedInvestment.id
+                                                  ? data.investment
+                                                  : inv
+                                              )
+                                            )
+                                          } catch (e) {
+                                            setPayErrorByKey((prev: Record<string, string>) => ({
+                                              ...prev,
+                                              [key]: e instanceof Error ? e.message : 'Failed to undo payment',
+                                            }))
+                                          } finally {
+                                            setPayLoadingKey(null)
+                                          }
+                                        }}
+                                      >
+                                        {loading ? 'Undoing...' : 'Undo'}
+                                      </Button>
+                                    ) : (
+                                      <span className="text-xs text-gray-500">Paid</span>
+                                    )
                                   ) : userRole === 'OWNER' ? (
                                     <Button
                                       variant="primary"

@@ -11,6 +11,10 @@ type PayBody = {
   paidDate?: string
 }
 
+type UnpayBody = {
+  monthIndex: number
+}
+
 const addMonths = (date: Date, months: number) => {
   const d = new Date(date)
   d.setMonth(d.getMonth() + months)
@@ -167,5 +171,104 @@ export async function POST(
   } catch (error) {
     console.error('Error paying savings month:', error)
     return NextResponse.json({ error: 'Failed to record payment' }, { status: 500 })
+  }
+}
+
+export async function DELETE(
+  req: NextRequest,
+  { params }: { params: Promise<{ id: string }> }
+) {
+  try {
+    await requireModuleAccess('savings')
+    const user = await getCurrentUser()
+
+    if (!user) {
+      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+    }
+
+    if (user.role !== 'OWNER') {
+      return NextResponse.json(
+        { error: 'Only owners can undo monthly contributions' },
+        { status: 403 }
+      )
+    }
+
+    const { id } = await params
+
+    const investment = await prisma.investment.findUnique({
+      where: { id },
+      include: { account: true },
+    })
+
+    if (!investment || investment.account?.type !== 'CIRCLYS') {
+      return NextResponse.json({ error: 'Savings plan not found' }, { status: 404 })
+    }
+
+    const body = (await req.json()) as UnpayBody
+    const monthIndex = Number(body.monthIndex)
+
+    if (!Number.isInteger(monthIndex) || monthIndex < 0) {
+      return NextResponse.json({ error: 'Invalid monthIndex' }, { status: 400 })
+    }
+
+    const meta = (() => {
+      try {
+        return JSON.parse(investment.metadata || '{}')
+      } catch {
+        return {}
+      }
+    })()
+
+    const payments: Record<string, any> =
+      meta.payments && typeof meta.payments === 'object' ? meta.payments : {}
+
+    const existing = payments[String(monthIndex)]
+    const bucketId = existing?.bucketId
+
+    if (!bucketId) {
+      return NextResponse.json({ error: 'This month is not paid' }, { status: 400 })
+    }
+
+    await prisma.cashBucket.delete({ where: { id: bucketId } })
+
+    const nextPayments = { ...payments }
+    delete nextPayments[String(monthIndex)]
+
+    const totalPaid = Object.values(nextPayments).reduce(
+      (sum: number, p: any) => sum + (Number(p.amount) || 0),
+      0
+    )
+    const totalRewardPaid = Object.values(nextPayments).reduce(
+      (sum: number, p: any) => sum + (Number(p.reward) || 0),
+      0
+    )
+    const monthsPaid = Object.keys(nextPayments).length
+
+    const updated = await prisma.investment.update({
+      where: { id: investment.id },
+      data: {
+        principalAmount: totalPaid,
+        currentValue: totalPaid + totalRewardPaid,
+        metadata: JSON.stringify({
+          ...meta,
+          payments: nextPayments,
+          monthsPaid,
+          totalPaid,
+          totalRewardPaid,
+        }),
+      },
+      include: { account: true },
+    })
+
+    await createAuditLog(user.id, 'DELETE', 'CASH_BUCKET', bucketId, {
+      type: 'CIRCLYS_CONTRIBUTION_UNDO',
+      investmentId: investment.id,
+      monthIndex,
+    })
+
+    return NextResponse.json({ investment: updated })
+  } catch (error) {
+    console.error('Error undoing savings month payment:', error)
+    return NextResponse.json({ error: 'Failed to undo payment' }, { status: 500 })
   }
 }
