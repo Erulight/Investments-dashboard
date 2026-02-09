@@ -1,4 +1,11 @@
-import type { FC, ReactNode } from 'react'
+import type {
+  FC,
+  ReactNode,
+  HTMLAttributes,
+  TableHTMLAttributes,
+  ThHTMLAttributes,
+  TdHTMLAttributes,
+} from 'react'
 
 interface TableProps {
   children: ReactNode
@@ -31,25 +38,40 @@ export const TableBody: FC<TableProps> = ({ children }) => {
   )
 }
 
-export const TableRow: FC<TableProps> = ({ children, className = '' }) => {
+type TableRowProps = HTMLAttributes<HTMLTableRowElement> & {
+  children: ReactNode
+}
+
+export const TableRow: FC<TableRowProps> = ({ children, className = '', ...props }) => {
   return (
-    <tr className={`transition-colors duration-150 ${className}`}>
+    <tr className={`transition-colors duration-150 ${className}`} {...props}>
       {children}
     </tr>
   )
 }
 
-export const TableHead: FC<TableProps> = ({ children, className = '' }) => {
+type TableHeadProps = ThHTMLAttributes<HTMLTableCellElement> & {
+  children: ReactNode
+}
+
+export const TableHead: FC<TableHeadProps> = ({ children, className = '', ...props }) => {
   return (
-    <th className={`px-3 py-2 text-left text-xs font-bold text-gray-700 uppercase tracking-wider leading-tight ${className}`}>
+    <th
+      className={`px-3 py-2 text-left text-xs font-bold text-gray-700 uppercase tracking-wider leading-tight ${className}`}
+      {...props}
+    >
       {children}
     </th>
   )
 }
 
-export const TableCell: FC<TableProps> = ({ children, className = '' }) => {
+type TableCellProps = TdHTMLAttributes<HTMLTableCellElement> & {
+  children: ReactNode
+}
+
+export const TableCell: FC<TableCellProps> = ({ children, className = '', ...props }) => {
   return (
-    <td className={`px-3 py-2 text-sm text-gray-900 leading-tight ${className}`}>
+    <td className={`px-3 py-2 text-sm text-gray-900 leading-tight ${className}`} {...props}>
       {children}
     </td>
   )
