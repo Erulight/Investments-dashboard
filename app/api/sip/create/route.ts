@@ -45,6 +45,15 @@ export async function POST(req: NextRequest) {
           investedAmount: 0,
           status: 'ACTIVE',
           lastInvestmentDate: null,
+          history: [
+            {
+              at: new Date().toISOString(),
+              action: 'CREATE',
+              investedAmount: 0,
+              totalAmount: validatedData.totalAmount,
+              currentValue: 0,
+            },
+          ],
         }),
         // Initialize other fields
         totalReceived: 0,

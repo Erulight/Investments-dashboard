@@ -31,8 +31,40 @@ interface SIPClientProps {
 
 export function SIPClient({ investments, userRole }: SIPClientProps) {
   const [showCreateForm, setShowCreateForm] = useState(false)
+  const [showEditForm, setShowEditForm] = useState(false)
   const [isLoading, setIsLoading] = useState(false)
   const [currentInvestments, setCurrentInvestments] = useState(investments)
+  const [editTarget, setEditTarget] = useState<Investment | null>(null)
+
+  const openEdit = (inv: Investment) => {
+    setEditTarget(inv)
+    setShowEditForm(true)
+  }
+
+  const handleEditSip = async (data: CreateSipInput) => {
+    if (!editTarget) return
+    setIsLoading(true)
+    try {
+      const response = await fetch(`/api/sip/${editTarget.id}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(data),
+      })
+      if (!response.ok) {
+        const error = await response.json()
+        throw new Error(error.error || 'Failed to update SIP plan')
+      }
+      const updated = await response.json()
+      setCurrentInvestments((prev: Investment[]) => prev.map((inv: Investment) => (inv.id === updated.id ? updated : inv)))
+      setShowEditForm(false)
+      setEditTarget(null)
+    } catch (error) {
+      console.error('Edit SIP error:', error)
+      throw error
+    } finally {
+      setIsLoading(false)
+    }
+  }
 
   // Helper to parse SIP metadata
   const parseSipMetadata = (inv: any) => {
@@ -46,6 +78,37 @@ export function SIPClient({ investments, userRole }: SIPClientProps) {
   const formatCurrency = (value: number) => {
     const amount = Number.isFinite(value) ? value : 0
     return `SAR ${amount.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`
+  }
+
+  const renderSparkline = (values: number[]) => {
+    if (!Array.isArray(values) || values.length < 2) return null
+    const safe = values.map((v) => (Number.isFinite(v) ? v : 0))
+    const min = Math.min(...safe)
+    const max = Math.max(...safe)
+    const width = 84
+    const height = 20
+    const pad = 2
+    const range = Math.max(0.000001, max - min)
+    const points = safe
+      .map((v, i) => {
+        const x = pad + (i * (width - pad * 2)) / (safe.length - 1)
+        const y = pad + (1 - (v - min) / range) * (height - pad * 2)
+        return `${x.toFixed(2)},${y.toFixed(2)}`
+      })
+      .join(' ')
+
+    const last = safe[safe.length - 1]
+    const prev = safe[safe.length - 2]
+    const up = last >= prev
+    const stroke = up ? '#059669' : '#dc2626'
+    const fill = up ? 'rgba(5,150,105,0.15)' : 'rgba(220,38,38,0.15)'
+
+    return (
+      <svg width={width} height={height} viewBox={`0 0 ${width} ${height}`} aria-hidden="true">
+        <polyline points={points} fill="none" stroke={stroke} strokeWidth="1.8" strokeLinejoin="round" strokeLinecap="round" />
+        <polygon points={`${points} ${width - pad},${height - pad} ${pad},${height - pad}`} fill={fill} />
+      </svg>
+    )
   }
 
   const handleCreateSip = async (data: CreateSipInput) => {
@@ -137,7 +200,7 @@ export function SIPClient({ investments, userRole }: SIPClientProps) {
   }
 
   // Filter only SIP investments
-  const sipInvestments = currentInvestments.filter(inv => {
+  const sipInvestments = currentInvestments.filter((inv: Investment) => {
     const meta = parseSipMetadata(inv)
     return meta.type === 'SIP'
   })
@@ -175,6 +238,7 @@ export function SIPClient({ investments, userRole }: SIPClientProps) {
                 <TableHead className="px-2 py-1.5 whitespace-nowrap">Platform</TableHead>
                 <TableHead className="px-2 py-1.5 whitespace-nowrap">ETF</TableHead>
                 <TableHead className="px-2 py-1.5 whitespace-nowrap">Risk Level</TableHead>
+                <TableHead className="px-2 py-1.5 whitespace-nowrap">Trend</TableHead>
                 <TableHead className="px-2 py-1.5 whitespace-nowrap text-right">Total Invested</TableHead>
                 <TableHead className="px-2 py-1.5 whitespace-nowrap text-right">APR Yearly</TableHead>
                 <TableHead className="px-2 py-1.5 whitespace-nowrap">Date Started</TableHead>
@@ -207,6 +271,15 @@ export function SIPClient({ investments, userRole }: SIPClientProps) {
                     <TableCell className="px-2 py-1.5 whitespace-nowrap text-gray-700">
                       {meta.riskLevel || '-'}
                     </TableCell>
+                    <TableCell className="px-2 py-1.5 whitespace-nowrap text-gray-700">
+                      {(() => {
+                        const history = Array.isArray(meta.history) ? meta.history : []
+                        const values = history
+                          .map((h: any) => Number(h?.currentValue))
+                          .filter((n: any) => Number.isFinite(n))
+                        return renderSparkline(values)
+                      })()}
+                    </TableCell>
                     <TableCell className="px-2 py-1.5 whitespace-nowrap text-right tabular-nums text-gray-900">
                       {formatCurrency(invested)}
                     </TableCell>
@@ -234,6 +307,12 @@ export function SIPClient({ investments, userRole }: SIPClientProps) {
                     {userRole === 'OWNER' && (
                       <TableCell className="px-2 py-1.5 whitespace-nowrap">
                         <div className="flex items-center gap-2">
+                          <button
+                            onClick={() => openEdit(inv)}
+                            className="px-2 py-1 bg-slate-700 text-white text-xs rounded hover:bg-slate-800 transition-colors"
+                          >
+                            Edit
+                          </button>
                           <button
                             onClick={() => handleInvestNow(inv.id)}
                             className="px-2 py-1 bg-emerald-600 text-white text-xs rounded hover:bg-emerald-700 transition-colors"
@@ -280,6 +359,43 @@ export function SIPClient({ investments, userRole }: SIPClientProps) {
               onSubmit={handleCreateSip}
               onCancel={() => setShowCreateForm(false)}
               isLoading={isLoading}
+            />
+          </div>
+        </div>
+      )}
+
+      {showEditForm && editTarget && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+          <div className="bg-white rounded-xl p-6 max-w-2xl w-full mx-4 max-h-[90vh] overflow-y-auto">
+            <div className="flex justify-between items-center mb-6">
+              <h2 className="text-xl font-bold text-gray-900">Edit SIP Plan</h2>
+              <button
+                onClick={() => {
+                  setShowEditForm(false)
+                  setEditTarget(null)
+                }}
+                className="text-gray-400 hover:text-gray-600"
+              >
+                ✕
+              </button>
+            </div>
+            <SIPForm
+              onSubmit={handleEditSip}
+              onCancel={() => {
+                setShowEditForm(false)
+                setEditTarget(null)
+              }}
+              isLoading={isLoading}
+              initialData={{
+                accountId: editTarget.account?.id,
+                name: editTarget.name,
+                totalAmount: (() => {
+                  const meta = parseSipMetadata(editTarget)
+                  return meta.totalAmount || 0
+                })(),
+                startDate: new Date(editTarget.startDate).toISOString().split('T')[0],
+                notes: (editTarget as any).notes || '',
+              }}
             />
           </div>
         </div>

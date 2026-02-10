@@ -56,6 +56,7 @@ export async function POST(request: Request) {
     const currentInvested = metadata.investedAmount || sip.principalAmount || 0
     const newInvested = currentInvested + amount
     const newPrincipal = sip.principalAmount + amount
+    const prevHistory = Array.isArray(metadata.history) ? metadata.history : []
 
     // Update the SIP investment
     const updatedSip = await prisma.investment.update({
@@ -67,6 +68,17 @@ export async function POST(request: Request) {
           ...metadata,
           investedAmount: newInvested,
           lastInvestmentDate: new Date().toISOString(),
+          history: [
+            ...prevHistory,
+            {
+              at: new Date().toISOString(),
+              action: 'INVEST',
+              amount,
+              investedAmount: newInvested,
+              totalAmount: metadata.totalAmount || 0,
+              currentValue: newPrincipal,
+            },
+          ].slice(-50),
         }),
       },
       include: { account: true },
