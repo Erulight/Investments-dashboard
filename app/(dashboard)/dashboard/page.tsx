@@ -53,6 +53,11 @@ export default async function DashboardPage({
   // ROSCA / Circlys debt tracking
   let roscaDebt = 0
 
+  let sukukInvested = 0
+  let sukukValue = 0
+  let sipValue = 0
+  let circlysOngoingSaved = 0
+
   if (user.role === 'OWNER') {
     const investments = await prisma.investment.findMany({
       where: {
@@ -70,6 +75,28 @@ export default async function DashboardPage({
       0
     )
     activeInvestments = investments.length
+
+    sukukInvested = investments
+      .filter((inv) => inv.account.type === 'SUKUK')
+      .reduce((sum, inv) => sum + inv.principalAmount, 0)
+    sukukValue = investments
+      .filter((inv) => inv.account.type === 'SUKUK')
+      .reduce((sum, inv) => sum + inv.currentValue, 0)
+    sipValue = investments
+      .filter((inv) => inv.account.type === 'SIP')
+      .reduce((sum, inv) => sum + inv.currentValue, 0)
+
+    circlysOngoingSaved = investments
+      .filter((inv) => inv.account.type === 'CIRCLYS')
+      .filter((inv) => {
+        try {
+          const meta = inv.metadata ? JSON.parse(inv.metadata as string) : {}
+          return !meta?.received?.date
+        } catch {
+          return true
+        }
+      })
+      .reduce((sum, inv) => sum + inv.principalAmount, 0)
 
     // Build per-type breakdown
     const typeMap = new Map<string, { invested: number; value: number; count: number }>()
@@ -161,7 +188,8 @@ export default async function DashboardPage({
   const yearlyProfitValue = Math.abs(yearlyProfit._sum.amount || 0)
 
   const displayedValue = user.role === 'OWNER' ? cashBalance + totalValue : totalValue
-  const returnPercentage = totalInvested > 0 ? ((totalValue - totalInvested) / totalInvested * 100) : 0
+  const yearlyReturnPercentage =
+    totalInvested > 0 ? (yearlyProfitValue / totalInvested) * 100 : 0
   const netWorth = displayedValue - roscaDebt
 
   return (
@@ -213,8 +241,8 @@ export default async function DashboardPage({
             <div className={`text-xl font-bold mt-1 tabular-nums ${yearlyProfitValue >= 0 ? 'text-emerald-600' : 'text-red-600'}`}>
               SAR {yearlyProfitValue.toLocaleString()}
             </div>
-            <p className={`text-[11px] mt-0.5 font-semibold ${returnPercentage >= 0 ? 'text-emerald-600' : 'text-red-600'}`}>
-              {returnPercentage >= 0 ? '↑' : '↓'} {Math.abs(returnPercentage).toFixed(2)}%
+            <p className={`text-[11px] mt-0.5 font-semibold ${yearlyReturnPercentage >= 0 ? 'text-emerald-600' : 'text-red-600'}`}>
+              {yearlyReturnPercentage >= 0 ? '↑' : '↓'} {Math.abs(yearlyReturnPercentage).toFixed(2)}%
             </p>
           </CardContent>
         </Card>
@@ -229,6 +257,7 @@ export default async function DashboardPage({
             <p className="text-[11px] text-gray-400 mt-0.5">Across all types</p>
           </CardContent>
         </Card>
+
         {user.role === 'OWNER' && roscaDebt > 0 && (
           <Card>
             <CardContent>
@@ -240,6 +269,7 @@ export default async function DashboardPage({
             </CardContent>
           </Card>
         )}
+
         {user.role === 'OWNER' && (
           <Card>
             <CardContent>
@@ -252,6 +282,43 @@ export default async function DashboardPage({
           </Card>
         )}
       </div>
+
+      {/* Third Row: Key Totals */}
+      {user.role === 'OWNER' && (
+        <div className="grid grid-cols-2 gap-3 lg:grid-cols-3">
+          <Card>
+            <CardContent>
+              <p className="text-xs font-medium text-gray-500 uppercase tracking-wider">Sukuk Total</p>
+              <div className="text-xl font-bold text-gray-900 mt-1 tabular-nums">
+                SAR {sukukValue.toLocaleString()}
+              </div>
+              <p className="text-[11px] text-gray-400 mt-0.5 tabular-nums">
+                Invested SAR {sukukInvested.toLocaleString()}
+              </p>
+            </CardContent>
+          </Card>
+
+          <Card>
+            <CardContent>
+              <p className="text-xs font-medium text-gray-500 uppercase tracking-wider">Circlys Ongoing</p>
+              <div className="text-xl font-bold text-gray-900 mt-1 tabular-nums">
+                SAR {circlysOngoingSaved.toLocaleString()}
+              </div>
+              <p className="text-[11px] text-gray-400 mt-0.5">Saved (not received)</p>
+            </CardContent>
+          </Card>
+
+          <Card>
+            <CardContent>
+              <p className="text-xs font-medium text-gray-500 uppercase tracking-wider">SIP Total</p>
+              <div className="text-xl font-bold text-gray-900 mt-1 tabular-nums">
+                SAR {sipValue.toLocaleString()}
+              </div>
+              <p className="text-[11px] text-gray-400 mt-0.5">Current value</p>
+            </CardContent>
+          </Card>
+        </div>
+      )}
 
       {/* Per-Type Breakdown */}
       {typeBreakdowns.length > 0 && (
