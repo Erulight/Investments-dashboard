@@ -3,6 +3,7 @@
 import { useMemo, useState, type ChangeEvent, type FormEvent } from 'react'
 import { SIPForm } from './SIPForm'
 import { CreateSipInput } from '@/lib/validation'
+import { formatGregorianAndHijriDate } from '@/lib/date'
 
 interface Investment {
   id: string
@@ -121,11 +122,14 @@ export function SIPPortfolioClient({ investment, userRole }: SIPPortfolioClientP
   const [showEditForm, setShowEditForm] = useState(false)
   const [showValueForm, setShowValueForm] = useState(false)
   const [isLoading, setIsLoading] = useState(false)
+  const [isSavingZakatBase, setIsSavingZakatBase] = useState(false)
 
   const [valueForm, setValueForm] = useState<{ date: string; currentValue: string }>({
     date: new Date().toISOString().split('T')[0],
     currentValue: '',
   })
+
+  const [zakatBaseDraft, setZakatBaseDraft] = useState<Record<string, string>>({})
 
   const meta = useMemo(() => parseMeta(inv), [inv])
 
@@ -153,6 +157,77 @@ export function SIPPortfolioClient({ investment, userRole }: SIPPortfolioClientP
 
     return filtered
   }, [meta.history, range])
+
+  const latestUpdateLabel = useMemo(() => {
+    const history: HistoryItem[] = Array.isArray(meta.history) ? meta.history : []
+    const last = history
+      .map((h) => ({ at: new Date(h.at) }))
+      .filter((x) => !Number.isNaN(x.at.getTime()))
+      .sort((a, b) => a.at.getTime() - b.at.getTime())
+      .at(-1)
+
+    return last ? formatGregorianAndHijriDate(last.at) : ''
+  }, [meta.history])
+
+  const zakatBaseRows = useMemo(() => {
+    const base = (meta.zakatBaseByAssetType || {}) as Record<string, number>
+    const keys = Object.keys(base)
+    const ordered = keys.length
+      ? keys
+      : [
+          'us_stocks',
+          'developed_emerging_stocks',
+          'local_equity',
+          'real_estate',
+          'money_market',
+          'commodities',
+        ]
+
+    return ordered.map((k) => ({
+      key: k,
+      label: k.replace(/_/g, ' ').replace(/\b\w/g, (c) => c.toUpperCase()),
+      value: Number(base[k] ?? 0),
+    }))
+  }, [meta.zakatBaseByAssetType])
+
+  const openZakatBaseEditor = () => {
+    const next: Record<string, string> = {}
+    for (const row of zakatBaseRows) {
+      next[row.key] = String(row.value ?? 0)
+    }
+    setZakatBaseDraft(next)
+  }
+
+  const saveZakatBase = async () => {
+    if (!inv) return
+    setIsSavingZakatBase(true)
+    try {
+      const payload: Record<string, number> = {}
+      for (const [k, v] of Object.entries(zakatBaseDraft)) {
+        const n = parseFloat(String(v))
+        payload[k] = Number.isFinite(n) ? n : 0
+      }
+
+      const response = await fetch('/api/sip/update-zakat-base', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ sipId: inv.id, zakatBaseByAssetType: payload }),
+      })
+
+      if (!response.ok) {
+        const error = await response.json().catch(() => ({}))
+        throw new Error(error.error || 'Failed to save zakat base')
+      }
+
+      const updated = await response.json()
+      setInv(updated)
+    } catch (error) {
+      console.error('Save zakat base error:', error)
+      alert(error instanceof Error ? error.message : 'Failed to save zakat base')
+    } finally {
+      setIsSavingZakatBase(false)
+    }
+  }
 
   const openValueModal = () => {
     setValueForm({
@@ -350,6 +425,14 @@ export function SIPPortfolioClient({ investment, userRole }: SIPPortfolioClientP
               </span>
               <span className="ml-2">({returnPct >= 0 ? '+' : ''}{returnPct.toFixed(2)}%)</span>
             </div>
+            <div className="mt-3 text-xs text-white/80">
+              <div>
+                <span className="text-white/70">Started:</span> {formatGregorianAndHijriDate(inv.startDate) || '-'}
+              </div>
+              <div className="mt-1">
+                <span className="text-white/70">Last update:</span> {latestUpdateLabel || '-'}
+              </div>
+            </div>
           </div>
 
           {userRole === 'OWNER' && (
@@ -452,8 +535,83 @@ export function SIPPortfolioClient({ investment, userRole }: SIPPortfolioClientP
         )}
 
         {activeTab === 'zakat' && (
-          <div className="mt-6 rounded-xl border border-gray-200 p-4 text-sm text-gray-600">
-            Zakat module (Hijri yearly breakdown + asset-type base %) is the next step.
+          <div className="mt-6 space-y-4">
+            <div className="rounded-xl border border-gray-200 p-4">
+              <div className="flex items-center justify-between gap-4">
+                <div>
+                  <div className="text-sm font-bold text-gray-900">Zakat Base % (by Asset Type)</div>
+                  <div className="text-xs text-gray-500 mt-1">Edit these percentages when your scholar guidance changes.</div>
+                </div>
+                {userRole === 'OWNER' && (
+                  <div className="flex items-center gap-2">
+                    <button
+                      type="button"
+                      onClick={openZakatBaseEditor}
+                      className="px-3 py-2 rounded-lg bg-gray-100 text-gray-700 hover:bg-gray-200 text-sm font-semibold"
+                    >
+                      Reset
+                    </button>
+                    <button
+                      type="button"
+                      onClick={saveZakatBase}
+                      disabled={isSavingZakatBase}
+                      className="px-3 py-2 rounded-lg bg-slate-900 text-white hover:bg-slate-800 disabled:opacity-50 text-sm font-semibold"
+                    >
+                      {isSavingZakatBase ? 'Saving...' : 'Save'}
+                    </button>
+                  </div>
+                )}
+              </div>
+
+              <div className="mt-4 overflow-x-auto">
+                <table className="min-w-full text-sm">
+                  <thead>
+                    <tr className="text-left text-xs uppercase tracking-wider text-gray-500">
+                      <th className="py-2 pr-4">Asset Type</th>
+                      <th className="py-2">Zakat Base %</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-gray-100">
+                    {zakatBaseRows.map((row) => {
+                      const draftValue = zakatBaseDraft[row.key]
+                      const shown = typeof draftValue === 'string' ? draftValue : String(row.value ?? 0)
+                      return (
+                        <tr key={row.key}>
+                          <td className="py-3 pr-4 font-medium text-gray-900 whitespace-nowrap">{row.label}</td>
+                          <td className="py-3">
+                            {userRole === 'OWNER' ? (
+                              <div className="flex items-center gap-2">
+                                <input
+                                  type="number"
+                                  min="0"
+                                  max="100"
+                                  step="0.01"
+                                  value={shown}
+                                  onChange={(e: ChangeEvent<HTMLInputElement>) =>
+                                    setZakatBaseDraft((prev: Record<string, string>) => ({
+                                      ...prev,
+                                      [row.key]: e.target.value,
+                                    }))
+                                  }
+                                  className="w-28 rounded-lg border border-gray-300 px-3 py-1.5 text-sm focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500 outline-none"
+                                />
+                                <span className="text-gray-500">%</span>
+                              </div>
+                            ) : (
+                              <span className="text-gray-700 tabular-nums">{Number(row.value ?? 0).toFixed(2)}%</span>
+                            )}
+                          </td>
+                        </tr>
+                      )
+                    })}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+
+            <div className="rounded-xl border border-gray-200 p-4 text-sm text-gray-600">
+              Hijri yearly hawl breakdown and purification calculations are next.
+            </div>
           </div>
         )}
 

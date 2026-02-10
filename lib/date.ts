@@ -39,3 +39,33 @@ export const toIsoDateInput = (value?: string | null) => {
   if (!date) return null
   return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}`
 }
+
+export const formatGregorianDate = (value?: string | Date | null) => {
+  if (!value) return ''
+  const date = value instanceof Date ? value : new Date(value)
+  if (Number.isNaN(date.getTime())) return ''
+  return date.toLocaleDateString('en-CA')
+}
+
+export const formatHijriDate = (value?: string | Date | null) => {
+  if (!value) return ''
+  const date = value instanceof Date ? value : new Date(value)
+  if (Number.isNaN(date.getTime())) return ''
+  try {
+    return new Intl.DateTimeFormat('ar-SA-u-ca-islamic', {
+      day: '2-digit',
+      month: '2-digit',
+      year: 'numeric',
+    }).format(date)
+  } catch {
+    return ''
+  }
+}
+
+export const formatGregorianAndHijriDate = (value?: string | Date | null) => {
+  const g = formatGregorianDate(value)
+  const h = formatHijriDate(value)
+  if (!g && !h) return ''
+  if (g && h) return `${g} • ${h}`
+  return g || h
+}
