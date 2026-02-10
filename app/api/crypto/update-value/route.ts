@@ -31,6 +31,12 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: 'Invalid date' }, { status: 400 })
     }
 
+    const now = new Date()
+    const maxFutureMs = 36 * 60 * 60 * 1000
+    if (at.getTime() > now.getTime() + maxFutureMs) {
+      return NextResponse.json({ error: 'Date cannot be in the future' }, { status: 400 })
+    }
+
     const inv = await prisma.investment.findUnique({
       where: { id: cryptoId },
       include: { account: true },
