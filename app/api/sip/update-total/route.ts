@@ -18,10 +18,15 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: 'Access denied' }, { status: 403 })
     }
 
-    const { sipId, totalAmount } = await request.json()
+    const { sipId, totalAmount, date } = await request.json()
 
     if (!sipId || !totalAmount || totalAmount <= 0) {
       return NextResponse.json({ error: 'Invalid total amount' }, { status: 400 })
+    }
+
+    const effectiveDate = date ? new Date(date) : new Date()
+    if (Number.isNaN(effectiveDate.getTime())) {
+      return NextResponse.json({ error: 'Invalid date' }, { status: 400 })
     }
 
     // Get the SIP investment
@@ -52,7 +57,7 @@ export async function POST(request: Request) {
           history: [
             ...prevHistory,
             {
-              at: new Date().toISOString(),
+              at: effectiveDate.toISOString(),
               action: 'UPDATE_TOTAL',
               totalAmount,
               investedAmount: metadata.investedAmount || sip.principalAmount || 0,

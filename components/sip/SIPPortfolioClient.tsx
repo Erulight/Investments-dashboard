@@ -162,22 +162,35 @@ function LineChart({ points }: { points: { at: Date; value: number }[] }) {
 }
 
 export function SIPPortfolioClient({ investment, userRole }: SIPPortfolioClientProps) {
-  const [inv, setInv] = useState<Investment | undefined>(investment)
+  const [inv, setInv] = useState(investment)
+
   const [activeTab, setActiveTab] = useState<'performance' | 'zakat' | 'stats'>('performance')
-  const [range, setRange] = useState<RangeKey>('week')
+  const [range, setRange] = useState<RangeKey>('month')
 
   const [showCreateForm, setShowCreateForm] = useState(false)
   const [showEditForm, setShowEditForm] = useState(false)
   const [showValueForm, setShowValueForm] = useState(false)
-  const [showHoldingsForm, setShowHoldingsForm] = useState(false)
   const [isLoading, setIsLoading] = useState(false)
-  const [isSavingZakatBase, setIsSavingZakatBase] = useState(false)
-  const [isSavingHoldings, setIsSavingHoldings] = useState(false)
-
   const [valueForm, setValueForm] = useState<{ date: string; currentValue: string }>({
     date: new Date().toISOString().split('T')[0],
     currentValue: '',
   })
+
+  const [showInvestForm, setShowInvestForm] = useState(false)
+  const [investForm, setInvestForm] = useState<{ date: string; amount: string }>({
+    date: new Date().toISOString().split('T')[0],
+    amount: '',
+  })
+
+  const [showTargetForm, setShowTargetForm] = useState(false)
+  const [targetForm, setTargetForm] = useState<{ date: string; totalAmount: string }>({
+    date: new Date().toISOString().split('T')[0],
+    totalAmount: '',
+  })
+
+  const [showHoldingsForm, setShowHoldingsForm] = useState(false)
+  const [isSavingHoldings, setIsSavingHoldings] = useState(false)
+  const [isSavingZakatBase, setIsSavingZakatBase] = useState(false)
 
   const [zakatBaseDraft, setZakatBaseDraft] = useState<Record<string, string>>({})
 
@@ -454,6 +467,22 @@ export function SIPPortfolioClient({ investment, userRole }: SIPPortfolioClientP
     setShowValueForm(true)
   }
 
+  const openInvestModal = () => {
+    setInvestForm({
+      date: new Date().toISOString().split('T')[0],
+      amount: '',
+    })
+    setShowInvestForm(true)
+  }
+
+  const openTargetModal = () => {
+    setTargetForm({
+      date: new Date().toISOString().split('T')[0],
+      totalAmount: String(meta.totalAmount || ''),
+    })
+    setShowTargetForm(true)
+  }
+
   const handleSubmitCurrentValue = async (e: FormEvent) => {
     e.preventDefault()
     if (!inv) return
@@ -482,6 +511,70 @@ export function SIPPortfolioClient({ investment, userRole }: SIPPortfolioClientP
     } catch (error) {
       console.error('Update value error:', error)
       alert(error instanceof Error ? error.message : 'Failed to update current value')
+    } finally {
+      setIsLoading(false)
+    }
+  }
+
+  const handleSubmitInvest = async (e: FormEvent) => {
+    e.preventDefault()
+    if (!inv) return
+
+    const amount = parseFloat(investForm.amount)
+    if (!Number.isFinite(amount) || amount <= 0) {
+      return
+    }
+
+    setIsLoading(true)
+    try {
+      const response = await fetch('/api/sip/invest', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ sipId: inv.id, amount, date: investForm.date }),
+      })
+
+      if (!response.ok) {
+        const error = await response.json().catch(() => ({}))
+        throw new Error(error.error || 'Failed to invest')
+      }
+
+      const updated = await response.json()
+      setInv(updated)
+      setShowInvestForm(false)
+    } catch (error) {
+      console.error('Invest error:', error)
+      alert(error instanceof Error ? error.message : 'Failed to invest')
+    } finally {
+      setIsLoading(false)
+    }
+  }
+
+  const handleSubmitTarget = async (e: FormEvent) => {
+    e.preventDefault()
+    if (!inv) return
+
+    const totalAmount = parseFloat(targetForm.totalAmount)
+    if (!Number.isFinite(totalAmount) || totalAmount <= 0) {
+      return
+    }
+
+    setIsLoading(true)
+    try {
+      const response = await fetch('/api/sip/update-total', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ sipId: inv.id, totalAmount, date: targetForm.date }),
+      })
+      if (!response.ok) {
+        const error = await response.json().catch(() => ({}))
+        throw new Error(error.error || 'Failed to update target')
+      }
+      const updated = await response.json()
+      setInv(updated)
+      setShowTargetForm(false)
+    } catch (error) {
+      console.error('Update target error:', error)
+      alert(error instanceof Error ? error.message : 'Failed to update target')
     } finally {
       setIsLoading(false)
     }
@@ -528,54 +621,14 @@ export function SIPPortfolioClient({ investment, userRole }: SIPPortfolioClientP
     }
   }
 
-  const handleInvest = async () => {
+  const handleInvest = () => {
     if (!inv) return
-    const amountStr = prompt('Enter deposit amount (SAR):')
-    if (!amountStr) return
-    const amount = parseFloat(amountStr)
-    if (!Number.isFinite(amount) || amount <= 0) return
-
-    try {
-      const response = await fetch('/api/sip/invest', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ sipId: inv.id, amount }),
-      })
-      if (!response.ok) {
-        const error = await response.json().catch(() => ({}))
-        throw new Error(error.error || 'Failed to deposit')
-      }
-      const updated = await response.json()
-      setInv(updated)
-    } catch (error) {
-      console.error('Deposit error:', error)
-      alert(error instanceof Error ? error.message : 'Failed to deposit')
-    }
+    openInvestModal()
   }
 
-  const handleUpdateTotal = async () => {
+  const handleUpdateTotal = () => {
     if (!inv) return
-    const totalStr = prompt('Enter new target amount (SAR):')
-    if (!totalStr) return
-    const totalAmount = parseFloat(totalStr)
-    if (!Number.isFinite(totalAmount) || totalAmount <= 0) return
-
-    try {
-      const response = await fetch('/api/sip/update-total', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ sipId: inv.id, totalAmount }),
-      })
-      if (!response.ok) {
-        const error = await response.json().catch(() => ({}))
-        throw new Error(error.error || 'Failed to update target')
-      }
-      const updated = await response.json()
-      setInv(updated)
-    } catch (error) {
-      console.error('Update target error:', error)
-      alert(error instanceof Error ? error.message : 'Failed to update target')
-    }
+    openTargetModal()
   }
 
   const handleDelete = async () => {
@@ -957,6 +1010,122 @@ export function SIPPortfolioClient({ investment, userRole }: SIPPortfolioClientP
                 notes: inv.notes || '',
               }}
             />
+          </div>
+        </div>
+      )}
+
+      {showInvestForm && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+          <div className="bg-white rounded-xl p-6 max-w-md w-full mx-4">
+            <div className="flex justify-between items-center mb-6">
+              <h2 className="text-xl font-bold text-gray-900">Invest</h2>
+              <button onClick={() => setShowInvestForm(false)} className="text-gray-400 hover:text-gray-600">✕</button>
+            </div>
+
+            <form onSubmit={handleSubmitInvest} className="space-y-4">
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">Date</label>
+                <input
+                  type="date"
+                  value={investForm.date}
+                  onChange={(e: ChangeEvent<HTMLInputElement>) =>
+                    setInvestForm((prev: { date: string; amount: string }) => ({ ...prev, date: e.target.value }))
+                  }
+                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500"
+                  required
+                />
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">Amount (SAR)</label>
+                <input
+                  type="number"
+                  min="0"
+                  step="0.01"
+                  value={investForm.amount}
+                  onChange={(e: ChangeEvent<HTMLInputElement>) =>
+                    setInvestForm((prev: { date: string; amount: string }) => ({ ...prev, amount: e.target.value }))
+                  }
+                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500"
+                  required
+                />
+              </div>
+
+              <div className="flex justify-end space-x-3 pt-4 border-t">
+                <button
+                  type="button"
+                  onClick={() => setShowInvestForm(false)}
+                  className="px-4 py-2 border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50 transition-colors"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  disabled={isLoading}
+                  className="px-4 py-2 bg-slate-900 text-white rounded-lg hover:bg-slate-800 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+                >
+                  {isLoading ? 'Saving...' : 'Save'}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {showTargetForm && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+          <div className="bg-white rounded-xl p-6 max-w-md w-full mx-4">
+            <div className="flex justify-between items-center mb-6">
+              <h2 className="text-xl font-bold text-gray-900">Update Target</h2>
+              <button onClick={() => setShowTargetForm(false)} className="text-gray-400 hover:text-gray-600">✕</button>
+            </div>
+
+            <form onSubmit={handleSubmitTarget} className="space-y-4">
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">Date</label>
+                <input
+                  type="date"
+                  value={targetForm.date}
+                  onChange={(e: ChangeEvent<HTMLInputElement>) =>
+                    setTargetForm((prev: { date: string; totalAmount: string }) => ({ ...prev, date: e.target.value }))
+                  }
+                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500"
+                  required
+                />
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">Target Amount (SAR)</label>
+                <input
+                  type="number"
+                  min="0"
+                  step="0.01"
+                  value={targetForm.totalAmount}
+                  onChange={(e: ChangeEvent<HTMLInputElement>) =>
+                    setTargetForm((prev: { date: string; totalAmount: string }) => ({ ...prev, totalAmount: e.target.value }))
+                  }
+                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500"
+                  required
+                />
+              </div>
+
+              <div className="flex justify-end space-x-3 pt-4 border-t">
+                <button
+                  type="button"
+                  onClick={() => setShowTargetForm(false)}
+                  className="px-4 py-2 border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50 transition-colors"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  disabled={isLoading}
+                  className="px-4 py-2 bg-slate-900 text-white rounded-lg hover:bg-slate-800 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+                >
+                  {isLoading ? 'Saving...' : 'Save'}
+                </button>
+              </div>
+            </form>
           </div>
         </div>
       )}

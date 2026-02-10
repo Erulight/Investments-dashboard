@@ -3,6 +3,25 @@ import { getCurrentUser } from '@/lib/auth'
 import { prisma } from '@/lib/db'
 import { requireModuleAccess } from '@/lib/rbac'
 import { createAuditLog } from '@/lib/audit'
+import type { Prisma } from '@prisma/client'
+import { withdrawFromBuckets } from '@/lib/cashBuckets'
+
+const CASH_BALANCE_KEY = 'CASH_BALANCE'
+
+const getCashAccount = async (tx: Prisma.TransactionClient, currency = 'SAR') => {
+  const existing = await tx.account.findFirst({
+    where: { type: 'CASH', isActive: true },
+  })
+  if (existing) return existing
+  return tx.account.create({
+    data: {
+      name: 'Cash Balance',
+      type: 'CASH',
+      currency,
+      description: 'Cash ledger account',
+    },
+  })
+}
 
 export async function POST(request: Request) {
   try {
@@ -13,10 +32,15 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
     }
 
-    const { sipId, amount } = await request.json()
+    const { sipId, amount, date } = await request.json()
 
     if (!sipId || !amount || amount <= 0) {
       return NextResponse.json({ error: 'Invalid investment amount' }, { status: 400 })
+    }
+
+    const investmentDate = date ? new Date(date) : new Date()
+    if (Number.isNaN(investmentDate.getTime())) {
+      return NextResponse.json({ error: 'Invalid date' }, { status: 400 })
     }
 
     // Get the SIP investment
@@ -47,41 +71,74 @@ export async function POST(request: Request) {
       }
     }
 
-    // For now, we'll just update the invested amount in metadata
-    // In a real implementation, you would:
-    // 1. Create a cash transaction to deduct from Cash Balance
-    // 2. Update the investment's principalAmount and currentValue
-    // 3. Create audit logs for the transaction
-
     const currentInvested = metadata.investedAmount || sip.principalAmount || 0
     const newInvested = currentInvested + amount
     const newPrincipal = sip.principalAmount + amount
     const prevHistory = Array.isArray(metadata.history) ? metadata.history : []
     const currentValue = metadata.currentValue || sip.currentValue || 0
 
-    // Update the SIP investment
-    const updatedSip = await prisma.investment.update({
-      where: { id: sipId },
-      data: {
-        principalAmount: newPrincipal,
-        metadata: JSON.stringify({
-          ...metadata,
-          investedAmount: newInvested,
-          lastInvestmentDate: new Date().toISOString(),
-          history: [
-            ...prevHistory,
-            {
-              at: new Date().toISOString(),
-              action: 'INVEST',
-              amount,
-              investedAmount: newInvested,
-              totalAmount: metadata.totalAmount || 0,
-              currentValue,
-            },
-          ].slice(-50),
-        }),
-      },
-      include: { account: true },
+    const updatedSip = await prisma.$transaction(async (tx: Prisma.TransactionClient) => {
+      const currency = sip.account?.currency || 'SAR'
+
+      await withdrawFromBuckets(tx, {
+        amount,
+        currency,
+        date: investmentDate,
+        type: 'INVEST_OUT',
+        investmentId: sipId,
+        notes: `SIP Invest • ${sip.name}`,
+        availableOnOrBefore: investmentDate,
+      })
+
+      const setting = await tx.systemSetting.findUnique({ where: { key: CASH_BALANCE_KEY } })
+      const currentCash = setting ? Number(setting.value) : 0
+      const nextCash = currentCash - amount
+      if (nextCash < 0) {
+        throw new Error('INSUFFICIENT_CASH')
+      }
+      if (setting) {
+        await tx.systemSetting.update({
+          where: { key: CASH_BALANCE_KEY },
+          data: { value: nextCash.toString() },
+        })
+      }
+
+      const cashAccount = await getCashAccount(tx, currency)
+      await tx.transaction.create({
+        data: {
+          accountId: cashAccount.id,
+          investmentId: sipId,
+          personId: user.personId || null,
+          type: 'INVEST_OUT',
+          amount: -amount,
+          date: investmentDate,
+          description: `SIP Invest • ${sip.name}`,
+        },
+      })
+
+      return tx.investment.update({
+        where: { id: sipId },
+        data: {
+          principalAmount: newPrincipal,
+          metadata: JSON.stringify({
+            ...metadata,
+            investedAmount: newInvested,
+            lastInvestmentDate: investmentDate.toISOString(),
+            history: [
+              ...prevHistory,
+              {
+                at: investmentDate.toISOString(),
+                action: 'INVEST',
+                amount,
+                investedAmount: newInvested,
+                totalAmount: metadata.totalAmount || 0,
+                currentValue,
+              },
+            ].slice(-200),
+          }),
+        },
+        include: { account: true },
+      })
     })
 
     // Log the investment action
@@ -102,6 +159,9 @@ export async function POST(request: Request) {
     console.error('Error investing in SIP:', error)
     if (error instanceof Error && error.message === 'Module access denied') {
       return NextResponse.json({ error: 'Access denied' }, { status: 403 })
+    }
+    if (error instanceof Error && error.message === 'INSUFFICIENT_CASH') {
+      return NextResponse.json({ error: 'Insufficient cash balance for selected date' }, { status: 400 })
     }
     return NextResponse.json({ error: 'Failed to invest in SIP plan' }, { status: 500 })
   }
