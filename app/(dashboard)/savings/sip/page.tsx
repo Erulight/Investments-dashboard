@@ -29,7 +29,7 @@ export default async function SIPPage() {
   const filteredInvestments = user.role === 'OWNER' 
     ? investments
     : investments.filter(inv => 
-        inv.dealParticipants.some(dp => dp.person.userId === user.id)
+        inv.dealParticipants.some(dp => dp.person.user?.id === user.id)
       )
 
   return (
