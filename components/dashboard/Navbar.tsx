@@ -41,6 +41,7 @@ interface NavbarProps {
     role: string
     permissions?: string | null
   }
+  activeAccountTypes?: string[]
 }
 
 function hasAccess(user: NavbarProps['user'], item: NavItem): boolean {
@@ -72,7 +73,7 @@ function hasAccess(user: NavbarProps['user'], item: NavItem): boolean {
   }
 }
 
-export function Navbar({ user }: NavbarProps) {
+export function Navbar({ user, activeAccountTypes }: NavbarProps) {
   const pathname = usePathname()
   const router = useRouter()
   const [loading, setLoading] = useState(false)
@@ -109,6 +110,35 @@ export function Navbar({ user }: NavbarProps) {
     }
   }
 
+  const normalizeType = (s: string) =>
+    String(s || '')
+      .trim()
+      .toUpperCase()
+      .replace(/\s+/g, '-')
+      .replace(/_/g, '-')
+
+  const activeTypes = new Set((Array.isArray(activeAccountTypes) ? activeAccountTypes : []).map(normalizeType))
+
+  const moduleToAccountType: Record<string, string> = {
+    sukuk: 'SUKUK',
+    crypto: 'CRYPTO',
+    sip: 'SIP',
+    savings: 'SAVINGS',
+    'business-deals': 'BUSINESS-DEALS',
+  }
+
+  const isActiveInvestmentType = (item: NavItem) => {
+    if (!item.module) return true
+    const expected = moduleToAccountType[item.module]
+    if (!expected) return true
+    if (!Array.isArray(activeAccountTypes)) return true
+    const normalizedExpected = normalizeType(expected)
+    if (activeTypes.has(normalizedExpected)) return true
+    // Backward-compat: allow spaces if existing DB types used spaces
+    const spaced = normalizeType(expected.replace(/-/g, ' '))
+    return activeTypes.has(spaced)
+  }
+
   const filteredNav = navigation
     .map(item => {
       if (!hasAccess(user, item)) {
@@ -117,7 +147,9 @@ export function Navbar({ user }: NavbarProps) {
       
       // Filter children if item has children
       if (item.children) {
-        const filteredChildren = item.children.filter(child => hasAccess(user, child))
+        const filteredChildren = item.children
+          .filter(child => hasAccess(user, child))
+          .filter(child => isActiveInvestmentType(child))
         
         // Only show parent if it has accessible children
         if (filteredChildren.length === 0) {
