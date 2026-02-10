@@ -368,7 +368,7 @@ export function CryptoPortfolioClient({ investment }: { investment: Investment }
               </div>
 
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">Current Value (SAR)</label>
+                <label className="block text-sm font-medium text-gray-700 mb-2">Current Value ({inv.account.currency})</label>
                 <input
                   type="number"
                   min="0"
