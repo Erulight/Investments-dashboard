@@ -4,6 +4,34 @@ import { ZakatDashboard } from '@/components/zakat/ZakatDashboard'
 
 export const dynamic = 'force-dynamic'
 
+type BucketRow = {
+  id: string
+  label?: string | null
+  currency: string
+  balance: number
+  haulStartDate: string
+  lastZakatPaidDate?: string | null
+  haulCompleteDate: string
+  idleBase: number
+  receiptsTotal: number
+  zakatDue: number
+  haulCompleted: boolean
+  source: string
+  sourceGroup: string
+  sourceType: string
+  lastPayment: null | {
+    id: string
+    date: string
+    amount: number
+  }
+  dueReceipts: Array<{
+    date: string
+    amount: number
+    type: string
+    investmentName?: string | null
+  }>
+}
+
 const addDays = (date: Date, days: number) => {
   const next = new Date(date)
   next.setDate(next.getDate() + days)
@@ -49,8 +77,8 @@ export default async function ZakatPage() {
     },
   })
 
-  const rows = buckets
-    .map((bucket: any) => {
+  const rows: BucketRow[] = buckets
+    .map((bucket: any): BucketRow | null => {
     const effectiveStart = bucket.lastZakatPaidDate
       ? new Date(bucket.lastZakatPaidDate)
       : new Date(bucket.haulStartDate)
@@ -174,7 +202,7 @@ export default async function ZakatPage() {
       })),
     }
     })
-    .filter(Boolean)
+    .filter((row: BucketRow | null): row is BucketRow => row !== null)
 
   return (
     <div className="space-y-6">
