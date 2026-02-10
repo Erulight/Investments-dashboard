@@ -207,8 +207,9 @@ export function CryptoPortfolioClient({ investment }: { investment: Investment }
   const zakatRemaining = Math.max(0, zakatDue - paidTotal)
 
   const openValueModal = () => {
+    const defaultDate = (points.at(-1)?.at || new Date()).toISOString().split('T')[0]
     setValueForm({
-      date: new Date().toISOString().split('T')[0],
+      date: defaultDate,
       currentValue: String(currentValue || ''),
     })
     setShowValueForm(true)
@@ -511,11 +512,10 @@ export function CryptoPortfolioClient({ investment }: { investment: Investment }
                 <tbody>
                   {monthlyRows
                     .slice()
-                    .reverse()
                     .map((row: { at: Date; value: number; change: number | null; investedAt: number; profitAt: number }) => {
                       const changePositive = row.change !== null ? row.change >= 0 : true
                       const profitPositive = row.profitAt >= 0
-                      const monthLabel = row.at.toLocaleDateString(undefined, { year: 'numeric', month: 'short' })
+                      const monthLabel = row.at.toLocaleDateString(undefined, { year: 'numeric', month: 'short', timeZone: 'UTC' })
                       return (
                         <tr key={row.at.toISOString()} className="border-b last:border-b-0">
                           <td className="py-2 pr-4 font-medium text-gray-900">{monthLabel}</td>
