@@ -75,7 +75,7 @@ export async function POST(request: Request) {
     // Log the investment action
     await createAuditLog(
       user.id,
-      'INVEST',
+      'UPDATE',
       'INVESTMENT',
       sipId,
       {
