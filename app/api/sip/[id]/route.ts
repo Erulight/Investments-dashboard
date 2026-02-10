@@ -54,7 +54,6 @@ export async function PATCH(
     }
 
     const prevHistory = Array.isArray(meta.history) ? meta.history : []
-    const nextTotalAmount = validated.totalAmount ?? meta.totalAmount ?? 0
     const investedAmount = meta.investedAmount ?? existing.principalAmount ?? 0
     const currentValue = meta.currentValue ?? existing.currentValue ?? 0
 
@@ -67,14 +66,12 @@ export async function PATCH(
         ...(validated.notes !== undefined ? { notes: validated.notes } : {}),
         metadata: JSON.stringify({
           ...meta,
-          ...(validated.totalAmount !== undefined ? { totalAmount: validated.totalAmount } : {}),
           history: [
             ...prevHistory,
             {
               at: new Date().toISOString(),
               action: 'EDIT',
               investedAmount,
-              totalAmount: nextTotalAmount,
               currentValue,
             },
           ].slice(-50),
@@ -87,7 +84,6 @@ export async function PATCH(
       type: 'SIP',
       name: updated.name,
       accountId: updated.accountId,
-      ...(validated.totalAmount !== undefined ? { totalAmount: validated.totalAmount } : {}),
     })
 
     return NextResponse.json(updated)

@@ -51,7 +51,6 @@ export async function POST(req: NextRequest) {
         // SIP fields in metadata
         metadata: JSON.stringify({
           type: 'SIP',
-          totalAmount: validatedData.totalAmount,
           investedAmount: 0,
           currentValue: 0,
           status: 'ACTIVE',
@@ -70,7 +69,6 @@ export async function POST(req: NextRequest) {
               at: new Date().toISOString(),
               action: 'CREATE',
               investedAmount: 0,
-              totalAmount: validatedData.totalAmount,
               currentValue: 0,
             },
           ],
@@ -98,7 +96,6 @@ export async function POST(req: NextRequest) {
         type: 'SIP',
         name: investment.name,
         accountId: investment.accountId,
-        totalAmount: validatedData.totalAmount,
       }
     )
 

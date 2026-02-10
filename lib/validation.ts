@@ -110,7 +110,6 @@ export type UpdateSavingsInput = z.infer<typeof updateSavingsSchema>
 export const createSipSchema = z.object({
   accountId: z.string().min(1, 'Account is required'),
   name: z.string().min(1, 'SIP name is required'),
-  totalAmount: z.number().positive('Total amount must be positive'),
   startDate: z.string().refine((date) => !isNaN(Date.parse(date)), {
     message: 'Invalid start date',
   }),
@@ -120,7 +119,6 @@ export const createSipSchema = z.object({
 export const updateSipSchema = z.object({
   accountId: z.string().min(1, 'Account is required').optional(),
   name: z.string().min(1, 'SIP name is required').optional(),
-  totalAmount: z.number().positive('Total amount must be positive').optional(),
   startDate: z.string().optional().refine((date) => !date || !isNaN(Date.parse(date)), {
     message: 'Invalid start date',
   }),

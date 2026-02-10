@@ -21,7 +21,6 @@ export function SIPForm({ onSubmit, onCancel, isLoading = false, initialData }: 
   const [formData, setFormData] = useState<CreateSipInput>({
     accountId: initialData?.accountId || '',
     name: initialData?.name || '',
-    totalAmount: initialData?.totalAmount || 0,
     startDate: initialData?.startDate || new Date().toISOString().split('T')[0],
     notes: initialData?.notes || '',
   })
@@ -62,10 +61,6 @@ export function SIPForm({ onSubmit, onCancel, isLoading = false, initialData }: 
     
     if (!formData.name.trim()) {
       newErrors.name = 'SIP name is required'
-    }
-    
-    if (!formData.totalAmount || formData.totalAmount <= 0) {
-      newErrors.totalAmount = 'Total amount must be greater than 0'
     }
     
     if (!formData.startDate) {
@@ -129,25 +124,6 @@ export function SIPForm({ onSubmit, onCancel, isLoading = false, initialData }: 
           required
         />
         {errors.name && <p className="mt-1 text-sm text-red-600">{errors.name}</p>}
-      </div>
-
-      {/* Total Amount */}
-      <div>
-        <label htmlFor="totalAmount" className="block text-sm font-medium text-gray-700 mb-2">
-          Target Amount (SAR) *
-        </label>
-        <input
-          id="totalAmount"
-          type="number"
-          min="0"
-          step="0.01"
-          value={formData.totalAmount || ''}
-          onChange={(e) => handleChange('totalAmount', parseFloat(e.target.value) || 0)}
-          placeholder="100000"
-          className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500"
-          required
-        />
-        {errors.totalAmount && <p className="mt-1 text-sm text-red-600">{errors.totalAmount}</p>}
       </div>
 
       {/* Start Date */}

@@ -131,7 +131,6 @@ export async function POST(request: Request) {
                 action: 'INVEST',
                 amount,
                 investedAmount: newInvested,
-                totalAmount: metadata.totalAmount || 0,
                 currentValue,
               },
             ].slice(-200),

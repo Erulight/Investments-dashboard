@@ -54,7 +54,6 @@ export async function POST(request: Request) {
 
     const prevHistory = Array.isArray(metadata.history) ? metadata.history : []
     const investedAmount = metadata.investedAmount || sip.principalAmount || 0
-    const totalAmount = metadata.totalAmount || 0
 
     const latestValueUpdateAt = prevHistory
       .filter((h: any) => typeof h?.action === 'string' && h.action === 'VALUE_UPDATE')
@@ -80,7 +79,6 @@ export async function POST(request: Request) {
               at: at.toISOString(),
               action: 'VALUE_UPDATE',
               investedAmount,
-              totalAmount,
               currentValue,
             },
           ].slice(-200),
