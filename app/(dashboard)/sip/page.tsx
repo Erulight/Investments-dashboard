@@ -1,6 +1,6 @@
 import { getCurrentUser } from '@/lib/auth'
 import { prisma } from '@/lib/db'
-import { SIPPortfolioClient } from '@/components/sip/SIPPortfolioClient'
+import SIPPortfolioClient from '@/components/sip/SIPPortfolioClient'
 
 export default async function SIPPage() {
   const user = await getCurrentUser()
