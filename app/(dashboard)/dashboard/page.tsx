@@ -69,7 +69,10 @@ export default async function DashboardPage({
     })
 
     totalInvested = investments.reduce((sum, inv) => sum + inv.principalAmount, 0)
-    totalValue = investments.reduce((sum, inv) => sum + inv.currentValue, 0)
+    totalValue = investments.reduce(
+      (sum, inv) => sum + (inv.account.type === 'SUKUK' ? inv.principalAmount : inv.currentValue),
+      0
+    )
     totalProfit = investments.reduce(
       (sum, inv) => sum + inv.realizedProfit + inv.unrealizedProfit,
       0
@@ -81,7 +84,7 @@ export default async function DashboardPage({
       .reduce((sum, inv) => sum + inv.principalAmount, 0)
     sukukValue = investments
       .filter((inv) => inv.account.type === 'SUKUK')
-      .reduce((sum, inv) => sum + inv.currentValue, 0)
+      .reduce((sum, inv) => sum + inv.principalAmount, 0)
     sipValue = investments
       .filter((inv) => inv.account.type === 'SIP')
       .reduce((sum, inv) => sum + inv.currentValue, 0)
@@ -104,7 +107,7 @@ export default async function DashboardPage({
       const t = inv.account.type
       const existing = typeMap.get(t) || { invested: 0, value: 0, count: 0 }
       existing.invested += inv.principalAmount
-      existing.value += inv.currentValue
+      existing.value += t === 'SUKUK' ? inv.principalAmount : inv.currentValue
       existing.count += 1
       typeMap.set(t, existing)
     }
