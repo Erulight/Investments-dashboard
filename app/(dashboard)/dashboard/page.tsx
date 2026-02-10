@@ -41,6 +41,8 @@ export default async function DashboardPage({
   let totalProfit = 0
   let activeInvestments = 0
 
+  let investments: any[] = []
+
   const investmentDateFilter = {
     startDate: { lt: yearEnd },
     OR: [{ maturityDate: null }, { maturityDate: { gte: yearStart } }],
@@ -59,54 +61,101 @@ export default async function DashboardPage({
   let sipValue = 0
   let circlysOngoingSaved = 0
 
-  if (user.role === 'OWNER') {
-    const toDate = (value?: string | Date | null) => {
-      if (!value) return null
-      if (value instanceof Date) return value
-      if (typeof value === 'string') {
-        const match = value.match(/^(\d{4})-(\d{2})-(\d{2})/)
-        if (match) {
-          const [, year, month, day] = match
-          return new Date(Number(year), Number(month) - 1, Number(day))
-        }
+  const toDate = (value?: string | Date | null) => {
+    if (!value) return null
+    if (value instanceof Date) return value
+    if (typeof value === 'string') {
+      const match = value.match(/^(\d{4})-(\d{2})-(\d{2})/)
+      if (match) {
+        const [, year, month, day] = match
+        return new Date(Number(year), Number(month) - 1, Number(day))
       }
-      const date = new Date(value)
-      if (Number.isNaN(date.getTime())) return null
-      return date
+    }
+    const date = new Date(value)
+    if (Number.isNaN(date.getTime())) return null
+    return date
+  }
+
+  const getPeriodMonths = (start?: string | Date | null, end?: string | Date | null) => {
+    const startDate = toDate(start)
+    const endDate = toDate(end)
+    if (!startDate || !endDate) return 0
+    const months = (endDate.getFullYear() - startDate.getFullYear()) * 12
+      + (endDate.getMonth() - startDate.getMonth())
+      + (endDate.getDate() - startDate.getDate()) / 30
+    return Math.max(0, months)
+  }
+
+  const getSukukNetProfit = (inv: any) => {
+    const investment = Number.isFinite(inv.principalAmount) ? inv.principalAmount : 0
+    const apr = Number.isFinite(inv.interestRate) ? inv.interestRate : 0
+    const fees = Number.isFinite(inv.fees) ? inv.fees : 0
+    const periodMonths = getPeriodMonths(inv.startDate, inv.maturityDate)
+    const periodYears = periodMonths ? periodMonths / 12 : 0
+    const grossProfit = investment > 0 && apr > 0 && periodYears > 0
+      ? investment * (apr / 100) * periodYears
+      : 0
+
+    const manualReceivable = Number.isFinite(inv.receivableAmount) ? inv.receivableAmount : null
+    if (manualReceivable !== null && manualReceivable > 0) return manualReceivable
+    return Math.max(0, grossProfit - fees)
+  }
+
+  const getValueFromHistoryAt = (inv: any, at: Date) => {
+    const metadata = (() => {
+      try {
+        return JSON.parse(inv.metadata || '{}')
+      } catch {
+        return {}
+      }
+    })()
+
+    const history = Array.isArray(metadata.history) ? metadata.history : []
+    const points = history
+      .filter((h: any) => typeof h?.action === 'string' && h.action === 'VALUE_UPDATE')
+      .map((h: any) => ({ at: new Date(h.at), value: Number(h.currentValue) }))
+      .filter((p: any) => !Number.isNaN(p.at.getTime()) && Number.isFinite(p.value))
+      .sort((a: any, b: any) => a.at.getTime() - b.at.getTime())
+
+    const t = at.getTime()
+    for (let i = points.length - 1; i >= 0; i--) {
+      if (points[i].at.getTime() <= t) return points[i].value
     }
 
-    const getPeriodMonths = (start?: string | Date | null, end?: string | Date | null) => {
-      const startDate = toDate(start)
-      const endDate = toDate(end)
-      if (!startDate || !endDate) return 0
-      const months = (endDate.getFullYear() - startDate.getFullYear()) * 12
-        + (endDate.getMonth() - startDate.getMonth())
-        + (endDate.getDate() - startDate.getDate()) / 30
-      return Math.max(0, months)
-    }
+    const fallback = Number(inv.currentValue)
+    return Number.isFinite(fallback) ? fallback : 0
+  }
 
-    const getSukukNetProfit = (inv: any) => {
-      const investment = Number.isFinite(inv.principalAmount) ? inv.principalAmount : 0
-      const apr = Number.isFinite(inv.interestRate) ? inv.interestRate : 0
-      const fees = Number.isFinite(inv.fees) ? inv.fees : 0
-      const periodMonths = getPeriodMonths(inv.startDate, inv.maturityDate)
-      const periodYears = periodMonths ? periodMonths / 12 : 0
-      const grossProfit = investment > 0 && apr > 0 && periodYears > 0
-        ? investment * (apr / 100) * periodYears
-        : 0
+  const isActiveAt = (inv: any, at: Date) => {
+    const start = toDate(inv.startDate)
+    const maturity = toDate(inv.maturityDate)
+    if (!start) return false
+    if (start.getTime() >= at.getTime()) return false
+    if (!maturity) return true
+    return maturity.getTime() >= at.getTime()
+  }
 
-      const manualReceivable = Number.isFinite(inv.receivableAmount) ? inv.receivableAmount : null
-      if (manualReceivable !== null && manualReceivable > 0) return manualReceivable
-      return Math.max(0, grossProfit - fees)
-    }
-
-    const investments = await prisma.investment.findMany({
+  if (user.role === 'OWNER') {
+    investments = await prisma.investment.findMany({
       where: {
         account: { isActive: true },
         name: { notIn: DEMO_INVESTMENT_NAMES },
         ...investmentDateFilter,
       },
-      include: { account: { select: { type: true } } },
+      include: {
+        account: { select: { type: true } },
+        transactions: {
+          where: {
+            type: { in: ['WITHDRAW_PROFIT', 'WITHDRAW_PRINCIPAL'] },
+          },
+          select: {
+            type: true,
+            date: true,
+            amount: true,
+          },
+          orderBy: { date: 'asc' },
+        },
+      },
     })
 
     totalInvested = investments.reduce((sum, inv) => sum + inv.principalAmount, 0)
@@ -220,36 +269,43 @@ export default async function DashboardPage({
       .sort((a, b) => b.value - a.value)
   }
 
-  const transactionWhere =
-    user.role === 'PARTNER' && user.personId
-      ? {
-          personId: user.personId,
-          OR: [
-            { investment: { name: { notIn: DEMO_INVESTMENT_NAMES } } },
-            { investmentId: null },
-          ],
-        }
-      : {
-          OR: [
-            { investment: { name: { notIn: DEMO_INVESTMENT_NAMES } } },
-            { investmentId: null },
-          ],
-        }
+  const yearlyValueChange = (() => {
+    if (user.role !== 'OWNER') return { start: 0, end: 0, change: 0, pct: 0 }
+    const startAt = yearStart
+    const endAt = new Date(yearEnd.getTime() - 1)
 
-  const yearlyProfit = await prisma.transaction.aggregate({
-    where: {
-      ...transactionWhere,
-      type: 'WITHDRAW_PROFIT',
-      date: { gte: yearStart, lt: yearEnd },
-    },
-    _sum: { amount: true },
-  })
+    const investmentsAtStart = (investments || []).filter((inv: any) => isActiveAt(inv, startAt))
+    const investmentsAtEnd = (investments || []).filter((inv: any) => isActiveAt(inv, endAt))
 
-  const yearlyProfitValue = Math.abs(yearlyProfit._sum.amount || 0)
+    const valueAt = (inv: any, at: Date) => {
+      const t = inv.account?.type
+      if (t === 'SUKUK') {
+        const netProfit = getSukukNetProfit(inv)
+        const receivedUpTo = Array.isArray(inv.transactions)
+          ? inv.transactions
+              .filter((tx: any) => {
+                const d = tx?.date instanceof Date ? tx.date : new Date(tx?.date)
+                return !Number.isNaN(d.getTime()) && d.getTime() <= at.getTime()
+              })
+              .reduce((s: number, tx: any) => s + Math.abs(Number(tx?.amount) || 0), 0)
+          : 0
+        const receivable = Math.max(0, netProfit - receivedUpTo)
+        return (Number(inv.principalAmount) || 0) + receivable
+      }
+
+      return getValueFromHistoryAt(inv, at)
+    }
+
+    const startValue = investmentsAtStart.reduce((s: number, inv: any) => s + valueAt(inv, startAt), 0)
+    const endValue = investmentsAtEnd.reduce((s: number, inv: any) => s + valueAt(inv, endAt), 0)
+    const change = endValue - startValue
+    const pct = startValue > 0 ? (change / startValue) * 100 : 0
+    return { start: startValue, end: endValue, change, pct }
+  })()
 
   const displayedValue = user.role === 'OWNER' ? cashBalance + totalValue : totalValue
-  const yearlyReturnPercentage =
-    totalInvested > 0 ? (yearlyProfitValue / totalInvested) * 100 : 0
+  const yearlyProfitValue = yearlyValueChange.change
+  const yearlyReturnPercentage = yearlyValueChange.pct
   const netWorth = displayedValue - roscaDebt
 
   return (
