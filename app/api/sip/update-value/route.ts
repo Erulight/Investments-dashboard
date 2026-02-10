@@ -56,13 +56,24 @@ export async function POST(request: Request) {
     const investedAmount = metadata.investedAmount || sip.principalAmount || 0
     const totalAmount = metadata.totalAmount || 0
 
+    const latestValueUpdateAt = prevHistory
+      .filter((h: any) => typeof h?.action === 'string' && h.action === 'VALUE_UPDATE')
+      .map((h: any) => new Date(h.at))
+      .filter((d: Date) => !Number.isNaN(d.getTime()))
+      .sort((a: Date, b: Date) => a.getTime() - b.getTime())
+      .at(-1)
+
+    const existingCurrentValue = Number(metadata.currentValue ?? sip.currentValue ?? 0)
+    const shouldUpdateCurrent = !latestValueUpdateAt || at.getTime() >= latestValueUpdateAt.getTime()
+    const nextCurrentValue = shouldUpdateCurrent ? currentValue : existingCurrentValue
+
     const updatedSip = await prisma.investment.update({
       where: { id: sipId },
       data: {
-        currentValue,
+        currentValue: nextCurrentValue,
         metadata: JSON.stringify({
           ...metadata,
-          currentValue,
+          currentValue: nextCurrentValue,
           history: [
             ...prevHistory,
             {
@@ -83,6 +94,8 @@ export async function POST(request: Request) {
       field: 'currentValue',
       currentValue,
       at: at.toISOString(),
+      currentValueApplied: nextCurrentValue,
+      backdated: !shouldUpdateCurrent,
     })
 
     return NextResponse.json(updatedSip)

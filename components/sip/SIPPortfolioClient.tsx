@@ -211,9 +211,77 @@ export default function SIPPortfolioClient({ investment, userRole }: SIPPortfoli
   const meta = useMemo(() => parseMeta(inv), [inv])
 
   const investedAmount = Number(meta.investedAmount ?? inv?.principalAmount ?? 0)
-  const currentValue = Number(meta.currentValue ?? inv?.currentValue ?? 0)
+  const currentValue = useMemo(() => {
+    const history: HistoryItem[] = Array.isArray((meta as any).history) ? ((meta as any).history as HistoryItem[]) : []
+    const latest = history
+      .filter((h) => typeof h?.action === 'string' && h.action === 'VALUE_UPDATE')
+      .map((h) => ({ at: new Date(h.at), value: safeNumber(h.currentValue, NaN) }))
+      .filter((x) => !Number.isNaN(x.at.getTime()) && Number.isFinite(x.value))
+      .sort((a, b) => a.at.getTime() - b.at.getTime())
+      .at(-1)
+
+    if (latest) return latest.value
+    return Number((meta as any).currentValue ?? inv?.currentValue ?? 0)
+  }, [meta, inv?.currentValue])
   const profit = currentValue - investedAmount
   const returnPct = investedAmount > 0 ? (profit / investedAmount) * 100 : 0
+
+  const transactionLogRows = useMemo(() => {
+    const history: any[] = Array.isArray((meta as any).history) ? ((meta as any).history as any[]) : []
+    const payments: any[] = Array.isArray((meta as any).zakatPayments) ? ((meta as any).zakatPayments as any[]) : []
+
+    const historyRows = history
+      .map((h: any) => {
+        const at = new Date(h?.at)
+        if (Number.isNaN(at.getTime())) return null
+        return {
+          key: `h_${String(h?.at || '')}_${String(h?.action || '')}_${String(h?.amount || '')}`,
+          at,
+          action: String(h?.action || ''),
+          amount: safeNumber(h?.amount, 0),
+          investedAmount: safeNumber(h?.investedAmount, NaN),
+          totalAmount: safeNumber(h?.totalAmount, NaN),
+          currentValue: safeNumber(h?.currentValue, NaN),
+        }
+      })
+      .filter((x): x is {
+        key: string
+        at: Date
+        action: string
+        amount: number
+        investedAmount: number
+        totalAmount: number
+        currentValue: number
+      } => !!x)
+
+    const paymentRows = payments
+      .map((p: any) => {
+        const at = new Date(p?.date)
+        if (Number.isNaN(at.getTime())) return null
+        return {
+          key: `z_${String(p?.id || '')}`,
+          at,
+          action: 'ZAKAT_PAID',
+          amount: safeNumber(p?.amount, 0),
+          investedAmount: NaN,
+          totalAmount: NaN,
+          currentValue: NaN,
+        }
+      })
+      .filter((x): x is {
+        key: string
+        at: Date
+        action: string
+        amount: number
+        investedAmount: number
+        totalAmount: number
+        currentValue: number
+      } => !!x)
+
+    return [...historyRows, ...paymentRows]
+      .sort((a, b) => b.at.getTime() - a.at.getTime())
+      .slice(0, 200)
+  }, [meta])
 
   const points = useMemo(() => {
     const history: HistoryItem[] = Array.isArray(meta.history) ? meta.history : []
@@ -944,10 +1012,37 @@ export default function SIPPortfolioClient({ investment, userRole }: SIPPortfoli
             <div className="md:col-span-3 rounded-xl border border-gray-200 p-4">
               <div className="text-sm font-bold text-gray-900">Recent Updates</div>
               <div className="mt-2 text-sm text-gray-600">
-                {Array.isArray(meta.history) && meta.history.length > 0
-                  ? 'Updates are recorded. (Full list UI coming next)'
-                  : 'No history yet.'}
+                {transactionLogRows.length > 0 ? 'Updates are recorded below.' : 'No history yet.'}
               </div>
+
+              {transactionLogRows.length > 0 && (
+                <div className="mt-4 overflow-x-auto">
+                  <table className="min-w-full text-sm">
+                    <thead>
+                      <tr className="text-left text-xs uppercase tracking-wider text-gray-500">
+                        <th className="py-2 pr-4">Date</th>
+                        <th className="py-2 pr-4">Action</th>
+                        <th className="py-2 pr-4 text-right">Amount</th>
+                        <th className="py-2 pr-4 text-right">Invested</th>
+                        <th className="py-2 pr-4 text-right">Target</th>
+                        <th className="py-2 text-right">Value</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-gray-100">
+                      {transactionLogRows.map((r) => (
+                        <tr key={r.key}>
+                          <td className="py-3 pr-4 text-gray-700 whitespace-nowrap">{formatGregorianAndHijriDate(r.at) || '-'}</td>
+                          <td className="py-3 pr-4 font-semibold text-gray-900 whitespace-nowrap">{r.action || '-'}</td>
+                          <td className="py-3 pr-4 text-right tabular-nums text-gray-900 whitespace-nowrap">{r.amount ? formatCurrency(r.amount) : '-'}</td>
+                          <td className="py-3 pr-4 text-right tabular-nums text-gray-900 whitespace-nowrap">{Number.isFinite(r.investedAmount) ? formatCurrency(r.investedAmount) : '-'}</td>
+                          <td className="py-3 pr-4 text-right tabular-nums text-gray-900 whitespace-nowrap">{Number.isFinite(r.totalAmount) ? formatCurrency(r.totalAmount) : '-'}</td>
+                          <td className="py-3 text-right tabular-nums text-gray-900 whitespace-nowrap">{Number.isFinite(r.currentValue) ? formatCurrency(r.currentValue) : '-'}</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              )}
             </div>
 
             <div className="md:col-span-3 rounded-xl border border-gray-200 p-4">
