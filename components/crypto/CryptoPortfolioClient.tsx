@@ -22,6 +22,8 @@ type HistoryItem = {
   at: string
   action: string
   currentValue?: number
+  amount?: number
+  investedAmount?: number
 }
 
 type ZakatPayment = {
@@ -136,6 +138,24 @@ export function CryptoPortfolioClient({ investment }: { investment: Investment }
       .sort((a, b) => a.at.getTime() - b.at.getTime())
   }, [history])
 
+  const deposits = useMemo(() => {
+    return history
+      .filter((h) => typeof h?.action === 'string' && h.action === 'DEPOSIT')
+      .map((h) => ({ at: new Date(h.at), amount: safeNumber((h as any).amount, 0) }))
+      .filter((x) => !Number.isNaN(x.at.getTime()) && Number.isFinite(x.amount) && x.amount > 0)
+      .sort((a, b) => a.at.getTime() - b.at.getTime())
+  }, [history])
+
+  const investedAmountAt = (at: Date) => {
+    const t = at.getTime()
+    let sum = 0
+    for (const d of deposits) {
+      if (d.at.getTime() <= t) sum += d.amount
+      else break
+    }
+    return sum
+  }
+
   const currentValue = useMemo(() => {
     const latest = points.at(-1)
     if (latest) return latest.value
@@ -153,6 +173,17 @@ export function CryptoPortfolioClient({ investment }: { investment: Investment }
     const pct = prev.value > 0 ? (diff / prev.value) * 100 : 0
     return { diff, pct, from: prev.at, to: last.at }
   }, [points])
+
+  const monthlyRows = useMemo(() => {
+    if (points.length === 0) return []
+    return points.map((p: { at: Date; value: number }, idx: number) => {
+      const prev = idx > 0 ? points[idx - 1] : null
+      const change = prev ? p.value - prev.value : null
+      const investedAt = investedAmountAt(p.at)
+      const profitAt = p.value - investedAt
+      return { at: p.at, value: p.value, change, investedAt, profitAt }
+    })
+  }, [points, deposits])
 
   const haulStartAt = useMemo(() => {
     const fixed = new Date('2025-09-01T00:00:00.000Z')
@@ -416,18 +447,66 @@ export function CryptoPortfolioClient({ investment }: { investment: Investment }
           </div>
         </div>
       </div>
-
       <Card>
         <CardHeader>
           <div className="flex items-center justify-between">
             <div>
-              <CardTitle className="text-sm font-bold text-gray-800">Performance Chart</CardTitle>
-              <p className="text-xs text-gray-500 mt-0.5">Based on monthly value updates</p>
+              <CardTitle>Performance Chart</CardTitle>
+              <p className="text-sm text-gray-500">Based on monthly value updates</p>
             </div>
           </div>
         </CardHeader>
         <CardContent>
           <LineChart points={points} />
+        </CardContent>
+      </Card>
+
+      <Card>
+        <CardHeader>
+          <CardTitle>Monthly Updates</CardTitle>
+          <p className="text-sm text-gray-500">Value updates with change and profit</p>
+        </CardHeader>
+        <CardContent>
+          {monthlyRows.length === 0 ? (
+            <div className="text-sm text-gray-500">No updates yet.</div>
+          ) : (
+            <div className="overflow-x-auto">
+              <table className="min-w-full text-sm">
+                <thead>
+                  <tr className="text-left text-gray-500 border-b">
+                    <th className="py-2 pr-4 font-medium">Month</th>
+                    <th className="py-2 pr-4 font-medium">Value</th>
+                    <th className="py-2 pr-4 font-medium">Change</th>
+                    <th className="py-2 pr-4 font-medium">Profit</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {monthlyRows
+                    .slice()
+                    .reverse()
+                    .map((row: { at: Date; value: number; change: number | null; investedAt: number; profitAt: number }) => {
+                      const changePositive = row.change !== null ? row.change >= 0 : true
+                      const profitPositive = row.profitAt >= 0
+                      const monthLabel = row.at.toLocaleDateString(undefined, { year: 'numeric', month: 'short' })
+                      return (
+                        <tr key={row.at.toISOString()} className="border-b last:border-b-0">
+                          <td className="py-2 pr-4 font-medium text-gray-900">{monthLabel}</td>
+                          <td className="py-2 pr-4">{formatCurrency(row.value, inv.account.currency)}</td>
+                          <td className={`py-2 pr-4 ${changePositive ? 'text-emerald-700' : 'text-rose-700'}`}>
+                            {row.change === null
+                              ? '—'
+                              : `${changePositive ? '+' : ''}${formatCurrency(row.change, inv.account.currency)}`}
+                          </td>
+                          <td className={`py-2 pr-4 ${profitPositive ? 'text-emerald-700' : 'text-rose-700'}`}>
+                            {`${profitPositive ? '+' : ''}${formatCurrency(row.profitAt, inv.account.currency)}`}
+                          </td>
+                        </tr>
+                      )
+                    })}
+                </tbody>
+              </table>
+            </div>
+          )}
         </CardContent>
       </Card>
 
