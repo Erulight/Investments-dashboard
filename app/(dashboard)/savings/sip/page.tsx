@@ -36,6 +36,12 @@ export default async function SIPPage() {
         inv.dealParticipants.some(dp => dp.person.user?.id === user.id)
       )
 
+  // Transform to match client component types (convert Date to string)
+  const transformedInvestments = filteredInvestments.map(inv => ({
+    ...inv,
+    startDate: inv.startDate.toISOString(),
+  }))
+
   return (
     <div className="p-6">
       <div className="mb-8">
@@ -46,7 +52,7 @@ export default async function SIPPage() {
       </div>
       
       <SIPClient 
-        investments={filteredInvestments} 
+        investments={transformedInvestments} 
         userRole={user.role}
       />
     </div>
