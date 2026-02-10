@@ -176,7 +176,7 @@ function LineChart({ points }: { points: { at: Date; value: number }[] }) {
 export default function SIPPortfolioClient({ investment, userRole }: SIPPortfolioClientProps) {
   const [inv, setInv] = useState(investment)
 
-  const [activeTab, setActiveTab] = useState<'performance' | 'zakat' | 'stats'>('performance')
+  const [activeTab, setActiveTab] = useState<'performance' | 'zakat' | 'logs' | 'stats'>('performance')
   const [range, setRange] = useState<RangeKey>('month')
 
   const [showCreateForm, setShowCreateForm] = useState(false)
@@ -975,6 +975,7 @@ export default function SIPPortfolioClient({ investment, userRole }: SIPPortfoli
           {([
             { key: 'performance', label: 'Performance' },
             { key: 'zakat', label: 'Zakat & Purif.' },
+            { key: 'logs', label: 'Logs' },
             { key: 'stats', label: 'General Stats' },
           ] as const).map((tab) => (
             <button
@@ -1007,42 +1008,6 @@ export default function SIPPortfolioClient({ investment, userRole }: SIPPortfoli
               <div className={`mt-1 font-bold tabular-nums ${returnPct >= 0 ? 'text-emerald-600' : 'text-red-600'}`}>
                 {returnPct >= 0 ? '+' : ''}{returnPct.toFixed(2)}%
               </div>
-            </div>
-
-            <div className="md:col-span-3 rounded-xl border border-gray-200 p-4">
-              <div className="text-sm font-bold text-gray-900">Recent Updates</div>
-              <div className="mt-2 text-sm text-gray-600">
-                {transactionLogRows.length > 0 ? 'Updates are recorded below.' : 'No history yet.'}
-              </div>
-
-              {transactionLogRows.length > 0 && (
-                <div className="mt-4 overflow-x-auto">
-                  <table className="min-w-full text-sm">
-                    <thead>
-                      <tr className="text-left text-xs uppercase tracking-wider text-gray-500">
-                        <th className="py-2 pr-4">Date</th>
-                        <th className="py-2 pr-4">Action</th>
-                        <th className="py-2 pr-4 text-right">Amount</th>
-                        <th className="py-2 pr-4 text-right">Invested</th>
-                        <th className="py-2 pr-4 text-right">Target</th>
-                        <th className="py-2 text-right">Value</th>
-                      </tr>
-                    </thead>
-                    <tbody className="divide-y divide-gray-100">
-                      {transactionLogRows.map((r) => (
-                        <tr key={r.key}>
-                          <td className="py-3 pr-4 text-gray-700 whitespace-nowrap">{formatGregorianAndHijriDate(r.at) || '-'}</td>
-                          <td className="py-3 pr-4 font-semibold text-gray-900 whitespace-nowrap">{r.action || '-'}</td>
-                          <td className="py-3 pr-4 text-right tabular-nums text-gray-900 whitespace-nowrap">{r.amount ? formatCurrency(r.amount) : '-'}</td>
-                          <td className="py-3 pr-4 text-right tabular-nums text-gray-900 whitespace-nowrap">{Number.isFinite(r.investedAmount) ? formatCurrency(r.investedAmount) : '-'}</td>
-                          <td className="py-3 pr-4 text-right tabular-nums text-gray-900 whitespace-nowrap">{Number.isFinite(r.totalAmount) ? formatCurrency(r.totalAmount) : '-'}</td>
-                          <td className="py-3 text-right tabular-nums text-gray-900 whitespace-nowrap">{Number.isFinite(r.currentValue) ? formatCurrency(r.currentValue) : '-'}</td>
-                        </tr>
-                      ))}
-                    </tbody>
-                  </table>
-                </div>
-              )}
             </div>
 
             <div className="md:col-span-3 rounded-xl border border-gray-200 p-4">
@@ -1097,6 +1062,44 @@ export default function SIPPortfolioClient({ investment, userRole }: SIPPortfoli
                 </div>
               )}
             </div>
+          </div>
+        )}
+
+        {activeTab === 'logs' && (
+          <div className="mt-6 rounded-xl border border-gray-200 p-4">
+            <div className="text-sm font-bold text-gray-900">Transaction Log</div>
+            <div className="mt-2 text-sm text-gray-600">
+              {transactionLogRows.length > 0 ? 'Latest 200 events.' : 'No history yet.'}
+            </div>
+
+            {transactionLogRows.length > 0 && (
+              <div className="mt-4 overflow-x-auto">
+                <table className="min-w-full text-sm">
+                  <thead>
+                    <tr className="text-left text-xs uppercase tracking-wider text-gray-500">
+                      <th className="py-2 pr-4">Date</th>
+                      <th className="py-2 pr-4">Action</th>
+                      <th className="py-2 pr-4 text-right">Amount</th>
+                      <th className="py-2 pr-4 text-right">Invested</th>
+                      <th className="py-2 pr-4 text-right">Target</th>
+                      <th className="py-2 text-right">Value</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-gray-100">
+                    {transactionLogRows.map((r) => (
+                      <tr key={r.key}>
+                        <td className="py-3 pr-4 text-gray-700 whitespace-nowrap">{formatGregorianAndHijriDate(r.at) || '-'}</td>
+                        <td className="py-3 pr-4 font-semibold text-gray-900 whitespace-nowrap">{r.action || '-'}</td>
+                        <td className="py-3 pr-4 text-right tabular-nums text-gray-900 whitespace-nowrap">{r.amount ? formatCurrency(r.amount) : '-'}</td>
+                        <td className="py-3 pr-4 text-right tabular-nums text-gray-900 whitespace-nowrap">{Number.isFinite(r.investedAmount) ? formatCurrency(r.investedAmount) : '-'}</td>
+                        <td className="py-3 pr-4 text-right tabular-nums text-gray-900 whitespace-nowrap">{Number.isFinite(r.totalAmount) ? formatCurrency(r.totalAmount) : '-'}</td>
+                        <td className="py-3 text-right tabular-nums text-gray-900 whitespace-nowrap">{Number.isFinite(r.currentValue) ? formatCurrency(r.currentValue) : '-'}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            )}
           </div>
         )}
 
