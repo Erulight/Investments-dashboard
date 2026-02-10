@@ -91,6 +91,8 @@ export function SukukList({ initialSukuk, userRole }: SukukListProps) {
     buyerPersonId: '',
     amount: '',
     salePrice: '',
+    commissionType: 'FIXED',
+    commissionValue: '',
     date: formatDateInput(new Date()),
     notes: '',
   })
@@ -198,15 +200,19 @@ export function SukukList({ initialSukuk, userRole }: SukukListProps) {
     const apr = Number.isFinite(inv.interestRate) ? inv.interestRate : 0
     const fees = Number.isFinite(inv.fees) ? inv.fees : 0
     const totalReceived = Number.isFinite(inv.totalReceived) ? inv.totalReceived : 0
-    const periodMonths = getPeriodMonths(inv.startDate, inv.maturityDate)
+    const startBasis = inv.myParticipation?.acquiredAt ?? inv.startDate
+    const periodMonths = getPeriodMonths(startBasis, inv.maturityDate)
     const periodYears = periodMonths ? periodMonths / 12 : 0
     const grossProfit = totalInvestment > 0 && apr > 0 && periodYears > 0
       ? totalInvestment * (apr / 100) * periodYears
       : 0
     const manualReceivable = Number.isFinite(inv.receivableAmount) ? inv.receivableAmount : null
+    const commissionFees = Number.isFinite(inv.myParticipation?.commissionFees)
+      ? Number(inv.myParticipation.commissionFees)
+      : 0
     const netProfit = manualReceivable !== null && manualReceivable > 0
       ? manualReceivable
-      : Math.max(0, grossProfit - fees)
+      : Math.max(0, grossProfit - fees - commissionFees)
     const aprAfterFees = totalInvestment > 0 ? (netProfit / totalInvestment) * 100 : 0
     const receivable = Math.max(0, netProfit - totalReceived)
     const receiptDate = getLatestReceiptDate(inv)
@@ -467,6 +473,8 @@ export function SukukList({ initialSukuk, userRole }: SukukListProps) {
       buyerPersonId: '',
       amount: '',
       salePrice: '',
+      commissionType: 'FIXED',
+      commissionValue: '',
       date: formatDateInput(new Date()),
       notes: '',
     })
@@ -559,6 +567,8 @@ export function SukukList({ initialSukuk, userRole }: SukukListProps) {
           buyerPersonId: sellForm.buyerPersonId,
           amount: parseFloat(sellForm.amount),
           salePrice: sellForm.salePrice ? parseFloat(sellForm.salePrice) : undefined,
+          commissionType: sellForm.commissionType,
+          commissionValue: sellForm.commissionValue ? parseFloat(sellForm.commissionValue) : 0,
           date: isoDate,
           notes: sellForm.notes,
         }),
@@ -1352,10 +1362,9 @@ export function SukukList({ initialSukuk, userRole }: SukukListProps) {
               {actionError}
             </div>
           )}
+
           <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">
-              Partner
-            </label>
+            <label className="block text-sm font-medium text-gray-700 mb-1">Partner</label>
             <select
               value={sellForm.buyerPersonId}
               onChange={(e) => setSellForm((prev) => ({ ...prev, buyerPersonId: e.target.value }))}
@@ -1363,55 +1372,78 @@ export function SukukList({ initialSukuk, userRole }: SukukListProps) {
               required
             >
               <option value="">Select partner</option>
-              {partners.map((partner) => (
-                <option key={partner.id} value={partner.id}>
-                  {partner.name}
+              {partners.map((p: any) => (
+                <option key={p.id} value={p.id}>
+                  {p.name}
                 </option>
               ))}
             </select>
           </div>
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">
-              Principal Amount to Transfer
-            </label>
-            <input
-              type="number"
-              min="0"
-              step="0.01"
-              value={sellForm.amount}
-              onChange={(e) => setSellForm((prev) => ({ ...prev, amount: e.target.value }))}
-              className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-              required
-            />
+
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">Amount (Principal)</label>
+              <input
+                type="number"
+                min="0"
+                step="0.01"
+                value={sellForm.amount}
+                onChange={(e) => setSellForm((prev) => ({ ...prev, amount: e.target.value }))}
+                className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                required
+              />
+            </div>
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">Sale Price (Cash)</label>
+              <input
+                type="number"
+                min="0"
+                step="0.01"
+                value={sellForm.salePrice}
+                onChange={(e) => setSellForm((prev) => ({ ...prev, salePrice: e.target.value }))}
+                className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                placeholder="Defaults to amount"
+              />
+            </div>
           </div>
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">
-              Sale Price (Cash Received)
-            </label>
-            <input
-              type="number"
-              min="0"
-              step="0.01"
-              value={sellForm.salePrice}
-              onChange={(e) => setSellForm((prev) => ({ ...prev, salePrice: e.target.value }))}
-              className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-              placeholder="Defaults to amount"
-            />
+
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">Commission Type</label>
+              <select
+                value={sellForm.commissionType}
+                onChange={(e) => setSellForm((prev) => ({ ...prev, commissionType: e.target.value }))}
+                className="w-full px-4 py-2 border border-gray-300 rounded-lg bg-white focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+              >
+                <option value="FIXED">Fixed</option>
+                <option value="PERCENT">Percent</option>
+              </select>
+            </div>
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">Commission Value</label>
+              <input
+                type="number"
+                min="0"
+                step="0.01"
+                value={sellForm.commissionValue}
+                onChange={(e) => setSellForm((prev) => ({ ...prev, commissionValue: e.target.value }))}
+                className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                placeholder={sellForm.commissionType === 'PERCENT' ? 'e.g. 1.5' : 'e.g. 50'}
+              />
+            </div>
           </div>
+
           <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">
-              Date
-            </label>
+            <label className="block text-sm font-medium text-gray-700 mb-1">Date</label>
             <DateInput
               value={sellForm.date}
               onChange={(value) => setSellForm((prev) => ({ ...prev, date: value }))}
               ariaLabel="Sell date"
             />
           </div>
+
           <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">
-              Notes
-            </label>
+            <label className="block text-sm font-medium text-gray-700 mb-1">Notes</label>
             <textarea
               rows={2}
               value={sellForm.notes}
@@ -1419,6 +1451,7 @@ export function SukukList({ initialSukuk, userRole }: SukukListProps) {
               className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
             />
           </div>
+
           <div className="flex justify-end gap-3">
             <Button type="button" variant="secondary" onClick={() => setSellTarget(null)} disabled={actionLoading}>
               Cancel
