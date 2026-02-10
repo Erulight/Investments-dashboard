@@ -17,7 +17,11 @@ export default async function SIPPage() {
     include: {
       account: true,
       dealParticipants: {
-        include: { person: true },
+        include: { 
+          person: {
+            include: { user: true }
+          }
+        },
       },
     },
     orderBy: {
