@@ -58,6 +58,10 @@ type ZakatBreakdownRow = {
   basePct: number
   zakatable: number
   zakatDue: number
+  paidAmount: number
+  dueAfterPayment: number
+  periodKey: string
+  canPay: boolean
 }
 
 type RangeKey = 'week' | 'month' | 'year' | 'all'
@@ -101,6 +105,12 @@ const formatCurrency = (value: number) => {
 }
 
 const startOfDay = (d: Date) => new Date(d.getFullYear(), d.getMonth(), d.getDate())
+
+const addDays = (date: Date, days: number) => {
+  const next = new Date(date)
+  next.setDate(next.getDate() + days)
+  return next
+}
 
 const getRangeStart = (range: RangeKey, now: Date) => {
   const n = startOfDay(now)
@@ -163,7 +173,7 @@ function LineChart({ points }: { points: { at: Date; value: number }[] }) {
   )
 }
 
-export function SIPPortfolioClient({ investment, userRole }: SIPPortfolioClientProps) {
+export default function SIPPortfolioClient({ investment, userRole }: SIPPortfolioClientProps) {
   const [inv, setInv] = useState(investment)
 
   const [activeTab, setActiveTab] = useState<'performance' | 'zakat' | 'stats'>('performance')
@@ -239,14 +249,16 @@ export function SIPPortfolioClient({ investment, userRole }: SIPPortfolioClientP
       .filter((x): x is { hijriYear: number; at: Date; value: number } => !!x)
       .sort((a, b) => a.at.getTime() - b.at.getTime())
 
-    const byYear = new Map<number, { start: { at: Date; value: number }; end: { at: Date; value: number } }>()
-    for (const p of valuePoints) {
-      const existing = byYear.get(p.hijriYear)
-      if (!existing) {
-        byYear.set(p.hijriYear, { start: { at: p.at, value: p.value }, end: { at: p.at, value: p.value } })
-        continue
-      }
-      existing.end = { at: p.at, value: p.value }
+    const payments = Array.isArray((meta as any).zakatPayments)
+      ? ((meta as any).zakatPayments as any[])
+      : []
+    const paidByPeriodKey = new Map<string, number>()
+    for (const p of payments) {
+      const key = typeof p?.periodKey === 'string' ? p.periodKey : ''
+      if (!key) continue
+      const amount = safeNumber(p?.amount, 0)
+      if (amount <= 0) continue
+      paidByPeriodKey.set(key, (paidByPeriodKey.get(key) || 0) + amount)
     }
 
     const zakatBaseByAssetType = (meta.zakatBaseByAssetType || {}) as Record<string, number>
@@ -266,25 +278,95 @@ export function SIPPortfolioClient({ investment, userRole }: SIPPortfolioClientP
       return Math.max(0, Math.min(100, weighted))
     })()
 
-    const years = Array.from(byYear.entries())
-      .map(([year, v]) => ({ year, ...v }))
-      .sort((a, b) => a.year - b.year)
+    const rows: ZakatBreakdownRow[] = (() => {
+      if (valuePoints.length === 0) return []
 
-    const rows: ZakatBreakdownRow[] = years.map((y) => {
-      const endValue = y.end.value
-      const zakatable = (endValue * effectiveBasePct) / 100
-      const zakatDue = zakatable * 0.025
-      return {
-        hijriYear: y.year,
-        startAt: y.start.at,
-        startValue: y.start.value,
-        endAt: y.end.at,
-        endValue,
-        basePct: effectiveBasePct,
-        zakatable,
-        zakatDue,
+      const hawlAnchorAt = (() => {
+        const investedDates = history
+          .filter((h) => typeof h?.action === 'string' && h.action === 'INVEST')
+          .map((h) => new Date(h.at))
+          .filter((d) => !Number.isNaN(d.getTime()))
+          .sort((a, b) => a.getTime() - b.getTime())
+
+        if (investedDates.length > 0) return investedDates[0]
+        return valuePoints[0].at
+      })()
+
+      const firstAt = startOfDay(hawlAnchorAt)
+      const lastAt = startOfDay(valuePoints[valuePoints.length - 1].at)
+      const now = startOfDay(new Date())
+
+      const periods: Array<{ startAt: Date; endAt: Date }> = []
+      // Generate rolling Hawl periods (approx lunar year) from the first point.
+      // We generate until the last recorded point (and optionally the current in-progress period).
+      let cursor = new Date(firstAt)
+      while (cursor.getTime() <= lastAt.getTime() || cursor.getTime() <= now.getTime()) {
+        const endAt = addDays(cursor, 354)
+        periods.push({ startAt: cursor, endAt })
+        cursor = addDays(cursor, 354)
+        // safety to avoid infinite loops
+        if (periods.length > 30) break
+        if (cursor.getTime() > now.getTime() && cursor.getTime() > lastAt.getTime()) break
       }
-    })
+
+      const getEndPoint = (startAt: Date, endAt: Date) => {
+        // last value point within the period (<= endAt)
+        for (let i = valuePoints.length - 1; i >= 0; i--) {
+          const p = valuePoints[i]
+          if (p.at.getTime() > endAt.getTime()) continue
+          if (p.at.getTime() < startAt.getTime()) break
+          return p
+        }
+        return null
+      }
+
+      const getStartPoint = (startAt: Date, endAt: Date) => {
+        // first value point within the period (>= startAt)
+        for (let i = 0; i < valuePoints.length; i++) {
+          const p = valuePoints[i]
+          if (p.at.getTime() < startAt.getTime()) continue
+          if (p.at.getTime() > endAt.getTime()) break
+          return p
+        }
+        return null
+      }
+
+      return periods
+        .map((period) => {
+          const startPoint = getStartPoint(period.startAt, period.endAt)
+          const endPoint = getEndPoint(period.startAt, period.endAt)
+          if (!endPoint || !startPoint) return null
+
+          const hijriYear = getHijriYear(period.startAt)
+          if (!hijriYear) return null
+
+          const endValue = endPoint.value
+          const zakatable = (endValue * effectiveBasePct) / 100
+          const zakatDue = zakatable * 0.025
+
+          const periodKey = `${period.startAt.toISOString().split('T')[0]}_${period.endAt.toISOString().split('T')[0]}`
+          const paidAmount = paidByPeriodKey.get(periodKey) || 0
+          const completed = now.getTime() >= period.endAt.getTime()
+          const dueIfCompleted = completed ? zakatDue : 0
+          const dueAfterPayment = Math.max(0, dueIfCompleted - paidAmount)
+
+          return {
+            hijriYear,
+            startAt: period.startAt,
+            startValue: startPoint.value,
+            endAt: period.endAt,
+            endValue,
+            basePct: effectiveBasePct,
+            zakatable,
+            zakatDue: dueIfCompleted,
+            paidAmount,
+            dueAfterPayment,
+            periodKey,
+            canPay: completed && dueAfterPayment > 0,
+          } satisfies ZakatBreakdownRow
+        })
+        .filter((x): x is ZakatBreakdownRow => !!x)
+    })()
 
     return {
       rows,
@@ -292,7 +374,66 @@ export function SIPPortfolioClient({ investment, userRole }: SIPPortfolioClientP
       hasHoldings: holdings.length > 0,
       hasHistory: valuePoints.length > 0,
     }
-  }, [meta.history, meta.zakatBaseByAssetType, meta.holdings])
+  }, [meta.history, meta.zakatBaseByAssetType, meta.holdings, (meta as any).zakatPayments])
+
+  const [showZakatPayForm, setShowZakatPayForm] = useState(false)
+  const [zakatPayTarget, setZakatPayTarget] = useState<ZakatBreakdownRow | null>(null)
+  const [zakatPayAmount, setZakatPayAmount] = useState('')
+  const [zakatPayDate, setZakatPayDate] = useState(new Date().toISOString().split('T')[0])
+  const [isPayingZakat, setIsPayingZakat] = useState(false)
+
+  const openZakatPay = (row: ZakatBreakdownRow) => {
+    setZakatPayTarget(row)
+    setZakatPayAmount(row.dueAfterPayment.toFixed(2))
+    setZakatPayDate(new Date().toISOString().split('T')[0])
+    setShowZakatPayForm(true)
+  }
+
+  const submitZakatPay = async (event: FormEvent) => {
+    event.preventDefault()
+    if (!inv || !zakatPayTarget) return
+    const amount = Number(zakatPayAmount)
+    if (!Number.isFinite(amount) || amount <= 0) {
+      alert('Enter a valid amount')
+      return
+    }
+    const date = zakatPayDate ? new Date(zakatPayDate) : new Date()
+    if (Number.isNaN(date.getTime())) {
+      alert('Invalid date')
+      return
+    }
+
+    setIsPayingZakat(true)
+    try {
+      const response = await fetch('/api/sip/pay-zakat', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          sipId: inv.id,
+          periodKey: zakatPayTarget.periodKey,
+          periodStartAt: zakatPayTarget.startAt.toISOString(),
+          periodEndAt: zakatPayTarget.endAt.toISOString(),
+          amount,
+          date: date.toISOString(),
+        }),
+      })
+
+      if (!response.ok) {
+        const error = await response.json().catch(() => ({}))
+        throw new Error(error.error || 'Failed to pay zakat')
+      }
+
+      const updated = await response.json()
+      setInv(updated)
+      setShowZakatPayForm(false)
+      setZakatPayTarget(null)
+    } catch (error) {
+      console.error('Pay zakat error:', error)
+      alert(error instanceof Error ? error.message : 'Failed to pay zakat')
+    } finally {
+      setIsPayingZakat(false)
+    }
+  }
 
   const holdingsSummary = useMemo(() => {
     const holdings = Array.isArray(meta.holdings) ? meta.holdings : []
@@ -964,19 +1105,36 @@ export function SIPPortfolioClient({ investment, userRole }: SIPPortfolioClientP
                         <th className="py-2 pr-4">Base %</th>
                         <th className="py-2 pr-4 text-right">End Value</th>
                         <th className="py-2 pr-4 text-right">Zakatable</th>
-                        <th className="py-2 text-right">Zakat (2.5%)</th>
+                        <th className="py-2 pr-4 text-right">Zakat (2.5%)</th>
+                        <th className="py-2 pr-4 text-right">Paid</th>
+                        <th className="py-2 text-right">Zakat Due</th>
                       </tr>
                     </thead>
                     <tbody className="divide-y divide-gray-100">
                       {zakatBreakdown.rows.map((r: ZakatBreakdownRow) => (
-                        <tr key={r.hijriYear}>
+                        <tr key={r.periodKey}>
                           <td className="py-3 pr-4 font-semibold text-gray-900 whitespace-nowrap">{r.hijriYear}</td>
                           <td className="py-3 pr-4 text-gray-700 whitespace-nowrap">{formatGregorianAndHijriDate(r.startAt) || '-'}</td>
                           <td className="py-3 pr-4 text-gray-700 whitespace-nowrap">{formatGregorianAndHijriDate(r.endAt) || '-'}</td>
                           <td className="py-3 pr-4 text-gray-700 tabular-nums whitespace-nowrap">{r.basePct.toFixed(2)}%</td>
                           <td className="py-3 pr-4 text-right tabular-nums text-gray-900 whitespace-nowrap">{formatCurrency(r.endValue)}</td>
                           <td className="py-3 pr-4 text-right tabular-nums text-gray-900 whitespace-nowrap">{formatCurrency(r.zakatable)}</td>
-                          <td className="py-3 text-right tabular-nums font-semibold text-gray-900 whitespace-nowrap">{formatCurrency(r.zakatDue)}</td>
+                          <td className="py-3 pr-4 text-right tabular-nums text-gray-900 whitespace-nowrap">{formatCurrency(r.zakatDue)}</td>
+                          <td className="py-3 pr-4 text-right tabular-nums text-gray-900 whitespace-nowrap">{formatCurrency(r.paidAmount)}</td>
+                          <td className="py-3 text-right tabular-nums font-semibold text-gray-900 whitespace-nowrap">
+                            <div className="flex items-center justify-end gap-2">
+                              <span>{formatCurrency(r.dueAfterPayment)}</span>
+                              {userRole === 'OWNER' && r.canPay && (
+                                <button
+                                  type="button"
+                                  onClick={() => openZakatPay(r)}
+                                  className="rounded-lg border border-emerald-200 bg-emerald-50 px-2 py-1 text-xs font-semibold text-emerald-700 hover:bg-emerald-100"
+                                >
+                                  Pay
+                                </button>
+                              )}
+                            </div>
+                          </td>
                         </tr>
                       ))}
                     </tbody>
@@ -986,6 +1144,66 @@ export function SIPPortfolioClient({ investment, userRole }: SIPPortfolioClientP
             </div>
           </div>
         )}
+
+      {showZakatPayForm && zakatPayTarget && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+          <div className="bg-white rounded-xl p-6 max-w-md w-full mx-4">
+            <div className="flex justify-between items-center mb-6">
+              <h2 className="text-xl font-bold text-gray-900">Pay Zakat</h2>
+              <button
+                onClick={() => (isPayingZakat ? null : setShowZakatPayForm(false))}
+                className="text-gray-400 hover:text-gray-600"
+              >
+                ✕
+              </button>
+            </div>
+
+            <form onSubmit={submitZakatPay} className="space-y-4">
+              <div className="text-sm text-gray-600">
+                Period: {formatGregorianAndHijriDate(zakatPayTarget.startAt)} → {formatGregorianAndHijriDate(zakatPayTarget.endAt)}
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">Date</label>
+                <input
+                  type="date"
+                  value={zakatPayDate}
+                  onChange={(e: ChangeEvent<HTMLInputElement>) => setZakatPayDate(e.target.value)}
+                  className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500 outline-none"
+                />
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">Amount</label>
+                <input
+                  type="number"
+                  min="0"
+                  step="0.01"
+                  value={zakatPayAmount}
+                  onChange={(e: ChangeEvent<HTMLInputElement>) => setZakatPayAmount(e.target.value)}
+                  className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500 outline-none"
+                />
+              </div>
+
+              <div className="flex gap-3 pt-2">
+                <button
+                  type="button"
+                  onClick={() => setShowZakatPayForm(false)}
+                  disabled={isPayingZakat}
+                  className="flex-1 rounded-lg border border-gray-300 px-4 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50 disabled:opacity-50"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  disabled={isPayingZakat}
+                  className="flex-1 rounded-lg bg-emerald-600 px-4 py-2 text-sm font-medium text-white hover:bg-emerald-700 disabled:opacity-50"
+                >
+                  {isPayingZakat ? 'Paying...' : 'Pay'}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
 
         {activeTab === 'stats' && (
           <div className="mt-6 grid grid-cols-1 md:grid-cols-2 gap-4">
