@@ -384,14 +384,14 @@ export function SIPClient({ investments, userRole }: SIPClientProps) {
                   <TableCell className="px-2 py-2 font-semibold text-gray-900 text-right tabular-nums whitespace-nowrap">
                     {formatCurrency(sipTotals.totalInvested)}
                   </TableCell>
-                  <TableCell className="px-2 py-2"></TableCell>
-                  <TableCell className="px-2 py-2"></TableCell>
-                  <TableCell className="px-2 py-2"></TableCell>
-                  <TableCell className="px-2 py-2"></TableCell>
+                  <TableCell className="px-2 py-2">{null}</TableCell>
+                  <TableCell className="px-2 py-2">{null}</TableCell>
+                  <TableCell className="px-2 py-2">{null}</TableCell>
+                  <TableCell className="px-2 py-2">{null}</TableCell>
                   <TableCell className="px-2 py-2 font-semibold text-gray-900 text-right tabular-nums whitespace-nowrap">
                     {formatCurrency(sipTotals.totalCurrent)}
                   </TableCell>
-                  {userRole === 'OWNER' && <TableCell className="px-2 py-2"></TableCell>}
+                  {userRole === 'OWNER' && <TableCell className="px-2 py-2">{null}</TableCell>}
                 </TableRow>
               </TableFooter>
             )}
