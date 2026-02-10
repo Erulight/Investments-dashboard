@@ -231,7 +231,7 @@ export function SIPClient({ investments, userRole }: SIPClientProps) {
             <p className="text-sm text-gray-600 mt-1">{sipInvestments.length} active plan{sipInvestments.length > 1 ? 's' : ''}</p>
           </div>
           <div className="divide-y divide-gray-100">
-            {sipInvestments.map((inv) => {
+            {sipInvestments.map((inv: Investment) => {
               const meta = parseSipMetadata(inv)
               const invested = meta.investedAmount || inv.principalAmount || 0
               const current = meta.currentValue || inv.currentValue || 0
