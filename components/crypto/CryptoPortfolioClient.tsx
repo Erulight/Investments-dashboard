@@ -254,6 +254,33 @@ export function CryptoPortfolioClient({ investment }: { investment: Investment }
     }
   }
 
+  const handleDeleteValueUpdate = async (at: string) => {
+    const ok = confirm('Delete this monthly update?')
+    if (!ok) return
+
+    setIsLoading(true)
+    try {
+      const response = await fetch('/api/crypto/delete-value-update', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ cryptoId: inv.id, at }),
+      })
+
+      if (!response.ok) {
+        const error = await response.json().catch(() => ({}))
+        throw new Error(error.error || 'Failed to delete update')
+      }
+
+      const updated = await response.json()
+      setInv(updated)
+    } catch (error) {
+      console.error('Delete update error:', error)
+      alert(error instanceof Error ? error.message : 'Failed to delete update')
+    } finally {
+      setIsLoading(false)
+    }
+  }
+
   const handleResetPortfolio = async () => {
     const ok = confirm('Reset crypto portfolio invested/current values to 0?')
     if (!ok) return
@@ -478,6 +505,7 @@ export function CryptoPortfolioClient({ investment }: { investment: Investment }
                     <th className="py-2 pr-4 font-medium">Value</th>
                     <th className="py-2 pr-4 font-medium">Change</th>
                     <th className="py-2 pr-4 font-medium">Profit</th>
+                    <th className="py-2 pr-4 font-medium"></th>
                   </tr>
                 </thead>
                 <tbody>
@@ -499,6 +527,16 @@ export function CryptoPortfolioClient({ investment }: { investment: Investment }
                           </td>
                           <td className={`py-2 pr-4 ${profitPositive ? 'text-emerald-700' : 'text-rose-700'}`}>
                             {`${profitPositive ? '+' : ''}${formatCurrency(row.profitAt, inv.account.currency)}`}
+                          </td>
+                          <td className="py-2 pr-4 text-right">
+                            <button
+                              type="button"
+                              disabled={isLoading}
+                              onClick={() => handleDeleteValueUpdate(row.at.toISOString())}
+                              className="text-xs text-rose-700 hover:text-rose-900 disabled:opacity-50"
+                            >
+                              Delete
+                            </button>
                           </td>
                         </tr>
                       )
