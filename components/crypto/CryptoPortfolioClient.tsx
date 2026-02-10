@@ -223,6 +223,60 @@ export function CryptoPortfolioClient({ investment }: { investment: Investment }
     }
   }
 
+  const handleResetPortfolio = async () => {
+    const ok = confirm('Reset crypto portfolio invested/current values to 0?')
+    if (!ok) return
+
+    setIsLoading(true)
+    try {
+      const response = await fetch('/api/crypto/reset', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ cryptoId: inv.id }),
+      })
+
+      if (!response.ok) {
+        const error = await response.json().catch(() => ({}))
+        throw new Error(error.error || 'Failed to reset portfolio')
+      }
+
+      const updated = await response.json()
+      setInv(updated)
+    } catch (error) {
+      console.error('Reset portfolio error:', error)
+      alert(error instanceof Error ? error.message : 'Failed to reset portfolio')
+    } finally {
+      setIsLoading(false)
+    }
+  }
+
+  const handleSetCurrencySar = async () => {
+    const ok = confirm('Set CRYPTO account currency to SAR?')
+    if (!ok) return
+
+    setIsLoading(true)
+    try {
+      const response = await fetch('/api/crypto/set-currency', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ accountId: inv.account.id, currency: 'SAR' }),
+      })
+
+      if (!response.ok) {
+        const error = await response.json().catch(() => ({}))
+        throw new Error(error.error || 'Failed to set currency')
+      }
+
+      const updatedAccount = await response.json()
+      setInv((prev: Investment) => ({ ...prev, account: { ...prev.account, currency: updatedAccount.currency } }))
+    } catch (error) {
+      console.error('Set currency error:', error)
+      alert(error instanceof Error ? error.message : 'Failed to set currency')
+    } finally {
+      setIsLoading(false)
+    }
+  }
+
   const handleSubmitDeposit = async (e: FormEvent) => {
     e.preventDefault()
 
@@ -301,6 +355,22 @@ export function CryptoPortfolioClient({ investment }: { investment: Investment }
             <p className="text-sm text-slate-400 mt-1">Monthly value updates, performance, and zakat tracking</p>
           </div>
           <div className="flex items-center gap-2">
+            <button
+              onClick={handleSetCurrencySar}
+              disabled={isLoading}
+              className="px-4 py-2 text-xs font-medium text-white bg-white/10 hover:bg-white/15 rounded-lg transition-colors border border-white/10 disabled:opacity-50"
+              title="Fix existing CRYPTO account currency"
+            >
+              Set SAR
+            </button>
+            <button
+              onClick={handleResetPortfolio}
+              disabled={isLoading}
+              className="px-4 py-2 text-xs font-medium text-white bg-white/10 hover:bg-white/15 rounded-lg transition-colors border border-white/10 disabled:opacity-50"
+              title="Fix existing portfolio seeded values"
+            >
+              Reset 0
+            </button>
             <button
               onClick={openDepositModal}
               className="px-4 py-2 text-xs font-medium text-white bg-white/10 hover:bg-white/15 rounded-lg transition-colors border border-white/10"
