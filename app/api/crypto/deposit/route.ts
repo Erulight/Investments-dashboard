@@ -74,8 +74,38 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: 'Invalid crypto portfolio' }, { status: 400 })
     }
 
+    // Strict validation: ensure cash was actually available on or before the selected date,
+    // not just available today in CASH_BALANCE.
+    const currency = inv.account?.currency || 'SAR'
+    const eligibleBuckets = await prisma.cashBucket.findMany({
+      where: {
+        currency,
+        haulStartDate: { lte: date },
+      },
+      select: { id: true },
+    })
+
+    const eligibleBucketIds = eligibleBuckets.map((b: { id: string }) => b.id)
+    const cashAtDateGroups = eligibleBucketIds.length
+      ? await prisma.cashBucketMovement.groupBy({
+          by: ['cashBucketId'],
+          where: {
+            cashBucketId: { in: eligibleBucketIds },
+            date: { lte: date },
+          },
+          _sum: { amount: true },
+        })
+      : []
+
+    const cashAvailableAtDate = cashAtDateGroups.reduce(
+      (sum: number, row: { _sum: { amount: number | null } }) => sum + (row._sum.amount || 0),
+      0
+    )
+    if (cashAvailableAtDate + 0.0001 < amount) {
+      return NextResponse.json({ error: 'Insufficient cash available for selected date' }, { status: 400 })
+    }
+
     const updated = await prisma.$transaction(async (tx: Prisma.TransactionClient) => {
-      const currency = inv.account?.currency || 'SAR'
       const notes = `Crypto Deposit • ${inv.name}`
 
       await withdrawFromBuckets(tx, {
