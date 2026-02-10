@@ -36,6 +36,22 @@ type HistoryItem = {
   totalAmount?: number
 }
 
+const getHijriYear = (date: Date) => {
+  try {
+    const parts = new Intl.DateTimeFormat('en-US-u-ca-islamic', { year: 'numeric' }).formatToParts(date)
+    const yearPart = parts.find((p) => p.type === 'year')?.value
+    const year = yearPart ? Number(yearPart) : NaN
+    return Number.isFinite(year) ? year : null
+  } catch {
+    return null
+  }
+}
+
+const safeNumber = (value: unknown, fallback = 0) => {
+  const n = typeof value === 'number' ? value : Number(value)
+  return Number.isFinite(n) ? n : fallback
+}
+
 const parseMeta = (inv?: Investment | null) => {
   if (!inv) return {}
   try {
@@ -157,6 +173,73 @@ export function SIPPortfolioClient({ investment, userRole }: SIPPortfolioClientP
 
     return filtered
   }, [meta.history, range])
+
+  const zakatBreakdown = useMemo(() => {
+    const history: HistoryItem[] = Array.isArray(meta.history) ? meta.history : []
+    const valuePoints = history
+      .map((h) => {
+        const at = new Date(h.at)
+        const value = safeNumber(h.currentValue, NaN)
+        if (Number.isNaN(at.getTime()) || !Number.isFinite(value)) return null
+        const hijriYear = getHijriYear(at)
+        if (!hijriYear) return null
+        return { hijriYear, at, value }
+      })
+      .filter((x): x is { hijriYear: number; at: Date; value: number } => !!x)
+      .sort((a, b) => a.at.getTime() - b.at.getTime())
+
+    const byYear = new Map<number, { start: { at: Date; value: number }; end: { at: Date; value: number } }>()
+    for (const p of valuePoints) {
+      const existing = byYear.get(p.hijriYear)
+      if (!existing) {
+        byYear.set(p.hijriYear, { start: { at: p.at, value: p.value }, end: { at: p.at, value: p.value } })
+        continue
+      }
+      existing.end = { at: p.at, value: p.value }
+    }
+
+    const zakatBaseByAssetType = (meta.zakatBaseByAssetType || {}) as Record<string, number>
+    const holdings = Array.isArray(meta.holdings) ? meta.holdings : []
+
+    const effectiveBasePct = (() => {
+      if (!holdings.length) return 0
+      const weighted = holdings.reduce((acc: number, h: any) => {
+        const allocationPct = safeNumber(h?.allocationPct, 0)
+        const assetType = String(h?.assetType || '')
+        const base = safeNumber(zakatBaseByAssetType[assetType], 0)
+        return acc + (allocationPct * base) / 100
+      }, 0)
+      const clamped = Math.max(0, Math.min(100, weighted))
+      return clamped
+    })()
+
+    const years = Array.from(byYear.entries())
+      .map(([year, v]) => ({ year, ...v }))
+      .sort((a, b) => a.year - b.year)
+
+    const rows = years.map((y) => {
+      const endValue = y.end.value
+      const zakatable = (endValue * effectiveBasePct) / 100
+      const zakatDue = zakatable * 0.025
+      return {
+        hijriYear: y.year,
+        startAt: y.start.at,
+        startValue: y.start.value,
+        endAt: y.end.at,
+        endValue,
+        basePct: effectiveBasePct,
+        zakatable,
+        zakatDue,
+      }
+    })
+
+    return {
+      rows,
+      effectiveBasePct,
+      hasHoldings: holdings.length > 0,
+      hasHistory: valuePoints.length > 0,
+    }
+  }, [meta.history, meta.zakatBaseByAssetType, meta.holdings])
 
   const latestUpdateLabel = useMemo(() => {
     const history: HistoryItem[] = Array.isArray(meta.history) ? meta.history : []
@@ -610,7 +693,49 @@ export function SIPPortfolioClient({ investment, userRole }: SIPPortfolioClientP
             </div>
 
             <div className="rounded-xl border border-gray-200 p-4 text-sm text-gray-600">
-              Hijri yearly hawl breakdown and purification calculations are next.
+              <div className="text-sm font-bold text-gray-900">Hijri Yearly (Hawl) Breakdown</div>
+              <div className="mt-2 text-sm text-gray-600">
+                {zakatBreakdown.hasHistory
+                  ? 'This uses your value history and calculates zakat based on the end-of-year value.'
+                  : 'Add value updates to generate yearly zakat breakdown.'}
+              </div>
+
+              {!zakatBreakdown.hasHoldings && (
+                <div className="mt-3 text-xs text-amber-700 bg-amber-50 border border-amber-200 rounded-lg p-3">
+                  Effective zakat base is currently 0% because holdings/allocations are not set yet.
+                </div>
+              )}
+
+              {zakatBreakdown.rows.length > 0 && (
+                <div className="mt-4 overflow-x-auto">
+                  <table className="min-w-full text-sm">
+                    <thead>
+                      <tr className="text-left text-xs uppercase tracking-wider text-gray-500">
+                        <th className="py-2 pr-4">Hijri Year</th>
+                        <th className="py-2 pr-4">Start</th>
+                        <th className="py-2 pr-4">End</th>
+                        <th className="py-2 pr-4">Base %</th>
+                        <th className="py-2 pr-4 text-right">End Value</th>
+                        <th className="py-2 pr-4 text-right">Zakatable</th>
+                        <th className="py-2 text-right">Zakat (2.5%)</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-gray-100">
+                      {zakatBreakdown.rows.map((r) => (
+                        <tr key={r.hijriYear}>
+                          <td className="py-3 pr-4 font-semibold text-gray-900 whitespace-nowrap">{r.hijriYear}</td>
+                          <td className="py-3 pr-4 text-gray-700 whitespace-nowrap">{formatGregorianAndHijriDate(r.startAt) || '-'}</td>
+                          <td className="py-3 pr-4 text-gray-700 whitespace-nowrap">{formatGregorianAndHijriDate(r.endAt) || '-'}</td>
+                          <td className="py-3 pr-4 text-gray-700 tabular-nums whitespace-nowrap">{r.basePct.toFixed(2)}%</td>
+                          <td className="py-3 pr-4 text-right tabular-nums text-gray-900 whitespace-nowrap">{formatCurrency(r.endValue)}</td>
+                          <td className="py-3 pr-4 text-right tabular-nums text-gray-900 whitespace-nowrap">{formatCurrency(r.zakatable)}</td>
+                          <td className="py-3 text-right tabular-nums font-semibold text-gray-900 whitespace-nowrap">{formatCurrency(r.zakatDue)}</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              )}
             </div>
           </div>
         )}
