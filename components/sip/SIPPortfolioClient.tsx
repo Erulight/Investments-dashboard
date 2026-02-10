@@ -26,6 +26,38 @@ interface SIPPortfolioClientProps {
   userRole: string
 }
 
+type HoldingRow = {
+  id: string
+  name: string
+  assetType: string
+  currentValue: number
+  allocationPct: number
+}
+
+type HoldingDraftRow = {
+  id: string
+  name: string
+  assetType: string
+  currentValue: string
+}
+
+type ZakatBaseRow = {
+  key: string
+  label: string
+  value: number
+}
+
+type ZakatBreakdownRow = {
+  hijriYear: number
+  startAt: Date
+  startValue: number
+  endAt: Date
+  endValue: number
+  basePct: number
+  zakatable: number
+  zakatDue: number
+}
+
 type RangeKey = 'week' | 'month' | 'year' | 'all'
 
 type HistoryItem = {
@@ -149,7 +181,7 @@ export function SIPPortfolioClient({ investment, userRole }: SIPPortfolioClientP
 
   const [zakatBaseDraft, setZakatBaseDraft] = useState<Record<string, string>>({})
 
-  const [holdingsDraft, setHoldingsDraft] = useState<Array<{ id: string; name: string; assetType: string; currentValue: string }>>([])
+  const [holdingsDraft, setHoldingsDraft] = useState<HoldingDraftRow[]>([])
 
   const meta = useMemo(() => parseMeta(inv), [inv])
 
@@ -223,7 +255,7 @@ export function SIPPortfolioClient({ investment, userRole }: SIPPortfolioClientP
       .map(([year, v]) => ({ year, ...v }))
       .sort((a, b) => a.year - b.year)
 
-    const rows = years.map((y) => {
+    const rows: ZakatBreakdownRow[] = years.map((y) => {
       const endValue = y.end.value
       const zakatable = (endValue * effectiveBasePct) / 100
       const zakatDue = zakatable * 0.025
@@ -259,8 +291,8 @@ export function SIPPortfolioClient({ investment, userRole }: SIPPortfolioClientP
       .filter((h: any) => h.assetType)
 
     const total = normalized.reduce((acc: number, h: any) => acc + h.currentValue, 0)
-    const rows = normalized
-      .map((h: any) => ({
+    const rows: HoldingRow[] = normalized
+      .map((h: any): HoldingRow => ({
         ...h,
         allocationPct: total > 0 ? (h.currentValue / total) * 100 : 0,
       }))
@@ -285,14 +317,14 @@ export function SIPPortfolioClient({ investment, userRole }: SIPPortfolioClientP
   }
 
   const addHoldingDraft = () => {
-    setHoldingsDraft((prev) => [
+    setHoldingsDraft((prev: HoldingDraftRow[]) => [
       ...prev,
       { id: crypto.randomUUID(), name: '', assetType: 'us_stocks', currentValue: '0' },
     ])
   }
 
   const removeHoldingDraft = (id: string) => {
-    setHoldingsDraft((prev) => prev.filter((h) => h.id !== id))
+    setHoldingsDraft((prev: HoldingDraftRow[]) => prev.filter((h: HoldingDraftRow) => h.id !== id))
   }
 
   const saveHoldings = async () => {
@@ -300,14 +332,14 @@ export function SIPPortfolioClient({ investment, userRole }: SIPPortfolioClientP
     setIsSavingHoldings(true)
     try {
       const payload = holdingsDraft
-        .map((h) => ({
+        .map((h: HoldingDraftRow) => ({
           id: h.id,
           name: h.name,
           assetType: h.assetType,
           currentValue: parseFloat(h.currentValue),
         }))
-        .filter((h) => typeof h.assetType === 'string' && h.assetType.trim().length > 0)
-        .map((h) => ({
+        .filter((h: { assetType: string }) => typeof h.assetType === 'string' && h.assetType.trim().length > 0)
+        .map((h: { id: string; name: string; assetType: string; currentValue: number }) => ({
           ...h,
           currentValue: Number.isFinite(h.currentValue) ? Math.max(0, h.currentValue) : 0,
         }))
@@ -359,7 +391,7 @@ export function SIPPortfolioClient({ investment, userRole }: SIPPortfolioClientP
           'commodities',
         ]
 
-    return ordered.map((k) => ({
+    return ordered.map((k): ZakatBaseRow => ({
       key: k,
       label: k.replace(/_/g, ' ').replace(/\b\w/g, (c) => c.toUpperCase()),
       value: Number(base[k] ?? 0),
@@ -739,7 +771,7 @@ export function SIPPortfolioClient({ investment, userRole }: SIPPortfolioClientP
                       </tr>
                     </thead>
                     <tbody className="divide-y divide-gray-100">
-                      {holdingsSummary.rows.map((h) => (
+                      {holdingsSummary.rows.map((h: HoldingRow) => (
                         <tr key={h.id || `${h.assetType}-${h.name}`}>
                           <td className="py-3 pr-4 font-medium text-gray-900 whitespace-nowrap">{h.name || '-'}</td>
                           <td className="py-3 pr-4 text-gray-700 whitespace-nowrap">{h.assetType}</td>
@@ -798,7 +830,7 @@ export function SIPPortfolioClient({ investment, userRole }: SIPPortfolioClientP
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-gray-100">
-                    {zakatBaseRows.map((row) => {
+                    {zakatBaseRows.map((row: ZakatBaseRow) => {
                       const draftValue = zakatBaseDraft[row.key]
                       const shown = typeof draftValue === 'string' ? draftValue : String(row.value ?? 0)
                       return (
@@ -864,7 +896,7 @@ export function SIPPortfolioClient({ investment, userRole }: SIPPortfolioClientP
                       </tr>
                     </thead>
                     <tbody className="divide-y divide-gray-100">
-                      {zakatBreakdown.rows.map((r) => (
+                      {zakatBreakdown.rows.map((r: ZakatBreakdownRow) => (
                         <tr key={r.hijriYear}>
                           <td className="py-3 pr-4 font-semibold text-gray-900 whitespace-nowrap">{r.hijriYear}</td>
                           <td className="py-3 pr-4 text-gray-700 whitespace-nowrap">{formatGregorianAndHijriDate(r.startAt) || '-'}</td>
@@ -1000,14 +1032,16 @@ export function SIPPortfolioClient({ investment, userRole }: SIPPortfolioClientP
               {holdingsDraft.length === 0 ? (
                 <div className="text-sm text-gray-600">No holdings added yet.</div>
               ) : (
-                holdingsDraft.map((h, idx) => (
+                holdingsDraft.map((h: HoldingDraftRow, idx: number) => (
                   <div key={h.id} className="grid grid-cols-1 md:grid-cols-12 gap-3 items-end border border-gray-200 rounded-xl p-4">
                     <div className="md:col-span-4">
                       <label className="block text-xs font-semibold text-gray-600 mb-1">Name</label>
                       <input
                         value={h.name}
                         onChange={(e: ChangeEvent<HTMLInputElement>) =>
-                          setHoldingsDraft((prev) => prev.map((x) => (x.id === h.id ? { ...x, name: e.target.value } : x)))
+                          setHoldingsDraft((prev: HoldingDraftRow[]) =>
+                            prev.map((x: HoldingDraftRow) => (x.id === h.id ? { ...x, name: e.target.value } : x))
+                          )
                         }
                         className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500 outline-none"
                         placeholder="e.g., SPUS / REIT / Cash"
@@ -1019,7 +1053,9 @@ export function SIPPortfolioClient({ investment, userRole }: SIPPortfolioClientP
                       <select
                         value={h.assetType}
                         onChange={(e: ChangeEvent<HTMLSelectElement>) =>
-                          setHoldingsDraft((prev) => prev.map((x) => (x.id === h.id ? { ...x, assetType: e.target.value } : x)))
+                          setHoldingsDraft((prev: HoldingDraftRow[]) =>
+                            prev.map((x: HoldingDraftRow) => (x.id === h.id ? { ...x, assetType: e.target.value } : x))
+                          )
                         }
                         className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500 outline-none"
                       >
@@ -1040,7 +1076,9 @@ export function SIPPortfolioClient({ investment, userRole }: SIPPortfolioClientP
                         step="0.01"
                         value={h.currentValue}
                         onChange={(e: ChangeEvent<HTMLInputElement>) =>
-                          setHoldingsDraft((prev) => prev.map((x) => (x.id === h.id ? { ...x, currentValue: e.target.value } : x)))
+                          setHoldingsDraft((prev: HoldingDraftRow[]) =>
+                            prev.map((x: HoldingDraftRow) => (x.id === h.id ? { ...x, currentValue: e.target.value } : x))
+                          )
                         }
                         className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500 outline-none"
                       />
