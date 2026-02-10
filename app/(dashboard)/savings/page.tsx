@@ -12,9 +12,8 @@ export default async function SavingsPage() {
     return null
   }
 
-  // Get all savings-related investments (we'll use CIRCLYS and SIP types)
+  // Get all savings-related investments (we'll use CIRCLYS type for now)
   let circlysInvestments: any[] = []
-  let sipInvestments: any[] = []
   let totalSavings = 0
   let totalReward = 0
 
@@ -31,25 +30,14 @@ export default async function SavingsPage() {
       },
       orderBy: { createdAt: 'desc' },
     })
-
-    sipInvestments = await prisma.investment.findMany({
-      where: {
-        category: 'SIP',
-      },
-      include: {
-        account: true,
-      },
-      orderBy: { createdAt: 'desc' },
-    })
   } else if (user.role === 'PARTNER' && user.personId) {
     const participants = await prisma.dealParticipant.findMany({
       where: { 
         personId: user.personId,
         investment: {
-          OR: [
-            { account: { type: 'CIRCLYS' } },
-            { category: 'SIP' },
-          ],
+          account: {
+            type: 'CIRCLYS'
+          }
         }
       },
       include: {
@@ -59,7 +47,7 @@ export default async function SavingsPage() {
       },
     })
     
-    const allInvestments = participants.map((p: any) => ({
+    circlysInvestments = participants.map((p: any) => ({
       ...p.investment,
       myParticipation: {
         investedAmount: p.investedAmount,
@@ -67,9 +55,6 @@ export default async function SavingsPage() {
         profit: p.profit,
       },
     }))
-    
-    circlysInvestments = allInvestments.filter(inv => inv.account?.type === 'CIRCLYS')
-    sipInvestments = allInvestments.filter(inv => inv.category === 'SIP')
   }
 
   totalSavings = circlysInvestments.reduce((sum, inv) => sum + inv.principalAmount, 0)
@@ -99,7 +84,7 @@ export default async function SavingsPage() {
       </div>
 
       {/* Savings Categories */}
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
         <Link href="/savings/circlys">
           <Card hover className="cursor-pointer">
             <CardContent className="py-8">
@@ -110,22 +95,6 @@ export default async function SavingsPage() {
                 <div className="flex items-center justify-between px-3 py-2 bg-gray-50 rounded-lg">
                   <span className="text-xs text-gray-500">Active Plans</span>
                   <span className="text-sm font-bold text-gray-900">{circlysInvestments.length}</span>
-                </div>
-              </div>
-            </CardContent>
-          </Card>
-        </Link>
-
-        <Link href="/savings/sip">
-          <Card hover className="cursor-pointer">
-            <CardContent className="py-8">
-              <div className="text-center">
-                <div className="text-3xl mb-3">📊</div>
-                <h3 className="text-sm font-bold text-gray-900 mb-1">SIP</h3>
-                <p className="text-xs text-gray-500 mb-3">Systematic Investment Plans</p>
-                <div className="flex items-center justify-between px-3 py-2 bg-gray-50 rounded-lg">
-                  <span className="text-xs text-gray-500">Active Plans</span>
-                  <span className="text-sm font-bold text-gray-900">{sipInvestments.length}</span>
                 </div>
               </div>
             </CardContent>

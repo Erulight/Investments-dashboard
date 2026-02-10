@@ -36,7 +36,7 @@ export function SIPForm({ onSubmit, onCancel, initialData, isLoading }: SIPFormP
   useEffect(() => {
     const fetchAccounts = async () => {
       try {
-        const response = await fetch('/api/savings/accounts')
+        const response = await fetch('/api/sip/accounts')
         if (response.ok) {
           const data = await response.json()
           setAccounts(data)
