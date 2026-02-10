@@ -120,10 +120,6 @@ export function Navbar({ user, activeAccountTypes }: NavbarProps) {
   const activeTypes = new Set((Array.isArray(activeAccountTypes) ? activeAccountTypes : []).map(normalizeType))
 
   const moduleToAccountType: Record<string, string> = {
-    sukuk: 'SUKUK',
-    crypto: 'CRYPTO',
-    sip: 'SIP',
-    savings: 'SAVINGS',
     'business-deals': 'BUSINESS-DEALS',
   }
 
