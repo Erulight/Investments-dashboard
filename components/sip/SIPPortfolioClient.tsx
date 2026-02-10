@@ -30,6 +30,7 @@ type HoldingRow = {
   id: string
   name: string
   assetType: string
+  cost: number
   currentValue: number
   allocationPct: number
 }
@@ -38,6 +39,7 @@ type HoldingDraftRow = {
   id: string
   name: string
   assetType: string
+  cost: string
   currentValue: string
 }
 
@@ -299,11 +301,13 @@ export function SIPPortfolioClient({ investment, userRole }: SIPPortfolioClientP
         id: String(h?.id || ''),
         name: String(h?.name || ''),
         assetType: String(h?.assetType || ''),
+        cost: Math.max(0, safeNumber(h?.cost, 0)),
         currentValue: Math.max(0, safeNumber(h?.currentValue, 0)),
       }))
       .filter((h: any) => h.assetType)
 
     const total = normalized.reduce((acc: number, h: any) => acc + h.currentValue, 0)
+    const costTotal = normalized.reduce((acc: number, h: any) => acc + h.cost, 0)
     const rows: HoldingRow[] = normalized
       .map((h: any): HoldingRow => ({
         ...h,
@@ -311,7 +315,7 @@ export function SIPPortfolioClient({ investment, userRole }: SIPPortfolioClientP
       }))
       .sort((a: any, b: any) => b.allocationPct - a.allocationPct)
 
-    return { rows, total }
+    return { rows, total, costTotal }
   }, [meta.holdings])
 
   const openHoldingsEditor = () => {
@@ -321,9 +325,10 @@ export function SIPPortfolioClient({ investment, userRole }: SIPPortfolioClientP
         id: String(h?.id || crypto.randomUUID()),
         name: String(h?.name || ''),
         assetType: String(h?.assetType || ''),
+        cost: String(safeNumber(h?.cost, 0)),
         currentValue: String(safeNumber(h?.currentValue, 0)),
       }))
-      .filter((h: any) => h.assetType || h.name || h.currentValue)
+      .filter((h: any) => h.assetType || h.name || h.currentValue || h.cost)
 
     setHoldingsDraft(next)
     setShowHoldingsForm(true)
@@ -332,7 +337,7 @@ export function SIPPortfolioClient({ investment, userRole }: SIPPortfolioClientP
   const addHoldingDraft = () => {
     setHoldingsDraft((prev: HoldingDraftRow[]) => [
       ...prev,
-      { id: crypto.randomUUID(), name: '', assetType: 'us_stocks', currentValue: '0' },
+      { id: crypto.randomUUID(), name: '', assetType: 'us_stocks', cost: '0', currentValue: '0' },
     ])
   }
 
@@ -349,11 +354,13 @@ export function SIPPortfolioClient({ investment, userRole }: SIPPortfolioClientP
           id: h.id,
           name: h.name,
           assetType: h.assetType,
+          cost: parseFloat(h.cost),
           currentValue: parseFloat(h.currentValue),
         }))
         .filter((h: { assetType: string }) => typeof h.assetType === 'string' && h.assetType.trim().length > 0)
-        .map((h: { id: string; name: string; assetType: string; currentValue: number }) => ({
+        .map((h: { id: string; name: string; assetType: string; currentValue: number; cost: number }) => ({
           ...h,
+          cost: Number.isFinite(h.cost) ? Math.max(0, h.cost) : 0,
           currentValue: Number.isFinite(h.currentValue) ? Math.max(0, h.currentValue) : 0,
         }))
 
@@ -828,6 +835,7 @@ export function SIPPortfolioClient({ investment, userRole }: SIPPortfolioClientP
                       <tr className="text-left text-xs uppercase tracking-wider text-gray-500">
                         <th className="py-2 pr-4">Holding</th>
                         <th className="py-2 pr-4">Asset Type</th>
+                        <th className="py-2 pr-4 text-right">Cost</th>
                         <th className="py-2 pr-4 text-right">Value</th>
                         <th className="py-2 text-right">Allocation</th>
                       </tr>
@@ -837,12 +845,14 @@ export function SIPPortfolioClient({ investment, userRole }: SIPPortfolioClientP
                         <tr key={h.id || `${h.assetType}-${h.name}`}>
                           <td className="py-3 pr-4 font-medium text-gray-900 whitespace-nowrap">{h.name || '-'}</td>
                           <td className="py-3 pr-4 text-gray-700 whitespace-nowrap">{h.assetType}</td>
+                          <td className="py-3 pr-4 text-right tabular-nums text-gray-900 whitespace-nowrap">{formatCurrency(h.cost)}</td>
                           <td className="py-3 pr-4 text-right tabular-nums text-gray-900 whitespace-nowrap">{formatCurrency(h.currentValue)}</td>
                           <td className="py-3 text-right tabular-nums text-gray-900 whitespace-nowrap">{h.allocationPct.toFixed(2)}%</td>
                         </tr>
                       ))}
                       <tr>
                         <td className="py-3 pr-4 font-semibold text-gray-900" colSpan={2}>Total</td>
+                        <td className="py-3 pr-4 text-right tabular-nums font-semibold text-gray-900 whitespace-nowrap">{formatCurrency(holdingsSummary.costTotal)}</td>
                         <td className="py-3 pr-4 text-right tabular-nums font-semibold text-gray-900 whitespace-nowrap">{formatCurrency(holdingsSummary.total)}</td>
                         <td className="py-3 text-right tabular-nums font-semibold text-gray-900 whitespace-nowrap">100.00%</td>
                       </tr>
@@ -1236,7 +1246,7 @@ export function SIPPortfolioClient({ investment, userRole }: SIPPortfolioClientP
                       />
                     </div>
 
-                    <div className="md:col-span-4">
+                    <div className="md:col-span-3">
                       <label className="block text-xs font-semibold text-gray-600 mb-1">Asset Type</label>
                       <select
                         value={h.assetType}
@@ -1256,7 +1266,23 @@ export function SIPPortfolioClient({ investment, userRole }: SIPPortfolioClientP
                       </select>
                     </div>
 
-                    <div className="md:col-span-3">
+                    <div className="md:col-span-2">
+                      <label className="block text-xs font-semibold text-gray-600 mb-1">Cost (SAR)</label>
+                      <input
+                        type="number"
+                        min="0"
+                        step="0.01"
+                        value={h.cost}
+                        onChange={(e: ChangeEvent<HTMLInputElement>) =>
+                          setHoldingsDraft((prev: HoldingDraftRow[]) =>
+                            prev.map((x: HoldingDraftRow) => (x.id === h.id ? { ...x, cost: e.target.value } : x))
+                          )
+                        }
+                        className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500 outline-none"
+                      />
+                    </div>
+
+                    <div className="md:col-span-2">
                       <label className="block text-xs font-semibold text-gray-600 mb-1">Current Value (SAR)</label>
                       <input
                         type="number"

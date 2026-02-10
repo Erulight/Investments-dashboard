@@ -9,6 +9,7 @@ type HoldingInput = {
   name?: string
   assetType: string
   currentValue: number
+  cost?: number
 }
 
 export async function POST(request: Request) {
@@ -53,11 +54,13 @@ export async function POST(request: Request) {
 
     const normalized = (holdings as HoldingInput[]).map((h) => {
       const currentValue = typeof h.currentValue === 'number' ? h.currentValue : Number(h.currentValue)
+      const cost = typeof h.cost === 'number' ? h.cost : Number(h.cost)
       return {
         id: typeof h.id === 'string' && h.id.trim() ? h.id.trim() : crypto.randomUUID(),
         name: typeof h.name === 'string' ? h.name.trim() : '',
         assetType: typeof h.assetType === 'string' ? h.assetType.trim() : '',
         currentValue: Number.isFinite(currentValue) ? Math.max(0, currentValue) : 0,
+        cost: Number.isFinite(cost) ? Math.max(0, cost) : 0,
       }
     })
 
