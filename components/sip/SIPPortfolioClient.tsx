@@ -137,8 +137,10 @@ export function SIPPortfolioClient({ investment, userRole }: SIPPortfolioClientP
   const [showCreateForm, setShowCreateForm] = useState(false)
   const [showEditForm, setShowEditForm] = useState(false)
   const [showValueForm, setShowValueForm] = useState(false)
+  const [showHoldingsForm, setShowHoldingsForm] = useState(false)
   const [isLoading, setIsLoading] = useState(false)
   const [isSavingZakatBase, setIsSavingZakatBase] = useState(false)
+  const [isSavingHoldings, setIsSavingHoldings] = useState(false)
 
   const [valueForm, setValueForm] = useState<{ date: string; currentValue: string }>({
     date: new Date().toISOString().split('T')[0],
@@ -146,6 +148,8 @@ export function SIPPortfolioClient({ investment, userRole }: SIPPortfolioClientP
   })
 
   const [zakatBaseDraft, setZakatBaseDraft] = useState<Record<string, string>>({})
+
+  const [holdingsDraft, setHoldingsDraft] = useState<Array<{ id: string; name: string; assetType: string; currentValue: string }>>([])
 
   const meta = useMemo(() => parseMeta(inv), [inv])
 
@@ -203,14 +207,16 @@ export function SIPPortfolioClient({ investment, userRole }: SIPPortfolioClientP
 
     const effectiveBasePct = (() => {
       if (!holdings.length) return 0
+      const total = holdings.reduce((acc: number, h: any) => acc + Math.max(0, safeNumber(h?.currentValue, 0)), 0)
+      if (total <= 0) return 0
       const weighted = holdings.reduce((acc: number, h: any) => {
-        const allocationPct = safeNumber(h?.allocationPct, 0)
+        const holdingValue = Math.max(0, safeNumber(h?.currentValue, 0))
         const assetType = String(h?.assetType || '')
         const base = safeNumber(zakatBaseByAssetType[assetType], 0)
+        const allocationPct = (holdingValue / total) * 100
         return acc + (allocationPct * base) / 100
       }, 0)
-      const clamped = Math.max(0, Math.min(100, weighted))
-      return clamped
+      return Math.max(0, Math.min(100, weighted))
     })()
 
     const years = Array.from(byYear.entries())
@@ -240,6 +246,93 @@ export function SIPPortfolioClient({ investment, userRole }: SIPPortfolioClientP
       hasHistory: valuePoints.length > 0,
     }
   }, [meta.history, meta.zakatBaseByAssetType, meta.holdings])
+
+  const holdingsSummary = useMemo(() => {
+    const holdings = Array.isArray(meta.holdings) ? meta.holdings : []
+    const normalized = holdings
+      .map((h: any) => ({
+        id: String(h?.id || ''),
+        name: String(h?.name || ''),
+        assetType: String(h?.assetType || ''),
+        currentValue: Math.max(0, safeNumber(h?.currentValue, 0)),
+      }))
+      .filter((h: any) => h.assetType)
+
+    const total = normalized.reduce((acc: number, h: any) => acc + h.currentValue, 0)
+    const rows = normalized
+      .map((h: any) => ({
+        ...h,
+        allocationPct: total > 0 ? (h.currentValue / total) * 100 : 0,
+      }))
+      .sort((a: any, b: any) => b.allocationPct - a.allocationPct)
+
+    return { rows, total }
+  }, [meta.holdings])
+
+  const openHoldingsEditor = () => {
+    const holdings = Array.isArray(meta.holdings) ? meta.holdings : []
+    const next = holdings
+      .map((h: any) => ({
+        id: String(h?.id || crypto.randomUUID()),
+        name: String(h?.name || ''),
+        assetType: String(h?.assetType || ''),
+        currentValue: String(safeNumber(h?.currentValue, 0)),
+      }))
+      .filter((h: any) => h.assetType || h.name || h.currentValue)
+
+    setHoldingsDraft(next)
+    setShowHoldingsForm(true)
+  }
+
+  const addHoldingDraft = () => {
+    setHoldingsDraft((prev) => [
+      ...prev,
+      { id: crypto.randomUUID(), name: '', assetType: 'us_stocks', currentValue: '0' },
+    ])
+  }
+
+  const removeHoldingDraft = (id: string) => {
+    setHoldingsDraft((prev) => prev.filter((h) => h.id !== id))
+  }
+
+  const saveHoldings = async () => {
+    if (!inv) return
+    setIsSavingHoldings(true)
+    try {
+      const payload = holdingsDraft
+        .map((h) => ({
+          id: h.id,
+          name: h.name,
+          assetType: h.assetType,
+          currentValue: parseFloat(h.currentValue),
+        }))
+        .filter((h) => typeof h.assetType === 'string' && h.assetType.trim().length > 0)
+        .map((h) => ({
+          ...h,
+          currentValue: Number.isFinite(h.currentValue) ? Math.max(0, h.currentValue) : 0,
+        }))
+
+      const response = await fetch('/api/sip/update-holdings', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ sipId: inv.id, holdings: payload }),
+      })
+
+      if (!response.ok) {
+        const error = await response.json().catch(() => ({}))
+        throw new Error(error.error || 'Failed to save holdings')
+      }
+
+      const updated = await response.json()
+      setInv(updated)
+      setShowHoldingsForm(false)
+    } catch (error) {
+      console.error('Save holdings error:', error)
+      alert(error instanceof Error ? error.message : 'Failed to save holdings')
+    } finally {
+      setIsSavingHoldings(false)
+    }
+  }
 
   const latestUpdateLabel = useMemo(() => {
     const history: HistoryItem[] = Array.isArray(meta.history) ? meta.history : []
@@ -614,6 +707,56 @@ export function SIPPortfolioClient({ investment, userRole }: SIPPortfolioClientP
                   : 'No history yet.'}
               </div>
             </div>
+
+            <div className="md:col-span-3 rounded-xl border border-gray-200 p-4">
+              <div className="flex items-center justify-between gap-4">
+                <div>
+                  <div className="text-sm font-bold text-gray-900">Holdings & Allocation</div>
+                  <div className="text-xs text-gray-500 mt-1">Allocation % is derived from holding values.</div>
+                </div>
+                {userRole === 'OWNER' && (
+                  <button
+                    type="button"
+                    onClick={openHoldingsEditor}
+                    className="px-3 py-2 rounded-lg bg-slate-900 text-white hover:bg-slate-800 text-sm font-semibold"
+                  >
+                    Edit Holdings
+                  </button>
+                )}
+              </div>
+
+              {holdingsSummary.rows.length === 0 ? (
+                <div className="mt-4 text-sm text-gray-600">No holdings yet.</div>
+              ) : (
+                <div className="mt-4 overflow-x-auto">
+                  <table className="min-w-full text-sm">
+                    <thead>
+                      <tr className="text-left text-xs uppercase tracking-wider text-gray-500">
+                        <th className="py-2 pr-4">Holding</th>
+                        <th className="py-2 pr-4">Asset Type</th>
+                        <th className="py-2 pr-4 text-right">Value</th>
+                        <th className="py-2 text-right">Allocation</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-gray-100">
+                      {holdingsSummary.rows.map((h) => (
+                        <tr key={h.id || `${h.assetType}-${h.name}`}>
+                          <td className="py-3 pr-4 font-medium text-gray-900 whitespace-nowrap">{h.name || '-'}</td>
+                          <td className="py-3 pr-4 text-gray-700 whitespace-nowrap">{h.assetType}</td>
+                          <td className="py-3 pr-4 text-right tabular-nums text-gray-900 whitespace-nowrap">{formatCurrency(h.currentValue)}</td>
+                          <td className="py-3 text-right tabular-nums text-gray-900 whitespace-nowrap">{h.allocationPct.toFixed(2)}%</td>
+                        </tr>
+                      ))}
+                      <tr>
+                        <td className="py-3 pr-4 font-semibold text-gray-900" colSpan={2}>Total</td>
+                        <td className="py-3 pr-4 text-right tabular-nums font-semibold text-gray-900 whitespace-nowrap">{formatCurrency(holdingsSummary.total)}</td>
+                        <td className="py-3 text-right tabular-nums font-semibold text-gray-900 whitespace-nowrap">100.00%</td>
+                      </tr>
+                    </tbody>
+                  </table>
+                </div>
+              )}
+            </div>
           </div>
         )}
 
@@ -831,6 +974,113 @@ export function SIPPortfolioClient({ investment, userRole }: SIPPortfolioClientP
                 </button>
               </div>
             </form>
+          </div>
+        </div>
+      )}
+
+      {showHoldingsForm && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+          <div className="bg-white rounded-xl p-6 max-w-3xl w-full mx-4 max-h-[90vh] overflow-y-auto">
+            <div className="flex justify-between items-center mb-6">
+              <h2 className="text-xl font-bold text-gray-900">Edit Holdings</h2>
+              <button onClick={() => setShowHoldingsForm(false)} className="text-gray-400 hover:text-gray-600">✕</button>
+            </div>
+
+            <div className="flex justify-end mb-3">
+              <button
+                type="button"
+                onClick={addHoldingDraft}
+                className="px-3 py-2 rounded-lg bg-gray-100 text-gray-700 hover:bg-gray-200 text-sm font-semibold"
+              >
+                + Add Holding
+              </button>
+            </div>
+
+            <div className="space-y-3">
+              {holdingsDraft.length === 0 ? (
+                <div className="text-sm text-gray-600">No holdings added yet.</div>
+              ) : (
+                holdingsDraft.map((h, idx) => (
+                  <div key={h.id} className="grid grid-cols-1 md:grid-cols-12 gap-3 items-end border border-gray-200 rounded-xl p-4">
+                    <div className="md:col-span-4">
+                      <label className="block text-xs font-semibold text-gray-600 mb-1">Name</label>
+                      <input
+                        value={h.name}
+                        onChange={(e: ChangeEvent<HTMLInputElement>) =>
+                          setHoldingsDraft((prev) => prev.map((x) => (x.id === h.id ? { ...x, name: e.target.value } : x)))
+                        }
+                        className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500 outline-none"
+                        placeholder="e.g., SPUS / REIT / Cash"
+                      />
+                    </div>
+
+                    <div className="md:col-span-4">
+                      <label className="block text-xs font-semibold text-gray-600 mb-1">Asset Type</label>
+                      <select
+                        value={h.assetType}
+                        onChange={(e: ChangeEvent<HTMLSelectElement>) =>
+                          setHoldingsDraft((prev) => prev.map((x) => (x.id === h.id ? { ...x, assetType: e.target.value } : x)))
+                        }
+                        className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500 outline-none"
+                      >
+                        <option value="us_stocks">US Stocks</option>
+                        <option value="developed_emerging_stocks">Developed/Emerging Stocks</option>
+                        <option value="local_equity">Local Equity</option>
+                        <option value="real_estate">Real Estate</option>
+                        <option value="money_market">Money Market</option>
+                        <option value="commodities">Commodities</option>
+                      </select>
+                    </div>
+
+                    <div className="md:col-span-3">
+                      <label className="block text-xs font-semibold text-gray-600 mb-1">Current Value (SAR)</label>
+                      <input
+                        type="number"
+                        min="0"
+                        step="0.01"
+                        value={h.currentValue}
+                        onChange={(e: ChangeEvent<HTMLInputElement>) =>
+                          setHoldingsDraft((prev) => prev.map((x) => (x.id === h.id ? { ...x, currentValue: e.target.value } : x)))
+                        }
+                        className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500 outline-none"
+                      />
+                    </div>
+
+                    <div className="md:col-span-1 flex justify-end">
+                      <button
+                        type="button"
+                        onClick={() => removeHoldingDraft(h.id)}
+                        className="px-3 py-2 rounded-lg bg-red-50 text-red-700 hover:bg-red-100 text-sm font-semibold"
+                      >
+                        Remove
+                      </button>
+                    </div>
+
+                    <div className="md:col-span-12 text-xs text-gray-500">
+                      Holding #{idx + 1}
+                    </div>
+                  </div>
+                ))
+              )}
+            </div>
+
+            <div className="flex justify-end gap-2 pt-6 border-t mt-6">
+              <button
+                type="button"
+                onClick={() => setShowHoldingsForm(false)}
+                className="px-4 py-2 border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50 transition-colors"
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                disabled={isSavingHoldings}
+                onClick={saveHoldings}
+                className="px-4 py-2 bg-slate-900 text-white rounded-lg hover:bg-slate-800 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+              >
+                {isSavingHoldings ? 'Saving...' : 'Save Holdings'}
+              </button>
+            </div>
           </div>
         </div>
       )}
