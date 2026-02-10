@@ -3,6 +3,7 @@
 import { useState } from 'react'
 import { CreateSipInput } from '@/lib/validation'
 import { SIPForm } from './SIPForm'
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/Table'
 
 interface Investment {
   id: string
@@ -40,6 +41,11 @@ export function SIPClient({ investments, userRole }: SIPClientProps) {
     } catch {
       return {}
     }
+  }
+
+  const formatCurrency = (value: number) => {
+    const amount = Number.isFinite(value) ? value : 0
+    return `SAR ${amount.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`
   }
 
   const handleCreateSip = async (data: CreateSipInput) => {
@@ -113,94 +119,31 @@ export function SIPClient({ investments, userRole }: SIPClientProps) {
     }
   }
 
+  const handleDeleteSip = async (sipId: string) => {
+    const confirmed = window.confirm('Delete this SIP? This action cannot be undone.')
+    if (!confirmed) return
+
+    try {
+      const response = await fetch(`/api/sip/${sipId}`, { method: 'DELETE' })
+      if (!response.ok) {
+        const error = await response.json().catch(() => ({}))
+        throw new Error(error.error || 'Failed to delete SIP')
+      }
+      setCurrentInvestments((prev: Investment[]) => prev.filter(inv => inv.id !== sipId))
+    } catch (error) {
+      console.error('Delete SIP error:', error)
+      alert(error instanceof Error ? error.message : 'Failed to delete SIP')
+    }
+  }
+
   // Filter only SIP investments
   const sipInvestments = currentInvestments.filter(inv => {
     const meta = parseSipMetadata(inv)
     return meta.type === 'SIP'
   })
 
-  const totalTargetAmount = sipInvestments.reduce((sum, inv) => {
-    const meta = parseSipMetadata(inv)
-    return sum + (meta.totalAmount || 0)
-  }, 0)
-
-  const totalInvested = sipInvestments.reduce((sum, inv) => {
-    const meta = parseSipMetadata(inv)
-    return sum + (meta.investedAmount || inv.principalAmount || 0)
-  }, 0)
-
-  const currentValue = sipInvestments.reduce((sum, inv) => {
-    const meta = parseSipMetadata(inv)
-    return sum + (meta.currentValue || inv.currentValue || 0)
-  }, 0)
-
-  const totalReturn = currentValue - totalInvested
-  const returnPercentage = totalInvested > 0 ? ((totalReturn / totalInvested) * 100) : 0
-
   return (
     <div className="space-y-6">
-      {/* Header Stats */}
-      <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
-        <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-6 hover:shadow-md transition-shadow">
-          <div className="flex items-center justify-between">
-            <div>
-              <p className="text-sm font-medium text-gray-600">Target Amount</p>
-              <p className="text-2xl font-bold text-gray-900 mt-1">
-                SAR {totalTargetAmount.toLocaleString()}
-              </p>
-            </div>
-            <div className="w-12 h-12 bg-blue-100 rounded-lg flex items-center justify-center">
-              <span className="text-xl">🎯</span>
-            </div>
-          </div>
-        </div>
-
-        <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-6 hover:shadow-md transition-shadow">
-          <div className="flex items-center justify-between">
-            <div>
-              <p className="text-sm font-medium text-gray-600">Total Invested</p>
-              <p className="text-2xl font-bold text-gray-900 mt-1">
-                SAR {totalInvested.toLocaleString()}
-              </p>
-            </div>
-            <div className="w-12 h-12 bg-emerald-100 rounded-lg flex items-center justify-center">
-              <span className="text-xl">💰</span>
-            </div>
-          </div>
-        </div>
-
-        <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-6 hover:shadow-md transition-shadow">
-          <div className="flex items-center justify-between">
-            <div>
-              <p className="text-sm font-medium text-gray-600">Current Value</p>
-              <p className="text-2xl font-bold text-gray-900 mt-1">
-                SAR {currentValue.toLocaleString()}
-              </p>
-            </div>
-            <div className="w-12 h-12 bg-purple-100 rounded-lg flex items-center justify-center">
-              <span className="text-xl">📊</span>
-            </div>
-          </div>
-        </div>
-
-        <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-6 hover:shadow-md transition-shadow">
-          <div className="flex items-center justify-between">
-            <div>
-              <p className="text-sm font-medium text-gray-600">Total Return</p>
-              <p className={`text-2xl font-bold mt-1 ${totalReturn >= 0 ? 'text-emerald-600' : 'text-red-600'}`}>
-                {totalReturn >= 0 ? '+' : ''}SAR {totalReturn.toLocaleString()}
-              </p>
-              <p className={`text-xs mt-1 ${totalReturn >= 0 ? 'text-emerald-600' : 'text-red-600'}`}>
-                {returnPercentage >= 0 ? '+' : ''}{returnPercentage.toFixed(2)}%
-              </p>
-            </div>
-            <div className={`w-12 h-12 rounded-lg flex items-center justify-center ${totalReturn >= 0 ? 'bg-emerald-100' : 'bg-red-100'}`}>
-              <span className="text-xl">{totalReturn >= 0 ? '📈' : '📉'}</span>
-            </div>
-          </div>
-        </div>
-      </div>
-
       {/* Add New SIP Button */}
       {userRole === 'OWNER' && (
         <div className="flex justify-end">
@@ -225,93 +168,98 @@ export function SIPClient({ investments, userRole }: SIPClientProps) {
           </p>
         </div>
       ) : (
-        <div className="bg-white rounded-xl shadow-sm border border-gray-100">
-          <div className="p-6 border-b border-gray-100">
-            <h2 className="text-lg font-semibold text-gray-900">SIP Plans</h2>
-            <p className="text-sm text-gray-600 mt-1">{sipInvestments.length} active plan{sipInvestments.length > 1 ? 's' : ''}</p>
-          </div>
-          <div className="divide-y divide-gray-100">
-            {sipInvestments.map((inv: Investment) => {
-              const meta = parseSipMetadata(inv)
-              const invested = meta.investedAmount || inv.principalAmount || 0
-              const current = meta.currentValue || inv.currentValue || 0
-              const target = meta.totalAmount || 0
-              const progress = target > 0 ? (invested / target) * 100 : 0
-              const returns = current - invested
-              const returnsPct = invested > 0 ? (returns / invested) * 100 : 0
+        <div className="overflow-x-auto rounded-xl border border-gray-200 bg-white">
+          <Table className="text-xs table-auto min-w-[1100px]">
+            <TableHeader className="sticky top-0 bg-gray-50">
+              <TableRow>
+                <TableHead className="px-2 py-1.5 whitespace-nowrap">Platform</TableHead>
+                <TableHead className="px-2 py-1.5 whitespace-nowrap">ETF</TableHead>
+                <TableHead className="px-2 py-1.5 whitespace-nowrap">Risk Level</TableHead>
+                <TableHead className="px-2 py-1.5 whitespace-nowrap text-right">Total Invested</TableHead>
+                <TableHead className="px-2 py-1.5 whitespace-nowrap text-right">APR Yearly</TableHead>
+                <TableHead className="px-2 py-1.5 whitespace-nowrap">Date Started</TableHead>
+                <TableHead className="px-2 py-1.5 whitespace-nowrap text-right">Expected Profit</TableHead>
+                <TableHead className="px-2 py-1.5 whitespace-nowrap text-right">Expected Actual</TableHead>
+                <TableHead className="px-2 py-1.5 whitespace-nowrap text-right">Expected APR</TableHead>
+                <TableHead className="px-2 py-1.5 whitespace-nowrap text-right">Actual APR</TableHead>
+                <TableHead className="px-2 py-1.5 whitespace-nowrap text-right">Total So Far</TableHead>
+                {userRole === 'OWNER' && (
+                  <TableHead className="px-2 py-1.5 whitespace-nowrap">Actions</TableHead>
+                )}
+              </TableRow>
+            </TableHeader>
+            <TableBody>
+              {sipInvestments.map((inv: Investment) => {
+                const meta = parseSipMetadata(inv)
+                const invested = meta.investedAmount || inv.principalAmount || 0
+                const current = meta.currentValue || inv.currentValue || 0
+                const target = meta.totalAmount || 0
+                const expectedProfit = target > 0 ? Math.max(0, target - invested) : 0
 
-              return (
-                <div key={inv.id} className="p-6 hover:bg-gray-50 transition-colors">
-                  <div className="flex items-start justify-between">
-                    <div className="flex-1">
-                      <div className="flex items-center gap-3 mb-2">
-                        <h3 className="text-lg font-semibold text-gray-900">{inv.name}</h3>
-                        <span className="px-2 py-1 bg-emerald-100 text-emerald-700 text-xs font-medium rounded-full">
-                          Active
-                        </span>
-                      </div>
-                      <p className="text-sm text-gray-600 mb-4">
-                        {inv.account.name} • Started {new Date(inv.startDate).toLocaleDateString()}
-                      </p>
-                      
-                      <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-4">
-                        <div>
-                          <p className="text-xs text-gray-500">Target</p>
-                          <p className="text-sm font-semibold text-gray-900">SAR {target.toLocaleString()}</p>
-                        </div>
-                        <div>
-                          <p className="text-xs text-gray-500">Invested</p>
-                          <p className="text-sm font-semibold text-gray-900">SAR {invested.toLocaleString()}</p>
-                        </div>
-                        <div>
-                          <p className="text-xs text-gray-500">Current</p>
-                          <p className="text-sm font-semibold text-gray-900">SAR {current.toLocaleString()}</p>
-                        </div>
-                        <div>
-                          <p className="text-xs text-gray-500">Returns</p>
-                          <p className={`text-sm font-semibold ${returns >= 0 ? 'text-emerald-600' : 'text-red-600'}`}>
-                            {returns >= 0 ? '+' : ''}SAR {returns.toLocaleString()} ({returnsPct >= 0 ? '+' : ''}{returnsPct.toFixed(2)}%)
-                          </p>
-                        </div>
-                      </div>
-
-                      {/* Progress Bar */}
-                      <div className="mb-4">
-                        <div className="flex justify-between text-xs text-gray-600 mb-1">
-                          <span>Progress</span>
-                          <span>{progress.toFixed(1)}%</span>
-                        </div>
-                        <div className="w-full bg-gray-200 rounded-full h-2">
-                          <div 
-                            className="bg-emerald-600 h-2 rounded-full transition-all duration-300"
-                            style={{ width: `${Math.min(progress, 100)}%` }}
-                          />
-                        </div>
-                      </div>
-                    </div>
-
-                    {/* Actions */}
+                return (
+                  <TableRow key={inv.id} className="hover:bg-blue-50">
+                    <TableCell className="px-2 py-1.5 font-semibold text-gray-900 whitespace-nowrap">
+                      {inv.account?.name || '-'}
+                    </TableCell>
+                    <TableCell className="px-2 py-1.5 font-semibold text-gray-900 whitespace-nowrap">
+                      {inv.name}
+                    </TableCell>
+                    <TableCell className="px-2 py-1.5 whitespace-nowrap text-gray-700">
+                      {meta.riskLevel || '-'}
+                    </TableCell>
+                    <TableCell className="px-2 py-1.5 whitespace-nowrap text-right tabular-nums text-gray-900">
+                      {formatCurrency(invested)}
+                    </TableCell>
+                    <TableCell className="px-2 py-1.5 whitespace-nowrap text-right tabular-nums text-gray-700">
+                      {meta.aprYearly ? `${Number(meta.aprYearly).toFixed(2)}%` : '-'}
+                    </TableCell>
+                    <TableCell className="px-2 py-1.5 whitespace-nowrap text-gray-700">
+                      {new Date(inv.startDate).toLocaleDateString('en-CA')}
+                    </TableCell>
+                    <TableCell className="px-2 py-1.5 whitespace-nowrap text-right tabular-nums text-gray-700">
+                      {expectedProfit > 0 ? formatCurrency(expectedProfit) : '-'}
+                    </TableCell>
+                    <TableCell className="px-2 py-1.5 whitespace-nowrap text-right tabular-nums text-gray-900">
+                      {formatCurrency(current)}
+                    </TableCell>
+                    <TableCell className="px-2 py-1.5 whitespace-nowrap text-right tabular-nums text-gray-700">
+                      {meta.expectedAprYearly ? `${Number(meta.expectedAprYearly).toFixed(2)}%` : '-'}
+                    </TableCell>
+                    <TableCell className="px-2 py-1.5 whitespace-nowrap text-right tabular-nums text-gray-700">
+                      {meta.actualAprYearly ? `${Number(meta.actualAprYearly).toFixed(2)}%` : '-'}
+                    </TableCell>
+                    <TableCell className="px-2 py-1.5 whitespace-nowrap text-right tabular-nums font-semibold text-gray-900">
+                      {formatCurrency(current)}
+                    </TableCell>
                     {userRole === 'OWNER' && (
-                      <div className="flex flex-col gap-2 ml-4">
-                        <button
-                          onClick={() => handleInvestNow(inv.id)}
-                          className="px-3 py-1.5 bg-emerald-600 text-white text-sm rounded-lg hover:bg-emerald-700 transition-colors"
-                        >
-                          Invest Now
-                        </button>
-                        <button
-                          onClick={() => handleUpdateTotal(inv.id)}
-                          className="px-3 py-1.5 bg-blue-600 text-white text-sm rounded-lg hover:bg-blue-700 transition-colors"
-                        >
-                          Update Total
-                        </button>
-                      </div>
+                      <TableCell className="px-2 py-1.5 whitespace-nowrap">
+                        <div className="flex items-center gap-2">
+                          <button
+                            onClick={() => handleInvestNow(inv.id)}
+                            className="px-2 py-1 bg-emerald-600 text-white text-xs rounded hover:bg-emerald-700 transition-colors"
+                          >
+                            Invest
+                          </button>
+                          <button
+                            onClick={() => handleUpdateTotal(inv.id)}
+                            className="px-2 py-1 bg-blue-600 text-white text-xs rounded hover:bg-blue-700 transition-colors"
+                          >
+                            Update
+                          </button>
+                          <button
+                            onClick={() => handleDeleteSip(inv.id)}
+                            className="px-2 py-1 bg-red-600 text-white text-xs rounded hover:bg-red-700 transition-colors"
+                          >
+                            Delete
+                          </button>
+                        </div>
+                      </TableCell>
                     )}
-                  </div>
-                </div>
-              )
-            })}
-          </div>
+                  </TableRow>
+                )
+              })}
+            </TableBody>
+          </Table>
         </div>
       )}
 
