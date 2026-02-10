@@ -1,6 +1,6 @@
 'use client'
 
-import { useState } from 'react'
+import { useState, type FormEvent, type ChangeEvent } from 'react'
 import { CreateSipInput } from '@/lib/validation'
 import { SIPForm } from './SIPForm'
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/Table'
@@ -32,9 +32,15 @@ interface SIPClientProps {
 export function SIPClient({ investments, userRole }: SIPClientProps) {
   const [showCreateForm, setShowCreateForm] = useState(false)
   const [showEditForm, setShowEditForm] = useState(false)
+  const [showValueForm, setShowValueForm] = useState(false)
   const [isLoading, setIsLoading] = useState(false)
   const [currentInvestments, setCurrentInvestments] = useState(investments)
   const [editTarget, setEditTarget] = useState<Investment | null>(null)
+  const [valueTargetId, setValueTargetId] = useState<string | null>(null)
+  const [valueForm, setValueForm] = useState<{ date: string; currentValue: string }>({
+    date: new Date().toISOString().split('T')[0],
+    currentValue: '',
+  })
 
   const openEdit = (inv: Investment) => {
     setEditTarget(inv)
@@ -66,32 +72,53 @@ export function SIPClient({ investments, userRole }: SIPClientProps) {
     }
   }
 
-  const handleUpdateCurrentValue = async (sipId: string) => {
-    const valueStr = prompt('Enter current portfolio value (SAR):')
-    if (valueStr === null) return
-    const value = parseFloat(valueStr)
+  const openValueModal = (inv: Investment) => {
+    const meta = parseSipMetadata(inv)
+    setValueTargetId(inv.id)
+    setValueForm({
+      date: new Date().toISOString().split('T')[0],
+      currentValue: String(meta.currentValue ?? inv.currentValue ?? ''),
+    })
+    setShowValueForm(true)
+  }
+
+  const handleSubmitCurrentValue = async (e: FormEvent) => {
+    e.preventDefault()
+    if (!valueTargetId) return
+
+    const value = parseFloat(valueForm.currentValue)
     if (!Number.isFinite(value) || value < 0) {
       return
     }
 
-    const dateStr = prompt('Enter date (YYYY-MM-DD) or leave empty for today:')
-    const date = dateStr && dateStr.trim().length > 0 ? dateStr.trim() : undefined
-
+    setIsLoading(true)
     try {
       const response = await fetch('/api/sip/update-value', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ sipId, currentValue: value, ...(date ? { date } : {}) }),
+        body: JSON.stringify({
+          sipId: valueTargetId,
+          currentValue: value,
+          date: valueForm.date,
+        }),
       })
+
       if (!response.ok) {
         const error = await response.json()
         throw new Error(error.error || 'Failed to update current value')
       }
+
       const updatedSip = await response.json()
-      setCurrentInvestments((prev: Investment[]) => prev.map((inv: Investment) => (inv.id === sipId ? updatedSip : inv)))
+      setCurrentInvestments((prev: Investment[]) =>
+        prev.map((inv: Investment) => (inv.id === valueTargetId ? updatedSip : inv))
+      )
+      setShowValueForm(false)
+      setValueTargetId(null)
     } catch (error) {
       console.error('Update value error:', error)
       alert(error instanceof Error ? error.message : 'Failed to update current value')
+    } finally {
+      setIsLoading(false)
     }
   }
 
@@ -349,7 +376,7 @@ export function SIPClient({ investments, userRole }: SIPClientProps) {
                             Invest
                           </button>
                           <button
-                            onClick={() => handleUpdateCurrentValue(inv.id)}
+                            onClick={() => openValueModal(inv)}
                             className="px-2 py-1 bg-purple-600 text-white text-xs rounded hover:bg-purple-700 transition-colors"
                           >
                             Value
@@ -432,6 +459,75 @@ export function SIPClient({ investments, userRole }: SIPClientProps) {
                 notes: (editTarget as any).notes || '',
               }}
             />
+          </div>
+        </div>
+      )}
+
+      {showValueForm && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+          <div className="bg-white rounded-xl p-6 max-w-md w-full mx-4">
+            <div className="flex justify-between items-center mb-6">
+              <h2 className="text-xl font-bold text-gray-900">Update Current Value</h2>
+              <button
+                onClick={() => {
+                  setShowValueForm(false)
+                  setValueTargetId(null)
+                }}
+                className="text-gray-400 hover:text-gray-600"
+              >
+                ✕
+              </button>
+            </div>
+
+            <form onSubmit={handleSubmitCurrentValue} className="space-y-4">
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">Date</label>
+                <input
+                  type="date"
+                  value={valueForm.date}
+                  onChange={(e: ChangeEvent<HTMLInputElement>) =>
+                    setValueForm((prev: { date: string; currentValue: string }) => ({ ...prev, date: e.target.value }))
+                  }
+                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500"
+                  required
+                />
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">Current Value (SAR)</label>
+                <input
+                  type="number"
+                  min="0"
+                  step="0.01"
+                  value={valueForm.currentValue}
+                  onChange={(e: ChangeEvent<HTMLInputElement>) =>
+                    setValueForm((prev: { date: string; currentValue: string }) => ({ ...prev, currentValue: e.target.value }))
+                  }
+                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500"
+                  required
+                />
+              </div>
+
+              <div className="flex justify-end space-x-3 pt-4 border-t">
+                <button
+                  type="button"
+                  onClick={() => {
+                    setShowValueForm(false)
+                    setValueTargetId(null)
+                  }}
+                  className="px-4 py-2 border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50 transition-colors"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  disabled={isLoading}
+                  className="px-4 py-2 bg-purple-600 text-white rounded-lg hover:bg-purple-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+                >
+                  {isLoading ? 'Saving...' : 'Save'}
+                </button>
+              </div>
+            </form>
           </div>
         </div>
       )}
