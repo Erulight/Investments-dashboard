@@ -49,7 +49,8 @@ export default async function ZakatPage() {
     },
   })
 
-  const rows = buckets.map((bucket: any) => {
+  const rows = buckets
+    .map((bucket: any) => {
     const effectiveStart = bucket.lastZakatPaidDate
       ? new Date(bucket.lastZakatPaidDate)
       : new Date(bucket.haulStartDate)
@@ -129,6 +130,18 @@ export default async function ZakatPage() {
       .reduce((s: number, m: any) => s + m.amount, 0)
     const displayBalance = bucket.balance - receiptInBucket
 
+    // Hide buckets that are effectively empty (cash was added then fully invested out)
+    // to avoid cluttering the zakat dashboard with many "General" 0 rows.
+    const isEffectivelyEmpty =
+      Number(bucket.balance || 0) <= 0 &&
+      idleBase <= 0 &&
+      receiptsTotal <= 0 &&
+      zakatDue <= 0 &&
+      dueReceipts.length === 0 &&
+      payments.length === 0
+
+    if (isEffectivelyEmpty) return null
+
     return {
       id: bucket.id,
       label: bucket.label,
@@ -160,7 +173,8 @@ export default async function ZakatPage() {
         investmentName: m.investment?.name || null,
       })),
     }
-  })
+    })
+    .filter(Boolean)
 
   return (
     <div className="space-y-6">
