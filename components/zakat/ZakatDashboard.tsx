@@ -579,6 +579,21 @@ export function ZakatDashboard({ buckets }: { buckets: BucketRow[] }) {
                     return rows
                   })()}
                 </tbody>
+                <tfoot>
+                  <tr className="bg-gray-50 border-t border-gray-200">
+                    <td colSpan={3} className="py-2.5 px-3 text-xs font-semibold text-gray-500">Total</td>
+                    <td className="py-2.5 px-3 text-right font-bold text-gray-900 whitespace-nowrap">
+                      SAR {fmt(totalBalance)}
+                    </td>
+                    <td className="py-2.5 px-3"></td>
+                    <td className="py-2.5 px-3"></td>
+                    <td className="py-2.5 px-3 text-right font-bold text-emerald-700 whitespace-nowrap">
+                      SAR {fmt(totalDue)}
+                    </td>
+                    <td className="py-2.5 px-3"></td>
+                    <td className="py-2.5 px-3"></td>
+                  </tr>
+                </tfoot>
               </table>
             </div>
           )}

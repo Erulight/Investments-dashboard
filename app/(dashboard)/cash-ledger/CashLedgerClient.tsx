@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect, useState, useCallback } from 'react'
+import { useEffect, useState, useCallback, useMemo } from 'react'
 import { Card, CardHeader, CardTitle, CardContent } from '@/components/ui/Card'
 import { Button } from '@/components/ui/Button'
 
@@ -74,10 +74,10 @@ export function CashLedgerClient() {
     // but for page 1, cashBalance is the current total
     if (data.page > 1) {
       // Can't compute exact running balance without server support, show amounts only
-      return data.transactions.map(tx => ({ ...tx, runningBalance: null as number | null }))
+      return data.transactions.map((tx: Transaction) => ({ ...tx, runningBalance: null as number | null }))
     }
     // Page 1: current balance, walk backwards
-    const result = data.transactions.map(tx => {
+    const result = data.transactions.map((tx: Transaction) => {
       const bal = runningBal
       runningBal -= tx.amount
       return { ...tx, runningBalance: bal }
@@ -85,9 +85,23 @@ export function CashLedgerClient() {
     return result
   })()
 
-  const activeBuckets = data?.buckets.filter(b => b.balance > 0) || []
-  const depletedBuckets = data?.buckets.filter(b => b.balance <= 0) || []
-  const totalBucketBalance = activeBuckets.reduce((s, b) => s + b.balance, 0)
+  const txPageTotals = useMemo(() => {
+    if (!data || transactionsWithBalance.length === 0) return null
+    const debit = transactionsWithBalance.reduce(
+      (s: number, tx: Transaction & { runningBalance?: number | null }) => s + (tx.amount < 0 ? Math.abs(tx.amount) : 0),
+      0
+    )
+    const credit = transactionsWithBalance.reduce(
+      (s: number, tx: Transaction & { runningBalance?: number | null }) => s + (tx.amount >= 0 ? tx.amount : 0),
+      0
+    )
+    return { debit, credit }
+  }, [data, transactionsWithBalance])
+
+  const activeBuckets = data?.buckets.filter((b: Bucket) => b.balance > 0) || []
+  const depletedBuckets = data?.buckets.filter((b: Bucket) => b.balance <= 0) || []
+  const totalBucketBalance = activeBuckets.reduce((s: number, b: Bucket) => s + b.balance, 0)
+  const totalDepletedBalance = depletedBuckets.reduce((s: number, b: Bucket) => s + b.balance, 0)
 
   return (
     <div className="space-y-6 animate-fade-in">
@@ -187,7 +201,7 @@ export function CashLedgerClient() {
                       </tr>
                     </thead>
                     <tbody className="divide-y divide-gray-50">
-                      {transactionsWithBalance.map(tx => (
+                      {transactionsWithBalance.map((tx: Transaction & { runningBalance?: number | null }) => (
                         <tr key={tx.id} className="hover:bg-gray-50/50 transition-colors">
                           <td className="py-2.5 px-4 text-gray-600 whitespace-nowrap tabular-nums">{fmtDate(tx.date)}</td>
                           <td className="py-2.5 px-4">
@@ -208,12 +222,28 @@ export function CashLedgerClient() {
                           </td>
                           {page === 1 && (
                             <td className="py-2.5 px-4 text-right font-medium tabular-nums text-gray-900 whitespace-nowrap">
-                              {tx.runningBalance !== null ? `SAR ${fmt(tx.runningBalance)}` : '—'}
+                              {typeof tx.runningBalance === 'number' && Number.isFinite(tx.runningBalance)
+                                ? `SAR ${fmt(tx.runningBalance)}`
+                                : '—'}
                             </td>
                           )}
                         </tr>
                       ))}
                     </tbody>
+                    {txPageTotals && (
+                      <tfoot>
+                        <tr className="bg-gray-50 border-t border-gray-200">
+                          <td colSpan={3} className="py-2.5 px-4 text-xs font-semibold text-gray-500">Total (this page)</td>
+                          <td className="py-2.5 px-4 text-right font-bold tabular-nums text-red-700 whitespace-nowrap">
+                            {fmt(txPageTotals.debit)}
+                          </td>
+                          <td className="py-2.5 px-4 text-right font-bold tabular-nums text-emerald-700 whitespace-nowrap">
+                            {fmt(txPageTotals.credit)}
+                          </td>
+                          {page === 1 && <td className="py-2.5 px-4"></td>}
+                        </tr>
+                      </tfoot>
+                    )}
                   </table>
                 </div>
 
@@ -275,7 +305,7 @@ export function CashLedgerClient() {
                       </tr>
                     </thead>
                     <tbody className="divide-y divide-gray-50">
-                      {activeBuckets.map(b => (
+                      {activeBuckets.map((b: Bucket) => (
                         <tr key={b.id} className="hover:bg-gray-50/50 transition-colors">
                           <td className="py-2.5 px-4 text-gray-500 font-mono text-xs">{b.id.slice(0, 8)}</td>
                           <td className="py-2.5 px-4 text-gray-700 truncate max-w-[200px]">{b.label || '—'}</td>
@@ -323,7 +353,7 @@ export function CashLedgerClient() {
                       </tr>
                     </thead>
                     <tbody className="divide-y divide-gray-50">
-                      {depletedBuckets.map(b => (
+                      {depletedBuckets.map((b: Bucket) => (
                         <tr key={b.id} className="text-gray-400">
                           <td className="py-2 px-4 font-mono text-xs">{b.id.slice(0, 8)}</td>
                           <td className="py-2 px-4 truncate max-w-[200px]">{b.label || '—'}</td>
@@ -334,6 +364,14 @@ export function CashLedgerClient() {
                         </tr>
                       ))}
                     </tbody>
+                    <tfoot>
+                      <tr className="bg-gray-50 border-t border-gray-200">
+                        <td colSpan={3} className="py-2 px-4 text-xs font-semibold text-gray-400">Total</td>
+                        <td className="py-2 px-4 text-right font-bold text-gray-500 tabular-nums whitespace-nowrap">
+                          SAR {fmt(totalDepletedBalance)}
+                        </td>
+                      </tr>
+                    </tfoot>
                   </table>
                 </div>
               </CardContent>

@@ -3,7 +3,7 @@
 import { useMemo, useState } from 'react'
 import type { ChangeEvent, MouseEvent } from 'react'
 import { Card, CardHeader, CardTitle, CardContent } from '@/components/ui/Card'
-import { Table, TableHeader, TableBody, TableRow, TableHead, TableCell } from '@/components/ui/Table'
+import { Table, TableHeader, TableBody, TableFooter, TableRow, TableHead, TableCell } from '@/components/ui/Table'
 import { Button } from '@/components/ui/Button'
 import { SavingsForm } from './SavingsForm'
 import { CreateSavingsInput } from '@/lib/validation'
@@ -69,6 +69,29 @@ export function CirclysClient({ initialInvestments, userRole }: CirclysClientPro
     if (yearFilter === 'all') return investments
     return investments.filter((i: any) => getStartYear(i) === Number(yearFilter))
   }, [investments, yearFilter])
+
+  const tableTotals = useMemo(() => {
+    if (filteredInvestments.length === 0) return null
+    return filteredInvestments.reduce(
+      (
+        acc: {
+          currency: string
+          monthly: number
+          reward: number
+          bookingFee: number
+        },
+        inv: any
+      ) => {
+        const meta = parseRoscaMetadata(inv)
+        acc.currency = acc.currency || String(inv.account?.currency || 'SAR')
+        acc.monthly += Number(meta.monthlyContribution || 0)
+        acc.reward += Number(meta.totalRewardPaid || 0)
+        acc.bookingFee += Number(meta.bookingFee || 0)
+        return acc
+      },
+      { currency: '', monthly: 0, reward: 0, bookingFee: 0 }
+    )
+  }, [filteredInvestments])
 
   // Stats based on selected (checked) plans within the filtered list
   const stats = useMemo(() => {
@@ -380,6 +403,28 @@ export function CirclysClient({ initialInvestments, userRole }: CirclysClientPro
                     )
                   })}
                 </TableBody>
+                {tableTotals && (
+                  <TableFooter>
+                    <TableRow>
+                      <TableCell className="w-10"></TableCell>
+                      <TableCell className="font-semibold text-gray-900">Total</TableCell>
+                      <TableCell></TableCell>
+                      <TableCell className="text-right font-semibold text-gray-900 tabular-nums whitespace-nowrap">
+                        {tableTotals.currency} {fmt(tableTotals.monthly)}
+                      </TableCell>
+                      <TableCell></TableCell>
+                      <TableCell></TableCell>
+                      <TableCell className="text-right font-semibold text-emerald-700 tabular-nums whitespace-nowrap">
+                        +{tableTotals.currency} {fmt(tableTotals.reward)}
+                      </TableCell>
+                      <TableCell className="text-right font-semibold text-red-700 tabular-nums whitespace-nowrap">
+                        {tableTotals.currency} {fmt(tableTotals.bookingFee)}
+                      </TableCell>
+                      <TableCell></TableCell>
+                      {userRole === 'OWNER' && <TableCell></TableCell>}
+                    </TableRow>
+                  </TableFooter>
+                )}
               </Table>
             </div>
 
@@ -648,6 +693,19 @@ export function CirclysClient({ initialInvestments, userRole }: CirclysClientPro
                           )
                         })}
                       </tbody>
+                      <tfoot>
+                        <tr className="bg-gray-50 border-t border-gray-200">
+                          <td colSpan={2} className="py-2 pr-3 text-xs font-semibold text-gray-500">Total</td>
+                          <td className="py-2 pr-3 text-xs font-bold text-gray-900 tabular-nums whitespace-nowrap">
+                            SAR {fmt(rows.reduce((s: number, x: any) => s + (Number(x.payment?.amount) || 0), 0))}
+                          </td>
+                          <td className="py-2 pr-3 text-xs font-bold text-emerald-700 tabular-nums whitespace-nowrap">
+                            SAR {fmt(rows.reduce((s: number, x: any) => s + (Number(x.payment?.reward) || 0), 0))}
+                          </td>
+                          <td className="py-2 pr-3"></td>
+                          <td className="py-2"></td>
+                        </tr>
+                      </tfoot>
                     </table>
                   </div>
 

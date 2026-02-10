@@ -3,7 +3,7 @@
 import { useMemo, useState } from 'react'
 import type { ReactNode } from 'react'
 import { useRouter } from 'next/navigation'
-import { Table, TableHeader, TableBody, TableRow, TableHead, TableCell } from '@/components/ui/Table'
+import { Table, TableHeader, TableBody, TableFooter, TableRow, TableHead, TableCell } from '@/components/ui/Table'
 import { Button } from '@/components/ui/Button'
 import { Modal } from './SukukModal'
 import { DateInput } from '@/components/ui/DateInput'
@@ -409,6 +409,33 @@ export function SukukList({ initialSukuk, userRole }: SukukListProps) {
     })
     return next
   }, [rows, sort, toDate])
+
+  const totals = useMemo(() => {
+    if (sortedRows.length === 0) return null
+    return sortedRows.reduce(
+      (
+        acc: {
+          currency: string
+          investment: number
+          fees: number
+          profit: number
+          received: number
+          receivable: number
+        },
+        row: { metrics: any }
+      ) => {
+        const m = row.metrics
+        acc.currency = acc.currency || String(m.currency || 'SAR')
+        acc.investment += Number(m.totalInvestment || 0)
+        acc.fees += Number(m.fees || 0)
+        acc.profit += Number(m.netProfit || 0)
+        acc.received += Number(m.totalReceived || 0)
+        acc.receivable += Number(m.receivable || 0)
+        return acc
+      },
+      { currency: '', investment: 0, fees: 0, profit: 0, received: 0, receivable: 0 }
+    )
+  }, [sortedRows])
 
   const toggleSort = (key: string) => {
     setSort((prev) => {
@@ -1069,6 +1096,35 @@ export function SukukList({ initialSukuk, userRole }: SukukListProps) {
                   )
                 })}
                 </TableBody>
+                {totals && (
+                  <TableFooter>
+                    <TableRow>
+                      <TableCell className="px-2 py-2 font-semibold text-gray-900">Total</TableCell>
+                      <TableCell className="px-2 py-2 text-right font-semibold text-gray-900 tabular-nums whitespace-nowrap">
+                        {formatCurrency(totals.investment, totals.currency)}
+                      </TableCell>
+                      <TableCell className="px-2 py-2"></TableCell>
+                      <TableCell className="px-2 py-2"></TableCell>
+                      <TableCell className="px-2 py-2"></TableCell>
+                      <TableCell className="px-2 py-2"></TableCell>
+                      <TableCell className="px-2 py-2"></TableCell>
+                      <TableCell className="px-2 py-2 text-right font-semibold text-gray-900 tabular-nums whitespace-nowrap">
+                        {formatCurrency(totals.fees, totals.currency)}
+                      </TableCell>
+                      <TableCell className="px-2 py-2 text-right font-semibold text-gray-900 tabular-nums whitespace-nowrap">
+                        {formatCurrency(totals.profit, totals.currency)}
+                      </TableCell>
+                      <TableCell className="px-2 py-2 text-right font-semibold text-gray-900 tabular-nums whitespace-nowrap">
+                        {formatCurrency(totals.received, totals.currency)}
+                      </TableCell>
+                      <TableCell className="px-2 py-2 text-right font-semibold text-gray-900 tabular-nums whitespace-nowrap">
+                        {formatCurrency(totals.receivable, totals.currency)}
+                      </TableCell>
+                      <TableCell className="px-2 py-2"></TableCell>
+                      {userRole === 'OWNER' && <TableCell className="px-2 py-2"></TableCell>}
+                    </TableRow>
+                  </TableFooter>
+                )}
               </Table>
             </div>
           )}

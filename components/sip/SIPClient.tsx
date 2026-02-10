@@ -3,7 +3,7 @@
 import { useState, type FormEvent, type ChangeEvent } from 'react'
 import { CreateSipInput } from '@/lib/validation'
 import { SIPForm } from './SIPForm'
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/Table'
+import { Table, TableBody, TableCell, TableFooter, TableHead, TableHeader, TableRow } from '@/components/ui/Table'
 
 interface Investment {
   id: string
@@ -237,6 +237,21 @@ export function SIPClient({ investments, userRole }: SIPClientProps) {
     return meta.type === 'SIP'
   })
 
+  const sipTotals = (() => {
+    if (sipInvestments.length === 0) return null
+    const totalInvested = sipInvestments.reduce((sum: number, inv: Investment) => {
+      const meta = parseSipMetadata(inv)
+      const invested = meta.investedAmount || inv.principalAmount || 0
+      return sum + (Number.isFinite(invested) ? invested : 0)
+    }, 0)
+    const totalCurrent = sipInvestments.reduce((sum: number, inv: Investment) => {
+      const meta = parseSipMetadata(inv)
+      const current = meta.currentValue || inv.currentValue || 0
+      return sum + (Number.isFinite(current) ? current : 0)
+    }, 0)
+    return { totalInvested, totalCurrent }
+  })()
+
   return (
     <div className="space-y-6">
       {/* Add New SIP Button */}
@@ -360,6 +375,26 @@ export function SIPClient({ investments, userRole }: SIPClientProps) {
                 )
               })}
             </TableBody>
+            {sipTotals && (
+              <TableFooter>
+                <TableRow>
+                  <TableCell className="px-2 py-2 font-semibold text-gray-900" colSpan={4}>
+                    Total
+                  </TableCell>
+                  <TableCell className="px-2 py-2 font-semibold text-gray-900 text-right tabular-nums whitespace-nowrap">
+                    {formatCurrency(sipTotals.totalInvested)}
+                  </TableCell>
+                  <TableCell className="px-2 py-2"></TableCell>
+                  <TableCell className="px-2 py-2"></TableCell>
+                  <TableCell className="px-2 py-2"></TableCell>
+                  <TableCell className="px-2 py-2"></TableCell>
+                  <TableCell className="px-2 py-2 font-semibold text-gray-900 text-right tabular-nums whitespace-nowrap">
+                    {formatCurrency(sipTotals.totalCurrent)}
+                  </TableCell>
+                  {userRole === 'OWNER' && <TableCell className="px-2 py-2"></TableCell>}
+                </TableRow>
+              </TableFooter>
+            )}
           </Table>
         </div>
       )}
