@@ -275,6 +275,8 @@ export async function PUT(
               personId: p.personId,
               investedAmount: p.investedAmount,
               currentValue: p.investedAmount,
+              acquiredAt: existingSukuk.startDate,
+              commissionFees: 0,
               sharePercentage: p.sharePercentage,
               notes: p.notes,
             })),

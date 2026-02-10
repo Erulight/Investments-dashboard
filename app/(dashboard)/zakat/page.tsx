@@ -52,6 +52,7 @@ export default async function ZakatPage() {
   }
 
   const buckets = await prisma.cashBucket.findMany({
+    where: { excludeFromZakat: false },
     orderBy: { haulStartDate: 'asc' },
     include: {
       movements: {

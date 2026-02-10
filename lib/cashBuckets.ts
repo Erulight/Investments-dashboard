@@ -23,6 +23,7 @@ export const createCashBucket = async (
     notes,
     investmentId,
     type = 'CASH_IN',
+    excludeFromZakat,
   }: {
     amount: number
     haulStartDate: Date
@@ -32,6 +33,7 @@ export const createCashBucket = async (
     notes?: string | null
     investmentId?: string | null
     type?: MovementType
+    excludeFromZakat?: boolean
   }
 ) => {
   const bucket = await tx.cashBucket.create({
@@ -39,6 +41,7 @@ export const createCashBucket = async (
       label: label || null,
       currency,
       haulStartDate,
+      excludeFromZakat: Boolean(excludeFromZakat),
       balance: amount,
     },
   })
@@ -97,18 +100,21 @@ export const withdrawFromBuckets = async (
     const movements = await tx.cashBucketMovement.groupBy({
       by: ['cashBucketId'],
       where: {
-        cashBucketId: { in: buckets.map((b) => b.id) },
+        cashBucketId: { in: buckets.map((b: { id: string }) => b.id) },
         date: { lte: cutoff },
       },
       _sum: { amount: true },
     })
     availableByBucket = new Map(
-      movements.map((movement) => [movement.cashBucketId, movement._sum.amount || 0])
+      movements.map((movement: { cashBucketId: string; _sum: { amount: number | null } }) => [
+        movement.cashBucketId,
+        movement._sum.amount || 0,
+      ])
     )
 
     const futureMovements = await tx.cashBucketMovement.findMany({
       where: {
-        cashBucketId: { in: buckets.map((b) => b.id) },
+        cashBucketId: { in: buckets.map((b: { id: string }) => b.id) },
         date: { gt: cutoff },
       },
       orderBy: { date: 'asc' },
@@ -229,8 +235,8 @@ export const creditBucketsForReceipt = async (
 
   const principalFocused = principalReduction > 0
   const usableAllocations = principalFocused
-    ? allocations.filter((alloc) => alloc.principalRemaining > 0)
-    : allocations.filter((alloc) => alloc.principalAllocated > 0)
+    ? allocations.filter((alloc: { principalRemaining: number }) => alloc.principalRemaining > 0)
+    : allocations.filter((alloc: { principalAllocated: number }) => alloc.principalAllocated > 0)
 
   if (usableAllocations.length === 0) {
     await createCashBucket(tx, {
@@ -245,7 +251,10 @@ export const creditBucketsForReceipt = async (
   }
 
   const totalRemaining = usableAllocations.reduce(
-    (sum, alloc) => sum + (principalFocused ? alloc.principalRemaining : alloc.principalAllocated),
+    (
+      sum: number,
+      alloc: { principalRemaining: number; principalAllocated: number }
+    ) => sum + (principalFocused ? alloc.principalRemaining : alloc.principalAllocated),
     0
   )
   const cappedReduction = principalFocused ? Math.min(principalReduction, totalRemaining) : 0

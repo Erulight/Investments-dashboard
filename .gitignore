@@ -25,6 +25,7 @@ yarn-error.log*
 # local env files
 .env
 .env*.local
+env.txt
 
 # vercel
 .vercel
@@ -35,7 +36,7 @@ yarn-error.log*
 # prisma
 prisma/dev.db
 prisma/dev.db-journal
-prisma/migrations
+# prisma/migrations
 
 # uploads
 /uploads

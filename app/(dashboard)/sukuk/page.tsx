@@ -68,6 +68,8 @@ export default async function InvestmentsPage() {
         investedAmount: p.investedAmount,
         currentValue: p.currentValue,
         profit: p.profit,
+        acquiredAt: p.acquiredAt,
+        commissionFees: p.commissionFees,
       },
     }))
   }
@@ -102,14 +104,18 @@ export default async function InvestmentsPage() {
     const investment = Number.isFinite(principal) ? principal : 0
     const apr = Number.isFinite(inv.interestRate) ? inv.interestRate : 0
     const fees = Number.isFinite(inv.fees) ? inv.fees : 0
-    const periodMonths = getPeriodMonths(inv.startDate, inv.maturityDate)
+    const startBasis = inv.myParticipation?.acquiredAt ?? inv.startDate
+    const periodMonths = getPeriodMonths(startBasis, inv.maturityDate)
     const periodYears = periodMonths ? periodMonths / 12 : 0
     const grossProfit = investment > 0 && apr > 0 && periodYears > 0
       ? investment * (apr / 100) * periodYears
       : 0
     const manualReceivable = Number.isFinite(inv.receivableAmount) ? inv.receivableAmount : null
     if (manualReceivable !== null && manualReceivable > 0) return manualReceivable
-    return Math.max(0, grossProfit - fees)
+    const commissionFees = Number.isFinite(inv.myParticipation?.commissionFees)
+      ? Number(inv.myParticipation.commissionFees)
+      : 0
+    return Math.max(0, grossProfit - fees - commissionFees)
   }
 
   const isActiveDeal = (inv: any) => {

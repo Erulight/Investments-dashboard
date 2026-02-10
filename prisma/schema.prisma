@@ -109,10 +109,12 @@ model CashBucket {
   currency          String   @default("SAR")
   haulStartDate     DateTime
   lastZakatPaidDate DateTime?
+  excludeFromZakat  Boolean  @default(false)
   balance           Float    @default(0)
   createdAt         DateTime @default(now())
   updatedAt         DateTime @updatedAt
 
+  debt              Debt?
   movements         CashBucketMovement[]
   allocations       InvestmentBucketAllocation[]
 
@@ -168,6 +170,8 @@ model DealParticipant {
   currentValue      Float    @default(0)
   receivable        Float    @default(0)
   profit            Float    @default(0)
+  acquiredAt        DateTime?
+  commissionFees    Float    @default(0)
   
   sharePercentage   Float?
   notes             String?
@@ -274,4 +278,35 @@ model SystemSetting {
   updatedAt         DateTime @updatedAt
 
   @@index([key])
+}
+
+model Debt {
+  id            String   @id @default(cuid())
+  lenderName    String
+  amount        Float
+  borrowedAt    DateTime
+  notes         String?
+  isArchived    Boolean  @default(false)
+  cashBucketId  String?  @unique
+  cashBucket    CashBucket? @relation(fields: [cashBucketId], references: [id], onDelete: SetNull)
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  payments      DebtPayment[]
+
+  @@index([borrowedAt])
+  @@index([lenderName])
+}
+
+model DebtPayment {
+  id            String   @id @default(cuid())
+  debtId        String
+  debt          Debt     @relation(fields: [debtId], references: [id], onDelete: Cascade)
+  amount        Float
+  paidAt        DateTime
+  notes         String?
+  createdAt     DateTime @default(now())
+
+  @@index([debtId])
+  @@index([paidAt])
 }

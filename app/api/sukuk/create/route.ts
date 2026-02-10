@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { prisma } from '@/lib/db'
+import type { Prisma } from '@prisma/client'
 import { requireModuleAccess } from '@/lib/rbac'
 import { createSukukSchema } from '@/lib/validation'
 import { logAudit } from '@/lib/audit'
@@ -52,7 +53,7 @@ export async function POST(req: NextRequest) {
     }
     
     // Create the Sukuk investment with participants in a transaction
-    const sukuk = await prisma.$transaction(async (tx) => {
+    const sukuk = await prisma.$transaction(async (tx: Prisma.TransactionClient) => {
       const cashSetting = await tx.systemSetting.findUnique({
         where: { key: 'CASH_BALANCE' },
       })
@@ -141,6 +142,8 @@ export async function POST(req: NextRequest) {
             personId: p.personId,
             investedAmount: p.investedAmount,
             currentValue: p.investedAmount, // Initialize with invested amount
+            acquiredAt: startDate,
+            commissionFees: 0,
             sharePercentage: p.sharePercentage,
             notes: p.notes,
           })),

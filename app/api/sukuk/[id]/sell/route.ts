@@ -3,6 +3,7 @@ import { prisma } from '@/lib/db'
 import { requireAuth } from '@/lib/rbac'
 import { logAudit } from '@/lib/audit'
 import { creditBucketsForReceipt } from '@/lib/cashBuckets'
+import { createCashBucket } from '@/lib/cashBuckets'
 
 export async function POST(
   req: NextRequest,
@@ -16,6 +17,8 @@ export async function POST(
     const buyerPersonId = typeof body.buyerPersonId === 'string' ? body.buyerPersonId : ''
     const amount = Number(body.amount)
     const salePrice = body.salePrice !== undefined ? Number(body.salePrice) : amount
+    const commissionType = body.commissionType === 'PERCENT' ? 'PERCENT' : body.commissionType === 'FIXED' ? 'FIXED' : 'FIXED'
+    const commissionValueRaw = body.commissionValue !== undefined ? Number(body.commissionValue) : 0
     const notes = typeof body.notes === 'string' ? body.notes : ''
     const date = body.date ? new Date(body.date) : new Date()
 
@@ -27,6 +30,9 @@ export async function POST(
     }
     if (!Number.isFinite(salePrice) || salePrice < 0) {
       return NextResponse.json({ error: 'Sale price must be 0 or more' }, { status: 400 })
+    }
+    if (!Number.isFinite(commissionValueRaw) || commissionValueRaw < 0) {
+      return NextResponse.json({ error: 'Commission must be 0 or more' }, { status: 400 })
     }
 
     const investment = await prisma.investment.findUnique({
@@ -46,7 +52,7 @@ export async function POST(
       return NextResponse.json({ error: 'Buyer must be different from seller' }, { status: 400 })
     }
 
-    const seller = investment.dealParticipants.find((p) => p.personId === user.personId)
+    const seller = investment.dealParticipants.find((p: any) => p.personId === user.personId)
 
     if (!seller) {
       return NextResponse.json({ error: 'Seller does not own this Sukuk' }, { status: 400 })
@@ -59,11 +65,14 @@ export async function POST(
     const ratio = seller.investedAmount > 0 ? amount / seller.investedAmount : 0
     const currentValueTransfer = seller.currentValue * ratio
     const profitTransfer = seller.profit * ratio
+    const commissionAmount = commissionType === 'PERCENT'
+      ? Math.max(0, (salePrice * commissionValueRaw) / 100)
+      : Math.max(0, commissionValueRaw)
     const sharePercentage = investment.principalAmount > 0
       ? (amount / investment.principalAmount) * 100
       : null
 
-    const updated = await prisma.$transaction(async (tx) => {
+    const updated = await prisma.$transaction(async (tx: any) => {
       const sellerRemaining = seller.investedAmount - amount
       if (sellerRemaining <= 0.000001) {
         await tx.dealParticipant.delete({
@@ -94,6 +103,8 @@ export async function POST(
             investedAmount: buyer.investedAmount + amount,
             currentValue: buyer.currentValue + currentValueTransfer,
             profit: buyer.profit + profitTransfer,
+            acquiredAt: buyer.acquiredAt || date,
+            commissionFees: (buyer.commissionFees || 0) + commissionAmount,
             sharePercentage: investment.principalAmount > 0
               ? ((buyer.investedAmount + amount) / investment.principalAmount) * 100
               : buyer.sharePercentage,
@@ -107,6 +118,8 @@ export async function POST(
             investedAmount: amount,
             currentValue: currentValueTransfer,
             profit: profitTransfer,
+            acquiredAt: date,
+            commissionFees: commissionAmount,
             sharePercentage,
           },
         })
@@ -137,8 +150,31 @@ export async function POST(
               buyerPersonId,
               principalTransferred: amount,
               salePrice,
+              commissionAmount,
             }),
           },
+          ...(commissionAmount > 0
+            ? [
+                {
+                  accountId: cashAccount.id,
+                  investmentId: null,
+                  personId: user.personId,
+                  type: 'PARTNER_COMMISSION',
+                  amount: Math.abs(commissionAmount),
+                  date,
+                  description: notes || 'Partner commission',
+                  metadata: JSON.stringify({
+                    buyerPersonId,
+                    investmentId: investment.id,
+                    principalTransferred: amount,
+                    salePrice,
+                    commissionType,
+                    commissionValue: commissionValueRaw,
+                    commissionAmount,
+                  }),
+                },
+              ]
+            : []),
           {
             accountId: investment.accountId,
             investmentId: investment.id,
@@ -151,6 +187,7 @@ export async function POST(
               sellerPersonId: user.personId,
               principalTransferred: amount,
               salePrice,
+              commissionAmount,
             }),
           },
         ],
@@ -160,7 +197,7 @@ export async function POST(
         where: { key: 'CASH_BALANCE' },
       })
       const currentCash = cashSetting ? Number(cashSetting.value) : 0
-      const nextCash = currentCash + salePrice
+      const nextCash = currentCash + salePrice + commissionAmount
 
       if (cashSetting) {
         await tx.systemSetting.update({
@@ -186,6 +223,18 @@ export async function POST(
         notes: notes || null,
       })
 
+      if (commissionAmount > 0) {
+        await createCashBucket(tx, {
+          amount: commissionAmount,
+          haulStartDate: date,
+          currency: investment.account?.currency || 'SAR',
+          label: 'Partner Commission',
+          date,
+          notes: notes || null,
+          type: 'CASH_IN',
+        })
+      }
+
       await logAudit(tx, {
         userId: user.id,
         action: 'UPDATE',
@@ -196,6 +245,9 @@ export async function POST(
             buyerPersonId,
             amount,
             salePrice,
+            commissionType,
+            commissionValue: commissionValueRaw,
+            commissionAmount,
             date,
           },
         }),
