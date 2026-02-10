@@ -2,7 +2,7 @@
 
 import Link from 'next/link'
 import { usePathname, useRouter } from 'next/navigation'
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 
 interface NavItem {
   name: string
@@ -77,6 +77,24 @@ export function Navbar({ user }: NavbarProps) {
   const router = useRouter()
   const [loading, setLoading] = useState(false)
   const [openDropdown, setOpenDropdown] = useState<string | null>(null)
+  const [isDark, setIsDark] = useState(false)
+
+  useEffect(() => {
+    if (typeof document === 'undefined') return
+    setIsDark(document.documentElement.classList.contains('dark'))
+  }, [])
+
+  const toggleTheme = () => {
+    const nextIsDark = !isDark
+    setIsDark(nextIsDark)
+    if (typeof document !== 'undefined') {
+      if (nextIsDark) document.documentElement.classList.add('dark')
+      else document.documentElement.classList.remove('dark')
+    }
+    try {
+      localStorage.setItem('theme', nextIsDark ? 'dark' : 'light')
+    } catch {}
+  }
 
   const handleLogout = async () => {
     setLoading(true)
@@ -126,20 +144,20 @@ export function Navbar({ user }: NavbarProps) {
   }
 
   return (
-    <nav className="bg-slate-900 sticky top-0 z-50 shadow-lg">
+    <nav className="sticky top-0 z-50 shadow-lg bg-white dark:bg-slate-900">
       <div className="w-full px-4 sm:px-6 lg:px-8">
         <div className="flex justify-between h-14">
           <div className="flex items-center space-x-6">
             <div className="flex-shrink-0 flex items-center">
               <div className="flex items-center space-x-2.5">
-                <div className="w-8 h-8 bg-white/10 rounded-lg flex items-center justify-center text-white font-bold text-sm">
+                <div className="w-8 h-8 bg-slate-900/10 dark:bg-white/10 rounded-lg flex items-center justify-center text-slate-900 dark:text-white font-bold text-sm">
                   S
                 </div>
                 <div>
-                  <h1 className="text-sm font-bold text-white tracking-wide">
+                  <h1 className="text-sm font-bold text-slate-900 dark:text-white tracking-wide">
                     Sukuk Portfolio
                   </h1>
-                  <p className="text-[10px] text-slate-400 -mt-0.5">Investment Tracker</p>
+                  <p className="text-[10px] text-slate-500 dark:text-slate-400 -mt-0.5">Investment Tracker</p>
                 </div>
               </div>
             </div>
@@ -156,8 +174,8 @@ export function Navbar({ user }: NavbarProps) {
                       <button
                         className={`inline-flex items-center px-3 py-1.5 rounded-md text-xs font-medium transition-all duration-150 ${
                           isActiveLink(item.href, item.children)
-                            ? 'bg-white/15 text-white'
-                            : 'text-slate-300 hover:bg-white/10 hover:text-white'
+                            ? 'bg-slate-900/10 dark:bg-white/15 text-slate-900 dark:text-white'
+                            : 'text-slate-700 dark:text-slate-300 hover:bg-slate-900/5 dark:hover:bg-white/10 hover:text-slate-900 dark:hover:text-white'
                         }`}
                       >
                         <span className="mr-1.5 text-sm">{item.icon}</span>
@@ -167,7 +185,7 @@ export function Navbar({ user }: NavbarProps) {
                         </svg>
                       </button>
                       {openDropdown === item.name && (
-                        <div className="absolute left-0 mt-1 w-52 rounded-lg shadow-xl bg-slate-800 ring-1 ring-white/10 overflow-hidden">
+                        <div className="absolute left-0 mt-1 w-52 rounded-lg shadow-xl bg-white dark:bg-slate-800 ring-1 ring-black/10 dark:ring-white/10 overflow-hidden">
                           <div className="py-1">
                             {item.children.map((child) => (
                               <Link
@@ -175,8 +193,8 @@ export function Navbar({ user }: NavbarProps) {
                                 href={child.href}
                                 className={`flex items-center px-3 py-2.5 text-xs font-medium transition-colors duration-100 ${
                                   pathname === child.href || pathname?.startsWith(child.href + '/')
-                                    ? 'bg-white/10 text-white'
-                                    : 'text-slate-300 hover:bg-white/5 hover:text-white'
+                                    ? 'bg-slate-900/5 dark:bg-white/10 text-slate-900 dark:text-white'
+                                    : 'text-slate-700 dark:text-slate-300 hover:bg-slate-900/5 dark:hover:bg-white/5 hover:text-slate-900 dark:hover:text-white'
                                 }`}
                               >
                                 <span className="mr-2.5 text-sm">{child.icon}</span>
@@ -192,8 +210,8 @@ export function Navbar({ user }: NavbarProps) {
                       href={item.href}
                       className={`inline-flex items-center px-3 py-1.5 rounded-md text-xs font-medium transition-all duration-150 ${
                         isActiveLink(item.href)
-                          ? 'bg-white/15 text-white'
-                          : 'text-slate-300 hover:bg-white/10 hover:text-white'
+                          ? 'bg-slate-900/10 dark:bg-white/15 text-slate-900 dark:text-white'
+                          : 'text-slate-700 dark:text-slate-300 hover:bg-slate-900/5 dark:hover:bg-white/10 hover:text-slate-900 dark:hover:text-white'
                       }`}
                     >
                       <span className="mr-1.5 text-sm">{item.icon}</span>
@@ -206,16 +224,25 @@ export function Navbar({ user }: NavbarProps) {
           </div>
           <div className="flex items-center space-x-3">
             <div className="hidden sm:block text-right">
-              <div className="text-xs font-semibold text-white">{user.name}</div>
-              <div className="text-[10px] text-slate-400 capitalize">{user.role.toLowerCase()}</div>
+              <div className="text-xs font-semibold text-slate-900 dark:text-white">{user.name}</div>
+              <div className="text-[10px] text-slate-500 dark:text-slate-400 capitalize">{user.role.toLowerCase()}</div>
             </div>
-            <div className="w-8 h-8 bg-white/10 rounded-full flex items-center justify-center text-white text-xs font-semibold">
+            <button
+              type="button"
+              onClick={toggleTheme}
+              className="w-8 h-8 rounded-full flex items-center justify-center text-xs font-semibold bg-slate-900/5 dark:bg-white/10 text-slate-900 dark:text-white hover:bg-slate-900/10 dark:hover:bg-white/15 transition-colors"
+              aria-label="Toggle theme"
+              title={isDark ? 'Switch to light' : 'Switch to dark'}
+            >
+              {isDark ? '☀️' : '🌙'}
+            </button>
+            <div className="w-8 h-8 bg-slate-900/10 dark:bg-white/10 rounded-full flex items-center justify-center text-slate-900 dark:text-white text-xs font-semibold">
               {user.name.charAt(0).toUpperCase()}
             </div>
             <button
               onClick={handleLogout}
               disabled={loading}
-              className="px-3 py-1.5 text-xs font-medium rounded-md text-slate-300 bg-white/5 hover:bg-white/10 hover:text-white border border-white/10 disabled:opacity-50 transition-all duration-150"
+              className="px-3 py-1.5 text-xs font-medium rounded-md text-slate-700 dark:text-slate-300 bg-slate-900/5 dark:bg-white/5 hover:bg-slate-900/10 dark:hover:bg-white/10 hover:text-slate-900 dark:hover:text-white border border-black/10 dark:border-white/10 disabled:opacity-50 transition-all duration-150"
             >
               {loading ? '...' : 'Logout'}
             </button>
