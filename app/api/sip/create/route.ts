@@ -30,29 +30,21 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: 'Invalid account selected' }, { status: 400 })
     }
 
-    // Calculate percentages for allocations if not provided
-    const allocationsWithPercentage = validatedData.allocations.map(allocation => ({
-      ...allocation,
-      percentage: allocation.percentage ?? (allocation.amount / validatedData.totalMonthlyAmount) * 100,
-    }))
-
-    // Create the SIP as an investment with SIP metadata
+    // Create the SIP as an investment with simple metadata
     const investment = await prisma.investment.create({
       data: {
         accountId: validatedData.accountId,
         name: validatedData.name,
-        // Use metadata to store SIP-specific fields
-        principalAmount: 0, // SIPs don't have a fixed principal
+        principalAmount: 0, // Start with 0, will be updated when investing
         currentValue: 0,
         startDate: new Date(validatedData.startDate),
         // SIP fields in metadata
         metadata: JSON.stringify({
           type: 'SIP',
-          totalMonthlyAmount: validatedData.totalMonthlyAmount,
-          allocations: allocationsWithPercentage,
+          totalAmount: validatedData.totalAmount,
+          investedAmount: 0,
           status: 'ACTIVE',
-          totalInvested: 0,
-          currentValue: 0,
+          lastInvestmentDate: null,
         }),
         // Initialize other fields
         totalReceived: 0,
@@ -77,8 +69,7 @@ export async function POST(req: NextRequest) {
         type: 'SIP',
         name: investment.name,
         accountId: investment.accountId,
-        totalMonthlyAmount: validatedData.totalMonthlyAmount,
-        allocationsCount: validatedData.allocations.length,
+        totalAmount: validatedData.totalAmount,
       }
     )
 
