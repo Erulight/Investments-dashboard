@@ -109,10 +109,16 @@ function LineChart({ points }: { points: { at: Date; value: number }[] }) {
 export function CryptoPortfolioClient({ investment }: { investment: Investment }) {
   const [inv, setInv] = useState(investment)
   const [showValueForm, setShowValueForm] = useState(false)
+  const [showDepositForm, setShowDepositForm] = useState(false)
   const [isLoading, setIsLoading] = useState(false)
   const [valueForm, setValueForm] = useState<{ date: string; currentValue: string }>({
     date: new Date().toISOString().split('T')[0],
     currentValue: '',
+  })
+
+  const [depositForm, setDepositForm] = useState<{ date: string; amount: string }>({
+    date: new Date().toISOString().split('T')[0],
+    amount: '',
   })
 
   const meta = useMemo(() => parseMeta(inv), [inv])
@@ -177,6 +183,14 @@ export function CryptoPortfolioClient({ investment }: { investment: Investment }
     setShowValueForm(true)
   }
 
+  const openDepositModal = () => {
+    setDepositForm({
+      date: new Date().toISOString().split('T')[0],
+      amount: '',
+    })
+    setShowDepositForm(true)
+  }
+
   const handleSubmitCurrentValue = async (e: FormEvent) => {
     e.preventDefault()
 
@@ -204,6 +218,38 @@ export function CryptoPortfolioClient({ investment }: { investment: Investment }
     } catch (error) {
       console.error('Update value error:', error)
       alert(error instanceof Error ? error.message : 'Failed to update current value')
+    } finally {
+      setIsLoading(false)
+    }
+  }
+
+  const handleSubmitDeposit = async (e: FormEvent) => {
+    e.preventDefault()
+
+    const amount = parseFloat(depositForm.amount)
+    if (!Number.isFinite(amount) || amount <= 0) {
+      return
+    }
+
+    setIsLoading(true)
+    try {
+      const response = await fetch('/api/crypto/deposit', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ cryptoId: inv.id, amount, date: depositForm.date }),
+      })
+
+      if (!response.ok) {
+        const error = await response.json().catch(() => ({}))
+        throw new Error(error.error || 'Failed to deposit')
+      }
+
+      const updated = await response.json()
+      setInv(updated)
+      setShowDepositForm(false)
+    } catch (error) {
+      console.error('Deposit error:', error)
+      alert(error instanceof Error ? error.message : 'Failed to deposit')
     } finally {
       setIsLoading(false)
     }
@@ -254,12 +300,20 @@ export function CryptoPortfolioClient({ investment }: { investment: Investment }
             <h1 className="text-2xl font-bold">Crypto Portfolio</h1>
             <p className="text-sm text-slate-400 mt-1">Monthly value updates, performance, and zakat tracking</p>
           </div>
-          <button
-            onClick={openValueModal}
-            className="px-4 py-2 text-xs font-medium text-white bg-white/10 hover:bg-white/15 rounded-lg transition-colors border border-white/10"
-          >
-            Update Value
-          </button>
+          <div className="flex items-center gap-2">
+            <button
+              onClick={openDepositModal}
+              className="px-4 py-2 text-xs font-medium text-white bg-white/10 hover:bg-white/15 rounded-lg transition-colors border border-white/10"
+            >
+              Deposit
+            </button>
+            <button
+              onClick={openValueModal}
+              className="px-4 py-2 text-xs font-medium text-white bg-white/10 hover:bg-white/15 rounded-lg transition-colors border border-white/10"
+            >
+              Update Value
+            </button>
+          </div>
         </div>
 
         <div className="grid grid-cols-1 md:grid-cols-4 gap-3">
@@ -396,6 +450,69 @@ export function CryptoPortfolioClient({ investment }: { investment: Investment }
                   className="px-4 py-2 bg-emerald-600 text-white rounded-lg hover:bg-emerald-700 disabled:opacity-50 transition-colors"
                 >
                   {isLoading ? 'Saving...' : 'Save'}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {showDepositForm && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+          <div className="bg-white rounded-xl p-6 max-w-md w-full mx-4">
+            <div className="flex justify-between items-center mb-6">
+              <h2 className="text-xl font-bold text-gray-900">Deposit</h2>
+              <button onClick={() => setShowDepositForm(false)} className="text-gray-400 hover:text-gray-600">
+                ✕
+              </button>
+            </div>
+
+            <form onSubmit={handleSubmitDeposit} className="space-y-4">
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">Date</label>
+                <input
+                  type="date"
+                  value={depositForm.date}
+                  onChange={(e: ChangeEvent<HTMLInputElement>) =>
+                    setDepositForm((prev: { date: string; amount: string }) => ({ ...prev, date: e.target.value }))
+                  }
+                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500"
+                  required
+                />
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">Amount ({inv.account.currency})</label>
+                <input
+                  type="number"
+                  min="0"
+                  step="0.01"
+                  value={depositForm.amount}
+                  onChange={(e: ChangeEvent<HTMLInputElement>) =>
+                    setDepositForm((prev: { date: string; amount: string }) => ({ ...prev, amount: e.target.value }))
+                  }
+                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500"
+                  required
+                />
+                <p className="text-xs text-gray-500 mt-2">
+                  This will deduct from Cash balance/buckets for the selected date.
+                </p>
+              </div>
+
+              <div className="flex justify-end space-x-3 pt-4 border-t">
+                <button
+                  type="button"
+                  onClick={() => setShowDepositForm(false)}
+                  className="px-4 py-2 border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50 transition-colors"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  disabled={isLoading}
+                  className="px-4 py-2 bg-emerald-600 text-white rounded-lg hover:bg-emerald-700 disabled:opacity-50 transition-colors"
+                >
+                  {isLoading ? 'Saving...' : 'Deposit'}
                 </button>
               </div>
             </form>
