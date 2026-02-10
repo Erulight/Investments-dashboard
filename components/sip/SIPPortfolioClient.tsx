@@ -344,6 +344,15 @@ export function SIPPortfolioClient({ investment, userRole }: SIPPortfolioClientP
           currentValue: Number.isFinite(h.currentValue) ? Math.max(0, h.currentValue) : 0,
         }))
 
+      const draftTotal = payload.reduce((acc: number, h: { currentValue: number }) => acc + (h.currentValue || 0), 0)
+      const currentPortfolioValue = Number(meta.currentValue ?? inv.currentValue ?? 0)
+
+      if (Math.abs(draftTotal - currentPortfolioValue) > 0.01) {
+        throw new Error(
+          `Holdings total must match portfolio current value. Holdings total is ${formatCurrency(draftTotal)} but portfolio current value is ${formatCurrency(currentPortfolioValue)}.`
+        )
+      }
+
       const response = await fetch('/api/sip/update-holdings', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -1016,6 +1025,16 @@ export function SIPPortfolioClient({ investment, userRole }: SIPPortfolioClientP
             <div className="flex justify-between items-center mb-6">
               <h2 className="text-xl font-bold text-gray-900">Edit Holdings</h2>
               <button onClick={() => setShowHoldingsForm(false)} className="text-gray-400 hover:text-gray-600">✕</button>
+            </div>
+
+            <div className="mb-4 rounded-lg border border-gray-200 bg-gray-50 p-3 text-sm text-gray-700">
+              <div className="font-semibold text-gray-900">How this works</div>
+              <div className="mt-1">
+                - Holdings values represent your <span className="font-semibold">current market value</span> breakdown.
+              </div>
+              <div className="mt-1">
+                - Invested amount is your <span className="font-semibold">cost basis</span> (can be different).
+              </div>
             </div>
 
             <div className="flex justify-end mb-3">
