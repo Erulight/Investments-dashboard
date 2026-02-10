@@ -38,6 +38,14 @@ export const TableBody: FC<TableProps> = ({ children }) => {
   )
 }
 
+export const TableFooter: FC<TableProps> = ({ children }) => {
+  return (
+    <tfoot className="bg-gray-50 border-t">
+      {children}
+    </tfoot>
+  )
+}
+
 type TableRowProps = HTMLAttributes<HTMLTableRowElement> & {
   children: ReactNode
 }

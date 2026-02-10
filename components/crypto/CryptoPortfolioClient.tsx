@@ -185,6 +185,17 @@ export function CryptoPortfolioClient({ investment }: { investment: Investment }
     })
   }, [points, deposits])
 
+  const monthlyTotals = useMemo(() => {
+    if (monthlyRows.length === 0) return null
+    const first = monthlyRows[0]
+    const last = monthlyRows[monthlyRows.length - 1]
+    return {
+      latestValue: last.value,
+      totalChange: last.value - first.value,
+      latestProfit: last.profitAt,
+    }
+  }, [monthlyRows])
+
   const haulStartAt = useMemo(() => {
     const fixed = new Date('2025-09-01T00:00:00.000Z')
     return Number.isNaN(fixed.getTime()) ? new Date(inv.startDate) : fixed
@@ -542,6 +553,31 @@ export function CryptoPortfolioClient({ investment }: { investment: Investment }
                       )
                     })}
                 </tbody>
+                {monthlyTotals && (
+                  <tfoot className="border-t bg-gray-50">
+                    <tr>
+                      <td className="py-2 pr-4 font-semibold text-gray-900">Total</td>
+                      <td className="py-2 pr-4 font-semibold text-gray-900">
+                        {formatCurrency(monthlyTotals.latestValue, inv.account.currency)}
+                      </td>
+                      <td
+                        className={`py-2 pr-4 font-semibold ${
+                          monthlyTotals.totalChange >= 0 ? 'text-emerald-700' : 'text-rose-700'
+                        }`}
+                      >
+                        {`${monthlyTotals.totalChange >= 0 ? '+' : ''}${formatCurrency(monthlyTotals.totalChange, inv.account.currency)}`}
+                      </td>
+                      <td
+                        className={`py-2 pr-4 font-semibold ${
+                          monthlyTotals.latestProfit >= 0 ? 'text-emerald-700' : 'text-rose-700'
+                        }`}
+                      >
+                        {`${monthlyTotals.latestProfit >= 0 ? '+' : ''}${formatCurrency(monthlyTotals.latestProfit, inv.account.currency)}`}
+                      </td>
+                      <td className="py-2 pr-4"></td>
+                    </tr>
+                  </tfoot>
+                )}
               </table>
             </div>
           )}
