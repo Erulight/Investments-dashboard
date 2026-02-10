@@ -406,22 +406,22 @@ export function CirclysClient({ initialInvestments, userRole }: CirclysClientPro
                 {tableTotals && (
                   <TableFooter>
                     <TableRow>
-                      <TableCell className="w-10"></TableCell>
+                      <TableCell className="w-10">{null}</TableCell>
                       <TableCell className="font-semibold text-gray-900">Total</TableCell>
-                      <TableCell></TableCell>
+                      <TableCell>{null}</TableCell>
                       <TableCell className="text-right font-semibold text-gray-900 tabular-nums whitespace-nowrap">
                         {tableTotals.currency} {fmt(tableTotals.monthly)}
                       </TableCell>
-                      <TableCell></TableCell>
-                      <TableCell></TableCell>
+                      <TableCell>{null}</TableCell>
+                      <TableCell>{null}</TableCell>
                       <TableCell className="text-right font-semibold text-emerald-700 tabular-nums whitespace-nowrap">
                         +{tableTotals.currency} {fmt(tableTotals.reward)}
                       </TableCell>
                       <TableCell className="text-right font-semibold text-red-700 tabular-nums whitespace-nowrap">
                         {tableTotals.currency} {fmt(tableTotals.bookingFee)}
                       </TableCell>
-                      <TableCell></TableCell>
-                      {userRole === 'OWNER' && <TableCell></TableCell>}
+                      <TableCell>{null}</TableCell>
+                      {userRole === 'OWNER' && <TableCell>{null}</TableCell>}
                     </TableRow>
                   </TableFooter>
                 )}

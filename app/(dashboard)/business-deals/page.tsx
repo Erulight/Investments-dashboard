@@ -205,7 +205,7 @@ export default async function BusinessDealsPage() {
                   <TableFooter>
                     <TableRow>
                       <TableCell className="font-semibold text-gray-900">Total</TableCell>
-                      <TableCell></TableCell>
+                      <TableCell>{null}</TableCell>
                       <TableCell className="font-semibold text-gray-900 tabular-nums">
                         {currency} {totals.principal.toLocaleString()}
                       </TableCell>
@@ -219,8 +219,8 @@ export default async function BusinessDealsPage() {
                           {totals.profit >= 0 ? '+' : ''}{currency} {Math.abs(totals.profit).toLocaleString()}
                         </span>
                       </TableCell>
-                      <TableCell></TableCell>
-                      <TableCell></TableCell>
+                      <TableCell>{null}</TableCell>
+                      <TableCell>{null}</TableCell>
                     </TableRow>
                   </TableFooter>
                 </Table>

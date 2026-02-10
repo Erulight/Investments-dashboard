@@ -1103,11 +1103,11 @@ export function SukukList({ initialSukuk, userRole }: SukukListProps) {
                       <TableCell className="px-2 py-2 text-right font-semibold text-gray-900 tabular-nums whitespace-nowrap">
                         {formatCurrency(totals.investment, totals.currency)}
                       </TableCell>
-                      <TableCell className="px-2 py-2"></TableCell>
-                      <TableCell className="px-2 py-2"></TableCell>
-                      <TableCell className="px-2 py-2"></TableCell>
-                      <TableCell className="px-2 py-2"></TableCell>
-                      <TableCell className="px-2 py-2"></TableCell>
+                      <TableCell className="px-2 py-2">{null}</TableCell>
+                      <TableCell className="px-2 py-2">{null}</TableCell>
+                      <TableCell className="px-2 py-2">{null}</TableCell>
+                      <TableCell className="px-2 py-2">{null}</TableCell>
+                      <TableCell className="px-2 py-2">{null}</TableCell>
                       <TableCell className="px-2 py-2 text-right font-semibold text-gray-900 tabular-nums whitespace-nowrap">
                         {formatCurrency(totals.fees, totals.currency)}
                       </TableCell>
@@ -1120,8 +1120,8 @@ export function SukukList({ initialSukuk, userRole }: SukukListProps) {
                       <TableCell className="px-2 py-2 text-right font-semibold text-gray-900 tabular-nums whitespace-nowrap">
                         {formatCurrency(totals.receivable, totals.currency)}
                       </TableCell>
-                      <TableCell className="px-2 py-2"></TableCell>
-                      {userRole === 'OWNER' && <TableCell className="px-2 py-2"></TableCell>}
+                      <TableCell className="px-2 py-2">{null}</TableCell>
+                      {userRole === 'OWNER' && <TableCell className="px-2 py-2">{null}</TableCell>}
                     </TableRow>
                   </TableFooter>
                 )}
