@@ -30,6 +30,16 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: 'Invalid account selected' }, { status: 400 })
     }
 
+    const existingCount = await prisma.investment.count({
+      where: {
+        category: 'SIP',
+      },
+    })
+
+    if (existingCount > 0) {
+      return NextResponse.json({ error: 'SIP portfolio already exists' }, { status: 400 })
+    }
+
     // Create the SIP as an investment with simple metadata
     const investment = await prisma.investment.create({
       data: {
@@ -43,8 +53,18 @@ export async function POST(req: NextRequest) {
           type: 'SIP',
           totalAmount: validatedData.totalAmount,
           investedAmount: 0,
+          currentValue: 0,
           status: 'ACTIVE',
           lastInvestmentDate: null,
+          holdings: [],
+          zakatBaseByAssetType: {
+            us_stocks: 0,
+            developed_emerging_stocks: 0,
+            local_equity: 0,
+            real_estate: 0,
+            money_market: 0,
+            commodities: 0,
+          },
           history: [
             {
               at: new Date().toISOString(),

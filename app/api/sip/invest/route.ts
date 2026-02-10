@@ -57,13 +57,13 @@ export async function POST(request: Request) {
     const newInvested = currentInvested + amount
     const newPrincipal = sip.principalAmount + amount
     const prevHistory = Array.isArray(metadata.history) ? metadata.history : []
+    const currentValue = metadata.currentValue || sip.currentValue || 0
 
     // Update the SIP investment
     const updatedSip = await prisma.investment.update({
       where: { id: sipId },
       data: {
         principalAmount: newPrincipal,
-        currentValue: newPrincipal, // For now, assume 1:1 value
         metadata: JSON.stringify({
           ...metadata,
           investedAmount: newInvested,
@@ -76,7 +76,7 @@ export async function POST(request: Request) {
               amount,
               investedAmount: newInvested,
               totalAmount: metadata.totalAmount || 0,
-              currentValue: newPrincipal,
+              currentValue,
             },
           ].slice(-50),
         }),

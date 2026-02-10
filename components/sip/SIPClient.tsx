@@ -66,6 +66,35 @@ export function SIPClient({ investments, userRole }: SIPClientProps) {
     }
   }
 
+  const handleUpdateCurrentValue = async (sipId: string) => {
+    const valueStr = prompt('Enter current portfolio value (SAR):')
+    if (valueStr === null) return
+    const value = parseFloat(valueStr)
+    if (!Number.isFinite(value) || value < 0) {
+      return
+    }
+
+    const dateStr = prompt('Enter date (YYYY-MM-DD) or leave empty for today:')
+    const date = dateStr && dateStr.trim().length > 0 ? dateStr.trim() : undefined
+
+    try {
+      const response = await fetch('/api/sip/update-value', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ sipId, currentValue: value, ...(date ? { date } : {}) }),
+      })
+      if (!response.ok) {
+        const error = await response.json()
+        throw new Error(error.error || 'Failed to update current value')
+      }
+      const updatedSip = await response.json()
+      setCurrentInvestments((prev: Investment[]) => prev.map((inv: Investment) => (inv.id === sipId ? updatedSip : inv)))
+    } catch (error) {
+      console.error('Update value error:', error)
+      alert(error instanceof Error ? error.message : 'Failed to update current value')
+    }
+  }
+
   // Helper to parse SIP metadata
   const parseSipMetadata = (inv: any) => {
     try {
@@ -318,6 +347,12 @@ export function SIPClient({ investments, userRole }: SIPClientProps) {
                             className="px-2 py-1 bg-emerald-600 text-white text-xs rounded hover:bg-emerald-700 transition-colors"
                           >
                             Invest
+                          </button>
+                          <button
+                            onClick={() => handleUpdateCurrentValue(inv.id)}
+                            className="px-2 py-1 bg-purple-600 text-white text-xs rounded hover:bg-purple-700 transition-colors"
+                          >
+                            Value
                           </button>
                           <button
                             onClick={() => handleUpdateTotal(inv.id)}
