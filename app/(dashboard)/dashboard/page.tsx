@@ -55,10 +55,51 @@ export default async function DashboardPage({
 
   let sukukInvested = 0
   let sukukValue = 0
+  let sukukReceivable = 0
   let sipValue = 0
   let circlysOngoingSaved = 0
 
   if (user.role === 'OWNER') {
+    const toDate = (value?: string | Date | null) => {
+      if (!value) return null
+      if (value instanceof Date) return value
+      if (typeof value === 'string') {
+        const match = value.match(/^(\d{4})-(\d{2})-(\d{2})/)
+        if (match) {
+          const [, year, month, day] = match
+          return new Date(Number(year), Number(month) - 1, Number(day))
+        }
+      }
+      const date = new Date(value)
+      if (Number.isNaN(date.getTime())) return null
+      return date
+    }
+
+    const getPeriodMonths = (start?: string | Date | null, end?: string | Date | null) => {
+      const startDate = toDate(start)
+      const endDate = toDate(end)
+      if (!startDate || !endDate) return 0
+      const months = (endDate.getFullYear() - startDate.getFullYear()) * 12
+        + (endDate.getMonth() - startDate.getMonth())
+        + (endDate.getDate() - startDate.getDate()) / 30
+      return Math.max(0, months)
+    }
+
+    const getSukukNetProfit = (inv: any) => {
+      const investment = Number.isFinite(inv.principalAmount) ? inv.principalAmount : 0
+      const apr = Number.isFinite(inv.interestRate) ? inv.interestRate : 0
+      const fees = Number.isFinite(inv.fees) ? inv.fees : 0
+      const periodMonths = getPeriodMonths(inv.startDate, inv.maturityDate)
+      const periodYears = periodMonths ? periodMonths / 12 : 0
+      const grossProfit = investment > 0 && apr > 0 && periodYears > 0
+        ? investment * (apr / 100) * periodYears
+        : 0
+
+      const manualReceivable = Number.isFinite(inv.receivableAmount) ? inv.receivableAmount : null
+      if (manualReceivable !== null && manualReceivable > 0) return manualReceivable
+      return Math.max(0, grossProfit - fees)
+    }
+
     const investments = await prisma.investment.findMany({
       where: {
         account: { isActive: true },
@@ -82,9 +123,18 @@ export default async function DashboardPage({
     sukukInvested = investments
       .filter((inv) => inv.account.type === 'SUKUK')
       .reduce((sum, inv) => sum + inv.principalAmount, 0)
-    sukukValue = investments
+
+    sukukReceivable = investments
       .filter((inv) => inv.account.type === 'SUKUK')
-      .reduce((sum, inv) => sum + inv.principalAmount, 0)
+      .reduce((sum, inv) => {
+        const netProfit = getSukukNetProfit(inv)
+        const received = Number.isFinite((inv as any).totalReceived) ? Number((inv as any).totalReceived) : 0
+        const receivable = Math.max(0, netProfit - received)
+        return sum + receivable
+      }, 0)
+
+    sukukValue = sukukInvested + sukukReceivable
+    totalValue += sukukReceivable
     sipValue = investments
       .filter((inv) => inv.account.type === 'SIP')
       .reduce((sum, inv) => sum + inv.currentValue, 0)
@@ -107,7 +157,14 @@ export default async function DashboardPage({
       const t = inv.account.type
       const existing = typeMap.get(t) || { invested: 0, value: 0, count: 0 }
       existing.invested += inv.principalAmount
-      existing.value += t === 'SUKUK' ? inv.principalAmount : inv.currentValue
+      if (t === 'SUKUK') {
+        const netProfit = getSukukNetProfit(inv)
+        const received = Number.isFinite((inv as any).totalReceived) ? Number((inv as any).totalReceived) : 0
+        const receivable = Math.max(0, netProfit - received)
+        existing.value += inv.principalAmount + receivable
+      } else {
+        existing.value += inv.currentValue
+      }
       existing.count += 1
       typeMap.set(t, existing)
     }
