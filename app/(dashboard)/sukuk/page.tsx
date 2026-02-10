@@ -121,16 +121,18 @@ export default async function InvestmentsPage() {
 
   const activeInvestments = investments.filter(isActiveDeal)
 
-  const totalInvested = activeInvestments.reduce((sum, inv) => {
+  const displayedInvestments = investments
+
+  const totalInvested = displayedInvestments.reduce((sum, inv) => {
     const principal = inv.myParticipation?.investedAmount || inv.principalAmount
     return sum + (Number.isFinite(principal) ? principal : 0)
   }, 0)
 
-  const totalNetProfit = activeInvestments.reduce((sum, inv) => {
+  const totalNetProfit = displayedInvestments.reduce((sum, inv) => {
     return sum + getNetProfit(inv)
   }, 0)
 
-  const totalWithdrawn = activeInvestments.reduce((sum, inv) => {
+  const totalWithdrawn = displayedInvestments.reduce((sum, inv) => {
     const received = Number.isFinite(inv.totalReceived) ? inv.totalReceived : 0
     return sum + received
   }, 0)
@@ -142,7 +144,7 @@ export default async function InvestmentsPage() {
   const returnPercentage = totalInvested > 0 ? ((totalReturn / totalInvested) * 100) : 0
   const activeDealsCount = activeInvestments.length
 
-  const totalFeesPaid = activeInvestments.reduce((sum, inv) => {
+  const totalFeesPaid = displayedInvestments.reduce((sum, inv) => {
     const fees = Number.isFinite(inv.fees) ? inv.fees : 0
     return sum + fees
   }, 0)
@@ -166,7 +168,7 @@ export default async function InvestmentsPage() {
   })()
 
   const platformTotals: Array<[string, number]> = Array.from(
-    activeInvestments
+    displayedInvestments
       .reduce((map: Map<string, number>, inv: any) => {
         const platform = inv.account?.name || 'Unknown'
         const principal = inv.myParticipation?.investedAmount || inv.principalAmount
