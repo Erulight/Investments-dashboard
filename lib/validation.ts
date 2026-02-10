@@ -105,3 +105,61 @@ export const updateSavingsSchema = z.object({
 
 export type CreateSavingsInput = z.infer<typeof createSavingsSchema>
 export type UpdateSavingsInput = z.infer<typeof updateSavingsSchema>
+
+// SIP validation schemas
+export const createSipSchema = z.object({
+  accountId: z.string().min(1, 'Account is required'),
+  name: z.string().min(1, 'SIP name is required'),
+  totalMonthlyAmount: z.number().positive('Total monthly amount must be positive'),
+  startDate: z.string().refine((date) => !isNaN(Date.parse(date)), {
+    message: 'Invalid start date',
+  }),
+  notes: z.string().optional(),
+  allocations: z.array(z.object({
+    company: z.string().min(1, 'Company is required'),
+    category: z.string().min(1, 'Category is required'),
+    amount: z.number().positive('Amount must be positive'),
+    percentage: z.number().min(0).max(100).optional(),
+    notes: z.string().optional(),
+  })).min(1, 'At least one allocation is required'),
+}).refine((data) => {
+  const totalAllocated = data.allocations.reduce((sum, a) => sum + a.amount, 0)
+  if (Math.abs(totalAllocated - data.totalMonthlyAmount) > 0.01) {
+    return false
+  }
+  return true
+}, {
+  message: 'Sum of allocations must equal total monthly amount',
+  path: ['allocations'],
+})
+
+export const updateSipSchema = z.object({
+  accountId: z.string().min(1, 'Account is required').optional(),
+  name: z.string().min(1, 'SIP name is required').optional(),
+  totalMonthlyAmount: z.number().positive('Total monthly amount must be positive').optional(),
+  startDate: z.string().optional().refine((date) => !date || !isNaN(Date.parse(date)), {
+    message: 'Invalid start date',
+  }),
+  notes: z.string().optional(),
+  allocations: z.array(z.object({
+    company: z.string().min(1, 'Company is required'),
+    category: z.string().min(1, 'Category is required'),
+    amount: z.number().positive('Amount must be positive'),
+    percentage: z.number().min(0).max(100).optional(),
+    notes: z.string().optional(),
+  })).optional(),
+}).refine((data) => {
+  if (data.totalMonthlyAmount && data.allocations) {
+    const totalAllocated = data.allocations.reduce((sum, a) => sum + a.amount, 0)
+    if (Math.abs(totalAllocated - data.totalMonthlyAmount) > 0.01) {
+      return false
+    }
+  }
+  return true
+}, {
+  message: 'Sum of allocations must equal total monthly amount',
+  path: ['allocations'],
+})
+
+export type CreateSipInput = z.infer<typeof createSipSchema>
+export type UpdateSipInput = z.infer<typeof updateSipSchema>
