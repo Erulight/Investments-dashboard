@@ -1,6 +1,6 @@
 import { getCurrentUser } from '@/lib/auth'
 import { prisma } from '@/lib/db'
-import { SIPClient } from '@/components/sip/SIPClient'
+import { SIPPortfolioClient } from '@/components/sip/SIPPortfolioClient'
 
 export default async function SIPPage() {
   const user = await getCurrentUser()
@@ -9,18 +9,17 @@ export default async function SIPPage() {
     return <div>Please log in to view SIP plans.</div>
   }
 
-  // Fetch investments for SIPs (category: SIP)
-  const investments = await prisma.investment.findMany({
+  const investment = await prisma.investment.findFirst({
     where: {
       category: 'SIP',
     },
     include: {
       account: true,
       dealParticipants: {
-        include: { 
+        include: {
           person: {
-            include: { user: true }
-          }
+            include: { user: true },
+          },
         },
       },
     },
@@ -29,36 +28,21 @@ export default async function SIPPage() {
     },
   })
 
-  // For owners, show all SIPs; for partners, show only their participating SIPs
-  const filteredInvestments = user.role === 'OWNER' 
-    ? investments
-    : investments.filter(inv => 
-        inv.dealParticipants.some(dp => dp.person.user?.id === user.id)
-      )
+  const canView = user.role === 'OWNER'
+    || (investment?.dealParticipants?.some((dp: any) => dp.person.user?.id === user.id) ?? false)
 
-  // Transform to match client component types (convert Date to string, null to undefined)
-  const transformedInvestments = filteredInvestments.map(inv => ({
-    ...inv,
-    startDate: inv.startDate.toISOString(),
-    metadata: inv.metadata || undefined,
-    notes: inv.notes || undefined,
-    maturityDate: inv.maturityDate?.toISOString() || undefined,
-    reopenedAt: inv.reopenedAt?.toISOString() || undefined,
-  }))
+  const transformedInvestment = investment && canView
+    ? {
+        ...investment,
+        startDate: investment.startDate.toISOString(),
+        metadata: investment.metadata || undefined,
+        notes: investment.notes || undefined,
+      }
+    : undefined
 
   return (
     <div className="p-6">
-      <div className="mb-8">
-        <h1 className="text-3xl font-bold text-gray-900">Systematic Investment Plans</h1>
-        <p className="text-gray-600 mt-2">
-          Manage your SIP investments with multiple companies and categories
-        </p>
-      </div>
-      
-      <SIPClient 
-        investments={transformedInvestments} 
-        userRole={user.role}
-      />
+      <SIPPortfolioClient investment={transformedInvestment} userRole={user.role} />
     </div>
   )
 }
