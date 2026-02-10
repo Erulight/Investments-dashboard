@@ -25,10 +25,10 @@ const navigation: NavItem[] = [
       { name: 'Sukuk', href: '/sukuk', module: 'sukuk', icon: '💎' },
       { name: 'Crypto', href: '/crypto', module: 'crypto', icon: '₿' },
       { name: 'Business Deals', href: '/business-deals', module: 'business-deals', icon: '🤝' },
-      { name: 'Savings', href: '/savings', module: 'savings', icon: '�' },
+      { name: 'SIP', href: '/sip', module: 'sip', icon: '📈' },
+      { name: 'Savings', href: '/savings', module: 'savings', icon: '💰' },
     ]
   },
-  { name: 'SIP', href: '/sip', module: 'sip', icon: '�' },
   { name: 'Import', href: '/import', module: 'import', icon: '📥' },
   { name: 'Users', href: '/users', roles: ['OWNER'], icon: '👥' },
   { name: 'Settings', href: '/settings', module: 'settings', icon: '⚙️' },
