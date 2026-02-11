@@ -71,7 +71,6 @@ type HistoryItem = {
   action: string
   currentValue?: number
   investedAmount?: number
-  totalAmount?: number
 }
 
 const getHijriYear = (date: Date) => {
@@ -548,6 +547,75 @@ export default function SIPPortfolioClient({ investment, userRole }: SIPPortfoli
       value: Number(base[k] ?? 0),
     }))
   }, [meta.zakatBaseByAssetType])
+
+  const openHoldingsEditor = () => {
+    const holdings = Array.isArray((meta as any).holdings) ? ((meta as any).holdings as any[]) : []
+    const next: HoldingDraftRow[] = holdings
+      .map((h: any): HoldingDraftRow => ({
+        id: typeof h?.id === 'string' && h.id ? h.id : crypto.randomUUID(),
+        name: String(h?.name || ''),
+        assetType: String(h?.assetType || ''),
+        cost: String(safeNumber(h?.cost, 0)),
+        currentValue: String(safeNumber(h?.currentValue, 0)),
+      }))
+      .filter((h) => h.assetType)
+
+    setHoldingsDraft(next)
+    setShowHoldingsForm(true)
+  }
+
+  const addHoldingDraft = () => {
+    setHoldingsDraft((prev: HoldingDraftRow[]) => [
+      ...prev,
+      {
+        id: crypto.randomUUID(),
+        name: '',
+        assetType: 'us_stocks',
+        cost: '0',
+        currentValue: '0',
+      },
+    ])
+  }
+
+  const removeHoldingDraft = (id: string) => {
+    setHoldingsDraft((prev: HoldingDraftRow[]) => prev.filter((h: HoldingDraftRow) => h.id !== id))
+  }
+
+  const saveHoldings = async () => {
+    if (!inv) return
+    if (isSavingHoldings) return
+
+    setIsSavingHoldings(true)
+    try {
+      const payload = holdingsDraft.map((h: HoldingDraftRow) => ({
+        id: h.id,
+        name: String(h.name || '').trim(),
+        assetType: String(h.assetType || '').trim(),
+        cost: Math.max(0, Number(h.cost) || 0),
+        currentValue: Math.max(0, Number(h.currentValue) || 0),
+      }))
+
+      const response = await fetch('/api/sip/update-holdings', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ sipId: inv.id, holdings: payload }),
+      })
+
+      if (!response.ok) {
+        const error = await response.json().catch(() => ({}))
+        throw new Error(error.error || 'Failed to save holdings')
+      }
+
+      const updated = await response.json()
+      setInv(updated)
+      setShowHoldingsForm(false)
+    } catch (error) {
+      console.error('Save holdings error:', error)
+      alert(error instanceof Error ? error.message : 'Failed to save holdings')
+    } finally {
+      setIsSavingHoldings(false)
+    }
+  }
 
   const openZakatBaseEditor = () => {
     const next: Record<string, string> = {}
