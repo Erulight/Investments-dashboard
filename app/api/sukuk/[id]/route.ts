@@ -5,6 +5,7 @@ import { updateSukukSchema } from '@/lib/validation'
 import { logAudit } from '@/lib/audit'
 import type { Prisma } from '@prisma/client'
 import { creditBucketsForReceipt, withdrawFromBuckets } from '@/lib/cashBuckets'
+import { parseDateInput } from '@/lib/date'
 
 const getCashAccount = async (tx: Prisma.TransactionClient, currency = 'SAR') => {
   const existing = await tx.account.findFirst({
@@ -152,11 +153,24 @@ export async function PUT(
       if (data.principalAmount !== undefined) updateData.principalAmount = data.principalAmount
       if (data.currentValue !== undefined) updateData.currentValue = data.currentValue
       const startDate = data.startDate !== undefined
-        ? new Date(data.startDate)
+        ? (typeof data.startDate === 'string'
+            ? (parseDateInput(data.startDate) ?? new Date(data.startDate))
+            : new Date(data.startDate))
         : existingSukuk.startDate
       const maturityDate = data.maturityDate !== undefined
-        ? (data.maturityDate ? new Date(data.maturityDate) : null)
+        ? (data.maturityDate
+            ? (typeof data.maturityDate === 'string'
+                ? (parseDateInput(data.maturityDate) ?? new Date(data.maturityDate))
+                : new Date(data.maturityDate))
+            : null)
         : existingSukuk.maturityDate
+
+      if (data.startDate !== undefined && Number.isNaN(startDate.getTime())) {
+        return NextResponse.json({ error: 'Invalid startDate' }, { status: 400 })
+      }
+      if (data.maturityDate !== undefined && maturityDate && Number.isNaN(maturityDate.getTime())) {
+        return NextResponse.json({ error: 'Invalid maturityDate' }, { status: 400 })
+      }
       if (data.startDate !== undefined) updateData.startDate = startDate
       if (data.maturityDate !== undefined) updateData.maturityDate = maturityDate
 

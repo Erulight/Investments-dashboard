@@ -5,6 +5,7 @@ import { requireModuleAccess } from '@/lib/rbac'
 import { createSukukSchema } from '@/lib/validation'
 import { logAudit } from '@/lib/audit'
 import { withdrawFromBuckets } from '@/lib/cashBuckets'
+import { parseDateInput } from '@/lib/date'
 
 export async function POST(req: NextRequest) {
   try {
@@ -28,8 +29,21 @@ export async function POST(req: NextRequest) {
     const receivableAmount = data.receivableAmount ?? 0
     const isIjarah = data.isIjarah ?? false
     const fees = data.fees ?? 0
-    const startDate = new Date(data.startDate)
-    const maturityDate = data.maturityDate ? new Date(data.maturityDate) : null
+    const startDate = typeof data.startDate === 'string'
+      ? (parseDateInput(data.startDate) ?? new Date(data.startDate))
+      : new Date(data.startDate)
+    const maturityDate = data.maturityDate
+      ? (typeof data.maturityDate === 'string'
+          ? (parseDateInput(data.maturityDate) ?? new Date(data.maturityDate))
+          : new Date(data.maturityDate))
+      : null
+
+    if (Number.isNaN(startDate.getTime())) {
+      return NextResponse.json({ error: 'Invalid startDate' }, { status: 400 })
+    }
+    if (maturityDate && Number.isNaN(maturityDate.getTime())) {
+      return NextResponse.json({ error: 'Invalid maturityDate' }, { status: 400 })
+    }
     const periodMonths = maturityDate
       ? (maturityDate.getFullYear() - startDate.getFullYear()) * 12
         + (maturityDate.getMonth() - startDate.getMonth())
