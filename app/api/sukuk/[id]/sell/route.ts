@@ -122,7 +122,7 @@ export async function POST(
 
     const ratio = seller.investedAmount > 0 ? amount / seller.investedAmount : 0
     const currentValueTransfer = seller.currentValue * ratio
-    const profitTransfer = seller.profit * ratio
+    const profitTransfer = 0
     const commissionAmount = commissionType === 'PERCENT'
       ? Math.max(0, (salePrice * commissionValueRaw) / 100)
       : Math.max(0, commissionValueRaw)
@@ -142,7 +142,6 @@ export async function POST(
           data: {
             investedAmount: sellerRemaining,
             currentValue: Math.max(0, seller.currentValue - currentValueTransfer),
-            profit: Math.max(0, seller.profit - profitTransfer),
             sharePercentage: investment.principalAmount > 0
               ? (sellerRemaining / investment.principalAmount) * 100
               : seller.sharePercentage,
@@ -160,7 +159,6 @@ export async function POST(
           data: {
             investedAmount: buyer.investedAmount + amount,
             currentValue: buyer.currentValue + currentValueTransfer,
-            profit: buyer.profit + profitTransfer,
             acquiredAt: buyer.acquiredAt || date,
             commissionFees: (buyer.commissionFees || 0) + commissionAmount,
             sharePercentage: investment.principalAmount > 0
@@ -175,7 +173,6 @@ export async function POST(
             personId: buyerPersonId,
             investedAmount: amount,
             currentValue: currentValueTransfer,
-            profit: profitTransfer,
             acquiredAt: date,
             commissionFees: commissionAmount,
             sharePercentage,

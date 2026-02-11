@@ -63,9 +63,10 @@ const TrashIcon = () => (
 interface SukukListProps {
   initialSukuk: any[]
   userRole: string
+  ownerPersonId?: string | null
 }
 
-export function SukukList({ initialSukuk, userRole }: SukukListProps) {
+export function SukukList({ initialSukuk, userRole, ownerPersonId }: SukukListProps) {
   const router = useRouter()
   const [sukuk, setSukuk] = useState<any[]>(
     Array.isArray(initialSukuk) ? initialSukuk : []
@@ -965,6 +966,15 @@ export function SukukList({ initialSukuk, userRole }: SukukListProps) {
                 <TableBody>
                 {sortedRows.map(({ inv, metrics }) => {
 
+                  const participantList = Array.isArray(inv.dealParticipants) ? inv.dealParticipants : []
+                  const partnerNames = userRole === 'OWNER'
+                    ? participantList
+                        .filter((p: any) => !ownerPersonId || p.personId !== ownerPersonId)
+                        .map((p: any) => p.person?.name)
+                        .filter(Boolean)
+                    : []
+                  const soldToLabel = partnerNames.length > 0 ? `Sold to: ${partnerNames.join(', ')}` : ''
+
                   return (
                     <TableRow key={inv.id} className="hover:bg-blue-50 transition-colors duration-150">
                       <TableCell className="px-2 py-1.5 font-semibold text-gray-900 align-middle">
@@ -976,6 +986,11 @@ export function SukukList({ initialSukuk, userRole }: SukukListProps) {
                         >
                           {inv.name}
                         </button>
+                        {soldToLabel && (
+                          <div className="mt-0.5 text-[10px] font-medium text-blue-700">
+                            {soldToLabel}
+                          </div>
+                        )}
                       </TableCell>
                       <TableCell className="px-2 py-1.5 text-gray-700 tabular-nums text-right whitespace-nowrap align-middle">
                         {formatCurrency(metrics.totalInvestment, metrics.currency)}
