@@ -2,6 +2,8 @@ import { NextRequest, NextResponse } from 'next/server'
 import { prisma } from '@/lib/db'
 import { requireAuth } from '@/lib/rbac'
 
+const CASH_BALANCE_KEY = 'CASH_BALANCE'
+
 export async function PUT(
   req: NextRequest,
   { params }: { params: Promise<{ id: string }> }
@@ -68,7 +70,15 @@ export async function DELETE(
 
     const debt = await prisma.debt.findUnique({
       where: { id },
-      include: { payments: true },
+      include: {
+        payments: true,
+        cashBucket: {
+          include: {
+            allocations: { select: { id: true } },
+            movements: { select: { id: true, type: true } },
+          },
+        },
+      },
     })
 
     if (!debt) {
@@ -82,11 +92,74 @@ export async function DELETE(
       )
     }
 
-    await prisma.debt.delete({ where: { id } })
+    const cashBucket = debt.cashBucket
+    if (!cashBucket || !debt.cashBucketId) {
+      return NextResponse.json(
+        { error: 'Debt cannot be deleted because its cash bucket is missing. Archive it instead.' },
+        { status: 400 }
+      )
+    }
+
+    const allocationCount = Array.isArray(cashBucket.allocations) ? cashBucket.allocations.length : 0
+    const movementCount = Array.isArray(cashBucket.movements) ? cashBucket.movements.length : 0
+    if (allocationCount > 0 || movementCount > 1) {
+      return NextResponse.json(
+        { error: 'Cannot delete this debt because its cash has been used. Archive it instead.' },
+        { status: 400 }
+      )
+    }
+
+    const amount = Number(debt.amount) || 0
+    if (!Number.isFinite(amount) || amount <= 0) {
+      return NextResponse.json({ error: 'Invalid debt amount' }, { status: 400 })
+    }
+
+    await prisma.$transaction(async (tx) => {
+      const setting = await tx.systemSetting.findUnique({ where: { key: CASH_BALANCE_KEY } })
+      const currentCash = setting ? Number(setting.value) : 0
+      const nextCash = currentCash - amount
+      if (nextCash < -0.000001) {
+        throw new Error('INSUFFICIENT_CASH')
+      }
+
+      if (setting) {
+        await tx.systemSetting.update({
+          where: { key: CASH_BALANCE_KEY },
+          data: { value: nextCash.toString() },
+        })
+      } else {
+        await tx.systemSetting.create({
+          data: {
+            key: CASH_BALANCE_KEY,
+            value: nextCash.toString(),
+            description: 'Available cash balance for investments',
+          },
+        })
+      }
+
+      await tx.transaction.deleteMany({
+        where: {
+          investmentId: null,
+          type: { in: ['DEBT_BORROW', 'DEBT_PAYMENT', 'DEBT_PAYMENT_UNDO'] },
+          metadata: { contains: `"debtId":"${id}"` },
+        },
+      })
+
+      await tx.debt.delete({ where: { id } })
+      await tx.cashBucket.delete({ where: { id: debt.cashBucketId! } })
+    })
 
     return NextResponse.json({ success: true })
   } catch (error) {
     console.error('Debt delete error:', error)
+
+    if (error instanceof Error && error.message === 'INSUFFICIENT_CASH') {
+      return NextResponse.json(
+        { error: 'Cannot delete this debt because it would make cash balance negative. Archive it instead.' },
+        { status: 400 }
+      )
+    }
+
     return NextResponse.json(
       { error: error instanceof Error ? error.message : 'Failed to delete debt' },
       { status: 500 }
