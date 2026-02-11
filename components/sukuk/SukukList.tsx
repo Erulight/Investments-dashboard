@@ -311,7 +311,9 @@ export function SukukList({ initialSukuk, userRole, ownerPersonId, viewerPersonI
       paymentStatus: 'sold',
       progress: getProgress(Math.max(0, cashInflow), Math.max(0, cashInflow)),
       currency,
-      aprAfterFees: principalSold > 0 ? (profitEarnedToSale / principalSold) * 100 : 0,
+      aprAfterFees: principalSold > 0 && heldYears > 0
+        ? ((profitEarnedToSale / principalSold) / heldYears) * 100
+        : 0,
       saleDate,
       salePrice,
       principalSold,
@@ -408,7 +410,9 @@ export function SukukList({ initialSukuk, userRole, ownerPersonId, viewerPersonI
     const netProfit = manualReceivable !== null
       ? Math.max(0, manualReceivable - commissionFees)
       : Math.max(0, grossProfit - fees - commissionFees)
-    const aprAfterFees = totalInvestment > 0 ? (netProfit / totalInvestment) * 100 : 0
+    const aprAfterFees = totalInvestment > 0 && periodYears > 0
+      ? ((netProfit / totalInvestment) / periodYears) * 100
+      : 0
     const receivable = Math.max(0, netProfit - totalReceived)
     const receiptDate = getLatestReceiptDate(inv)
     const isFullyReceived = receivable <= 0.01
