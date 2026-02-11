@@ -145,6 +145,7 @@ export default async function InvestmentsPage() {
       ? Math.min(1, investment / inv.principalAmount)
       : 0
     const startBasis = inv.myParticipation?.acquiredAt ?? inv.startDate
+    const totalMonthsFull = getPeriodMonths(inv.startDate, inv.maturityDate)
     const periodMonths = getPeriodMonths(startBasis, inv.maturityDate)
     const periodYears = periodMonths ? periodMonths / 12 : 0
     const grossProfit = investment > 0 && apr > 0 && periodYears > 0
@@ -163,7 +164,12 @@ export default async function InvestmentsPage() {
     const commissionFees = Number.isFinite(inv.myParticipation?.commissionFees)
       ? Number(inv.myParticipation.commissionFees)
       : 0
-    const proratedFees = inv.myParticipation ? fees * participationRatio : fees
+    const timeRatio = inv.myParticipation && totalMonthsFull > 0
+      ? Math.min(1, Math.max(0, periodMonths / totalMonthsFull))
+      : 1
+    const proratedFees = inv.myParticipation
+      ? (fees * participationRatio) * timeRatio
+      : fees
     return Math.max(0, grossProfit - proratedFees - commissionFees)
   }
 
@@ -204,7 +210,13 @@ export default async function InvestmentsPage() {
     const investment = Number.isFinite(principal) ? principal : 0
     const ratio = inv.principalAmount > 0 && investment > 0 ? Math.min(1, investment / inv.principalAmount) : 0
     const fees = Number.isFinite(inv.fees) ? inv.fees : 0
-    return sum + (inv.myParticipation ? fees * ratio : fees)
+    const startBasis = inv.myParticipation?.acquiredAt ?? inv.startDate
+    const monthsHeld = getPeriodMonths(startBasis, inv.maturityDate)
+    const totalMonthsFull = getPeriodMonths(inv.startDate, inv.maturityDate)
+    const timeRatio = inv.myParticipation && totalMonthsFull > 0
+      ? Math.min(1, Math.max(0, monthsHeld / totalMonthsFull))
+      : 1
+    return sum + (inv.myParticipation ? (fees * ratio) * timeRatio : fees)
   }, 0)
 
   const avgDaysToMaturity = (() => {

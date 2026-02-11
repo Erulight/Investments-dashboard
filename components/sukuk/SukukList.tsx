@@ -343,11 +343,17 @@ export function SukukList({ initialSukuk, userRole, ownerPersonId, viewerPersonI
     const participationRatio = inv.principalAmount > 0 && totalInvestment > 0
       ? Math.min(1, totalInvestment / inv.principalAmount)
       : 0
-    const fees = participation ? fullFees * participationRatio : fullFees
-
-    const totalReceived = getViewerReceived(inv)
+    const totalMonthsFull = getPeriodMonths(inv.startDate, inv.maturityDate)
     const startBasis = participation?.acquiredAt ?? inv.startDate
     const periodMonths = getPeriodMonths(startBasis, inv.maturityDate)
+    const timeRatio = totalMonthsFull && periodMonths !== null && totalMonthsFull > 0
+      ? Math.min(1, Math.max(0, periodMonths / totalMonthsFull))
+      : 1
+    const fees = participation
+      ? (fullFees * participationRatio) * timeRatio
+      : fullFees
+
+    const totalReceived = getViewerReceived(inv)
     const periodYears = periodMonths ? periodMonths / 12 : 0
     const grossProfit = totalInvestment > 0 && apr > 0 && periodYears > 0
       ? totalInvestment * (apr / 100) * periodYears
