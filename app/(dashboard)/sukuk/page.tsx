@@ -182,9 +182,16 @@ export default async function InvestmentsPage() {
     return receivable > 0.01
   }
 
-  const activeInvestments = investments.filter(isActiveDeal)
+  const displayedInvestments = (() => {
+    if (user.role !== 'OWNER' || !user.personId) return investments
+    return investments.filter((inv: any) => {
+      const participants = Array.isArray(inv.dealParticipants) ? inv.dealParticipants : []
+      if (participants.length === 0) return true
+      return participants.some((p: any) => p.personId === user.personId)
+    })
+  })()
 
-  const displayedInvestments = investments
+  const activeInvestments = displayedInvestments.filter(isActiveDeal)
 
   const totalInvested = displayedInvestments.reduce((sum, inv) => {
     const principal = inv.myParticipation?.investedAmount || inv.principalAmount
