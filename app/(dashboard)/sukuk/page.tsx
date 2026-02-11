@@ -295,6 +295,90 @@ export default async function InvestmentsPage() {
       .entries()
   ).sort((a, b) => b[1] - a[1])
 
+  const getMonthKey = (value?: string | Date | null) => {
+    const date = toDate(value)
+    if (!date) return null
+    const y = date.getFullYear()
+    const m = String(date.getMonth() + 1).padStart(2, '0')
+    return `${y}-${m}`
+  }
+
+  const monthKeyToLabel = (key: string) => {
+    const match = key.match(/^(\d{4})-(\d{2})$/)
+    if (!match) return key
+    const [, y, m] = match
+    return `${m}/${y}`
+  }
+
+  const getMonthlySeries = (sourceInvestments: any[]) => {
+    const buckets = new Map<string, { received: number; realizedProfit: number }>()
+
+    for (const inv of sourceInvestments) {
+      const transactions = Array.isArray(inv.transactions) ? inv.transactions : []
+      for (const tx of transactions) {
+        const key = getMonthKey(tx.date)
+        if (!key) continue
+
+        const type = String(tx.type || '')
+        const amountRaw = Number(tx.amount)
+        const amount = Number.isFinite(amountRaw) ? amountRaw : 0
+
+        const viewerOk = !user.personId || tx.personId === user.personId
+        if (!viewerOk) continue
+
+        const current = buckets.get(key) ?? { received: 0, realizedProfit: 0 }
+
+        if (type === 'WITHDRAW_PROFIT') {
+          current.received += Math.max(0, amount)
+          current.realizedProfit += Math.max(0, amount)
+        }
+
+        if (type === 'SELL_PROFIT_ACCRUED' || type === 'PARTNER_COMMISSION') {
+          current.received += Math.max(0, amount)
+          current.realizedProfit += Math.max(0, amount)
+        }
+
+        buckets.set(key, current)
+      }
+    }
+
+    const keys = Array.from(buckets.keys()).sort()
+    return keys.map((k) => ({
+      key: k,
+      label: monthKeyToLabel(k),
+      received: buckets.get(k)?.received ?? 0,
+      realizedProfit: buckets.get(k)?.realizedProfit ?? 0,
+    }))
+  }
+
+  const analyticsSource = user.role === 'OWNER' ? investments : displayedInvestments
+  const monthlySeries = getMonthlySeries(analyticsSource)
+
+  const renderSparkline = (points: number[]) => {
+    const width = 560
+    const height = 120
+    if (points.length === 0) return null
+
+    const max = Math.max(...points, 0)
+    const min = Math.min(...points, 0)
+    const range = Math.max(1e-6, max - min)
+    const stepX = points.length > 1 ? width / (points.length - 1) : width
+
+    const path = points
+      .map((v, i) => {
+        const x = i * stepX
+        const y = height - ((v - min) / range) * height
+        return `${i === 0 ? 'M' : 'L'} ${x.toFixed(2)} ${y.toFixed(2)}`
+      })
+      .join(' ')
+
+    return (
+      <svg viewBox={`0 0 ${width} ${height}`} className="w-full h-28">
+        <path d={path} fill="none" stroke="#0f172a" strokeWidth="2" />
+      </svg>
+    )
+  }
+
   return (
     <div className="space-y-6 animate-fade-in">
       {/* Header */}
@@ -373,6 +457,104 @@ export default async function InvestmentsPage() {
           />
         </CardContent>
       </Card>
+
+      {/* Analytics */}
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
+        <Card className="lg:col-span-2">
+          <CardHeader>
+            <CardTitle className="text-sm font-bold text-gray-800">Analytics</CardTitle>
+          </CardHeader>
+          <CardContent>
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <div className="rounded-lg border border-gray-100 p-3">
+                <div className="flex items-center justify-between">
+                  <p className="text-xs font-semibold text-gray-700">Monthly Received</p>
+                  <p className="text-[11px] text-gray-500">Last {monthlySeries.length} months</p>
+                </div>
+                <div className="mt-2">
+                  {renderSparkline(monthlySeries.map((x) => x.received))}
+                </div>
+              </div>
+
+              <div className="rounded-lg border border-gray-100 p-3">
+                <div className="flex items-center justify-between">
+                  <p className="text-xs font-semibold text-gray-700">Monthly Realized Profit</p>
+                  <p className="text-[11px] text-gray-500">Withdrawals + Sold profit + Commission</p>
+                </div>
+                <div className="mt-2">
+                  {renderSparkline(monthlySeries.map((x) => x.realizedProfit))}
+                </div>
+              </div>
+            </div>
+
+            {monthlySeries.length > 0 && (
+              <div className="mt-3 grid grid-cols-1 md:grid-cols-2 gap-3">
+                <div className="rounded-lg bg-gray-50 p-3">
+                  <p className="text-[11px] text-gray-500">Best Month (Received)</p>
+                  {(() => {
+                    const best = monthlySeries.reduce((a, b) => (b.received > a.received ? b : a), monthlySeries[0])
+                    return (
+                      <p className="text-sm font-bold text-gray-900 tabular-nums">
+                        {best.label} • SAR {best.received.toLocaleString(undefined, { maximumFractionDigits: 2 })}
+                      </p>
+                    )
+                  })()}
+                </div>
+                <div className="rounded-lg bg-gray-50 p-3">
+                  <p className="text-[11px] text-gray-500">Best Month (Profit)</p>
+                  {(() => {
+                    const best = monthlySeries.reduce(
+                      (a, b) => (b.realizedProfit > a.realizedProfit ? b : a),
+                      monthlySeries[0]
+                    )
+                    return (
+                      <p className="text-sm font-bold text-gray-900 tabular-nums">
+                        {best.label} • SAR {best.realizedProfit.toLocaleString(undefined, { maximumFractionDigits: 2 })}
+                      </p>
+                    )
+                  })()}
+                </div>
+              </div>
+            )}
+          </CardContent>
+        </Card>
+
+        <Card>
+          <CardHeader>
+            <CardTitle className="text-sm font-bold text-gray-800">Platform Distribution</CardTitle>
+          </CardHeader>
+          <CardContent>
+            {platformTotals.length === 0 ? (
+              <p className="text-xs text-gray-500">No data</p>
+            ) : (
+              <div className="space-y-2">
+                {(() => {
+                  const max = Math.max(...platformTotals.map((x) => x[1]), 1)
+                  return platformTotals.slice(0, 8).map(([platform, value]) => {
+                    const pct = Math.max(0, Math.min(100, (value / max) * 100))
+                    return (
+                      <div key={platform} className="space-y-1">
+                        <div className="flex items-center justify-between gap-2">
+                          <span className="text-xs text-gray-700 truncate">{platform}</span>
+                          <span className="text-xs font-semibold tabular-nums text-gray-900">
+                            SAR {value.toLocaleString(undefined, { maximumFractionDigits: 0 })}
+                          </span>
+                        </div>
+                        <div className="w-full bg-gray-100 rounded-full h-2">
+                          <div
+                            className="bg-slate-800 h-2 rounded-full"
+                            style={{ width: `${pct}%` }}
+                          />
+                        </div>
+                      </div>
+                    )
+                  })
+                })()}
+              </div>
+            )}
+          </CardContent>
+        </Card>
+      </div>
 
       {/* Performance Overview for Owner */}
       {user.role === 'OWNER' && investments.length > 0 && (
