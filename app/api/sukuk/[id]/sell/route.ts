@@ -10,7 +10,7 @@ export async function POST(
   { params }: { params: Promise<{ id: string }> }
 ) {
   try {
-    const user = await requireAuth(['OWNER'])
+    const user = await requireAuth(['OWNER', 'PARTNER'])
     const { id } = await params
     const body = await req.json()
 

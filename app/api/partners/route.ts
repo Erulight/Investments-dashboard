@@ -4,7 +4,7 @@ import { requireAuth } from '@/lib/rbac'
 
 export async function GET(req: NextRequest) {
   try {
-    await requireAuth(['OWNER'])
+    const user = await requireAuth(['OWNER', 'PARTNER'])
 
     const partners = await prisma.user.findMany({
       where: {
@@ -28,6 +28,7 @@ export async function GET(req: NextRequest) {
     return NextResponse.json({
       partners: partners
         .filter((partner) => partner.person?.id)
+        .filter((partner) => (user.personId ? partner.person!.id !== user.personId : true))
         .map((partner) => ({
           id: partner.person!.id,
           name: partner.person?.name || partner.name || partner.email,
