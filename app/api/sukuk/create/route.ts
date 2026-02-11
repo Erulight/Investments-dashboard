@@ -72,8 +72,20 @@ export async function POST(req: NextRequest) {
         where: { key: 'CASH_BALANCE' },
       })
       const currentCashRaw = cashSetting ? Number(cashSetting.value) : 0
-      const currentCash = Number.isFinite(currentCashRaw) ? currentCashRaw : 0
-      const nextCash = currentCash - data.principalAmount
+      let currentCash = Number.isFinite(currentCashRaw) ? currentCashRaw : 0
+      let nextCash = currentCash - data.principalAmount
+
+      if (nextCash < 0) {
+        const bucketAgg = await tx.cashBucket.aggregate({
+          _sum: { balance: true },
+        })
+        const bucketSumRaw = bucketAgg?._sum?.balance
+        const bucketSum = Number.isFinite(bucketSumRaw as any) ? Number(bucketSumRaw) : 0
+        if (bucketSum > currentCash + 0.0001) {
+          currentCash = bucketSum
+          nextCash = currentCash - data.principalAmount
+        }
+      }
 
       if (nextCash < 0) {
         throw new Error('INSUFFICIENT_CASH')

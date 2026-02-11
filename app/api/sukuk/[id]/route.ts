@@ -202,8 +202,21 @@ export async function PUT(
         const cashSetting = await tx.systemSetting.findUnique({
           where: { key: 'CASH_BALANCE' },
         })
-        const currentCash = cashSetting ? Number(cashSetting.value) : 0
-        const nextCash = currentCash - principalDelta
+        const currentCashRaw = cashSetting ? Number(cashSetting.value) : 0
+        let currentCash = Number.isFinite(currentCashRaw) ? currentCashRaw : 0
+        let nextCash = currentCash - principalDelta
+
+        if (principalDelta > 0 && nextCash < 0) {
+          const bucketAgg = await tx.cashBucket.aggregate({
+            _sum: { balance: true },
+          })
+          const bucketSumRaw = bucketAgg?._sum?.balance
+          const bucketSum = Number.isFinite(bucketSumRaw as any) ? Number(bucketSumRaw) : 0
+          if (bucketSum > currentCash + 0.0001) {
+            currentCash = bucketSum
+            nextCash = currentCash - principalDelta
+          }
+        }
 
         if (principalDelta > 0 && nextCash < 0) {
           throw new Error('INSUFFICIENT_CASH')
