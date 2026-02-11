@@ -64,6 +64,8 @@ export function DebtsClient() {
   const [editLoading, setEditLoading] = useState(false)
   const [editError, setEditError] = useState('')
 
+  const [resetLoading, setResetLoading] = useState(false)
+
   const load = useCallback(async () => {
     setLoading(true)
     setError('')
@@ -126,6 +128,35 @@ export function DebtsClient() {
       setCreateError(e instanceof Error ? e.message : 'Failed to create debt')
     } finally {
       setCreateLoading(false)
+    }
+  }
+
+  const deleteDebt = async (debt: Debt) => {
+    const confirmed = confirm('Delete this debt? This can only be done if it has no payments.')
+    if (!confirmed) return
+    try {
+      const res = await fetch(`/api/debts/${debt.id}`, { method: 'DELETE' })
+      const json = await res.json().catch(() => ({}))
+      if (!res.ok) throw new Error(json.error || 'Failed to delete debt')
+      await load()
+    } catch (e) {
+      alert(e instanceof Error ? e.message : 'Failed to delete debt')
+    }
+  }
+
+  const resetDebts = async () => {
+    const confirmed = confirm('Reset debts? This will archive all debts and clear the list.')
+    if (!confirmed) return
+    setResetLoading(true)
+    try {
+      const res = await fetch('/api/debts/reset', { method: 'POST' })
+      const json = await res.json().catch(() => ({}))
+      if (!res.ok) throw new Error(json.error || 'Failed to reset debts')
+      await load()
+    } catch (e) {
+      alert(e instanceof Error ? e.message : 'Failed to reset debts')
+    } finally {
+      setResetLoading(false)
     }
   }
 
@@ -320,7 +351,12 @@ export function DebtsClient() {
 
       <Card>
         <CardHeader>
-          <CardTitle className="text-sm font-bold text-gray-800">Debt List</CardTitle>
+          <div className="flex items-center justify-between gap-3">
+            <CardTitle className="text-sm font-bold text-gray-800">Debt List</CardTitle>
+            <Button size="sm" variant="danger" onClick={resetDebts} disabled={resetLoading || loading || debts.length === 0}>
+              {resetLoading ? 'Resetting...' : 'Reset'}
+            </Button>
+          </div>
         </CardHeader>
         <CardContent className="p-0">
           {loading ? (
@@ -358,6 +394,9 @@ export function DebtsClient() {
                             </Button>
                             <Button size="sm" variant="ghost" onClick={() => openEdit(debt)}>
                               Edit
+                            </Button>
+                            <Button size="sm" variant="danger" onClick={() => deleteDebt(debt)} disabled={debt.payments.length > 0}>
+                              Delete
                             </Button>
                             <Button size="sm" variant="danger" onClick={() => archiveDebt(debt)}>
                               Archive
