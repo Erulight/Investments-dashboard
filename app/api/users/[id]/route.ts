@@ -38,7 +38,7 @@ export async function PATCH(
 
     const existingUser = await prisma.user.findUnique({
       where: { id },
-      select: { id: true, email: true },
+      select: { id: true, email: true, name: true, personId: true },
     })
 
     if (!existingUser) {
@@ -81,19 +81,35 @@ export async function PATCH(
       updateData.password = await hashPassword(validatedData.password)
     }
 
-    const user = await prisma.user.update({
-      where: { id },
-      data: updateData,
-      select: {
-        id: true,
-        email: true,
-        name: true,
-        role: true,
-        permissions: true,
-        canEditAsPartner: true,
-        createdAt: true,
-        updatedAt: true,
-      },
+    const user = await prisma.$transaction(async (tx) => {
+      const nextRole = typeof validatedData.role !== 'undefined' ? validatedData.role : undefined
+
+      if (nextRole === 'PARTNER' && !existingUser.personId) {
+        const created = await tx.person.create({
+          data: {
+            name: updateData.name || existingUser.name || 'Partner',
+            email: updateData.email || existingUser.email,
+          },
+          select: { id: true },
+        })
+
+        ;(updateData as any).personId = created.id
+      }
+
+      return tx.user.update({
+        where: { id },
+        data: updateData as any,
+        select: {
+          id: true,
+          email: true,
+          name: true,
+          role: true,
+          permissions: true,
+          canEditAsPartner: true,
+          createdAt: true,
+          updatedAt: true,
+        },
+      })
     })
 
     return NextResponse.json({

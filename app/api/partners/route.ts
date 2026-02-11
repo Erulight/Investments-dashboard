@@ -6,34 +6,53 @@ export async function GET(req: NextRequest) {
   try {
     const user = await requireAuth(['OWNER', 'PARTNER'])
 
-    const people = await prisma.person.findMany({
-      where: {
-        user: {
+    const partners = await prisma.$transaction(async (tx) => {
+      const eligible = await tx.user.findMany({
+        where: {
           OR: [{ role: 'PARTNER' }, { canEditAsPartner: true }],
         },
-      },
-      select: {
-        id: true,
-        name: true,
-        email: true,
-        user: {
-          select: {
-            name: true,
-            email: true,
-          },
+        select: {
+          id: true,
+          email: true,
+          name: true,
+          role: true,
+          canEditAsPartner: true,
+          personId: true,
+          person: { select: { id: true, name: true, email: true } },
         },
-      },
-      orderBy: { createdAt: 'asc' },
+        orderBy: { createdAt: 'asc' },
+      })
+
+      const ensured = [] as Array<{ id: string; name: string }>
+      for (const u of eligible) {
+        const personId = u.personId || u.person?.id
+
+        if (!personId) {
+          const created = await tx.person.create({
+            data: { name: u.name || 'Partner', email: u.email },
+            select: { id: true, name: true, email: true },
+          })
+
+          await tx.user.update({
+            where: { id: u.id },
+            data: { personId: created.id },
+            select: { id: true },
+          })
+
+          if (!user.personId || created.id !== user.personId) {
+            ensured.push({ id: created.id, name: created.name || u.name || u.email })
+          }
+          continue
+        }
+
+        if (user.personId && personId === user.personId) continue
+        ensured.push({ id: personId, name: u.person?.name || u.name || u.email })
+      }
+
+      return ensured
     })
 
-    return NextResponse.json({
-      partners: people
-        .filter((p) => (user.personId ? p.id !== user.personId : true))
-        .map((p) => ({
-          id: p.id,
-          name: p.name || p.user?.name || p.user?.email || p.email || p.id,
-        })),
-    })
+    return NextResponse.json({ partners })
   } catch (error) {
     console.error('Partners fetch error:', error)
 

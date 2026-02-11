@@ -87,25 +87,39 @@ export async function POST(req: NextRequest) {
     // Hash password
     const hashedPassword = await hashPassword(validatedData.password)
     
-    // Create user
-    const user = await prisma.user.create({
-      data: {
-        email: validatedData.email,
-        password: hashedPassword,
-        name: validatedData.name,
-        role: validatedData.role,
-        permissions: validatedData.permissions 
-          ? JSON.stringify(validatedData.permissions) 
-          : null,
-      },
-      select: {
-        id: true,
-        email: true,
-        name: true,
-        role: true,
-        permissions: true,
-        createdAt: true,
-      },
+    const user = await prisma.$transaction(async (tx) => {
+      const personId = validatedData.role === 'PARTNER'
+        ? (
+            await tx.person.create({
+              data: {
+                name: validatedData.name,
+                email: validatedData.email,
+              },
+              select: { id: true },
+            })
+          ).id
+        : null
+
+      return tx.user.create({
+        data: {
+          email: validatedData.email,
+          password: hashedPassword,
+          name: validatedData.name,
+          role: validatedData.role,
+          personId: personId || undefined,
+          permissions: validatedData.permissions
+            ? JSON.stringify(validatedData.permissions)
+            : null,
+        },
+        select: {
+          id: true,
+          email: true,
+          name: true,
+          role: true,
+          permissions: true,
+          createdAt: true,
+        },
+      })
     })
     
     return NextResponse.json({ 
