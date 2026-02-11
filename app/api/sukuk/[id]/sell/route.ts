@@ -58,7 +58,28 @@ export async function POST(
       investment.dealParticipants.find((p: any) => (p.person?.name ? p.person.name === user.name : false))
 
     if (!seller) {
-      return NextResponse.json({ error: 'Seller does not own this Sukuk' }, { status: 400 })
+      return NextResponse.json(
+        {
+          error: 'Seller does not own this Sukuk',
+          debug: {
+            user: {
+              id: user.id,
+              role: user.role,
+              personId: user.personId,
+              email: (user as any).email,
+              name: (user as any).name,
+            },
+            participants: investment.dealParticipants.map((p: any) => ({
+              id: p.id,
+              personId: p.personId,
+              personEmail: p.person?.email || null,
+              personName: p.person?.name || null,
+              investedAmount: p.investedAmount,
+            })),
+          },
+        },
+        { status: 400 }
+      )
     }
 
     const sellerPersonId = seller.personId
