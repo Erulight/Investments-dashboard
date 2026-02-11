@@ -123,6 +123,7 @@ export async function POST(
     const ratio = seller.investedAmount > 0 ? amount / seller.investedAmount : 0
     const currentValueTransfer = seller.currentValue * ratio
     const profitTransfer = 0
+    const accruedProfitAtSale = Math.max(0, currentValueTransfer - amount)
     const commissionAmount = commissionType === 'PERCENT'
       ? Math.max(0, (salePrice * commissionValueRaw) / 100)
       : Math.max(0, commissionValueRaw)
@@ -206,8 +207,29 @@ export async function POST(
               principalTransferred: amount,
               salePrice,
               commissionAmount,
+              accruedProfitAtSale,
             }),
           },
+          ...(accruedProfitAtSale > 0
+            ? [
+                {
+                  accountId: cashAccount.id,
+                  investmentId: investment.id,
+                  personId: sellerPersonId,
+                  type: 'SELL_PROFIT_ACCRUED',
+                  amount: Math.abs(accruedProfitAtSale),
+                  date,
+                  description: notes || 'Accrued profit realized at sale',
+                  metadata: JSON.stringify({
+                    buyerPersonId,
+                    principalTransferred: amount,
+                    salePrice,
+                    commissionAmount,
+                    accruedProfitAtSale,
+                  }),
+                },
+              ]
+            : []),
           ...(commissionAmount > 0
             ? [
                 {
@@ -226,6 +248,7 @@ export async function POST(
                     commissionType,
                     commissionValue: commissionValueRaw,
                     commissionAmount,
+                    accruedProfitAtSale,
                   }),
                 },
               ]
@@ -243,6 +266,7 @@ export async function POST(
               principalTransferred: amount,
               salePrice,
               commissionAmount,
+              accruedProfitAtSale,
             }),
           },
         ],
@@ -252,7 +276,7 @@ export async function POST(
         where: { key: 'CASH_BALANCE' },
       })
       const currentCash = cashSetting ? Number(cashSetting.value) : 0
-      const nextCash = currentCash + salePrice + commissionAmount
+      const nextCash = currentCash + salePrice + commissionAmount + accruedProfitAtSale
 
       if (cashSetting) {
         await tx.systemSetting.update({
@@ -271,7 +295,7 @@ export async function POST(
 
       await creditBucketsForReceipt(tx, {
         investmentId: investment.id,
-        amount: salePrice,
+        amount: salePrice + accruedProfitAtSale,
         principalReduction: amount,
         date,
         type: 'SELL_RECEIPT',
