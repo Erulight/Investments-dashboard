@@ -35,13 +35,45 @@ export async function POST(
       return NextResponse.json({ error: 'Commission must be 0 or more' }, { status: 400 })
     }
 
-    const investment = await prisma.investment.findUnique({
+    let investment = await prisma.investment.findUnique({
       where: { id },
       include: { dealParticipants: { include: { person: true } }, account: true },
     })
 
     if (!investment) {
       return NextResponse.json({ error: 'Sukuk not found' }, { status: 404 })
+    }
+
+    if (investment.dealParticipants.length === 0) {
+      if (user.role !== 'OWNER') {
+        return NextResponse.json({ error: 'Seller does not own this Sukuk' }, { status: 400 })
+      }
+
+      if (!user.personId) {
+        return NextResponse.json({ error: 'Seller is missing a person profile' }, { status: 400 })
+      }
+
+      await prisma.dealParticipant.create({
+        data: {
+          investmentId: investment.id,
+          personId: user.personId,
+          investedAmount: investment.principalAmount,
+          currentValue: investment.currentValue,
+          receivable: investment.receivableAmount || 0,
+          profit: investment.unrealizedProfit || 0,
+          acquiredAt: investment.startDate,
+          sharePercentage: 100,
+        },
+      })
+
+      investment = await prisma.investment.findUnique({
+        where: { id },
+        include: { dealParticipants: { include: { person: true } }, account: true },
+      })
+
+      if (!investment) {
+        return NextResponse.json({ error: 'Sukuk not found' }, { status: 404 })
+      }
     }
 
     if (!user.personId) {
