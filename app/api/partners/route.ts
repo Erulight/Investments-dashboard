@@ -6,19 +6,20 @@ export async function GET(req: NextRequest) {
   try {
     const user = await requireAuth(['OWNER', 'PARTNER'])
 
-    const partners = await prisma.user.findMany({
+    const people = await prisma.person.findMany({
       where: {
-        role: 'PARTNER',
-        personId: { not: null },
+        user: {
+          OR: [{ role: 'PARTNER' }, { canEditAsPartner: true }],
+        },
       },
       select: {
         id: true,
-        email: true,
         name: true,
-        person: {
+        email: true,
+        user: {
           select: {
-            id: true,
             name: true,
+            email: true,
           },
         },
       },
@@ -26,12 +27,11 @@ export async function GET(req: NextRequest) {
     })
 
     return NextResponse.json({
-      partners: partners
-        .filter((partner) => partner.person?.id)
-        .filter((partner) => (user.personId ? partner.person!.id !== user.personId : true))
-        .map((partner) => ({
-          id: partner.person!.id,
-          name: partner.person?.name || partner.name || partner.email,
+      partners: people
+        .filter((p) => (user.personId ? p.id !== user.personId : true))
+        .map((p) => ({
+          id: p.id,
+          name: p.name || p.user?.name || p.user?.email || p.email || p.id,
         })),
     })
   } catch (error) {
