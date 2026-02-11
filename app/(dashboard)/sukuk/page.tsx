@@ -34,6 +34,7 @@ export default async function InvestmentsPage() {
                 'WITHDRAW_PROFIT',
                 'WITHDRAW_PRINCIPAL',
                 'SELL_TO_PARTNER',
+                'SELL_PROFIT_ACCRUED',
                 'BUY_FROM_PARTNER',
                 'PARTNER_COMMISSION',
               ],
@@ -66,6 +67,7 @@ export default async function InvestmentsPage() {
                     'WITHDRAW_PROFIT',
                     'WITHDRAW_PRINCIPAL',
                     'SELL_TO_PARTNER',
+                    'SELL_PROFIT_ACCRUED',
                     'BUY_FROM_PARTNER',
                     'PARTNER_COMMISSION',
                   ],
@@ -119,21 +121,49 @@ export default async function InvestmentsPage() {
     const transactions = Array.isArray(inv.transactions) ? inv.transactions : []
     const profitWithdrawals = transactions.filter((tx: any) => tx.type === 'WITHDRAW_PROFIT')
 
+    const realizedFromSales = transactions
+      .filter((tx: any) => tx.type === 'SELL_PROFIT_ACCRUED' || tx.type === 'PARTNER_COMMISSION')
+      .reduce((sum: number, tx: any) => {
+        if (user.personId && tx.personId !== user.personId) return sum
+        const amount = Number(tx.amount)
+        return sum + (Number.isFinite(amount) ? amount : 0)
+      }, 0)
+
     if (user.personId) {
-      return profitWithdrawals.reduce((sum: number, tx: any) => {
+      const withdrawn = profitWithdrawals.reduce((sum: number, tx: any) => {
         if (tx.personId !== user.personId) return sum
         const amount = Number(tx.amount)
         return sum + (Number.isFinite(amount) ? amount : 0)
       }, 0)
+
+      return withdrawn + realizedFromSales
     }
 
     const totalReceived = Number(inv.totalReceived)
     return Number.isFinite(totalReceived)
-      ? totalReceived
+      ? totalReceived + realizedFromSales
       : profitWithdrawals.reduce((sum: number, tx: any) => {
           const amount = Number(tx.amount)
           return sum + (Number.isFinite(amount) ? amount : 0)
-        }, 0)
+        }, 0) + realizedFromSales
+  }
+
+  const getOwnerRealizedProfitFromSales = (inv: any) => {
+    if (user.role !== 'OWNER' || !user.personId) return 0
+    const transactions = Array.isArray(inv.transactions) ? inv.transactions : []
+    const profit = transactions
+      .filter((tx: any) => tx.type === 'SELL_PROFIT_ACCRUED' && tx.personId === user.personId)
+      .reduce((sum: number, tx: any) => {
+        const amount = Number(tx.amount)
+        return sum + (Number.isFinite(amount) ? amount : 0)
+      }, 0)
+    const commission = transactions
+      .filter((tx: any) => tx.type === 'PARTNER_COMMISSION' && tx.personId === user.personId)
+      .reduce((sum: number, tx: any) => {
+        const amount = Number(tx.amount)
+        return sum + (Number.isFinite(amount) ? amount : 0)
+      }, 0)
+    return Math.max(0, profit + commission)
   }
 
   const getNetProfit = (inv: any) => {
@@ -198,9 +228,16 @@ export default async function InvestmentsPage() {
     return sum + (Number.isFinite(principal) ? principal : 0)
   }, 0)
 
-  const totalNetProfit = displayedInvestments.reduce((sum, inv) => {
-    return sum + getNetProfit(inv)
-  }, 0)
+  const totalNetProfit = (() => {
+    // Owner: include realized profit + commission from sold deals even after ownership is removed
+    if (user.role === 'OWNER') {
+      const activeProfit = displayedInvestments.reduce((sum, inv) => sum + getNetProfit(inv), 0)
+      const soldProfit = investments.reduce((sum, inv) => sum + getOwnerRealizedProfitFromSales(inv), 0)
+      return activeProfit + soldProfit
+    }
+
+    return displayedInvestments.reduce((sum, inv) => sum + getNetProfit(inv), 0)
+  })()
 
   const totalWithdrawn = displayedInvestments.reduce((sum, inv) => {
     const received = getViewerReceived(inv)
