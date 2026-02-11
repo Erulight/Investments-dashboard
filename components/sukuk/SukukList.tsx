@@ -365,7 +365,7 @@ export function SukukList({ initialSukuk, userRole, ownerPersonId, viewerPersonI
     const aprAfterFees = totalInvestment > 0 ? (netProfit / totalInvestment) * 100 : 0
     const receivable = Math.max(0, netProfit - totalReceived)
     const receiptDate = getLatestReceiptDate(inv)
-    const isFullyReceived = netProfit > 0 && totalReceived >= netProfit - 0.01
+    const isFullyReceived = receivable <= 0.01
     const referenceDate = isFullyReceived
       ? receiptDate ?? toDate(inv.maturityDate) ?? asOfDate
       : asOfDate

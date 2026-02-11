@@ -29,7 +29,15 @@ export default async function InvestmentsPage() {
         },
         transactions: {
           where: {
-            type: { in: ['WITHDRAW_PROFIT', 'WITHDRAW_PRINCIPAL'] },
+            type: {
+              in: [
+                'WITHDRAW_PROFIT',
+                'WITHDRAW_PRINCIPAL',
+                'SELL_TO_PARTNER',
+                'BUY_FROM_PARTNER',
+                'PARTNER_COMMISSION',
+              ],
+            },
           },
           orderBy: { date: 'asc' },
         },
@@ -53,7 +61,15 @@ export default async function InvestmentsPage() {
             account: true,
             transactions: {
               where: {
-                type: { in: ['WITHDRAW_PROFIT', 'WITHDRAW_PRINCIPAL'] },
+                type: {
+                  in: [
+                    'WITHDRAW_PROFIT',
+                    'WITHDRAW_PRINCIPAL',
+                    'SELL_TO_PARTNER',
+                    'BUY_FROM_PARTNER',
+                    'PARTNER_COMMISSION',
+                  ],
+                },
               },
               orderBy: { date: 'asc' },
             },
@@ -99,28 +115,61 @@ export default async function InvestmentsPage() {
     return Math.max(0, months)
   }
 
+  const getViewerReceived = (inv: any) => {
+    const transactions = Array.isArray(inv.transactions) ? inv.transactions : []
+    const profitWithdrawals = transactions.filter((tx: any) => tx.type === 'WITHDRAW_PROFIT')
+
+    if (user.personId) {
+      return profitWithdrawals.reduce((sum: number, tx: any) => {
+        if (tx.personId !== user.personId) return sum
+        const amount = Number(tx.amount)
+        return sum + (Number.isFinite(amount) ? amount : 0)
+      }, 0)
+    }
+
+    const totalReceived = Number(inv.totalReceived)
+    return Number.isFinite(totalReceived)
+      ? totalReceived
+      : profitWithdrawals.reduce((sum: number, tx: any) => {
+          const amount = Number(tx.amount)
+          return sum + (Number.isFinite(amount) ? amount : 0)
+        }, 0)
+  }
+
   const getNetProfit = (inv: any) => {
     const principal = inv.myParticipation?.investedAmount ?? inv.principalAmount
     const investment = Number.isFinite(principal) ? principal : 0
     const apr = Number.isFinite(inv.interestRate) ? inv.interestRate : 0
     const fees = Number.isFinite(inv.fees) ? inv.fees : 0
+    const participationRatio = inv.principalAmount > 0 && investment > 0
+      ? Math.min(1, investment / inv.principalAmount)
+      : 0
     const startBasis = inv.myParticipation?.acquiredAt ?? inv.startDate
     const periodMonths = getPeriodMonths(startBasis, inv.maturityDate)
     const periodYears = periodMonths ? periodMonths / 12 : 0
     const grossProfit = investment > 0 && apr > 0 && periodYears > 0
       ? investment * (apr / 100) * periodYears
       : 0
-    const manualReceivable = Number.isFinite(inv.receivableAmount) ? inv.receivableAmount : null
-    if (manualReceivable !== null && manualReceivable > 0) return manualReceivable
+    const manualReceivableFull = Number.isFinite(inv.receivableAmount) ? inv.receivableAmount : null
+    const manualReceivable = manualReceivableFull !== null && manualReceivableFull > 0
+      ? (inv.myParticipation ? manualReceivableFull * participationRatio : manualReceivableFull)
+      : null
+    if (manualReceivable !== null) {
+      const commissionFees = Number.isFinite(inv.myParticipation?.commissionFees)
+        ? Number(inv.myParticipation.commissionFees)
+        : 0
+      return Math.max(0, manualReceivable - commissionFees)
+    }
     const commissionFees = Number.isFinite(inv.myParticipation?.commissionFees)
       ? Number(inv.myParticipation.commissionFees)
       : 0
-    return Math.max(0, grossProfit - fees - commissionFees)
+    const proratedFees = inv.myParticipation ? fees * participationRatio : fees
+    return Math.max(0, grossProfit - proratedFees - commissionFees)
   }
 
   const isActiveDeal = (inv: any) => {
     const netProfit = getNetProfit(inv)
-    const totalReceived = Number.isFinite(inv.totalReceived) ? inv.totalReceived : 0
+    const totalReceived = getViewerReceived(inv)
     const receivable = netProfit - totalReceived
     return receivable > 0.01
   }
@@ -139,7 +188,7 @@ export default async function InvestmentsPage() {
   }, 0)
 
   const totalWithdrawn = displayedInvestments.reduce((sum, inv) => {
-    const received = Number.isFinite(inv.totalReceived) ? inv.totalReceived : 0
+    const received = getViewerReceived(inv)
     return sum + received
   }, 0)
 
@@ -151,8 +200,11 @@ export default async function InvestmentsPage() {
   const activeDealsCount = activeInvestments.length
 
   const totalFeesPaid = displayedInvestments.reduce((sum, inv) => {
+    const principal = inv.myParticipation?.investedAmount ?? inv.principalAmount
+    const investment = Number.isFinite(principal) ? principal : 0
+    const ratio = inv.principalAmount > 0 && investment > 0 ? Math.min(1, investment / inv.principalAmount) : 0
     const fees = Number.isFinite(inv.fees) ? inv.fees : 0
-    return sum + fees
+    return sum + (inv.myParticipation ? fees * ratio : fees)
   }, 0)
 
   const avgDaysToMaturity = (() => {
