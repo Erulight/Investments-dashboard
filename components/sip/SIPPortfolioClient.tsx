@@ -176,7 +176,7 @@ function LineChart({ points }: { points: { at: Date; value: number }[] }) {
 export default function SIPPortfolioClient({ investment, userRole }: SIPPortfolioClientProps) {
   const [inv, setInv] = useState(investment)
 
-  const [activeTab, setActiveTab] = useState<'performance' | 'zakat' | 'logs' | 'stats'>('performance')
+  const [activeTab, setActiveTab] = useState<'performance' | 'zakat' | 'logs'>('performance')
   const [range, setRange] = useState<RangeKey>('month')
 
   const [showCreateForm, setShowCreateForm] = useState(false)
@@ -517,83 +517,6 @@ export default function SIPPortfolioClient({ investment, userRole }: SIPPortfoli
     return { rows, total, costTotal }
   }, [meta.holdings])
 
-  const openHoldingsEditor = () => {
-    const holdings = Array.isArray(meta.holdings) ? meta.holdings : []
-    const next = holdings
-      .map((h: any) => ({
-        id: String(h?.id || crypto.randomUUID()),
-        name: String(h?.name || ''),
-        assetType: String(h?.assetType || ''),
-        cost: String(safeNumber(h?.cost, 0)),
-        currentValue: String(safeNumber(h?.currentValue, 0)),
-      }))
-      .filter((h: any) => h.assetType || h.name || h.currentValue || h.cost)
-
-    setHoldingsDraft(next)
-    setShowHoldingsForm(true)
-  }
-
-  const addHoldingDraft = () => {
-    setHoldingsDraft((prev: HoldingDraftRow[]) => [
-      ...prev,
-      { id: crypto.randomUUID(), name: '', assetType: 'us_stocks', cost: '0', currentValue: '0' },
-    ])
-  }
-
-  const removeHoldingDraft = (id: string) => {
-    setHoldingsDraft((prev: HoldingDraftRow[]) => prev.filter((h: HoldingDraftRow) => h.id !== id))
-  }
-
-  const saveHoldings = async () => {
-    if (!inv) return
-    setIsSavingHoldings(true)
-    try {
-      const payload = holdingsDraft
-        .map((h: HoldingDraftRow) => ({
-          id: h.id,
-          name: h.name,
-          assetType: h.assetType,
-          cost: parseFloat(h.cost),
-          currentValue: parseFloat(h.currentValue),
-        }))
-        .filter((h: { assetType: string }) => typeof h.assetType === 'string' && h.assetType.trim().length > 0)
-        .map((h: { id: string; name: string; assetType: string; currentValue: number; cost: number }) => ({
-          ...h,
-          cost: Number.isFinite(h.cost) ? Math.max(0, h.cost) : 0,
-          currentValue: Number.isFinite(h.currentValue) ? Math.max(0, h.currentValue) : 0,
-        }))
-
-      const draftTotal = payload.reduce((acc: number, h: { currentValue: number }) => acc + (h.currentValue || 0), 0)
-      const currentPortfolioValue = Number(meta.currentValue ?? inv.currentValue ?? 0)
-
-      if (Math.abs(draftTotal - currentPortfolioValue) > 0.01) {
-        throw new Error(
-          `Holdings total must match portfolio current value. Holdings total is ${formatCurrency(draftTotal)} but portfolio current value is ${formatCurrency(currentPortfolioValue)}.`
-        )
-      }
-
-      const response = await fetch('/api/sip/update-holdings', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ sipId: inv.id, holdings: payload }),
-      })
-
-      if (!response.ok) {
-        const error = await response.json().catch(() => ({}))
-        throw new Error(error.error || 'Failed to save holdings')
-      }
-
-      const updated = await response.json()
-      setInv(updated)
-      setShowHoldingsForm(false)
-    } catch (error) {
-      console.error('Save holdings error:', error)
-      alert(error instanceof Error ? error.message : 'Failed to save holdings')
-    } finally {
-      setIsSavingHoldings(false)
-    }
-  }
-
   const latestUpdateLabel = useMemo(() => {
     const history: HistoryItem[] = Array.isArray(meta.history) ? meta.history : []
     const last = history
@@ -746,7 +669,6 @@ export default function SIPPortfolioClient({ investment, userRole }: SIPPortfoli
       setIsLoading(false)
     }
   }
-
 
   const handleCreate = async (data: CreateSipInput) => {
     setIsLoading(true)
@@ -920,7 +842,6 @@ export default function SIPPortfolioClient({ investment, userRole }: SIPPortfoli
             { key: 'performance', label: 'Performance' },
             { key: 'zakat', label: 'Zakat & Purif.' },
             { key: 'logs', label: 'Logs' },
-            { key: 'stats', label: 'General Stats' },
           ] as const).map((tab) => (
             <button
               key={tab.key}
@@ -1184,6 +1105,7 @@ export default function SIPPortfolioClient({ investment, userRole }: SIPPortfoli
             </div>
           </div>
         )}
+      </div>
 
       {showZakatPayForm && zakatPayTarget && (
         <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
@@ -1244,20 +1166,6 @@ export default function SIPPortfolioClient({ investment, userRole }: SIPPortfoli
           </div>
         </div>
       )}
-
-        {activeTab === 'stats' && (
-          <div className="mt-6 grid grid-cols-1 md:grid-cols-2 gap-4">
-            <div className="rounded-xl border border-gray-200 p-4">
-              <div className="text-xs text-gray-500">Portfolio Name</div>
-              <div className="mt-1 font-bold text-gray-900">{inv.name}</div>
-            </div>
-            <div className="rounded-xl border border-gray-200 p-4">
-              <div className="text-xs text-gray-500">Platform</div>
-              <div className="mt-1 font-bold text-gray-900">{inv.account?.name}</div>
-            </div>
-          </div>
-        )}
-      </div>
 
       {showEditForm && (
         <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
@@ -1338,7 +1246,6 @@ export default function SIPPortfolioClient({ investment, userRole }: SIPPortfoli
           </div>
         </div>
       )}
-
 
       {showValueForm && (
         <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
