@@ -37,7 +37,7 @@ export async function POST(
 
     const investment = await prisma.investment.findUnique({
       where: { id },
-      include: { dealParticipants: true, account: true },
+      include: { dealParticipants: { include: { person: true } }, account: true },
     })
 
     if (!investment) {
@@ -52,11 +52,16 @@ export async function POST(
       return NextResponse.json({ error: 'Buyer must be different from seller' }, { status: 400 })
     }
 
-    const seller = investment.dealParticipants.find((p: any) => p.personId === user.personId)
+    const seller =
+      investment.dealParticipants.find((p: any) => p.personId === user.personId) ||
+      investment.dealParticipants.find((p: any) => (p.person?.email ? p.person.email === user.email : false)) ||
+      investment.dealParticipants.find((p: any) => (p.person?.name ? p.person.name === user.name : false))
 
     if (!seller) {
       return NextResponse.json({ error: 'Seller does not own this Sukuk' }, { status: 400 })
     }
+
+    const sellerPersonId = seller.personId
 
     if (amount > seller.investedAmount) {
       return NextResponse.json({ error: 'Amount exceeds your principal' }, { status: 400 })
@@ -141,7 +146,7 @@ export async function POST(
           {
             accountId: cashAccount.id,
             investmentId: investment.id,
-            personId: user.personId,
+            personId: sellerPersonId,
             type: 'SELL_TO_PARTNER',
             amount: Math.abs(salePrice),
             date,
@@ -158,7 +163,7 @@ export async function POST(
                 {
                   accountId: cashAccount.id,
                   investmentId: null,
-                  personId: user.personId,
+                  personId: sellerPersonId,
                   type: 'PARTNER_COMMISSION',
                   amount: Math.abs(commissionAmount),
                   date,
@@ -184,7 +189,7 @@ export async function POST(
             date,
             description: notes || null,
             metadata: JSON.stringify({
-              sellerPersonId: user.personId,
+              sellerPersonId,
               principalTransferred: amount,
               salePrice,
               commissionAmount,
