@@ -199,6 +199,45 @@ export function SukukList({ initialSukuk, userRole, ownerPersonId, viewerPersonI
     }, null)
   }
 
+  const getLatestPrincipalWithdrawalDate = (inv: any) => {
+    const transactions = Array.isArray(inv.transactions) ? inv.transactions : []
+    const principalWithdrawals = transactions.filter((tx: any) => tx.type === 'WITHDRAW_PRINCIPAL')
+    if (principalWithdrawals.length === 0) return null
+
+    const filtered = viewerPersonId
+      ? principalWithdrawals.filter((tx: any) => tx.personId === viewerPersonId)
+      : principalWithdrawals
+
+    if (filtered.length === 0) return null
+    return filtered.reduce((latest: Date | null, tx: any) => {
+      const txDate = toDate(tx.date)
+      if (!txDate) return latest
+      if (!latest || txDate > latest) return txDate
+      return latest
+    }, null)
+  }
+
+  const getHistoricalPrincipal = (inv: any, participation: any) => {
+    if (participation && Number.isFinite(participation.investedAmount)) {
+      return Number(participation.investedAmount)
+    }
+
+    const current = Number(inv.principalAmount)
+    const currentPrincipal = Number.isFinite(current) ? current : 0
+
+    const transactions = Array.isArray(inv.transactions) ? inv.transactions : []
+    const principalWithdrawals = transactions.filter((tx: any) => tx.type === 'WITHDRAW_PRINCIPAL')
+    const withdrawalSum = (viewerPersonId
+      ? principalWithdrawals.filter((tx: any) => tx.personId === viewerPersonId)
+      : principalWithdrawals
+    ).reduce((sum: number, tx: any) => {
+      const amount = Number(tx.amount)
+      return sum + (Number.isFinite(amount) ? amount : 0)
+    }, 0)
+
+    return Math.max(0, currentPrincipal + withdrawalSum)
+  }
+
   const parseMetadata = (value: unknown) => {
     if (!value) return null
     if (typeof value === 'object') return value as any
@@ -336,7 +375,8 @@ export function SukukList({ initialSukuk, userRole, ownerPersonId, viewerPersonI
       }
     }
 
-    const principal = participation?.investedAmount ?? inv.principalAmount
+    const endBasis = getLatestPrincipalWithdrawalDate(inv) ?? inv.maturityDate
+    const principal = getHistoricalPrincipal(inv, participation)
     const totalInvestment = Number.isFinite(principal) ? principal : 0
     const apr = Number.isFinite(inv.interestRate) ? inv.interestRate : 0
     const fullFees = Number.isFinite(inv.fees) ? inv.fees : 0
@@ -345,7 +385,7 @@ export function SukukList({ initialSukuk, userRole, ownerPersonId, viewerPersonI
       : 0
     const totalMonthsFull = getPeriodMonths(inv.startDate, inv.maturityDate)
     const startBasis = participation?.acquiredAt ?? inv.startDate
-    const periodMonths = getPeriodMonths(startBasis, inv.maturityDate)
+    const periodMonths = getPeriodMonths(startBasis, endBasis)
     const timeRatio = totalMonthsFull && periodMonths !== null && totalMonthsFull > 0
       ? Math.min(1, Math.max(0, periodMonths / totalMonthsFull))
       : 1
@@ -375,12 +415,12 @@ export function SukukList({ initialSukuk, userRole, ownerPersonId, viewerPersonI
     const referenceDate = isFullyReceived
       ? receiptDate ?? toDate(inv.maturityDate) ?? asOfDate
       : asOfDate
-    const daysRemaining = getDaysRemaining(inv.maturityDate, referenceDate)
+    const daysRemaining = isFullyReceived ? 0 : getDaysRemaining(inv.maturityDate, referenceDate)
 
-    const paymentStatus = daysRemaining !== null && daysRemaining <= 0 && !isFullyReceived
-      ? 'delayed'
-      : isFullyReceived && daysRemaining !== null && daysRemaining > 0
-        ? 'early'
+    const paymentStatus = isFullyReceived
+      ? 'completed'
+      : daysRemaining !== null && daysRemaining <= 0
+        ? 'delayed'
         : 'on-time'
 
     const progress = getProgress(netProfit, totalReceived)
