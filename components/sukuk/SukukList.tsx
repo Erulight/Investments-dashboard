@@ -64,9 +64,10 @@ interface SukukListProps {
   initialSukuk: any[]
   userRole: string
   ownerPersonId?: string | null
+  viewerPersonId?: string | null
 }
 
-export function SukukList({ initialSukuk, userRole, ownerPersonId }: SukukListProps) {
+export function SukukList({ initialSukuk, userRole, ownerPersonId, viewerPersonId }: SukukListProps) {
   const router = useRouter()
   const [sukuk, setSukuk] = useState<any[]>(
     Array.isArray(initialSukuk) ? initialSukuk : []
@@ -110,6 +111,7 @@ export function SukukList({ initialSukuk, userRole, ownerPersonId }: SukukListPr
   })
   const [filtersOpen, setFiltersOpen] = useState(false)
   const [filterTab, setFilterTab] = useState<'platforms' | 'terms' | 'statuses' | 'dates'>('platforms')
+  const [ownerView, setOwnerView] = useState<'active' | 'sold'>('active')
   const list = Array.isArray(sukuk) ? sukuk : []
   const isEmpty = list.length === 0
 
@@ -130,6 +132,27 @@ export function SukukList({ initialSukuk, userRole, ownerPersonId }: SukukListPr
     const date = new Date(value)
     if (Number.isNaN(date.getTime())) return null
     return date
+  }
+
+  const getViewerReceived = (inv: any) => {
+    const transactions = Array.isArray(inv.transactions) ? inv.transactions : []
+    const profitWithdrawals = transactions.filter((tx: any) => tx.type === 'WITHDRAW_PROFIT')
+
+    if (viewerPersonId) {
+      return profitWithdrawals.reduce((sum: number, tx: any) => {
+        if (tx.personId !== viewerPersonId) return sum
+        const amount = Number(tx.amount)
+        return sum + (Number.isFinite(amount) ? amount : 0)
+      }, 0)
+    }
+
+    const totalReceived = Number(inv.totalReceived)
+    return Number.isFinite(totalReceived)
+      ? totalReceived
+      : profitWithdrawals.reduce((sum: number, tx: any) => {
+          const amount = Number(tx.amount)
+          return sum + (Number.isFinite(amount) ? amount : 0)
+        }, 0)
   }
 
   const formatDate = (value?: string | Date | null) => {
@@ -176,6 +199,86 @@ export function SukukList({ initialSukuk, userRole, ownerPersonId }: SukukListPr
     }, null)
   }
 
+  const parseMetadata = (value: unknown) => {
+    if (!value) return null
+    if (typeof value === 'object') return value as any
+    if (typeof value !== 'string') return null
+    try {
+      return JSON.parse(value)
+    } catch {
+      return null
+    }
+  }
+
+  const getSoldDealMetrics = (inv: any) => {
+    const currency = inv.account?.currency || ''
+    const transactions = Array.isArray(inv.transactions) ? inv.transactions : []
+
+    const sellTxs = transactions
+      .filter((tx: any) => tx.type === 'SELL_TO_PARTNER' && (!ownerPersonId || tx.personId === ownerPersonId))
+      .map((tx: any) => ({ tx, meta: parseMetadata(tx.metadata) }))
+      .filter((x: any) => x.tx)
+
+    const sellTx = sellTxs
+      .map((x: any) => ({
+        ...x,
+        d: toDate(x.tx.date),
+      }))
+      .filter((x: any) => x.d)
+      .sort((a: any, b: any) => (b.d as Date).getTime() - (a.d as Date).getTime())[0]
+
+    const saleDate = sellTx?.d ? startOfDay(sellTx.d) : null
+    const principalSold = Number(sellTx?.meta?.principalTransferred ?? sellTx?.meta?.amount ?? 0)
+    const salePrice = Number(sellTx?.meta?.salePrice ?? sellTx?.tx?.amount ?? 0)
+
+    const commissionEarned = transactions
+      .filter((tx: any) => tx.type === 'PARTNER_COMMISSION' && (!ownerPersonId || tx.personId === ownerPersonId))
+      .reduce((sum: number, tx: any) => {
+        const meta = parseMetadata(tx.metadata)
+        if (meta?.investmentId && meta.investmentId !== inv.id) return sum
+        const amount = Number(tx.amount)
+        return sum + (Number.isFinite(amount) ? amount : 0)
+      }, 0)
+
+    const apr = Number.isFinite(inv.interestRate) ? inv.interestRate : 0
+    const fullFees = Number.isFinite(inv.fees) ? inv.fees : 0
+    const ratio = inv.principalAmount > 0 && principalSold > 0 ? Math.min(1, principalSold / inv.principalAmount) : 0
+    const totalMonthsFull = getPeriodMonths(inv.startDate, inv.maturityDate)
+    const monthsHeld = saleDate ? getPeriodMonths(inv.startDate, saleDate) : null
+
+    const heldYears = monthsHeld ? monthsHeld / 12 : 0
+    const grossProfitHeld = principalSold > 0 && apr > 0 && heldYears > 0
+      ? principalSold * (apr / 100) * heldYears
+      : 0
+
+    const feesHeld = totalMonthsFull && monthsHeld !== null && totalMonthsFull > 0
+      ? (fullFees * ratio) * Math.min(1, monthsHeld / totalMonthsFull)
+      : fullFees * ratio
+
+    const profitEarnedToSale = Math.max(0, grossProfitHeld - feesHeld)
+    const cashInflow = Math.max(0, salePrice) + Math.max(0, commissionEarned)
+
+    return {
+      totalInvestment: Number.isFinite(principalSold) ? principalSold : 0,
+      apr,
+      fees: feesHeld,
+      netProfit: profitEarnedToSale,
+      commissionEarned,
+      cashInflow,
+      totalReceived: cashInflow,
+      receivable: 0,
+      periodMonths: monthsHeld,
+      daysRemaining: getDaysRemaining(inv.maturityDate, saleDate ?? asOfDate),
+      paymentStatus: 'sold',
+      progress: getProgress(Math.max(0, cashInflow), Math.max(0, cashInflow)),
+      currency,
+      aprAfterFees: principalSold > 0 ? (profitEarnedToSale / principalSold) * 100 : 0,
+      saleDate,
+      salePrice,
+      principalSold,
+    }
+  }
+
   const getDaysRemaining = (end?: string | Date | null, reference?: Date | null) => {
     const endDate = toDate(end)
     if (!endDate) return null
@@ -196,23 +299,68 @@ export function SukukList({ initialSukuk, userRole, ownerPersonId }: SukukListPr
   }
 
   const getMetrics = (inv: any) => {
-    const principal = inv.myParticipation?.investedAmount ?? inv.principalAmount
+    const participantList = Array.isArray(inv.dealParticipants) ? inv.dealParticipants : []
+    const isSoldForOwner = userRole === 'OWNER' && participantList.length > 0 && ownerPersonId
+      ? !participantList.some((p: any) => p.personId === ownerPersonId)
+      : false
+
+    const ownerParticipation =
+      userRole === 'OWNER' && ownerPersonId
+        ? participantList.find((p: any) => p.personId === ownerPersonId)
+        : null
+
+    const participation = userRole === 'OWNER'
+      ? (participantList.length === 0
+          ? {
+              investedAmount: inv.principalAmount,
+              acquiredAt: inv.startDate,
+              commissionFees: 0,
+            }
+          : ownerParticipation)
+      : (inv.myParticipation || null)
+
+    if (isSoldForOwner) {
+      return {
+        totalInvestment: 0,
+        apr: Number.isFinite(inv.interestRate) ? inv.interestRate : 0,
+        fees: 0,
+        netProfit: 0,
+        totalReceived: 0,
+        receivable: 0,
+        periodMonths: getPeriodMonths(inv.startDate, inv.maturityDate),
+        daysRemaining: getDaysRemaining(inv.maturityDate, asOfDate),
+        paymentStatus: 'sold',
+        progress: getProgress(0, 0),
+        currency: inv.account?.currency || '',
+        aprAfterFees: 0,
+      }
+    }
+
+    const principal = participation?.investedAmount ?? inv.principalAmount
     const totalInvestment = Number.isFinite(principal) ? principal : 0
     const apr = Number.isFinite(inv.interestRate) ? inv.interestRate : 0
-    const fees = Number.isFinite(inv.fees) ? inv.fees : 0
-    const totalReceived = Number.isFinite(inv.totalReceived) ? inv.totalReceived : 0
-    const startBasis = inv.myParticipation?.acquiredAt ?? inv.startDate
+    const fullFees = Number.isFinite(inv.fees) ? inv.fees : 0
+    const participationRatio = inv.principalAmount > 0 && totalInvestment > 0
+      ? Math.min(1, totalInvestment / inv.principalAmount)
+      : 0
+    const fees = participation ? fullFees * participationRatio : fullFees
+
+    const totalReceived = getViewerReceived(inv)
+    const startBasis = participation?.acquiredAt ?? inv.startDate
     const periodMonths = getPeriodMonths(startBasis, inv.maturityDate)
     const periodYears = periodMonths ? periodMonths / 12 : 0
     const grossProfit = totalInvestment > 0 && apr > 0 && periodYears > 0
       ? totalInvestment * (apr / 100) * periodYears
       : 0
-    const manualReceivable = Number.isFinite(inv.receivableAmount) ? inv.receivableAmount : null
-    const commissionFees = Number.isFinite(inv.myParticipation?.commissionFees)
-      ? Number(inv.myParticipation.commissionFees)
+    const manualReceivableFull = Number.isFinite(inv.receivableAmount) ? inv.receivableAmount : null
+    const manualReceivable = manualReceivableFull !== null && manualReceivableFull > 0
+      ? (participation ? manualReceivableFull * participationRatio : manualReceivableFull)
+      : null
+    const commissionFees = Number.isFinite(participation?.commissionFees)
+      ? Number(participation.commissionFees)
       : 0
-    const netProfit = manualReceivable !== null && manualReceivable > 0
-      ? manualReceivable
+    const netProfit = manualReceivable !== null
+      ? Math.max(0, manualReceivable - commissionFees)
       : Math.max(0, grossProfit - fees - commissionFees)
     const aprAfterFees = totalInvestment > 0 ? (netProfit / totalInvestment) * 100 : 0
     const receivable = Math.max(0, netProfit - totalReceived)
@@ -222,29 +370,30 @@ export function SukukList({ initialSukuk, userRole, ownerPersonId }: SukukListPr
       ? receiptDate ?? toDate(inv.maturityDate) ?? asOfDate
       : asOfDate
     const daysRemaining = getDaysRemaining(inv.maturityDate, referenceDate)
+
+    const paymentStatus = daysRemaining !== null && daysRemaining <= 0 && !isFullyReceived
+      ? 'delayed'
+      : isFullyReceived && daysRemaining !== null && daysRemaining > 0
+        ? 'early'
+        : 'on-time'
+
     const progress = getProgress(netProfit, totalReceived)
     const currency = inv.account?.currency || ''
 
     return {
       totalInvestment,
-      apr: manualReceivable !== null && manualReceivable > 0 && periodYears
-        ? ((manualReceivable + fees) / totalInvestment / periodYears) * 100
-        : apr,
-      fees,
-      totalReceived,
+      apr,
       periodMonths,
-      netProfit,
-      aprAfterFees,
-      receivable,
+      maturityDate: inv.maturityDate,
       daysRemaining,
-      paymentStatus:
-        daysRemaining !== null && daysRemaining < 0
-          ? 'delayed'
-          : isFullyReceived && daysRemaining !== null && daysRemaining > 0
-            ? 'early'
-            : 'on-time',
-      progress,
+      fees,
+      netProfit,
+      totalReceived,
+      receivable,
       currency,
+      progress,
+      paymentStatus,
+      aprAfterFees,
       isFullyReceived,
     }
   }
@@ -304,6 +453,14 @@ export function SukukList({ initialSukuk, userRole, ownerPersonId }: SukukListPr
   )
 
   const filteredSukuk = list.filter((inv) => {
+    if (userRole === 'OWNER' && ownerPersonId) {
+      const participantList = Array.isArray(inv.dealParticipants) ? inv.dealParticipants : []
+      const ownerHas = participantList.length === 0
+        ? true
+        : participantList.some((p: any) => p.personId === ownerPersonId)
+      if (ownerView === 'active' && !ownerHas) return false
+      if (ownerView === 'sold' && ownerHas) return false
+    }
     const metrics = getMetrics(inv)
     const platform = inv.account?.name || ''
     const maturityDate = toDate(inv.maturityDate)
@@ -357,8 +514,19 @@ export function SukukList({ initialSukuk, userRole, ownerPersonId }: SukukListPr
   })
 
   const rows = useMemo(() => {
-    return filteredSukuk.map((inv: any) => ({ inv, metrics: getMetrics(inv) }))
-  }, [filteredSukuk])
+    return filteredSukuk.map((inv: any) => {
+      const participantList = Array.isArray(inv.dealParticipants) ? inv.dealParticipants : []
+      const isSoldForOwner = userRole === 'OWNER' && participantList.length > 0 && ownerPersonId
+        ? !participantList.some((p: any) => p.personId === ownerPersonId)
+        : false
+
+      const metrics = userRole === 'OWNER' && ownerView === 'sold' && isSoldForOwner
+        ? getSoldDealMetrics(inv)
+        : getMetrics(inv)
+
+      return { inv, metrics }
+    })
+  }, [filteredSukuk, ownerView, ownerPersonId, userRole])
 
   const sortedRows = useMemo(() => {
     const dirMul = sort.dir === 'asc' ? 1 : -1
@@ -703,6 +871,32 @@ export function SukukList({ initialSukuk, userRole, ownerPersonId }: SukukListPr
         </div>
         <div className="flex items-center gap-3">
           <span className="text-xs text-gray-500">As of {asOfLabel}</span>
+          {userRole === 'OWNER' && ownerPersonId && (
+            <div className="flex items-center gap-2">
+              <button
+                type="button"
+                onClick={() => setOwnerView('active')}
+                className={`px-3 py-1.5 rounded-full text-xs font-semibold border transition-colors ${
+                  ownerView === 'active'
+                    ? 'bg-blue-600 text-white border-blue-600'
+                    : 'bg-white text-gray-700 border-gray-200 hover:border-gray-300'
+                }`}
+              >
+                Active
+              </button>
+              <button
+                type="button"
+                onClick={() => setOwnerView('sold')}
+                className={`px-3 py-1.5 rounded-full text-xs font-semibold border transition-colors ${
+                  ownerView === 'sold'
+                    ? 'bg-blue-600 text-white border-blue-600'
+                    : 'bg-white text-gray-700 border-gray-200 hover:border-gray-300'
+                }`}
+              >
+                Sold
+              </button>
+            </div>
+          )}
           {userRole === 'OWNER' && (
             <Button
               onClick={openCreateModal}
@@ -1199,12 +1393,13 @@ export function SukukList({ initialSukuk, userRole, ownerPersonId }: SukukListPr
         {detailTarget && (() => {
           const metrics = getMetrics(detailTarget)
           return (
-            <div className="space-y-4 text-sm">
+            <div className="space-y-4">
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                 <div>
                   <p className="text-gray-500">Company</p>
                   <p className="font-semibold text-gray-900">{detailTarget.name}</p>
                 </div>
+                {/* ... */}
                 <div>
                   <p className="text-gray-500">Platform</p>
                   <p className="font-semibold text-gray-900">{detailTarget.account?.name || '—'}</p>

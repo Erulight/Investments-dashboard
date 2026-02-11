@@ -255,7 +255,12 @@ export default async function InvestmentsPage() {
       {/* Investments List */}
       <Card>
         <CardContent>
-          <SukukList initialSukuk={investments} userRole={user.role} ownerPersonId={user.personId || null} />
+          <SukukList
+            initialSukuk={investments}
+            userRole={user.role}
+            ownerPersonId={user.role === 'OWNER' ? (user.personId || null) : null}
+            viewerPersonId={user.personId || null}
+          />
         </CardContent>
       </Card>
 
