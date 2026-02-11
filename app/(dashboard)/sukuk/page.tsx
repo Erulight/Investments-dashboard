@@ -153,7 +153,9 @@ export default async function InvestmentsPage() {
       : 0
     const manualReceivableFull = Number.isFinite(inv.receivableAmount) ? inv.receivableAmount : null
     const manualReceivable = manualReceivableFull !== null && manualReceivableFull > 0
-      ? (inv.myParticipation ? manualReceivableFull * participationRatio : manualReceivableFull)
+      ? (inv.myParticipation
+          ? (manualReceivableFull * participationRatio) * (totalMonthsFull > 0 ? Math.min(1, Math.max(0, periodMonths / totalMonthsFull)) : 1)
+          : manualReceivableFull)
       : null
     if (manualReceivable !== null) {
       const commissionFees = Number.isFinite(inv.myParticipation?.commissionFees)

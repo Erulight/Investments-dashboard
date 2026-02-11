@@ -360,7 +360,7 @@ export function SukukList({ initialSukuk, userRole, ownerPersonId, viewerPersonI
       : 0
     const manualReceivableFull = Number.isFinite(inv.receivableAmount) ? inv.receivableAmount : null
     const manualReceivable = manualReceivableFull !== null && manualReceivableFull > 0
-      ? (participation ? manualReceivableFull * participationRatio : manualReceivableFull)
+      ? (participation ? (manualReceivableFull * participationRatio) * timeRatio : manualReceivableFull)
       : null
     const commissionFees = Number.isFinite(participation?.commissionFees)
       ? Number(participation.commissionFees)
