@@ -325,11 +325,11 @@ export default async function DashboardPage({
       </div>
 
       {/* Top Stats Row */}
-      <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
+      <div className="grid grid-cols-2 gap-3 lg:grid-cols-4 items-start auto-rows-min">
         {user.role === 'OWNER' && (
           <CashBalanceCard initialCash={Number.isFinite(cashBalance) ? cashBalance : 0} />
         )}
-        <Card>
+        <Card className="p-4">
           <CardContent>
             <p className="text-xs font-medium text-gray-500 uppercase tracking-wider">Total Invested</p>
             <div className="text-xl font-bold text-gray-900 mt-1 tabular-nums">
@@ -338,7 +338,7 @@ export default async function DashboardPage({
             <p className="text-[11px] text-gray-400 mt-0.5">Principal</p>
           </CardContent>
         </Card>
-        <Card>
+        <Card className="p-4">
           <CardContent>
             <p className="text-xs font-medium text-gray-500 uppercase tracking-wider">
               {user.role === 'OWNER' ? 'Portfolio Value' : 'Investment Value'}
@@ -351,7 +351,7 @@ export default async function DashboardPage({
             </p>
           </CardContent>
         </Card>
-        <Card>
+        <Card className="p-4">
           <CardContent>
             <p className="text-xs font-medium text-gray-500 uppercase tracking-wider">Yearly Return</p>
             <div className={`text-xl font-bold mt-1 tabular-nums ${yearlyProfitValue >= 0 ? 'text-emerald-600' : 'text-red-600'}`}>
@@ -365,8 +365,8 @@ export default async function DashboardPage({
       </div>
 
       {/* Second Row: Deals + Debt + Net Worth */}
-      <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
-        <Card>
+      <div className="grid grid-cols-2 gap-3 lg:grid-cols-4 items-start auto-rows-min">
+        <Card className="p-4">
           <CardContent>
             <p className="text-xs font-medium text-gray-500 uppercase tracking-wider">Active Deals</p>
             <div className="text-xl font-bold text-gray-900 mt-1">{activeInvestments}</div>
@@ -375,7 +375,7 @@ export default async function DashboardPage({
         </Card>
 
         {user.role === 'OWNER' && roscaDebt > 0 && (
-          <Card>
+          <Card className="p-4">
             <CardContent>
               <p className="text-xs font-medium text-red-500 uppercase tracking-wider">ROSCA Remaining</p>
               <div className="text-xl font-bold text-red-600 mt-1 tabular-nums">
@@ -387,7 +387,7 @@ export default async function DashboardPage({
         )}
 
         {user.role === 'OWNER' && (
-          <Card>
+          <Card className="p-4">
             <CardContent>
               <p className="text-xs font-medium text-gray-500 uppercase tracking-wider">Net Worth</p>
               <div className={`text-xl font-bold mt-1 tabular-nums ${netWorth >= 0 ? 'text-gray-900' : 'text-red-600'}`}>
@@ -401,8 +401,8 @@ export default async function DashboardPage({
 
       {/* Third Row: Key Totals */}
       {user.role === 'OWNER' && (
-        <div className="grid grid-cols-2 gap-3 lg:grid-cols-3">
-          <Card>
+        <div className="grid grid-cols-2 gap-3 lg:grid-cols-3 items-start auto-rows-min">
+          <Card className="p-4">
             <CardContent>
               <p className="text-xs font-medium text-gray-500 uppercase tracking-wider">Sukuk Total</p>
               <div className="text-xl font-bold text-gray-900 mt-1 tabular-nums">
@@ -414,7 +414,7 @@ export default async function DashboardPage({
             </CardContent>
           </Card>
 
-          <Card>
+          <Card className="p-4">
             <CardContent>
               <p className="text-xs font-medium text-gray-500 uppercase tracking-wider">Circlys Ongoing</p>
               <div className="text-xl font-bold text-gray-900 mt-1 tabular-nums">
@@ -424,7 +424,7 @@ export default async function DashboardPage({
             </CardContent>
           </Card>
 
-          <Card>
+          <Card className="p-4">
             <CardContent>
               <p className="text-xs font-medium text-gray-500 uppercase tracking-wider">SIP Total</p>
               <div className="text-xl font-bold text-gray-900 mt-1 tabular-nums">
