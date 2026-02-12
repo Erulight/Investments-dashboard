@@ -4,6 +4,9 @@ import { prisma } from '@/lib/db'
 import { SukukList } from '@/components/sukuk/SukukList'
 import { requireModuleAccess } from '@/lib/rbac'
 
+export const dynamic = 'force-dynamic'
+export const revalidate = 0
+
 export default async function InvestmentsPage() {
   await requireModuleAccess('sukuk')
   const user = await getCurrentUser()
