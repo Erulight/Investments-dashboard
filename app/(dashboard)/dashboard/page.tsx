@@ -26,6 +26,34 @@ export default async function DashboardPage({
   const yearStart = new Date(selectedYear, 0, 1)
   const yearEnd = new Date(selectedYear + 1, 0, 1)
 
+  const getOutstandingDebtsAt = async (atExclusive: Date) => {
+    if (user.role !== 'OWNER') return 0
+    const debts = await prisma.debt.findMany({
+      where: {
+        isArchived: false,
+        borrowedAt: { lt: atExclusive },
+      },
+      include: {
+        payments: {
+          where: { paidAt: { lt: atExclusive } },
+          select: { amount: true },
+        },
+      },
+    })
+
+    return debts.reduce((sum: number, d: any) => {
+      const borrowed = Number(d.amount) || 0
+      const paid = Array.isArray(d.payments)
+        ? d.payments.reduce((s: number, p: any) => s + (Number(p.amount) || 0), 0)
+        : 0
+      const outstanding = Math.max(0, borrowed - paid)
+      return sum + outstanding
+    }, 0)
+  }
+
+  const debtsAtStart = await getOutstandingDebtsAt(yearStart)
+  const debtsAtEnd = await getOutstandingDebtsAt(yearEnd)
+
   const cashAccount =
     user.role === 'OWNER'
       ? await prisma.account.findFirst({ where: { type: 'CASH', isActive: true } })
@@ -399,17 +427,21 @@ export default async function DashboardPage({
 
     const startValue = investmentsAtStart.reduce((s: number, inv: any) => s + valueAt(inv, startAt), 0)
     const endValue = investmentsAtEnd.reduce((s: number, inv: any) => s + valueAt(inv, endAt), 0)
-    const startTotal = cashAtStart + startValue
-    const endTotal = cashAtEnd + endValue
-    const change = endTotal - startTotal
-    const pct = startTotal > 0 ? (change / startTotal) * 100 : 0
-    return { start: startTotal, end: endTotal, change, pct }
+    const startAssets = cashAtStart + startValue
+    const endAssets = cashAtEnd + endValue
+    const startNetWorth = startAssets - debtsAtStart
+    const endNetWorth = endAssets - debtsAtEnd
+    const change = endNetWorth - startNetWorth
+    const pct = startNetWorth > 0 ? (change / startNetWorth) * 100 : 0
+    return { start: startNetWorth, end: endNetWorth, change, pct }
   })()
 
   const displayedValue = user.role === 'OWNER' ? cashBalance + totalValue : totalValue
   const yearlyProfitValue = yearlyValueChange.change
   const yearlyReturnPercentage = yearlyValueChange.pct
-  const netWorth = displayedValue - roscaDebt
+  const netWorth = user.role === 'OWNER'
+    ? displayedValue - roscaDebt - debtsAtEnd
+    : displayedValue - roscaDebt
 
   const monthlyLabels = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec']
 
