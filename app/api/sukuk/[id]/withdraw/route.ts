@@ -114,12 +114,7 @@ export async function POST(
       }
 
       if (user.role === 'PARTNER') {
-        const participants = Array.isArray(investment.dealParticipants)
-          ? investment.dealParticipants
-          : []
-        const acquiredAtRaw = participants[0]?.acquiredAt || investment.startDate
-        const acquiredAt = acquiredAtRaw instanceof Date ? acquiredAtRaw : new Date(acquiredAtRaw)
-        const haulStartDate = Number.isNaN(acquiredAt.getTime()) ? date : acquiredAt
+        const haulStartDate = new Date(date.getFullYear(), date.getMonth(), date.getDate())
 
         await createCashBucket(tx, {
           amount,
