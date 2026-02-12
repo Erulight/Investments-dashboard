@@ -203,13 +203,17 @@ export default async function DashboardPage({
       : null
 
     const txs = Array.isArray(inv?.transactions) ? inv.transactions : []
-    const commissionPaid = txs
+    const commissionFromParticipant = Number.isFinite(participation?.commissionFees)
+      ? Number(participation.commissionFees)
+      : 0
+    const commissionFromTx = txs
       .filter((tx: any) => tx?.type === 'BUY_FROM_PARTNER' && participation?.personId && tx.personId === participation.personId)
       .reduce((sum: number, tx: any) => {
         const meta = parseMetadata(tx.metadata)
         const commission = Number(meta?.commissionAmount ?? 0)
         return sum + (Number.isFinite(commission) ? Math.max(0, commission) : 0)
       }, 0)
+    const commissionPaid = commissionFromParticipant > 0 ? commissionFromParticipant : commissionFromTx
 
     const netProfitTotal = manualReceivable !== null
       ? Math.max(0, manualReceivable - commissionPaid)
@@ -585,7 +589,7 @@ export default async function DashboardPage({
       where: {
         personId: user.personId,
         date: { gte: yearStart, lt: yearEnd },
-        type: { in: ['WITHDRAW_PROFIT', 'SELL_PROFIT_ACCRUED', 'PARTNER_COMMISSION'] },
+        type: { in: ['WITHDRAW_PROFIT'] },
         OR: [
           { investment: { name: { notIn: DEMO_INVESTMENT_NAMES } } },
           { investmentId: null },
