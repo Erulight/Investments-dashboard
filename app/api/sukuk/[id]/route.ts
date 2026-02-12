@@ -390,9 +390,40 @@ export async function DELETE(
     
     // Delete the sukuk and reverse cash/bucket effects
     await prisma.$transaction(async (tx) => {
-      const movements = await tx.cashBucketMovement.findMany({
+      const commissionTxs = await tx.transaction.findMany({
+        where: {
+          type: 'PARTNER_COMMISSION',
+          OR: [
+            { investmentId: id },
+            { metadata: { contains: `"investmentId":"${id}"` } },
+          ],
+        },
+      })
+
+      const commissionMovements = commissionTxs.length
+        ? await tx.cashBucketMovement.findMany({
+            where: {
+              investmentId: null,
+              type: 'CASH_IN',
+              OR: commissionTxs.map((t) => ({
+                amount: t.amount,
+                date: t.date,
+              })),
+              cashBucket: {
+                label: 'Partner Commission',
+              },
+            },
+            include: {
+              cashBucket: true,
+            },
+          })
+        : []
+
+      const investmentMovements = await tx.cashBucketMovement.findMany({
         where: { investmentId: id },
       })
+
+      const movements = [...investmentMovements, ...commissionMovements]
 
       const netMovement = movements.reduce((sum, m) => sum + m.amount, 0)
 
@@ -439,11 +470,30 @@ export async function DELETE(
       await tx.cashBucketMovement.deleteMany({
         where: { investmentId: id },
       })
+
+      if (commissionMovements.length > 0) {
+        await tx.cashBucketMovement.deleteMany({
+          where: {
+            id: {
+              in: commissionMovements.map((m) => m.id),
+            },
+          },
+        })
+      }
       await tx.investmentBucketAllocation.deleteMany({
         where: { investmentId: id },
       })
+
       await tx.transaction.deleteMany({
-        where: { investmentId: id },
+        where: {
+          OR: [
+            { investmentId: id },
+            {
+              type: 'PARTNER_COMMISSION',
+              metadata: { contains: `"investmentId":"${id}"` },
+            },
+          ],
+        },
       })
 
       await tx.investment.delete({

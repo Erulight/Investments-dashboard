@@ -330,7 +330,7 @@ export async function POST(
             ? [
                 {
                   accountId: cashAccount.id,
-                  investmentId: null,
+                  investmentId: investment.id,
                   personId: sellerPersonId,
                   type: 'PARTNER_COMMISSION',
                   amount: Math.abs(commissionAmount),
@@ -419,6 +419,7 @@ export async function POST(
           label: 'Partner Commission',
           date,
           notes: notes || null,
+          investmentId: investment.id,
           type: 'CASH_IN',
         })
       }
