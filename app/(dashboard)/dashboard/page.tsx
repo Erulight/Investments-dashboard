@@ -133,6 +133,46 @@ export default async function DashboardPage({
     return Math.max(0, grossProfit - fees)
   }
 
+  const getSukukValueAt = (inv: any, at: Date) => {
+    const principal = Number.isFinite(inv.principalAmount) ? Number(inv.principalAmount) : 0
+    if (principal <= 0) return 0
+
+    const start = toDate(inv.startDate)
+    const maturity = toDate(inv.maturityDate)
+    const startTime = start?.getTime() || 0
+    const maturityTime = maturity?.getTime() || 0
+
+    const totalProfit = getSukukNetProfit(inv)
+
+    const totalMs = maturityTime > startTime ? maturityTime - startTime : 0
+    const atMs = at.getTime()
+    const elapsedMs = totalMs > 0
+      ? Math.min(Math.max(atMs - startTime, 0), totalMs)
+      : (atMs > startTime ? 1 : 0)
+
+    const accruedProfit = totalMs > 0
+      ? totalProfit * (elapsedMs / totalMs)
+      : (atMs > startTime ? totalProfit : 0)
+
+    const txs = Array.isArray(inv.transactions) ? inv.transactions : []
+    const upTo = (type: string) =>
+      txs
+        .filter((tx: any) => {
+          if (tx?.type !== type) return false
+          const d = tx?.date instanceof Date ? tx.date : new Date(tx?.date)
+          return !Number.isNaN(d.getTime()) && d.getTime() <= atMs
+        })
+        .reduce((s: number, tx: any) => s + Math.abs(Number(tx?.amount) || 0), 0)
+
+    const withdrawnProfit = upTo('WITHDRAW_PROFIT')
+    const withdrawnPrincipal = upTo('WITHDRAW_PRINCIPAL')
+
+    const principalOutstanding = Math.max(0, principal - withdrawnPrincipal)
+    const profitOutstanding = Math.max(0, accruedProfit - withdrawnProfit)
+
+    return principalOutstanding + profitOutstanding
+  }
+
   const getValueFromHistoryAt = (inv: any, at: Date) => {
     const metadata = (() => {
       try {
@@ -205,12 +245,13 @@ export default async function DashboardPage({
       .filter((inv) => inv.account.type === 'SUKUK')
       .reduce((sum, inv) => sum + inv.principalAmount, 0)
 
+    const now = new Date()
     sukukReceivable = investments
       .filter((inv) => inv.account.type === 'SUKUK')
       .reduce((sum, inv) => {
-        const netProfit = getSukukNetProfit(inv)
-        const received = Number.isFinite((inv as any).totalReceived) ? Number((inv as any).totalReceived) : 0
-        const receivable = Math.max(0, netProfit - received)
+        const v = getSukukValueAt(inv, now)
+        const principal = Number.isFinite(inv.principalAmount) ? Number(inv.principalAmount) : 0
+        const receivable = Math.max(0, v - principal)
         return sum + receivable
       }, 0)
 
@@ -239,10 +280,8 @@ export default async function DashboardPage({
       const existing = typeMap.get(t) || { invested: 0, value: 0, count: 0 }
       existing.invested += inv.principalAmount
       if (t === 'SUKUK') {
-        const netProfit = getSukukNetProfit(inv)
-        const received = Number.isFinite((inv as any).totalReceived) ? Number((inv as any).totalReceived) : 0
-        const receivable = Math.max(0, netProfit - received)
-        existing.value += inv.principalAmount + receivable
+        const v = getSukukValueAt(inv, new Date())
+        existing.value += v
       } else {
         existing.value += inv.currentValue
       }
@@ -312,17 +351,7 @@ export default async function DashboardPage({
     const valueAt = (inv: any, at: Date) => {
       const t = inv.account?.type
       if (t === 'SUKUK') {
-        const netProfit = getSukukNetProfit(inv)
-        const receivedUpTo = Array.isArray(inv.transactions)
-          ? inv.transactions
-              .filter((tx: any) => {
-                const d = tx?.date instanceof Date ? tx.date : new Date(tx?.date)
-                return !Number.isNaN(d.getTime()) && d.getTime() <= at.getTime()
-              })
-              .reduce((s: number, tx: any) => s + Math.abs(Number(tx?.amount) || 0), 0)
-          : 0
-        const receivable = Math.max(0, netProfit - receivedUpTo)
-        return (Number(inv.principalAmount) || 0) + receivable
+        return getSukukValueAt(inv, at)
       }
 
       return getValueFromHistoryAt(inv, at)
@@ -379,17 +408,7 @@ export default async function DashboardPage({
       const monthValue = monthInvestments.reduce((s: number, inv: any) => {
         const t = inv.account?.type
         if (t === 'SUKUK') {
-          const netProfit = getSukukNetProfit(inv)
-          const receivedUpTo = Array.isArray(inv.transactions)
-            ? inv.transactions
-                .filter((tx: any) => {
-                  const d = tx?.date instanceof Date ? tx.date : new Date(tx?.date)
-                  return !Number.isNaN(d.getTime()) && d.getTime() <= at.getTime()
-                })
-                .reduce((ss: number, tx: any) => ss + Math.abs(Number(tx?.amount) || 0), 0)
-            : 0
-          const receivable = Math.max(0, netProfit - receivedUpTo)
-          return s + (Number(inv.principalAmount) || 0) + receivable
+          return s + getSukukValueAt(inv, at)
         }
 
         return s + getValueFromHistoryAt(inv, at)
