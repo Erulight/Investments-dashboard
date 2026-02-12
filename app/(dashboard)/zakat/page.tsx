@@ -4,6 +4,9 @@ import { ZakatDashboard } from '@/components/zakat/ZakatDashboard'
 
 export const dynamic = 'force-dynamic'
 
+const NISAB_KEY = 'NISAB_VALUE'
+const DEFAULT_NISAB = 55000
+
 type BucketRow = {
   id: string
   label?: string | null
@@ -47,9 +50,24 @@ const receiptTypes = new Set([
 
 export default async function ZakatPage() {
   const user = await getCurrentUser()
-  if (!user || user.role !== 'OWNER') {
+  if (!user) {
     return null
   }
+
+  if (user.role !== 'OWNER') {
+    return (
+      <div className="space-y-6">
+        <div className="bg-gradient-to-r from-slate-800 to-slate-900 rounded-xl shadow-md p-6 text-white">
+          <h1 className="text-2xl font-bold">Zakat Dashboard</h1>
+          <p className="text-sm text-slate-400 mt-1">Only owners can access Zakat.</p>
+        </div>
+      </div>
+    )
+  }
+
+  const nisabSetting = await prisma.systemSetting.findUnique({ where: { key: NISAB_KEY } })
+  const nisabRaw = nisabSetting ? Number(nisabSetting.value) : DEFAULT_NISAB
+  const nisabValue = Number.isFinite(nisabRaw) && nisabRaw > 0 ? nisabRaw : DEFAULT_NISAB
 
   const buckets = await prisma.cashBucket.findMany({
     where: { excludeFromZakat: false },
@@ -77,6 +95,13 @@ export default async function ZakatPage() {
       },
     },
   })
+
+  const totalZakatableWealth = buckets.reduce((sum: number, b: any) => {
+    const balance = Number(b.balance)
+    return sum + (Number.isFinite(balance) ? Math.max(0, balance) : 0)
+  }, 0)
+
+  const zakatEnabled = totalZakatableWealth >= nisabValue
 
   const rows: BucketRow[] = buckets
     .map((bucket: any): BucketRow | null => {
@@ -214,7 +239,17 @@ export default async function ZakatPage() {
         </p>
       </div>
 
-      <ZakatDashboard buckets={rows} />
+      {!zakatEnabled && (
+        <div className="rounded-xl border border-amber-200 bg-amber-50 p-4 text-sm text-amber-900">
+          <div className="font-semibold">Below Nisab</div>
+          <div className="mt-1">
+            Total zakatable cash is SAR {totalZakatableWealth.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}.
+            Nisab is SAR {nisabValue.toLocaleString(undefined, { minimumFractionDigits: 0, maximumFractionDigits: 0 })}.
+          </div>
+        </div>
+      )}
+
+      <ZakatDashboard buckets={rows} zakatEnabled={zakatEnabled} />
     </div>
   )
 }

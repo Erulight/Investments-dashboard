@@ -3,6 +3,7 @@ import { Card, CardHeader, CardTitle, CardContent } from '@/components/ui/Card'
 import { SukukPlatformManager } from '@/components/settings/SukukPlatformManager'
 import { PortfolioReset } from '@/components/settings/PortfolioReset'
 import { InvestmentTypeManager } from '@/components/settings/InvestmentTypeManager'
+import { NisabSettings } from '@/components/settings/NisabSettings'
 import { UserList } from '@/components/users/UserList'
 import { prisma } from '@/lib/db'
 
@@ -21,6 +22,8 @@ export default async function SettingsPage() {
       </div>
 
       <InvestmentTypeManager />
+
+      <NisabSettings />
 
       <Card>
         <CardHeader>

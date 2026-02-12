@@ -53,7 +53,13 @@ function SortArrow({ active, dir }: { active: boolean; dir: SortDir }) {
   )
 }
 
-export function ZakatDashboard({ buckets }: { buckets: BucketRow[] }) {
+export function ZakatDashboard({
+  buckets,
+  zakatEnabled = true,
+}: {
+  buckets: BucketRow[]
+  zakatEnabled?: boolean
+}) {
   const router = useRouter()
 
   // --- Tab state ---
@@ -184,6 +190,7 @@ export function ZakatDashboard({ buckets }: { buckets: BucketRow[] }) {
   }
 
   const openPay = (bucket: BucketRow) => {
+    if (!zakatEnabled) return
     setPayTarget(bucket)
     setPayAmount(bucket.zakatDue.toFixed(2))
     setPayDate(formatDateInput(new Date()))
@@ -292,6 +299,11 @@ export function ZakatDashboard({ buckets }: { buckets: BucketRow[] }) {
 
   return (
     <div className="space-y-4">
+      {!zakatEnabled && (
+        <div className="rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 text-xs text-amber-900">
+          Zakat is disabled because total zakatable wealth is below Nisab.
+        </div>
+      )}
       {/* Summary row */}
       <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
         <Card>
