@@ -67,9 +67,23 @@ export async function POST(req: NextRequest) {
       const cashSetting = await tx.systemSetting.findUnique({
         where: { key: CASH_BALANCE_KEY },
       })
-      const currentCash = cashSetting ? Number(cashSetting.value) : 0
-      const nextCash = currentCash - amount
+      const currentCashRaw = cashSetting ? Number(cashSetting.value) : 0
+      let currentCash = Number.isFinite(currentCashRaw) ? currentCashRaw : 0
+      let nextCash = currentCash - amount
+
       if (nextCash < 0) {
+        const bucketAgg = await tx.cashBucket.aggregate({
+          _sum: { balance: true },
+        })
+        const bucketSumRaw = bucketAgg?._sum?.balance
+        const bucketSum = Number.isFinite(bucketSumRaw as any) ? Number(bucketSumRaw) : 0
+        if (bucketSum > currentCash + 0.0001) {
+          currentCash = bucketSum
+          nextCash = currentCash - amount
+        }
+      }
+
+      if (nextCash < -0.000001) {
         throw new Error('INSUFFICIENT_CASH')
       }
 

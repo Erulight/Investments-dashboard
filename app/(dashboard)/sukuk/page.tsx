@@ -131,7 +131,7 @@ export default async function InvestmentsPage() {
     const profitWithdrawals = transactions.filter((tx: any) => tx.type === 'WITHDRAW_PROFIT')
 
     const realizedFromSales = transactions
-      .filter((tx: any) => tx.type === 'SELL_PROFIT_ACCRUED' || tx.type === 'PARTNER_COMMISSION')
+      .filter((tx: any) => tx.type === 'SELL_PROFIT_ACCRUED')
       .reduce((sum: number, tx: any) => {
         if (user.personId && tx.personId !== user.personId) return sum
         const amount = Number(tx.amount)
@@ -189,13 +189,7 @@ export default async function InvestmentsPage() {
         const amount = Number(tx.amount)
         return sum + (Number.isFinite(amount) ? amount : 0)
       }, 0)
-    const commission = transactions
-      .filter((tx: any) => tx.type === 'PARTNER_COMMISSION' && tx.personId === user.personId)
-      .reduce((sum: number, tx: any) => {
-        const amount = Number(tx.amount)
-        return sum + (Number.isFinite(amount) ? amount : 0)
-      }, 0)
-    return Math.max(0, profit + commission)
+    return Math.max(0, profit)
   }
 
   const getNetProfit = (inv: any) => {
