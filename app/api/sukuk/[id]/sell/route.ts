@@ -130,10 +130,14 @@ export async function POST(
     const currentValueTransfer = seller.currentValue * ratio
 
     const startOfDay = (d: Date) => new Date(d.getFullYear(), d.getMonth(), d.getDate())
-    const diffDays = (start: Date, end: Date) => {
+    const diffDaysExclusive = (start: Date, end: Date) => {
       const s = startOfDay(start)
       const e = startOfDay(end)
       return Math.max(0, Math.round((e.getTime() - s.getTime()) / (1000 * 60 * 60 * 24)))
+    }
+    const diffDaysInclusive = (start: Date, end: Date) => {
+      const days = diffDaysExclusive(start, end)
+      return days > 0 ? days + 1 : 1
     }
 
     const startDate = investment.startDate ? new Date(investment.startDate) : null
@@ -142,9 +146,14 @@ export async function POST(
       return NextResponse.json({ error: 'Sukuk maturity date is required for selling' }, { status: 400 })
     }
     const saleDate = new Date(date)
-    const totalDays = diffDays(startDate, maturityDate)
-    const investorDays = diffDays(startDate, saleDate)
-    const partnerDays = diffDays(saleDate, maturityDate)
+
+    // Inclusive day counting:
+    // - Total days includes both start and maturity day.
+    // - Investor days excludes the sale day (owner holds up to the day before sale).
+    // - Partner days includes sale day through maturity.
+    const totalDays = diffDaysInclusive(startDate, maturityDate)
+    const investorDays = diffDaysExclusive(startDate, saleDate)
+    const partnerDays = diffDaysInclusive(saleDate, maturityDate)
 
     const totalNetProfitFull = Number.isFinite(investment.receivableAmount)
       ? Number(investment.receivableAmount)
