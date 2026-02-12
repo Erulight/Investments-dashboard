@@ -54,12 +54,24 @@ export default async function ZakatPage() {
     return null
   }
 
-  if (user.role !== 'OWNER') {
+  const canAccess = user.role === 'OWNER' || user.role === 'PARTNER'
+  if (!canAccess) {
     return (
       <div className="space-y-6">
         <div className="bg-gradient-to-r from-slate-800 to-slate-900 rounded-xl shadow-md p-6 text-white">
           <h1 className="text-2xl font-bold">Zakat Dashboard</h1>
-          <p className="text-sm text-slate-400 mt-1">Only owners can access Zakat.</p>
+          <p className="text-sm text-slate-400 mt-1">You do not have access to Zakat.</p>
+        </div>
+      </div>
+    )
+  }
+
+  if (user.role === 'PARTNER' && !user.personId) {
+    return (
+      <div className="space-y-6">
+        <div className="bg-gradient-to-r from-slate-800 to-slate-900 rounded-xl shadow-md p-6 text-white">
+          <h1 className="text-2xl font-bold">Zakat Dashboard</h1>
+          <p className="text-sm text-slate-400 mt-1">Partner is missing a person profile.</p>
         </div>
       </div>
     )
@@ -69,8 +81,16 @@ export default async function ZakatPage() {
   const nisabRaw = nisabSetting ? Number(nisabSetting.value) : DEFAULT_NISAB
   const nisabValue = Number.isFinite(nisabRaw) && nisabRaw > 0 ? nisabRaw : DEFAULT_NISAB
 
+  const scopeKey = user.role === 'OWNER' ? 'OWNER' : user.personId!
+  const nisabMetKey = `NISAB_MET_SINCE:${scopeKey}`
+
   const buckets = await prisma.cashBucket.findMany({
-    where: { excludeFromZakat: false },
+    where: {
+      excludeFromZakat: false,
+      ...(user.role === 'OWNER'
+        ? { personId: null }
+        : { personId: user.personId }),
+    },
     orderBy: { haulStartDate: 'asc' },
     include: {
       movements: {
@@ -101,21 +121,56 @@ export default async function ZakatPage() {
     return sum + (Number.isFinite(balance) ? Math.max(0, balance) : 0)
   }, 0)
 
-  const zakatEnabled = totalZakatableWealth >= nisabValue
+  const thresholdMet = totalZakatableWealth >= nisabValue
+  const nisabMetSetting = await prisma.systemSetting.findUnique({ where: { key: nisabMetKey } })
+  const nisabMetSince = nisabMetSetting?.value ? new Date(nisabMetSetting.value) : null
+
+  // Haul starts when nisab is met, and restarts when wealth drops below nisab.
+  // We persist the crossing time to keep haul-year stable.
+  if (thresholdMet) {
+    if (!nisabMetSince || Number.isNaN(nisabMetSince.getTime())) {
+      const now = new Date()
+      const dayStart = new Date(now.getFullYear(), now.getMonth(), now.getDate())
+      await prisma.systemSetting.upsert({
+        where: { key: nisabMetKey },
+        update: { value: dayStart.toISOString() },
+        create: {
+          key: nisabMetKey,
+          value: dayStart.toISOString(),
+          description: 'When nisab threshold was met for zakat haul start',
+        },
+      })
+    }
+  } else if (nisabMetSetting) {
+    await prisma.systemSetting.delete({ where: { key: nisabMetKey } })
+  }
+
+  const effectiveNisabStart = thresholdMet
+    ? (nisabMetSince && !Number.isNaN(nisabMetSince.getTime()) ? nisabMetSince : new Date())
+    : null
+
+  const zakatEnabled = Boolean(effectiveNisabStart)
 
   const rows: BucketRow[] = buckets
     .map((bucket: any): BucketRow | null => {
-    const effectiveStart = bucket.lastZakatPaidDate
-      ? new Date(bucket.lastZakatPaidDate)
-      : new Date(bucket.haulStartDate)
-    const haulCompleteDate = addDays(effectiveStart, 354)
+    const lastPaid = bucket.lastZakatPaidDate ? new Date(bucket.lastZakatPaidDate) : null
+    const bucketStart = new Date(bucket.haulStartDate)
+    const effectiveStart = lastPaid && !Number.isNaN(lastPaid.getTime())
+      ? lastPaid
+      : bucketStart
+
+    const nisabStart = effectiveNisabStart
+    const effectiveHaulStart = nisabStart && nisabStart.getTime() > effectiveStart.getTime()
+      ? nisabStart
+      : effectiveStart
+    const haulCompleteDate = addDays(effectiveHaulStart, 354)
     const now = new Date()
     const haulCompleted = now.getTime() >= haulCompleteDate.getTime()
 
     const idleMovements = bucket.movements.filter((movement: any) => {
       const movementDate = new Date(movement.date)
       if (movement.type === 'ZAKAT_PAID') return false
-      if (movementDate < effectiveStart) return false
+      if (movementDate < effectiveHaulStart) return false
       if (movementDate > haulCompleteDate) return false
       // Exclude Circlys receipt payout — it shouldn't count as idle cash
       // for this bucket's haul period (it arrived later and inflates the balance)
@@ -138,7 +193,7 @@ export default async function ZakatPage() {
         if (new Date(movement.createdAt) < reopenedAt) return false
       }
       const movementDate = new Date(movement.date)
-      if (movementDate < effectiveStart) return false
+      if (movementDate < effectiveHaulStart) return false
       return movementDate >= haulCompleteDate
     })
     const dedupedMap = new Map<string, typeof rawReceipts[number]>()
@@ -201,7 +256,7 @@ export default async function ZakatPage() {
       label: bucket.label,
       currency: bucket.currency,
       balance: displayBalance,
-      haulStartDate: bucket.haulStartDate.toISOString().split('T')[0],
+      haulStartDate: effectiveHaulStart.toISOString().split('T')[0],
       lastZakatPaidDate: bucket.lastZakatPaidDate
         ? bucket.lastZakatPaidDate.toISOString().split('T')[0]
         : null,

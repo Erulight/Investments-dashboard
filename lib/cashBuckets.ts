@@ -24,6 +24,7 @@ export const createCashBucket = async (
     investmentId,
     type = 'CASH_IN',
     excludeFromZakat,
+    personId,
   }: {
     amount: number
     haulStartDate: Date
@@ -34,6 +35,7 @@ export const createCashBucket = async (
     investmentId?: string | null
     type?: MovementType
     excludeFromZakat?: boolean
+    personId?: string | null
   }
 ) => {
   const bucket = await tx.cashBucket.create({
@@ -42,6 +44,7 @@ export const createCashBucket = async (
       currency,
       haulStartDate,
       excludeFromZakat: Boolean(excludeFromZakat),
+      personId: personId || null,
       balance: amount,
     },
   })

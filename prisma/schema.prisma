@@ -114,12 +114,16 @@ model CashBucket {
   createdAt         DateTime @default(now())
   updatedAt         DateTime @updatedAt
 
+  personId          String?
+  person            Person?  @relation(fields: [personId], references: [id], onDelete: SetNull)
+
   debt              Debt?
   movements         CashBucketMovement[]
   allocations       InvestmentBucketAllocation[]
 
   @@index([currency])
   @@index([haulStartDate])
+  @@index([personId])
 }
 
 model CashBucketMovement {

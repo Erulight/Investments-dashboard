@@ -7,12 +7,20 @@ export async function GET(
   { params }: { params: Promise<{ id: string }> }
 ) {
   try {
-    await requireAuth(['OWNER'])
+    const user = await requireAuth(['OWNER', 'PARTNER'])
+    if (user.role === 'PARTNER' && !user.personId) {
+      return NextResponse.json({ error: 'Partner is missing a person profile' }, { status: 400 })
+    }
 
     const { id } = await params
 
-    const bucket = await prisma.cashBucket.findUnique({
-      where: { id },
+    const bucket = await prisma.cashBucket.findFirst({
+      where: {
+        id,
+        ...(user.role === 'OWNER'
+          ? { personId: null }
+          : { personId: user.personId }),
+      },
       select: {
         id: true,
         label: true,
@@ -44,9 +52,8 @@ export async function GET(
 
     const transactions = await prisma.transaction.findMany({
       where: {
-        metadata: {
-          contains: id,
-        },
+        ...(user.role === 'PARTNER' ? { personId: user.personId } : {}),
+        metadata: { contains: id },
       },
       orderBy: [{ date: 'desc' }, { createdAt: 'desc' }],
       select: {

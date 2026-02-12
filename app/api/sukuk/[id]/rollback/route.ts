@@ -138,6 +138,7 @@ export async function POST(
           notes: notes || null,
           investmentId: investment.id,
           type: 'ROLLBACK_PRINCIPAL',
+          personId: user.personId || null,
         })
       } else {
         await creditBucketsForReceipt(tx, {

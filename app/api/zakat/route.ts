@@ -23,7 +23,10 @@ const getCashAccount = async (tx: Prisma.TransactionClient, currency = 'SAR') =>
 
 export async function POST(req: NextRequest) {
   try {
-    const user = await requireAuth(['OWNER'])
+    const user = await requireAuth(['OWNER', 'PARTNER'])
+    if (user.role === 'PARTNER' && !user.personId) {
+      return NextResponse.json({ error: 'Partner is missing a person profile' }, { status: 400 })
+    }
     const body = await req.json().catch(() => ({}))
     const bucketId = typeof body.bucketId === 'string' ? body.bucketId : ''
     const amount = Number(body.amount)
@@ -38,7 +41,14 @@ export async function POST(req: NextRequest) {
     }
 
     const result = await prisma.$transaction(async (tx) => {
-      const bucket = await tx.cashBucket.findUnique({ where: { id: bucketId } })
+      const bucket = await tx.cashBucket.findFirst({
+        where: {
+          id: bucketId,
+          ...(user.role === 'OWNER'
+            ? { personId: null }
+            : { personId: user.personId }),
+        },
+      })
       if (!bucket) {
         return NextResponse.json({ error: 'Bucket not found' }, { status: 404 })
       }
@@ -63,6 +73,22 @@ export async function POST(req: NextRequest) {
           notes: notes || null,
         },
       })
+
+      if (user.role === 'PARTNER') {
+        await logAudit(tx, {
+          userId: user.id,
+          action: 'UPDATE',
+          entityType: 'ZAKAT',
+          entityId: bucketId,
+          changes: JSON.stringify({
+            amount,
+            date,
+            movementId: movement.id,
+          }),
+        })
+
+        return { success: true }
+      }
 
       const cashSetting = await tx.systemSetting.findUnique({
         where: { key: CASH_BALANCE_KEY },

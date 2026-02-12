@@ -7,7 +7,10 @@ const CASH_BALANCE_KEY = 'CASH_BALANCE'
 
 export async function POST(req: NextRequest) {
   try {
-    const user = await requireAuth(['OWNER'])
+    const user = await requireAuth(['OWNER', 'PARTNER'])
+    if (user.role === 'PARTNER' && !user.personId) {
+      return NextResponse.json({ error: 'Partner is missing a person profile' }, { status: 400 })
+    }
     const body = await req.json().catch(() => ({}))
     const bucketId = typeof body.bucketId === 'string' ? body.bucketId : ''
     const movementId = typeof body.movementId === 'string' ? body.movementId : ''
@@ -17,7 +20,14 @@ export async function POST(req: NextRequest) {
     }
 
     const result = await prisma.$transaction(async (tx) => {
-      const bucket = await tx.cashBucket.findUnique({ where: { id: bucketId } })
+      const bucket = await tx.cashBucket.findFirst({
+        where: {
+          id: bucketId,
+          ...(user.role === 'OWNER'
+            ? { personId: null }
+            : { personId: user.personId }),
+        },
+      })
       if (!bucket) {
         return NextResponse.json({ error: 'Bucket not found' }, { status: 404 })
       }
@@ -44,6 +54,39 @@ export async function POST(req: NextRequest) {
         },
       })
 
+      await tx.cashBucketMovement.delete({
+        where: { id: targetMovement.id },
+      })
+
+      if (user.role === 'PARTNER') {
+        const remainingPayment = await tx.cashBucketMovement.findFirst({
+          where: { cashBucketId: bucketId, type: 'ZAKAT_PAID' },
+          orderBy: [{ date: 'desc' }, { createdAt: 'desc' }],
+        })
+
+        await tx.cashBucket.update({
+          where: { id: bucketId },
+          data: {
+            lastZakatPaidDate: remainingPayment ? remainingPayment.date : null,
+          },
+        })
+
+        await logAudit(tx, {
+          userId: user.id,
+          action: 'UPDATE',
+          entityType: 'ZAKAT',
+          entityId: bucketId,
+          changes: JSON.stringify({
+            rollback: {
+              amount,
+              movementId: targetMovement.id,
+            },
+          }),
+        })
+
+        return { success: true }
+      }
+
       const cashSetting = await tx.systemSetting.findUnique({
         where: { key: CASH_BALANCE_KEY },
       })
@@ -64,10 +107,6 @@ export async function POST(req: NextRequest) {
           },
         })
       }
-
-      await tx.cashBucketMovement.delete({
-        where: { id: targetMovement.id },
-      })
 
       const dayStart = new Date(targetMovement.date.getFullYear(), targetMovement.date.getMonth(), targetMovement.date.getDate())
       const dayEnd = new Date(targetMovement.date.getFullYear(), targetMovement.date.getMonth(), targetMovement.date.getDate() + 1)

@@ -130,6 +130,7 @@ export async function POST(
           notes: notes || null,
           investmentId: investment.id,
           type: source === 'PROFIT' ? 'WITHDRAW_PROFIT' : 'WITHDRAW_PRINCIPAL',
+          personId: user.personId || null,
         })
       } else {
         await creditBucketsForReceipt(tx, {
