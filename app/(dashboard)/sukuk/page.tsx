@@ -120,6 +120,12 @@ export default async function InvestmentsPage() {
     return Math.max(0, months)
   }
 
+  const round2 = (value: number) => {
+    const n = Number(value)
+    if (!Number.isFinite(n)) return 0
+    return Math.round(n * 100) / 100
+  }
+
   const getViewerReceived = (inv: any) => {
     const transactions = Array.isArray(inv.transactions) ? inv.transactions : []
     const profitWithdrawals = transactions.filter((tx: any) => tx.type === 'WITHDRAW_PROFIT')
@@ -207,17 +213,6 @@ export default async function InvestmentsPage() {
     const grossProfit = investment > 0 && apr > 0 && periodYears > 0
       ? investment * (apr / 100) * periodYears
       : 0
-    if (inv.myParticipation) {
-      const grossProfit = Number.isFinite(inv.myParticipation?.profit)
-        ? Number(inv.myParticipation.profit)
-        : 0
-      const commissionFees = Number.isFinite(inv.myParticipation?.commissionFees)
-        ? Number(inv.myParticipation.commissionFees)
-        : 0
-      if (grossProfit > 0 || commissionFees > 0) {
-        return Math.max(0, grossProfit - commissionFees)
-      }
-    }
 
     const manualReceivableFull = Number.isFinite(inv.receivableAmount) ? inv.receivableAmount : null
     const manualReceivable = manualReceivableFull !== null && manualReceivableFull > 0
@@ -275,16 +270,16 @@ export default async function InvestmentsPage() {
     if (user.role === 'OWNER') {
       const activeProfit = displayedInvestments.reduce((sum, inv) => sum + getNetProfit(inv), 0)
       const soldProfit = investments.reduce((sum, inv) => sum + getOwnerRealizedProfitFromSales(inv), 0)
-      return activeProfit + soldProfit
+      return round2(activeProfit + soldProfit)
     }
 
-    return displayedInvestments.reduce((sum, inv) => sum + getNetProfit(inv), 0)
+    return round2(displayedInvestments.reduce((sum, inv) => sum + getNetProfit(inv), 0))
   })()
 
-  const totalWithdrawn = displayedInvestments.reduce((sum, inv) => {
+  const totalWithdrawn = round2(displayedInvestments.reduce((sum, inv) => {
     const received = getViewerReceived(inv)
     return sum + received
-  }, 0)
+  }, 0))
 
   const totalCommissionEarned = (() => {
     if (user.role !== 'OWNER' || !user.personId) return 0
@@ -300,14 +295,14 @@ export default async function InvestmentsPage() {
     }, 0)
   })()
 
-  const totalReceivable = Math.max(0, totalNetProfit - totalWithdrawn)
+  const totalReceivable = round2(Math.max(0, totalNetProfit - totalWithdrawn))
 
   const totalValue = totalInvested
   const totalReturn = totalNetProfit
   const returnPercentage = totalInvested > 0 ? ((totalReturn / totalInvested) * 100) : 0
   const activeDealsCount = activeInvestments.length
 
-  const totalFeesPaid = displayedInvestments.reduce((sum, inv) => {
+  const totalFeesPaid = round2(displayedInvestments.reduce((sum, inv) => {
     const principal = inv.myParticipation?.investedAmount ?? inv.principalAmount
     const investment = Number.isFinite(principal) ? principal : 0
     const ratio = inv.principalAmount > 0 && investment > 0 ? Math.min(1, investment / inv.principalAmount) : 0
@@ -319,7 +314,7 @@ export default async function InvestmentsPage() {
       ? Math.min(1, Math.max(0, monthsHeld / totalMonthsFull))
       : 1
     return sum + (inv.myParticipation ? (fees * ratio) * timeRatio : fees)
-  }, 0)
+  }, 0))
 
   const avgDaysToMaturity = (() => {
     const now = new Date()
@@ -454,7 +449,7 @@ export default async function InvestmentsPage() {
           </div>
           <div className="bg-white/5 rounded-lg p-3 border border-white/10">
             <p className="text-[11px] text-slate-400 uppercase tracking-wider">Total Return</p>
-            <p className="text-lg font-bold mt-0.5">SAR {totalReturn.toLocaleString()}</p>
+            <p className="text-lg font-bold mt-0.5">SAR {totalReturn.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</p>
           </div>
           <div className="bg-white/5 rounded-lg p-3 border border-white/10">
             <p className="text-[11px] text-slate-400 uppercase tracking-wider">Return %</p>
@@ -471,11 +466,11 @@ export default async function InvestmentsPage() {
         <div className="grid grid-cols-2 md:grid-cols-5 gap-3 mt-3">
           <div className="bg-white/5 rounded-lg p-3 border border-white/10">
             <p className="text-[11px] text-slate-400 uppercase tracking-wider">Received</p>
-            <p className="text-sm font-bold mt-0.5">SAR {totalWithdrawn.toLocaleString(undefined, { maximumFractionDigits: 0 })}</p>
+            <p className="text-sm font-bold mt-0.5">SAR {totalWithdrawn.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</p>
           </div>
           <div className="bg-white/5 rounded-lg p-3 border border-white/10">
             <p className="text-[11px] text-slate-400 uppercase tracking-wider">Fees Paid</p>
-            <p className="text-sm font-bold mt-0.5">SAR {totalFeesPaid.toLocaleString(undefined, { maximumFractionDigits: 0 })}</p>
+            <p className="text-sm font-bold mt-0.5">SAR {totalFeesPaid.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</p>
           </div>
           <div className="bg-white/5 rounded-lg p-3 border border-white/10">
             <p className="text-[11px] text-slate-400 uppercase tracking-wider">Commission Earned</p>
@@ -483,7 +478,7 @@ export default async function InvestmentsPage() {
           </div>
           <div className="bg-white/5 rounded-lg p-3 border border-white/10">
             <p className="text-[11px] text-slate-400 uppercase tracking-wider">Receivable</p>
-            <p className="text-sm font-bold mt-0.5">SAR {totalReceivable.toLocaleString(undefined, { maximumFractionDigits: 0 })}</p>
+            <p className="text-sm font-bold mt-0.5">SAR {totalReceivable.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</p>
           </div>
           <div className="bg-white/5 rounded-lg p-3 border border-white/10">
             <p className="text-[11px] text-slate-400 uppercase tracking-wider">Avg Days to Maturity</p>
