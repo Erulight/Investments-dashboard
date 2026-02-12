@@ -5,6 +5,7 @@ import { DEMO_INVESTMENT_NAMES } from '@/lib/demo'
 import { YearFilter } from '@/components/dashboard/YearFilter'
 import { CashBalanceCard } from '@/components/dashboard/CashBalanceCard'
 import { ReportButton } from '@/components/dashboard/ReportButton'
+import { DashboardCharts } from '@/components/dashboard/DashboardCharts'
 
 export const dynamic = 'force-dynamic'
 
@@ -25,16 +26,47 @@ export default async function DashboardPage({
   const yearStart = new Date(selectedYear, 0, 1)
   const yearEnd = new Date(selectedYear + 1, 0, 1)
 
-  const cashBalance =
+  const cashAccount =
     user.role === 'OWNER'
-      ? Number(
-          (
-            await prisma.systemSetting.findUnique({
-              where: { key: 'CASH_BALANCE' },
-            })
-          )?.value || 0
-        )
+      ? await prisma.account.findFirst({ where: { type: 'CASH', isActive: true } })
+      : null
+
+  const cashSetting =
+    user.role === 'OWNER'
+      ? await prisma.systemSetting.findUnique({ where: { key: 'CASH_BALANCE' } })
+      : null
+
+  const currentCash = user.role === 'OWNER' ? Number(cashSetting?.value || 0) : 0
+
+  const allCashTxSum =
+    user.role === 'OWNER' && cashAccount
+      ? (
+          await prisma.transaction.aggregate({
+            where: { accountId: cashAccount.id },
+            _sum: { amount: true },
+          })
+        )._sum.amount || 0
       : 0
+
+  const cashOffset =
+    user.role === 'OWNER' && Number.isFinite(currentCash)
+      ? currentCash - (Number.isFinite(allCashTxSum) ? allCashTxSum : 0)
+      : 0
+
+  const cashAt = async (atExclusive: Date) => {
+    if (user.role !== 'OWNER' || !cashAccount) return 0
+    const sum = (
+      await prisma.transaction.aggregate({
+        where: { accountId: cashAccount.id, date: { lt: atExclusive } },
+        _sum: { amount: true },
+      })
+    )._sum.amount || 0
+    return cashOffset + (Number.isFinite(sum) ? sum : 0)
+  }
+
+  const cashAtStart = await cashAt(yearStart)
+  const cashAtEnd = await cashAt(yearEnd)
+  const cashBalance = cashAtEnd
 
   let totalInvested = 0
   let totalValue = 0
@@ -298,15 +330,76 @@ export default async function DashboardPage({
 
     const startValue = investmentsAtStart.reduce((s: number, inv: any) => s + valueAt(inv, startAt), 0)
     const endValue = investmentsAtEnd.reduce((s: number, inv: any) => s + valueAt(inv, endAt), 0)
-    const change = endValue - startValue
-    const pct = startValue > 0 ? (change / startValue) * 100 : 0
-    return { start: startValue, end: endValue, change, pct }
+    const startTotal = cashAtStart + startValue
+    const endTotal = cashAtEnd + endValue
+    const change = endTotal - startTotal
+    const pct = startTotal > 0 ? (change / startTotal) * 100 : 0
+    return { start: startTotal, end: endTotal, change, pct }
   })()
 
   const displayedValue = user.role === 'OWNER' ? cashBalance + totalValue : totalValue
   const yearlyProfitValue = yearlyValueChange.change
   const yearlyReturnPercentage = yearlyValueChange.pct
   const netWorth = displayedValue - roscaDebt
+
+  const monthlyLabels = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec']
+
+  const monthlyCashflow = await (async () => {
+    if (user.role !== 'OWNER' || !cashAccount) {
+      return monthlyLabels.map((l) => ({ label: l, value: 0 }))
+    }
+
+    const txs = await prisma.transaction.findMany({
+      where: { accountId: cashAccount.id, date: { gte: yearStart, lt: yearEnd } },
+      select: { date: true, amount: true },
+    })
+
+    const byMonth = new Array(12).fill(0)
+    for (const tx of txs) {
+      const d = tx.date instanceof Date ? tx.date : new Date(tx.date)
+      const m = d.getMonth()
+      if (m >= 0 && m < 12) byMonth[m] += Number(tx.amount) || 0
+    }
+
+    return monthlyLabels.map((label, i) => ({ label, value: byMonth[i] }))
+  })()
+
+  const monthlyPortfolioValue = await (async () => {
+    if (user.role !== 'OWNER') {
+      return monthlyLabels.map((l) => ({ label: l, value: 0 }))
+    }
+
+    const points: { label: string; value: number }[] = []
+    for (let m = 0; m < 12; m++) {
+      const monthEndExclusive = new Date(selectedYear, m + 1, 1)
+      const at = new Date(monthEndExclusive.getTime() - 1)
+
+      const monthCash = await cashAt(monthEndExclusive)
+      const monthInvestments = (investments || []).filter((inv: any) => isActiveAt(inv, at))
+      const monthValue = monthInvestments.reduce((s: number, inv: any) => {
+        const t = inv.account?.type
+        if (t === 'SUKUK') {
+          const netProfit = getSukukNetProfit(inv)
+          const receivedUpTo = Array.isArray(inv.transactions)
+            ? inv.transactions
+                .filter((tx: any) => {
+                  const d = tx?.date instanceof Date ? tx.date : new Date(tx?.date)
+                  return !Number.isNaN(d.getTime()) && d.getTime() <= at.getTime()
+                })
+                .reduce((ss: number, tx: any) => ss + Math.abs(Number(tx?.amount) || 0), 0)
+            : 0
+          const receivable = Math.max(0, netProfit - receivedUpTo)
+          return s + (Number(inv.principalAmount) || 0) + receivable
+        }
+
+        return s + getValueFromHistoryAt(inv, at)
+      }, 0)
+
+      points.push({ label: monthlyLabels[m], value: monthCash + monthValue })
+    }
+
+    return points
+  })()
 
   return (
     <div className="space-y-6 animate-fade-in">
@@ -434,6 +527,16 @@ export default async function DashboardPage({
             </CardContent>
           </Card>
         </div>
+      )}
+
+      {/* Per-Type Breakdown */}
+      {user.role === 'OWNER' && (
+        <DashboardCharts
+          selectedYear={selectedYear}
+          monthlyCashflow={monthlyCashflow}
+          monthlyPortfolioValue={monthlyPortfolioValue}
+          typeBreakdowns={typeBreakdowns}
+        />
       )}
 
       {/* Per-Type Breakdown */}

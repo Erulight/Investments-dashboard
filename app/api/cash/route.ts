@@ -31,14 +31,47 @@ export async function GET(req: NextRequest) {
     const yearStart = new Date(selectedYear, 0, 1)
     const yearEnd = new Date(selectedYear + 1, 0, 1)
 
-    const setting = await prisma.systemSetting.findUnique({
-      where: { key: CASH_BALANCE_KEY },
-    })
-    const cashBalance = setting ? Number(setting.value) : 0
-
     const cashAccount = await prisma.account.findFirst({
       where: { type: 'CASH', isActive: true },
     })
+
+    const setting = await prisma.systemSetting.findUnique({
+      where: { key: CASH_BALANCE_KEY },
+    })
+    const currentCash = setting ? Number(setting.value) : 0
+
+    const allCashTxSum = cashAccount
+      ? (
+          await prisma.transaction.aggregate({
+            where: { accountId: cashAccount.id },
+            _sum: { amount: true },
+          })
+        )._sum.amount || 0
+      : 0
+
+    const offset = Number.isFinite(currentCash)
+      ? currentCash - (Number.isFinite(allCashTxSum) ? allCashTxSum : 0)
+      : 0
+
+    const cashAtStart = cashAccount
+      ? (
+          await prisma.transaction.aggregate({
+            where: { accountId: cashAccount.id, date: { lt: yearStart } },
+            _sum: { amount: true },
+          })
+        )._sum.amount || 0
+      : 0
+
+    const cashAtEnd = cashAccount
+      ? (
+          await prisma.transaction.aggregate({
+            where: { accountId: cashAccount.id, date: { lt: yearEnd } },
+            _sum: { amount: true },
+          })
+        )._sum.amount || 0
+      : 0
+
+    const cashBalance = offset + (Number.isFinite(cashAtEnd) ? cashAtEnd : 0)
 
     const buckets = await prisma.cashBucket.findMany({
       where: { balance: { gt: 0 } },
@@ -66,6 +99,8 @@ export async function GET(req: NextRequest) {
 
     return NextResponse.json({
       cashBalance: Number.isFinite(cashBalance) ? cashBalance : 0,
+      cashAtStart: offset + (Number.isFinite(cashAtStart) ? cashAtStart : 0),
+      cashAtEnd: Number.isFinite(cashBalance) ? cashBalance : 0,
       transactions,
       buckets,
       selectedYear,
