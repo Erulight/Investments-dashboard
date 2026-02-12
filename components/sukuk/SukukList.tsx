@@ -1679,7 +1679,8 @@ export function SukukList({ initialSukuk, userRole, ownerPersonId, viewerPersonI
                 className="w-full px-4 py-2 border border-gray-300 rounded-lg bg-white focus:ring-2 focus:ring-blue-500 focus:border-transparent"
               >
                 <option value="FIXED">Fixed</option>
-                <option value="PERCENT">Percent</option>
+                <option value="PERCENT">Percentage (of partner gross profit)</option>
+                <option value="AUTO">AUTO (cap partner at 10% APR)</option>
               </select>
             </div>
             <div>
@@ -1691,7 +1692,7 @@ export function SukukList({ initialSukuk, userRole, ownerPersonId, viewerPersonI
                 value={sellForm.commissionValue}
                 onChange={(e) => setSellForm((prev) => ({ ...prev, commissionValue: e.target.value }))}
                 className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                placeholder={sellForm.commissionType === 'PERCENT' ? 'e.g. 1.5' : 'e.g. 50'}
+                placeholder={sellForm.commissionType === 'PERCENT' ? 'e.g. 5' : sellForm.commissionType === 'AUTO' ? 'Leave 0 for auto' : 'e.g. 50'}
               />
             </div>
           </div>

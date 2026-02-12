@@ -17,7 +17,13 @@ export async function POST(
     const buyerPersonId = typeof body.buyerPersonId === 'string' ? body.buyerPersonId : ''
     const amount = Number(body.amount)
     const salePrice = body.salePrice !== undefined ? Number(body.salePrice) : amount
-    const commissionType = body.commissionType === 'PERCENT' ? 'PERCENT' : body.commissionType === 'FIXED' ? 'FIXED' : 'FIXED'
+    const commissionType = body.commissionType === 'PERCENT'
+      ? 'PERCENT'
+      : body.commissionType === 'AUTO'
+        ? 'AUTO'
+        : body.commissionType === 'FIXED'
+          ? 'FIXED'
+          : 'FIXED'
     const commissionValueRaw = body.commissionValue !== undefined ? Number(body.commissionValue) : 0
     const notes = typeof body.notes === 'string' ? body.notes : ''
     const date = body.date ? new Date(body.date) : new Date()
@@ -159,9 +165,25 @@ export async function POST(
     const feeRecoveredFromPartner = partnerFeeShare
     const sellerProfitAtSale = investorProfit + feeRecoveredFromPartner
     const accruedProfitAtSale = Math.max(0, sellerProfitAtSale)
-    const commissionAmount = commissionType === 'PERCENT'
-      ? Math.max(0, (salePrice * commissionValueRaw) / 100)
-      : Math.max(0, commissionValueRaw)
+
+    const partnerHoldingYears = partnerDays > 0 ? (partnerDays / 365) : 0
+    const partnerApr = (partnerHoldingYears > 0 && amount > 0)
+      ? ((partnerGrossProfit / amount) / partnerHoldingYears) * 100
+      : 0
+    const allowedProfitAtTenApr = (partnerHoldingYears > 0 && amount > 0)
+      ? amount * 0.10 * partnerHoldingYears
+      : 0
+
+    const commissionAmount = (() => {
+      if (commissionType === 'PERCENT') {
+        return Math.max(0, (partnerGrossProfit * commissionValueRaw) / 100)
+      }
+      if (commissionType === 'AUTO') {
+        const excess = partnerGrossProfit - allowedProfitAtTenApr
+        return Math.max(0, excess)
+      }
+      return Math.max(0, commissionValueRaw)
+    })()
     const sharePercentage = investment.principalAmount > 0
       ? (amount / investment.principalAmount) * 100
       : null
@@ -255,6 +277,11 @@ export async function POST(
               partnerGrossProfit,
               partnerFeeShare,
               feeRecoveredFromPartner,
+              partnerHoldingYears,
+              partnerApr,
+              allowedProfitAtTenApr,
+              commissionType,
+              commissionValueRaw,
             }),
           },
           ...(accruedProfitAtSale > 0
@@ -283,6 +310,9 @@ export async function POST(
                     partnerGrossProfit,
                     partnerFeeShare,
                     feeRecoveredFromPartner,
+                    partnerHoldingYears,
+                    partnerApr,
+                    allowedProfitAtTenApr,
                   }),
                 },
               ]
@@ -316,6 +346,9 @@ export async function POST(
                     partnerGrossProfit,
                     partnerFeeShare,
                     feeRecoveredFromPartner,
+                    partnerHoldingYears,
+                    partnerApr,
+                    allowedProfitAtTenApr,
                   }),
                 },
               ]
