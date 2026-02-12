@@ -324,6 +324,7 @@ export function SukukList({ initialSukuk, userRole, ownerPersonId, viewerPersonI
       netProfit: profitEarnedToSale,
       commissionEarned,
       acquiredAt: null,
+      commissionPaid: 0,
       cashInflow,
       totalReceived: cashInflow,
       receivable: 0,
