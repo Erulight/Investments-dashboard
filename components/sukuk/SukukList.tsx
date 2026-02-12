@@ -73,6 +73,8 @@ export function SukukList({ initialSukuk, userRole, ownerPersonId, viewerPersonI
     Array.isArray(initialSukuk) ? initialSukuk : []
   )
 
+  const canActOnDeals = userRole === 'OWNER' || userRole === 'PARTNER'
+
   useEffect(() => {
     setSukuk(Array.isArray(initialSukuk) ? initialSukuk : [])
   }, [initialSukuk])
@@ -251,6 +253,76 @@ export function SukukList({ initialSukuk, userRole, ownerPersonId, viewerPersonI
       return JSON.parse(value)
     } catch {
       return null
+    }
+  }
+
+  const handleReceiveAndClose = async (investment: any, metrics: any) => {
+    if (actionLoading) return
+
+    const receivable = Number(metrics?.receivable ?? 0)
+    const remainingPrincipal = Number(investment?.principalAmount ?? 0)
+    const currencyLabel = investment?.account?.currency || 'SAR'
+
+    const confirmLines: string[] = []
+    if (receivable > 0.01) {
+      confirmLines.push(`Receive remaining profit: ${currencyLabel} ${receivable.toFixed(2)}`)
+    }
+    if (remainingPrincipal > 0.01) {
+      confirmLines.push(`Close principal: ${currencyLabel} ${remainingPrincipal.toFixed(2)}`)
+    }
+    if (confirmLines.length === 0) {
+      alert('Nothing to receive or close for this deal.')
+      return
+    }
+
+    const confirmed = confirm(`This will:\n- ${confirmLines.join('\n- ')}\n\nContinue?`)
+    if (!confirmed) return
+
+    setActionLoading(true)
+    setActionError('')
+
+    try {
+      const isoDate = new Date().toISOString().split('T')[0]
+
+      if (receivable > 0.01) {
+        const res = await fetch(`/api/sukuk/${investment.id}/withdraw`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            source: 'PROFIT',
+            amount: receivable,
+            date: isoDate,
+            notes: 'Receive & close',
+          }),
+        })
+        const data = await res.json().catch(() => ({}))
+        if (!res.ok) {
+          setActionError(data.error || 'Failed to receive profit')
+          return
+        }
+      }
+
+      if (remainingPrincipal > 0.01) {
+        const res = await fetch(`/api/sukuk/${investment.id}/rollback`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            date: isoDate,
+            notes: 'Receive & close',
+          }),
+        })
+        const data = await res.json().catch(() => ({}))
+        if (!res.ok) {
+          setActionError(data.error || 'Failed to close principal')
+          return
+        }
+      }
+
+      router.refresh()
+    } catch (error) {
+      setActionError('Failed to close deal')
+    } finally {
+      setActionLoading(false)
     }
   }
 
@@ -1249,7 +1321,7 @@ export function SukukList({ initialSukuk, userRole, ownerPersonId, viewerPersonI
                         Status{sortIndicator('status')}
                       </button>
                     </TableHead>
-                    {userRole === 'OWNER' && (
+                    {canActOnDeals && (
                       <TableHead className="px-2 py-1.5 text-xs whitespace-nowrap">Actions</TableHead>
                     )}
                   </TableRow>
@@ -1423,6 +1495,32 @@ export function SukukList({ initialSukuk, userRole, ownerPersonId, viewerPersonI
                           </div>
                         </TableCell>
                       )}
+
+                      {userRole === 'PARTNER' && (
+                        <TableCell className="px-2 py-1.5 align-middle">
+                          <div className="flex flex-nowrap items-center gap-2 whitespace-nowrap">
+                            <Button
+                              size="sm"
+                              variant="secondary"
+                              onClick={() => handleReceiveAndClose(inv, metrics)}
+                              disabled={actionLoading}
+                              title="Receive & Close"
+                            >
+                              Receive & Close
+                            </Button>
+
+                            <Button
+                              size="sm"
+                              variant="ghost"
+                              onClick={() => handleReopen(inv)}
+                              disabled={actionLoading}
+                              title="Redo"
+                            >
+                              Redo
+                            </Button>
+                          </div>
+                        </TableCell>
+                      )}
                     </TableRow>
                   )
                 })}
@@ -1463,7 +1561,7 @@ export function SukukList({ initialSukuk, userRole, ownerPersonId, viewerPersonI
                         {formatCurrency(totals.receivable, totals.currency)}
                       </TableCell>
                       <TableCell className="px-2 py-2">{null}</TableCell>
-                      {userRole === 'OWNER' && <TableCell className="px-2 py-2">{null}</TableCell>}
+                      {canActOnDeals && <TableCell className="px-2 py-2">{null}</TableCell>}
                     </TableRow>
                   </TableFooter>
                 )}

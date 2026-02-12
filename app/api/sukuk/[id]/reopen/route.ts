@@ -10,19 +10,37 @@ export async function POST(
   { params }: { params: Promise<{ id: string }> }
 ) {
   try {
-    const user = await requireAuth(['OWNER'])
+    const user = await requireAuth(['OWNER', 'PARTNER'])
     const { id } = await params
 
     const investment = await prisma.investment.findUnique({
       where: { id },
-      include: { account: true },
+      include: {
+        account: true,
+        dealParticipants: true,
+      },
     })
 
     if (!investment) {
       return NextResponse.json({ error: 'Sukuk not found' }, { status: 404 })
     }
 
-    const result = await prisma.$transaction(async (tx) => {
+    if (user.role === 'PARTNER') {
+      if (!user.personId) {
+        return NextResponse.json({ error: 'Partner is missing a person profile' }, { status: 400 })
+      }
+
+      const participants = Array.isArray(investment.dealParticipants)
+        ? investment.dealParticipants
+        : []
+
+      const isSoleOwner = participants.length === 1 && participants[0]?.personId === user.personId
+      if (!isSoleOwner) {
+        return NextResponse.json({ error: 'This Sukuk is not fully owned by you' }, { status: 403 })
+      }
+    }
+
+    const result = await prisma.$transaction(async (tx: any) => {
       const receiptMovements = await tx.cashBucketMovement.findMany({
         where: {
           investmentId: id,
@@ -37,21 +55,21 @@ export async function POST(
         },
       })
 
-      const movementTotal = receiptMovements.reduce((sum, m) => sum + m.amount, 0)
+      const movementTotal = receiptMovements.reduce((sum: number, m: any) => sum + m.amount, 0)
       const movementProfit = receiptMovements
-        .filter((m) => m.type === 'WITHDRAW_PROFIT')
-        .reduce((sum, m) => sum + m.amount, 0)
+        .filter((m: any) => m.type === 'WITHDRAW_PROFIT')
+        .reduce((sum: number, m: any) => sum + m.amount, 0)
       const movementPrincipal = receiptMovements
-        .filter((m) => m.type !== 'WITHDRAW_PROFIT')
-        .reduce((sum, m) => sum + m.amount, 0)
+        .filter((m: any) => m.type !== 'WITHDRAW_PROFIT')
+        .reduce((sum: number, m: any) => sum + m.amount, 0)
 
-      const transactionTotal = receiptTransactions.reduce((sum, t) => sum + Math.abs(t.amount), 0)
+      const transactionTotal = receiptTransactions.reduce((sum: number, t: any) => sum + Math.abs(t.amount), 0)
       const transactionProfit = receiptTransactions
-        .filter((t) => t.type === 'WITHDRAW_PROFIT')
-        .reduce((sum, t) => sum + Math.abs(t.amount), 0)
+        .filter((t: any) => t.type === 'WITHDRAW_PROFIT')
+        .reduce((sum: number, t: any) => sum + Math.abs(t.amount), 0)
       const transactionPrincipal = receiptTransactions
-        .filter((t) => t.type !== 'WITHDRAW_PROFIT')
-        .reduce((sum, t) => sum + Math.abs(t.amount), 0)
+        .filter((t: any) => t.type !== 'WITHDRAW_PROFIT')
+        .reduce((sum: number, t: any) => sum + Math.abs(t.amount), 0)
 
       const useMovements = receiptMovements.length > 0
       const totalReceipt = useMovements ? movementTotal : transactionTotal

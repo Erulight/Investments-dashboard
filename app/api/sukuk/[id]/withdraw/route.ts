@@ -3,13 +3,14 @@ import { prisma } from '@/lib/db'
 import { requireAuth } from '@/lib/rbac'
 import { logAudit } from '@/lib/audit'
 import { creditBucketsForReceipt } from '@/lib/cashBuckets'
+import { createCashBucket } from '@/lib/cashBuckets'
 
 export async function POST(
   req: NextRequest,
   { params }: { params: Promise<{ id: string }> }
 ) {
   try {
-    const user = await requireAuth(['OWNER'])
+    const user = await requireAuth(['OWNER', 'PARTNER'])
     const { id } = await params
     const body = await req.json()
 
@@ -24,11 +25,29 @@ export async function POST(
 
     const investment = await prisma.investment.findUnique({
       where: { id },
-      include: { account: true },
+      include: {
+        account: true,
+        dealParticipants: true,
+      },
     })
 
     if (!investment) {
       return NextResponse.json({ error: 'Sukuk not found' }, { status: 404 })
+    }
+
+    if (user.role === 'PARTNER') {
+      if (!user.personId) {
+        return NextResponse.json({ error: 'Partner is missing a person profile' }, { status: 400 })
+      }
+
+      const participants = Array.isArray(investment.dealParticipants)
+        ? investment.dealParticipants
+        : []
+
+      const isSoleOwner = participants.length === 1 && participants[0]?.personId === user.personId
+      if (!isSoleOwner) {
+        return NextResponse.json({ error: 'This Sukuk is not fully owned by you' }, { status: 403 })
+      }
     }
 
     if (source === 'PRINCIPAL' && amount > investment.principalAmount) {
@@ -59,7 +78,7 @@ export async function POST(
       )
     }
 
-    const updated = await prisma.$transaction(async (tx) => {
+    const updated = await prisma.$transaction(async (tx: any) => {
       const updatedInvestment = await tx.investment.update({
         where: { id },
         data: {
@@ -94,14 +113,34 @@ export async function POST(
         })
       }
 
-      await creditBucketsForReceipt(tx, {
-        investmentId: investment.id,
-        amount,
-        principalReduction: source === 'PRINCIPAL' ? amount : 0,
-        date,
-        type: source === 'PROFIT' ? 'WITHDRAW_PROFIT' : 'WITHDRAW_PRINCIPAL',
-        notes: notes || null,
-      })
+      if (user.role === 'PARTNER') {
+        const participants = Array.isArray(investment.dealParticipants)
+          ? investment.dealParticipants
+          : []
+        const acquiredAtRaw = participants[0]?.acquiredAt || investment.startDate
+        const acquiredAt = acquiredAtRaw instanceof Date ? acquiredAtRaw : new Date(acquiredAtRaw)
+        const haulStartDate = Number.isNaN(acquiredAt.getTime()) ? date : acquiredAt
+
+        await createCashBucket(tx, {
+          amount,
+          haulStartDate,
+          currency: investment.account?.currency || 'SAR',
+          label: `Sukuk Receipt • ${investment.name}`,
+          date,
+          notes: notes || null,
+          investmentId: investment.id,
+          type: source === 'PROFIT' ? 'WITHDRAW_PROFIT' : 'WITHDRAW_PRINCIPAL',
+        })
+      } else {
+        await creditBucketsForReceipt(tx, {
+          investmentId: investment.id,
+          amount,
+          principalReduction: source === 'PRINCIPAL' ? amount : 0,
+          date,
+          type: source === 'PROFIT' ? 'WITHDRAW_PROFIT' : 'WITHDRAW_PRINCIPAL',
+          notes: notes || null,
+        })
+      }
 
       const cashAccount = await tx.account.findFirst({
         where: { type: 'CASH', isActive: true },
