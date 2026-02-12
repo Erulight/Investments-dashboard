@@ -122,8 +122,43 @@ export async function POST(
 
     const ratio = seller.investedAmount > 0 ? amount / seller.investedAmount : 0
     const currentValueTransfer = seller.currentValue * ratio
-    const profitTransfer = 0
-    const accruedProfitAtSale = Math.max(0, currentValueTransfer - amount)
+
+    const startOfDay = (d: Date) => new Date(d.getFullYear(), d.getMonth(), d.getDate())
+    const diffDays = (start: Date, end: Date) => {
+      const s = startOfDay(start)
+      const e = startOfDay(end)
+      return Math.max(0, Math.round((e.getTime() - s.getTime()) / (1000 * 60 * 60 * 24)))
+    }
+
+    const startDate = investment.startDate ? new Date(investment.startDate) : null
+    const maturityDate = investment.maturityDate ? new Date(investment.maturityDate) : null
+    if (!startDate || !maturityDate || Number.isNaN(maturityDate.getTime())) {
+      return NextResponse.json({ error: 'Sukuk maturity date is required for selling' }, { status: 400 })
+    }
+    const saleDate = new Date(date)
+    const totalDays = diffDays(startDate, maturityDate)
+    const investorDays = diffDays(startDate, saleDate)
+    const partnerDays = diffDays(saleDate, maturityDate)
+
+    const totalNetProfitFull = Number.isFinite(investment.receivableAmount)
+      ? Number(investment.receivableAmount)
+      : 0
+    const totalFeesFull = Number.isFinite(investment.fees) ? Number(investment.fees) : 0
+
+    const principalRatio = investment.principalAmount > 0
+      ? Math.min(1, Math.max(0, amount / investment.principalAmount))
+      : 0
+
+    const dailyNetProfit = totalDays > 0 ? (totalNetProfitFull / totalDays) : 0
+    const dailyFee = totalDays > 0 ? (totalFeesFull / totalDays) : 0
+
+    const investorProfit = dailyNetProfit * investorDays * principalRatio
+    const partnerGrossProfit = dailyNetProfit * partnerDays * principalRatio
+    const partnerFeeShare = dailyFee * partnerDays * principalRatio
+    const investorFeeShare = dailyFee * investorDays * principalRatio
+    const feeRecoveredFromPartner = partnerFeeShare
+    const sellerProfitAtSale = investorProfit + feeRecoveredFromPartner
+    const accruedProfitAtSale = Math.max(0, sellerProfitAtSale)
     const commissionAmount = commissionType === 'PERCENT'
       ? Math.max(0, (salePrice * commissionValueRaw) / 100)
       : Math.max(0, commissionValueRaw)
@@ -161,7 +196,8 @@ export async function POST(
             investedAmount: buyer.investedAmount + amount,
             currentValue: buyer.currentValue + currentValueTransfer,
             acquiredAt: buyer.acquiredAt || date,
-            commissionFees: (buyer.commissionFees || 0) + commissionAmount,
+            commissionFees: (buyer.commissionFees || 0) + commissionAmount + partnerFeeShare,
+            profit: (buyer.profit || 0) + partnerGrossProfit,
             sharePercentage: investment.principalAmount > 0
               ? ((buyer.investedAmount + amount) / investment.principalAmount) * 100
               : buyer.sharePercentage,
@@ -175,7 +211,8 @@ export async function POST(
             investedAmount: amount,
             currentValue: currentValueTransfer,
             acquiredAt: date,
-            commissionFees: commissionAmount,
+            commissionFees: commissionAmount + partnerFeeShare,
+            profit: partnerGrossProfit,
             sharePercentage,
           },
         })
@@ -208,6 +245,16 @@ export async function POST(
               salePrice,
               commissionAmount,
               accruedProfitAtSale,
+              totalDays,
+              investorDays,
+              partnerDays,
+              totalNetProfitFull,
+              totalFeesFull,
+              investorProfit,
+              investorFeeShare,
+              partnerGrossProfit,
+              partnerFeeShare,
+              feeRecoveredFromPartner,
             }),
           },
           ...(accruedProfitAtSale > 0
@@ -226,6 +273,16 @@ export async function POST(
                     salePrice,
                     commissionAmount,
                     accruedProfitAtSale,
+                    totalDays,
+                    investorDays,
+                    partnerDays,
+                    totalNetProfitFull,
+                    totalFeesFull,
+                    investorProfit,
+                    investorFeeShare,
+                    partnerGrossProfit,
+                    partnerFeeShare,
+                    feeRecoveredFromPartner,
                   }),
                 },
               ]
@@ -249,6 +306,16 @@ export async function POST(
                     commissionValue: commissionValueRaw,
                     commissionAmount,
                     accruedProfitAtSale,
+                    totalDays,
+                    investorDays,
+                    partnerDays,
+                    totalNetProfitFull,
+                    totalFeesFull,
+                    investorProfit,
+                    investorFeeShare,
+                    partnerGrossProfit,
+                    partnerFeeShare,
+                    feeRecoveredFromPartner,
                   }),
                 },
               ]

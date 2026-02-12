@@ -280,21 +280,24 @@ export function SukukList({ initialSukuk, userRole, ownerPersonId, viewerPersonI
       }, 0)
 
     const apr = Number.isFinite(inv.interestRate) ? inv.interestRate : 0
-    const fullFees = Number.isFinite(inv.fees) ? inv.fees : 0
-    const ratio = inv.principalAmount > 0 && principalSold > 0 ? Math.min(1, principalSold / inv.principalAmount) : 0
-    const totalMonthsFull = getPeriodMonths(inv.startDate, inv.maturityDate)
-    const monthsHeld = saleDate ? getPeriodMonths(inv.startDate, saleDate) : null
+    const meta = sellTx?.meta || null
 
-    const heldYears = monthsHeld ? monthsHeld / 12 : 0
-    const grossProfitHeld = principalSold > 0 && apr > 0 && heldYears > 0
-      ? principalSold * (apr / 100) * heldYears
-      : 0
+    const investorDays = Number(meta?.investorDays ?? 0)
+    const totalDays = Number(meta?.totalDays ?? 0)
+    const monthsHeld = investorDays > 0 ? investorDays / 30 : (saleDate ? getPeriodMonths(inv.startDate, saleDate) : null)
 
-    const feesHeld = totalMonthsFull && monthsHeld !== null && totalMonthsFull > 0
-      ? (fullFees * ratio) * Math.min(1, monthsHeld / totalMonthsFull)
-      : fullFees * ratio
+    const investorProfit = Number(meta?.investorProfit ?? 0)
+    const investorFeeShare = Number(meta?.investorFeeShare ?? 0)
+    const partnerFeeShare = Number(meta?.partnerFeeShare ?? 0)
+    const accruedProfitAtSale = Number(meta?.accruedProfitAtSale ?? 0)
 
-    const profitEarnedToSale = Math.max(0, grossProfitHeld - feesHeld)
+    // This is the realized gain booked for the owner at sale time per business rules:
+    // owner net profit for held days + fee share recovered from partner.
+    const profitEarnedToSale = Number.isFinite(accruedProfitAtSale)
+      ? Math.max(0, accruedProfitAtSale)
+      : Math.max(0, investorProfit + partnerFeeShare)
+
+    const feesHeld = Number.isFinite(investorFeeShare) ? Math.max(0, investorFeeShare) : 0
     const cashInflow = Math.max(0, salePrice) + Math.max(0, commissionEarned)
 
     return {
@@ -311,12 +314,12 @@ export function SukukList({ initialSukuk, userRole, ownerPersonId, viewerPersonI
       paymentStatus: 'sold',
       progress: getProgress(Math.max(0, cashInflow), Math.max(0, cashInflow)),
       currency,
-      aprAfterFees: principalSold > 0 && heldYears > 0
-        ? ((profitEarnedToSale / principalSold) / heldYears) * 100
-        : 0,
+      aprAfterFees: 0,
       saleDate,
       salePrice,
       principalSold,
+      investorDays: Number.isFinite(investorDays) ? investorDays : null,
+      totalDays: Number.isFinite(totalDays) ? totalDays : null,
     }
   }
 

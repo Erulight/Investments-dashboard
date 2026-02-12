@@ -181,6 +181,18 @@ export default async function InvestmentsPage() {
     const grossProfit = investment > 0 && apr > 0 && periodYears > 0
       ? investment * (apr / 100) * periodYears
       : 0
+    if (inv.myParticipation) {
+      const grossProfit = Number.isFinite(inv.myParticipation?.profit)
+        ? Number(inv.myParticipation.profit)
+        : 0
+      const commissionFees = Number.isFinite(inv.myParticipation?.commissionFees)
+        ? Number(inv.myParticipation.commissionFees)
+        : 0
+      if (grossProfit > 0 || commissionFees > 0) {
+        return Math.max(0, grossProfit - commissionFees)
+      }
+    }
+
     const manualReceivableFull = Number.isFinite(inv.receivableAmount) ? inv.receivableAmount : null
     const manualReceivable = manualReceivableFull !== null && manualReceivableFull > 0
       ? (inv.myParticipation
