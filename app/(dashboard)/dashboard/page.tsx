@@ -216,6 +216,14 @@ export default async function DashboardPage({
       },
       include: {
         account: { select: { type: true } },
+        dealParticipants: {
+          select: {
+            personId: true,
+            investedAmount: true,
+            currentValue: true,
+            profit: true,
+          },
+        },
         transactions: {
           where: {
             type: { in: ['WITHDRAW_PROFIT', 'WITHDRAW_PRINCIPAL'] },
@@ -230,38 +238,69 @@ export default async function DashboardPage({
       },
     })
 
-    totalInvested = investments.reduce((sum, inv) => sum + inv.principalAmount, 0)
-    totalValue = investments.reduce(
-      (sum, inv) => sum + (inv.account.type === 'SUKUK' ? inv.principalAmount : inv.currentValue),
+    const ownerPersonId = user.personId || null
+    const getOwnerPosition = (inv: any) => {
+      if (!ownerPersonId) return null
+      const dps = Array.isArray(inv.dealParticipants) ? inv.dealParticipants : []
+      return dps.find((p: any) => p?.personId === ownerPersonId) || null
+    }
+
+    const ownedInvestments = investments.filter((inv: any) => {
+      const dps = Array.isArray(inv.dealParticipants) ? inv.dealParticipants : []
+      if (dps.length === 0) return true
+      return Boolean(getOwnerPosition(inv))
+    })
+
+    totalInvested = ownedInvestments.reduce((sum, inv) => {
+      const pos = getOwnerPosition(inv)
+      return sum + (pos ? Number(pos.investedAmount) || 0 : inv.principalAmount)
+    }, 0)
+
+    totalValue = ownedInvestments.reduce(
+      (sum, inv) => {
+        const pos = getOwnerPosition(inv)
+        const principal = pos ? Number(pos.investedAmount) || 0 : inv.principalAmount
+        return sum + (inv.account.type === 'SUKUK' ? principal : inv.currentValue)
+      },
       0
     )
-    totalProfit = investments.reduce(
-      (sum, inv) => sum + inv.realizedProfit + inv.unrealizedProfit,
+    totalProfit = ownedInvestments.reduce(
+      (sum, inv) => {
+        const pos = getOwnerPosition(inv)
+        if (pos) return sum + (Number(pos.profit) || 0)
+        return sum + inv.realizedProfit + inv.unrealizedProfit
+      },
       0
     )
-    activeInvestments = investments.length
+    activeInvestments = ownedInvestments.length
 
-    sukukInvested = investments
-      .filter((inv) => inv.account.type === 'SUKUK')
-      .reduce((sum, inv) => sum + inv.principalAmount, 0)
-
-    const now = new Date()
-    sukukReceivable = investments
+    sukukInvested = ownedInvestments
       .filter((inv) => inv.account.type === 'SUKUK')
       .reduce((sum, inv) => {
+        const pos = getOwnerPosition(inv)
+        return sum + (pos ? Number(pos.investedAmount) || 0 : inv.principalAmount)
+      }, 0)
+
+    const now = new Date()
+    sukukReceivable = ownedInvestments
+      .filter((inv) => inv.account.type === 'SUKUK')
+      .reduce((sum, inv) => {
+        const pos = getOwnerPosition(inv)
         const v = getSukukValueAt(inv, now)
-        const principal = Number.isFinite(inv.principalAmount) ? Number(inv.principalAmount) : 0
+        const principal = pos
+          ? (Number(pos.investedAmount) || 0)
+          : (Number.isFinite(inv.principalAmount) ? Number(inv.principalAmount) : 0)
         const receivable = Math.max(0, v - principal)
         return sum + receivable
       }, 0)
 
     sukukValue = sukukInvested + sukukReceivable
     totalValue += sukukReceivable
-    sipValue = investments
+    sipValue = ownedInvestments
       .filter((inv) => inv.account.type === 'SIP')
       .reduce((sum, inv) => sum + inv.currentValue, 0)
 
-    circlysOngoingSaved = investments
+    circlysOngoingSaved = ownedInvestments
       .filter((inv) => inv.account.type === 'CIRCLYS')
       .filter((inv) => {
         try {
@@ -275,10 +314,11 @@ export default async function DashboardPage({
 
     // Build per-type breakdown
     const typeMap = new Map<string, { invested: number; value: number; count: number }>()
-    for (const inv of investments) {
+    for (const inv of ownedInvestments) {
       const t = inv.account.type
       const existing = typeMap.get(t) || { invested: 0, value: 0, count: 0 }
-      existing.invested += inv.principalAmount
+      const pos = getOwnerPosition(inv)
+      existing.invested += pos ? (Number(pos.investedAmount) || 0) : inv.principalAmount
       if (t === 'SUKUK') {
         const v = getSukukValueAt(inv, new Date())
         existing.value += v
@@ -294,7 +334,7 @@ export default async function DashboardPage({
 
     // Calculate ROSCA / Circlys remaining payback debt
     // For ROSCA plans: if totalPaid < (monthlyAmount * durationMonths), the remainder is debt
-    const roscaInvestments = investments.filter(inv => inv.account.type === 'CIRCLYS')
+    const roscaInvestments = ownedInvestments.filter(inv => inv.account.type === 'CIRCLYS')
     for (const inv of roscaInvestments) {
       try {
         const meta = inv.metadata ? JSON.parse(inv.metadata as string) : {}
