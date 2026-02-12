@@ -249,6 +249,18 @@ export function SukukList({ initialSukuk, userRole, ownerPersonId, viewerPersonI
     }
   }
 
+  const getPartnerCommissionPaid = (inv: any) => {
+    if (!viewerPersonId) return 0
+    const transactions = Array.isArray(inv.transactions) ? inv.transactions : []
+    return transactions
+      .filter((tx: any) => tx.type === 'BUY_FROM_PARTNER' && tx.personId === viewerPersonId)
+      .reduce((sum: number, tx: any) => {
+        const meta = parseMetadata(tx.metadata)
+        const commission = Number(meta?.commissionAmount ?? 0)
+        return sum + (Number.isFinite(commission) ? Math.max(0, commission) : 0)
+      }, 0)
+  }
+
   const getSoldDealMetrics = (inv: any) => {
     const currency = inv.account?.currency || ''
     const transactions = Array.isArray(inv.transactions) ? inv.transactions : []
@@ -370,6 +382,7 @@ export function SukukList({ initialSukuk, userRole, ownerPersonId, viewerPersonI
         fees: 0,
         netProfit: 0,
         commissionEarned: 0,
+        commissionPaid: 0,
         totalReceived: 0,
         receivable: 0,
         periodMonths: getPeriodMonths(inv.startDate, inv.maturityDate),
@@ -443,6 +456,7 @@ export function SukukList({ initialSukuk, userRole, ownerPersonId, viewerPersonI
       fees,
       netProfit,
       commissionEarned: 0,
+      commissionPaid: userRole === 'OWNER' ? 0 : getPartnerCommissionPaid(inv),
       totalReceived,
       receivable,
       currency,
@@ -450,6 +464,7 @@ export function SukukList({ initialSukuk, userRole, ownerPersonId, viewerPersonI
       paymentStatus,
       aprAfterFees,
       isFullyReceived,
+      acquiredAt: participation?.acquiredAt ?? null,
     }
   }
 
@@ -650,6 +665,7 @@ export function SukukList({ initialSukuk, userRole, ownerPersonId, viewerPersonI
           fees: number
           profit: number
           commission: number
+          commissionPaid: number
           received: number
           receivable: number
         },
@@ -661,11 +677,12 @@ export function SukukList({ initialSukuk, userRole, ownerPersonId, viewerPersonI
         acc.fees += Number(m.fees || 0)
         acc.profit += Number(m.netProfit || 0)
         acc.commission += Number(m.commissionEarned || 0)
+        acc.commissionPaid += Number(m.commissionPaid || 0)
         acc.received += Number(m.totalReceived || 0)
         acc.receivable += Number(m.receivable || 0)
         return acc
       },
-      { currency: '', investment: 0, fees: 0, profit: 0, commission: 0, received: 0, receivable: 0 }
+      { currency: '', investment: 0, fees: 0, profit: 0, commission: 0, commissionPaid: 0, received: 0, receivable: 0 }
     )
   }, [sortedRows])
 
@@ -1174,6 +1191,11 @@ export function SukukList({ initialSukuk, userRole, ownerPersonId, viewerPersonI
                         Period{sortIndicator('period')}
                       </button>
                     </TableHead>
+                    {userRole !== 'OWNER' && (
+                      <TableHead className="px-2 py-1.5 text-xs whitespace-nowrap">
+                        Start Date
+                      </TableHead>
+                    )}
                     <TableHead className="px-2 py-1.5 text-xs whitespace-nowrap">
                       <button type="button" onClick={() => toggleSort('maturityDate')} className="inline-flex items-center hover:text-gray-900">
                         Maturity{sortIndicator('maturityDate')}
@@ -1189,6 +1211,11 @@ export function SukukList({ initialSukuk, userRole, ownerPersonId, viewerPersonI
                         Fees{sortIndicator('fees')}
                       </button>
                     </TableHead>
+                    {userRole !== 'OWNER' && (
+                      <TableHead className="px-2 py-1.5 text-xs whitespace-nowrap text-right">
+                        Commission Paid
+                      </TableHead>
+                    )}
                     <TableHead className="px-2 py-1.5 text-xs whitespace-nowrap text-right">
                       <button type="button" onClick={() => toggleSort('profit')} className="inline-flex items-center hover:text-gray-900">
                         Profit{sortIndicator('profit')}
@@ -1260,6 +1287,11 @@ export function SukukList({ initialSukuk, userRole, ownerPersonId, viewerPersonI
                       <TableCell className="px-2 py-1.5 text-gray-700 tabular-nums text-right whitespace-nowrap align-middle">
                         {metrics.periodMonths === null ? '—' : metrics.periodMonths.toFixed(1)}
                       </TableCell>
+                      {userRole !== 'OWNER' && (
+                        <TableCell className="px-2 py-1.5 text-gray-700 tabular-nums whitespace-nowrap align-middle">
+                          {formatDate(metrics.acquiredAt || inv.startDate)}
+                        </TableCell>
+                      )}
                       <TableCell className="px-2 py-1.5 text-gray-700 tabular-nums whitespace-nowrap align-middle">
                         {formatDate(inv.maturityDate)}
                       </TableCell>
@@ -1281,6 +1313,11 @@ export function SukukList({ initialSukuk, userRole, ownerPersonId, viewerPersonI
                       <TableCell className="px-2 py-1.5 text-gray-700 tabular-nums text-right whitespace-nowrap align-middle">
                         {formatCurrency(metrics.fees, metrics.currency)}
                       </TableCell>
+                      {userRole !== 'OWNER' && (
+                        <TableCell className="px-2 py-1.5 text-gray-700 tabular-nums text-right whitespace-nowrap align-middle">
+                          {formatCurrency(Number(metrics.commissionPaid || 0), metrics.currency)}
+                        </TableCell>
+                      )}
                       <TableCell className="px-2 py-1.5 text-gray-700 tabular-nums text-right whitespace-nowrap align-middle">
                         {formatCurrency(metrics.netProfit, metrics.currency)}
                       </TableCell>
@@ -1393,10 +1430,16 @@ export function SukukList({ initialSukuk, userRole, ownerPersonId, viewerPersonI
                       <TableCell className="px-2 py-2">{null}</TableCell>
                       <TableCell className="px-2 py-2">{null}</TableCell>
                       <TableCell className="px-2 py-2">{null}</TableCell>
+                      {userRole !== 'OWNER' && <TableCell className="px-2 py-2">{null}</TableCell>}
                       <TableCell className="px-2 py-2">{null}</TableCell>
                       <TableCell className="px-2 py-2 text-right font-semibold text-gray-900 tabular-nums whitespace-nowrap">
                         {formatCurrency(totals.fees, totals.currency)}
                       </TableCell>
+                      {userRole !== 'OWNER' && (
+                        <TableCell className="px-2 py-2 text-right font-semibold text-gray-900 tabular-nums whitespace-nowrap">
+                          {formatCurrency(totals.commissionPaid, totals.currency)}
+                        </TableCell>
+                      )}
                       <TableCell className="px-2 py-2 text-right font-semibold text-gray-900 tabular-nums whitespace-nowrap">
                         {formatCurrency(totals.profit, totals.currency)}
                       </TableCell>
