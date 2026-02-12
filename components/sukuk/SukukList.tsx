@@ -1,6 +1,6 @@
 'use client'
 
-import { useMemo, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import type { ReactNode } from 'react'
 import { useRouter } from 'next/navigation'
 import { Table, TableHeader, TableBody, TableFooter, TableRow, TableHead, TableCell } from '@/components/ui/Table'
@@ -72,6 +72,11 @@ export function SukukList({ initialSukuk, userRole, ownerPersonId, viewerPersonI
   const [sukuk, setSukuk] = useState<any[]>(
     Array.isArray(initialSukuk) ? initialSukuk : []
   )
+
+  useEffect(() => {
+    setSukuk(Array.isArray(initialSukuk) ? initialSukuk : [])
+  }, [initialSukuk])
+
   const [sort, setSort] = useState<{ key: string; dir: 'asc' | 'desc' }>(() => ({
     key: 'maturityDate',
     dir: 'asc',
