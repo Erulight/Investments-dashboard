@@ -43,6 +43,7 @@ model Person {
   user              User?
   dealParticipants  DealParticipant[]
   transactions      Transaction[]
+  cashBuckets       CashBucket[]
 
   @@index([email])
 }
