@@ -147,6 +147,23 @@ export default async function DashboardPage({
     return Math.max(0, months)
   }
 
+  const round2 = (value: number) => {
+    const n = Number(value)
+    if (!Number.isFinite(n)) return 0
+    return Math.round(n * 100) / 100
+  }
+
+  const parseMetadata = (value: unknown) => {
+    if (!value) return null
+    if (typeof value === 'object') return value as any
+    if (typeof value !== 'string') return null
+    try {
+      return JSON.parse(value)
+    } catch {
+      return null
+    }
+  }
+
   const getSukukNetProfit = (inv: any) => {
     const investment = Number.isFinite(inv.principalAmount) ? inv.principalAmount : 0
     const apr = Number.isFinite(inv.interestRate) ? inv.interestRate : 0
@@ -160,6 +177,87 @@ export default async function DashboardPage({
     const manualReceivable = Number.isFinite(inv.receivableAmount) ? inv.receivableAmount : null
     if (manualReceivable !== null && manualReceivable > 0) return manualReceivable
     return Math.max(0, grossProfit - fees)
+  }
+
+  const getPartnerSukukMetrics = (inv: any, participation: any, asOf: Date) => {
+    const principal = Number.isFinite(participation?.investedAmount) ? Number(participation.investedAmount) : 0
+    const apr = Number.isFinite(inv?.interestRate) ? Number(inv.interestRate) : 0
+    const fullFees = Number.isFinite(inv?.fees) ? Number(inv.fees) : 0
+    const startBasis = participation?.acquiredAt ?? inv?.startDate
+    const totalMonthsFull = getPeriodMonths(inv?.startDate, inv?.maturityDate)
+    const monthsHeld = getPeriodMonths(startBasis, inv?.maturityDate)
+    const timeRatio = totalMonthsFull > 0 ? Math.min(1, Math.max(0, monthsHeld / totalMonthsFull)) : 1
+
+    const feesHeld = (principal > 0 && Number.isFinite(inv?.principalAmount) && Number(inv.principalAmount) > 0)
+      ? (fullFees * Math.min(1, principal / Number(inv.principalAmount))) * timeRatio
+      : 0
+
+    const periodYears = monthsHeld ? monthsHeld / 12 : 0
+    const grossProfit = principal > 0 && apr > 0 && periodYears > 0
+      ? principal * (apr / 100) * periodYears
+      : 0
+
+    const manualReceivableFull = Number.isFinite(inv?.receivableAmount) ? Number(inv.receivableAmount) : null
+    const manualReceivable = manualReceivableFull !== null && manualReceivableFull > 0
+      ? manualReceivableFull * timeRatio
+      : null
+
+    const txs = Array.isArray(inv?.transactions) ? inv.transactions : []
+    const commissionPaid = txs
+      .filter((tx: any) => tx?.type === 'BUY_FROM_PARTNER' && participation?.personId && tx.personId === participation.personId)
+      .reduce((sum: number, tx: any) => {
+        const meta = parseMetadata(tx.metadata)
+        const commission = Number(meta?.commissionAmount ?? 0)
+        return sum + (Number.isFinite(commission) ? Math.max(0, commission) : 0)
+      }, 0)
+
+    const netProfitTotal = manualReceivable !== null
+      ? Math.max(0, manualReceivable - commissionPaid)
+      : Math.max(0, grossProfit - feesHeld - commissionPaid)
+
+    const start = toDate(startBasis)
+    const maturity = toDate(inv?.maturityDate)
+    const startTime = start?.getTime() || 0
+    const maturityTime = maturity?.getTime() || 0
+    const totalMs = maturityTime > startTime ? maturityTime - startTime : 0
+    const atMs = asOf.getTime()
+    const elapsedMs = totalMs > 0
+      ? Math.min(Math.max(atMs - startTime, 0), totalMs)
+      : (atMs > startTime ? 1 : 0)
+
+    const accruedProfit = totalMs > 0
+      ? netProfitTotal * (elapsedMs / totalMs)
+      : (atMs > startTime ? netProfitTotal : 0)
+
+    const withdrawnProfit = txs
+      .filter((tx: any) => tx?.type === 'WITHDRAW_PROFIT' && participation?.personId && tx.personId === participation.personId)
+      .filter((tx: any) => {
+        const d = tx?.date instanceof Date ? tx.date : new Date(tx?.date)
+        return !Number.isNaN(d.getTime()) && d.getTime() <= atMs
+      })
+      .reduce((sum: number, tx: any) => sum + Math.abs(Number(tx?.amount) || 0), 0)
+
+    const withdrawnPrincipal = txs
+      .filter((tx: any) => tx?.type === 'WITHDRAW_PRINCIPAL' && participation?.personId && tx.personId === participation.personId)
+      .filter((tx: any) => {
+        const d = tx?.date instanceof Date ? tx.date : new Date(tx?.date)
+        return !Number.isNaN(d.getTime()) && d.getTime() <= atMs
+      })
+      .reduce((sum: number, tx: any) => sum + Math.abs(Number(tx?.amount) || 0), 0)
+
+    const principalOutstanding = Math.max(0, principal - withdrawnPrincipal)
+    const receivable = Math.max(0, accruedProfit - withdrawnProfit)
+    const value = principalOutstanding + receivable
+
+    return {
+      principal,
+      value,
+      received: withdrawnProfit,
+      receivable,
+      profitAccrued: accruedProfit,
+      feesHeld,
+      commissionPaid,
+    }
   }
 
   const getSukukValueAt = (inv: any, at: Date) => {
@@ -389,20 +487,58 @@ export default async function DashboardPage({
           ...investmentDateFilter,
         },
       },
-      include: { investment: { include: { account: { select: { type: true } } } } },
+      include: {
+        investment: {
+          include: {
+            account: { select: { type: true } },
+            transactions: {
+              where: {
+                type: { in: ['WITHDRAW_PROFIT', 'WITHDRAW_PRINCIPAL', 'BUY_FROM_PARTNER', 'SELL_PROFIT_ACCRUED', 'PARTNER_COMMISSION'] },
+                OR: [{ personId: user.personId }, { personId: null }],
+              },
+              select: { type: true, date: true, amount: true, personId: true, metadata: true },
+              orderBy: { date: 'asc' },
+            },
+          },
+        },
+      },
     })
 
-    totalInvested = participants.reduce((sum, p) => sum + p.investedAmount, 0)
-    totalValue = participants.reduce((sum, p) => sum + p.currentValue, 0)
-    totalProfit = participants.reduce((sum, p) => sum + p.profit, 0)
+    const now = new Date()
+
+    totalInvested = participants.reduce((sum, p) => sum + (Number(p.investedAmount) || 0), 0)
+    totalValue = participants.reduce((sum, p) => {
+      const t = p.investment.account.type
+      if (t === 'SUKUK') {
+        const m = getPartnerSukukMetrics(p.investment, p, now)
+        return sum + m.value
+      }
+      return sum + (Number(p.currentValue) || 0)
+    }, 0)
+
+    // For partners, totalProfit = accrued profit-to-date (not just stored p.profit)
+    totalProfit = participants.reduce((sum, p) => {
+      const t = p.investment.account.type
+      if (t === 'SUKUK') {
+        const m = getPartnerSukukMetrics(p.investment, p, now)
+        return sum + m.profitAccrued
+      }
+      return sum + (Number(p.profit) || 0)
+    }, 0)
     activeInvestments = participants.length
 
     const typeMap = new Map<string, { invested: number; value: number; count: number }>()
     for (const p of participants) {
       const t = p.investment.account.type
       const existing = typeMap.get(t) || { invested: 0, value: 0, count: 0 }
-      existing.invested += p.investedAmount
-      existing.value += p.currentValue
+      const invested = Number(p.investedAmount) || 0
+      existing.invested += invested
+      if (t === 'SUKUK') {
+        const m = getPartnerSukukMetrics(p.investment, p, now)
+        existing.value += m.value
+      } else {
+        existing.value += Number(p.currentValue) || 0
+      }
       existing.count += 1
       typeMap.set(t, existing)
     }
@@ -443,8 +579,26 @@ export default async function DashboardPage({
   })()
 
   const displayedValue = user.role === 'OWNER' ? cashBalance + totalValue : totalValue
-  const yearlyProfitValue = yearlyValueChange.change
-  const yearlyReturnPercentage = yearlyValueChange.pct
+  const yearlyProfitValue = await (async () => {
+    if (user.role !== 'PARTNER' || !user.personId) return yearlyValueChange.change
+    const txSum = await prisma.transaction.aggregate({
+      where: {
+        personId: user.personId,
+        date: { gte: yearStart, lt: yearEnd },
+        type: { in: ['WITHDRAW_PROFIT', 'SELL_PROFIT_ACCRUED', 'PARTNER_COMMISSION'] },
+        OR: [
+          { investment: { name: { notIn: DEMO_INVESTMENT_NAMES } } },
+          { investmentId: null },
+        ],
+      },
+      _sum: { amount: true },
+    })
+    return Math.max(0, Math.abs(Number(txSum._sum.amount || 0)))
+  })()
+
+  const yearlyReturnPercentage = user.role === 'PARTNER'
+    ? (totalInvested > 0 ? (yearlyProfitValue / totalInvested) * 100 : 0)
+    : yearlyValueChange.pct
   const netWorth = user.role === 'OWNER'
     ? displayedValue - roscaDebt - debtsAtEnd
     : displayedValue - roscaDebt
@@ -553,6 +707,47 @@ export default async function DashboardPage({
           </CardContent>
         </Card>
       </div>
+
+      {user.role === 'PARTNER' && user.personId && (
+        <div className="grid grid-cols-2 gap-3 lg:grid-cols-4 items-start auto-rows-min">
+          <Card className="p-4">
+            <CardContent>
+              <p className="text-xs font-medium text-gray-500 uppercase tracking-wider">Profit (Accrued)</p>
+              <div className="text-xl font-bold text-gray-900 mt-1 tabular-nums">
+                SAR {round2(totalProfit).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+              </div>
+              <p className="text-[11px] text-gray-400 mt-0.5">Across your deals</p>
+            </CardContent>
+          </Card>
+          <Card className="p-4">
+            <CardContent>
+              <p className="text-xs font-medium text-gray-500 uppercase tracking-wider">Receivable</p>
+              <div className="text-xl font-bold text-gray-900 mt-1 tabular-nums">
+                SAR {round2(Math.max(0, totalValue - totalInvested)).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+              </div>
+              <p className="text-[11px] text-gray-400 mt-0.5">Accrued - received</p>
+            </CardContent>
+          </Card>
+          <Card className="p-4">
+            <CardContent>
+              <p className="text-xs font-medium text-gray-500 uppercase tracking-wider">Received (This Year)</p>
+              <div className="text-xl font-bold text-gray-900 mt-1 tabular-nums">
+                SAR {round2(yearlyProfitValue).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+              </div>
+              <p className="text-[11px] text-gray-400 mt-0.5">Withdrawals / realized</p>
+            </CardContent>
+          </Card>
+          <Card className="p-4">
+            <CardContent>
+              <p className="text-xs font-medium text-gray-500 uppercase tracking-wider">Yearly Return %</p>
+              <div className={`text-xl font-bold mt-1 tabular-nums ${yearlyReturnPercentage >= 0 ? 'text-emerald-600' : 'text-red-600'}`}>
+                {yearlyReturnPercentage >= 0 ? '+' : ''}{Math.abs(yearlyReturnPercentage).toFixed(2)}%
+              </div>
+              <p className="text-[11px] text-gray-400 mt-0.5">Based on invested</p>
+            </CardContent>
+          </Card>
+        </div>
+      )}
 
       {/* Second Row: Deals + Debt + Net Worth */}
       <div className="grid grid-cols-2 gap-3 lg:grid-cols-4 items-start auto-rows-min">
