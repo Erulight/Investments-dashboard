@@ -222,14 +222,18 @@ export default async function InvestmentsPage() {
       : null
     if (manualReceivable !== null) {
       const commissionFees = user.role === 'PARTNER'
-        ? getPartnerCommissionPaid(inv)
+        ? (Number.isFinite(inv.myParticipation?.commissionFees)
+            ? Number(inv.myParticipation.commissionFees)
+            : getPartnerCommissionPaid(inv))
         : (Number.isFinite(inv.myParticipation?.commissionFees)
             ? Number(inv.myParticipation.commissionFees)
             : 0)
       return Math.max(0, manualReceivable - commissionFees)
     }
     const commissionFees = user.role === 'PARTNER'
-      ? getPartnerCommissionPaid(inv)
+      ? (Number.isFinite(inv.myParticipation?.commissionFees)
+          ? Number(inv.myParticipation.commissionFees)
+          : getPartnerCommissionPaid(inv))
       : (Number.isFinite(inv.myParticipation?.commissionFees)
           ? Number(inv.myParticipation.commissionFees)
           : 0)
