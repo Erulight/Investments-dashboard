@@ -148,6 +148,29 @@ export default async function InvestmentsPage() {
         }, 0) + realizedFromSales
   }
 
+  const parseMetadata = (value: unknown) => {
+    if (!value) return null
+    if (typeof value === 'object') return value as any
+    if (typeof value !== 'string') return null
+    try {
+      return JSON.parse(value)
+    } catch {
+      return null
+    }
+  }
+
+  const getPartnerCommissionPaid = (inv: any) => {
+    if (user.role !== 'PARTNER' || !user.personId) return 0
+    const transactions = Array.isArray(inv.transactions) ? inv.transactions : []
+    return transactions
+      .filter((tx: any) => tx.type === 'BUY_FROM_PARTNER' && tx.personId === user.personId)
+      .reduce((sum: number, tx: any) => {
+        const meta = parseMetadata(tx.metadata)
+        const commission = Number(meta?.commissionAmount ?? 0)
+        return sum + (Number.isFinite(commission) ? Math.max(0, commission) : 0)
+      }, 0)
+  }
+
   const getOwnerRealizedProfitFromSales = (inv: any) => {
     if (user.role !== 'OWNER' || !user.personId) return 0
     const transactions = Array.isArray(inv.transactions) ? inv.transactions : []
@@ -200,14 +223,18 @@ export default async function InvestmentsPage() {
           : manualReceivableFull)
       : null
     if (manualReceivable !== null) {
-      const commissionFees = Number.isFinite(inv.myParticipation?.commissionFees)
-        ? Number(inv.myParticipation.commissionFees)
-        : 0
+      const commissionFees = user.role === 'PARTNER'
+        ? getPartnerCommissionPaid(inv)
+        : (Number.isFinite(inv.myParticipation?.commissionFees)
+            ? Number(inv.myParticipation.commissionFees)
+            : 0)
       return Math.max(0, manualReceivable - commissionFees)
     }
-    const commissionFees = Number.isFinite(inv.myParticipation?.commissionFees)
-      ? Number(inv.myParticipation.commissionFees)
-      : 0
+    const commissionFees = user.role === 'PARTNER'
+      ? getPartnerCommissionPaid(inv)
+      : (Number.isFinite(inv.myParticipation?.commissionFees)
+          ? Number(inv.myParticipation.commissionFees)
+          : 0)
     const timeRatio = inv.myParticipation && totalMonthsFull > 0
       ? Math.min(1, Math.max(0, periodMonths / totalMonthsFull))
       : 1
