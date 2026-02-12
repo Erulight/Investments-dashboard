@@ -102,6 +102,7 @@ export default async function DashboardPage({
   let activeInvestments = 0
 
   let investments: any[] = []
+  let ownedInvestments: any[] = []
 
   const investmentDateFilter = {
     startDate: { lt: yearEnd },
@@ -273,18 +274,20 @@ export default async function DashboardPage({
       return dps.find((p: any) => p?.personId === ownerPersonId) || null
     }
 
-    const ownedInvestments = investments.filter((inv: any) => {
+    const owned = investments.filter((inv: any) => {
       const dps = Array.isArray(inv.dealParticipants) ? inv.dealParticipants : []
       if (dps.length === 0) return true
       return Boolean(getOwnerPosition(inv))
     })
 
-    totalInvested = ownedInvestments.reduce((sum, inv) => {
+    ownedInvestments = owned
+
+    totalInvested = owned.reduce((sum, inv) => {
       const pos = getOwnerPosition(inv)
       return sum + (pos ? Number(pos.investedAmount) || 0 : inv.principalAmount)
     }, 0)
 
-    totalValue = ownedInvestments.reduce(
+    totalValue = owned.reduce(
       (sum, inv) => {
         const pos = getOwnerPosition(inv)
         const principal = pos ? Number(pos.investedAmount) || 0 : inv.principalAmount
@@ -292,7 +295,7 @@ export default async function DashboardPage({
       },
       0
     )
-    totalProfit = ownedInvestments.reduce(
+    totalProfit = owned.reduce(
       (sum, inv) => {
         const pos = getOwnerPosition(inv)
         if (pos) return sum + (Number(pos.profit) || 0)
@@ -300,9 +303,9 @@ export default async function DashboardPage({
       },
       0
     )
-    activeInvestments = ownedInvestments.length
+    activeInvestments = owned.length
 
-    sukukInvested = ownedInvestments
+    sukukInvested = owned
       .filter((inv) => inv.account.type === 'SUKUK')
       .reduce((sum, inv) => {
         const pos = getOwnerPosition(inv)
@@ -310,7 +313,7 @@ export default async function DashboardPage({
       }, 0)
 
     const now = new Date()
-    sukukReceivable = ownedInvestments
+    sukukReceivable = owned
       .filter((inv) => inv.account.type === 'SUKUK')
       .reduce((sum, inv) => {
         const pos = getOwnerPosition(inv)
@@ -324,11 +327,11 @@ export default async function DashboardPage({
 
     sukukValue = sukukInvested + sukukReceivable
     totalValue += sukukReceivable
-    sipValue = ownedInvestments
+    sipValue = owned
       .filter((inv) => inv.account.type === 'SIP')
       .reduce((sum, inv) => sum + inv.currentValue, 0)
 
-    circlysOngoingSaved = ownedInvestments
+    circlysOngoingSaved = owned
       .filter((inv) => inv.account.type === 'CIRCLYS')
       .filter((inv) => {
         try {
@@ -342,7 +345,7 @@ export default async function DashboardPage({
 
     // Build per-type breakdown
     const typeMap = new Map<string, { invested: number; value: number; count: number }>()
-    for (const inv of ownedInvestments) {
+    for (const inv of owned) {
       const t = inv.account.type
       const existing = typeMap.get(t) || { invested: 0, value: 0, count: 0 }
       const pos = getOwnerPosition(inv)
@@ -362,7 +365,7 @@ export default async function DashboardPage({
 
     // Calculate ROSCA / Circlys remaining payback debt
     // For ROSCA plans: if totalPaid < (monthlyAmount * durationMonths), the remainder is debt
-    const roscaInvestments = ownedInvestments.filter(inv => inv.account.type === 'CIRCLYS')
+    const roscaInvestments = owned.filter(inv => inv.account.type === 'CIRCLYS')
     for (const inv of roscaInvestments) {
       try {
         const meta = inv.metadata ? JSON.parse(inv.metadata as string) : {}
@@ -406,6 +409,8 @@ export default async function DashboardPage({
     typeBreakdowns = Array.from(typeMap.entries())
       .map(([type, data]) => ({ type, ...data }))
       .sort((a, b) => b.value - a.value)
+
+    ownedInvestments = []
   }
 
   const yearlyValueChange = (() => {
@@ -413,8 +418,9 @@ export default async function DashboardPage({
     const startAt = yearStart
     const endAt = new Date(yearEnd.getTime() - 1)
 
-    const investmentsAtStart = (investments || []).filter((inv: any) => isActiveAt(inv, startAt))
-    const investmentsAtEnd = (investments || []).filter((inv: any) => isActiveAt(inv, endAt))
+    const base = Array.isArray(ownedInvestments) ? ownedInvestments : []
+    const investmentsAtStart = base.filter((inv: any) => isActiveAt(inv, startAt))
+    const investmentsAtEnd = base.filter((inv: any) => isActiveAt(inv, endAt))
 
     const valueAt = (inv: any, at: Date) => {
       const t = inv.account?.type
@@ -476,7 +482,7 @@ export default async function DashboardPage({
       const at = new Date(monthEndExclusive.getTime() - 1)
 
       const monthCash = await cashAt(monthEndExclusive)
-      const monthInvestments = (investments || []).filter((inv: any) => isActiveAt(inv, at))
+      const monthInvestments = (ownedInvestments || []).filter((inv: any) => isActiveAt(inv, at))
       const monthValue = monthInvestments.reduce((s: number, inv: any) => {
         const t = inv.account?.type
         if (t === 'SUKUK') {
