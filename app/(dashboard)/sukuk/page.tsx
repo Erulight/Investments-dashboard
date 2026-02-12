@@ -256,6 +256,20 @@ export default async function InvestmentsPage() {
     return sum + received
   }, 0)
 
+  const totalCommissionEarned = (() => {
+    if (user.role !== 'OWNER' || !user.personId) return 0
+    return investments.reduce((sum, inv) => {
+      const transactions = Array.isArray(inv.transactions) ? inv.transactions : []
+      const commission = transactions
+        .filter((tx: any) => tx.type === 'PARTNER_COMMISSION' && tx.personId === user.personId)
+        .reduce((acc: number, tx: any) => {
+          const amount = Number(tx.amount)
+          return acc + (Number.isFinite(amount) ? amount : 0)
+        }, 0)
+      return sum + Math.max(0, commission)
+    }, 0)
+  })()
+
   const totalReceivable = Math.max(0, totalNetProfit - totalWithdrawn)
 
   const totalValue = totalInvested
@@ -424,7 +438,7 @@ export default async function InvestmentsPage() {
           </div>
         </div>
 
-        <div className="grid grid-cols-2 md:grid-cols-4 gap-3 mt-3">
+        <div className="grid grid-cols-2 md:grid-cols-5 gap-3 mt-3">
           <div className="bg-white/5 rounded-lg p-3 border border-white/10">
             <p className="text-[11px] text-slate-400 uppercase tracking-wider">Received</p>
             <p className="text-sm font-bold mt-0.5">SAR {totalWithdrawn.toLocaleString(undefined, { maximumFractionDigits: 0 })}</p>
@@ -432,6 +446,10 @@ export default async function InvestmentsPage() {
           <div className="bg-white/5 rounded-lg p-3 border border-white/10">
             <p className="text-[11px] text-slate-400 uppercase tracking-wider">Fees Paid</p>
             <p className="text-sm font-bold mt-0.5">SAR {totalFeesPaid.toLocaleString(undefined, { maximumFractionDigits: 0 })}</p>
+          </div>
+          <div className="bg-white/5 rounded-lg p-3 border border-white/10">
+            <p className="text-[11px] text-slate-400 uppercase tracking-wider">Commission Earned</p>
+            <p className="text-sm font-bold mt-0.5">SAR {totalCommissionEarned.toLocaleString(undefined, { maximumFractionDigits: 0 })}</p>
           </div>
           <div className="bg-white/5 rounded-lg p-3 border border-white/10">
             <p className="text-[11px] text-slate-400 uppercase tracking-wider">Receivable</p>

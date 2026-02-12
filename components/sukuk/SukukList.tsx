@@ -647,6 +647,7 @@ export function SukukList({ initialSukuk, userRole, ownerPersonId, viewerPersonI
           investment: number
           fees: number
           profit: number
+          commission: number
           received: number
           receivable: number
         },
@@ -657,11 +658,12 @@ export function SukukList({ initialSukuk, userRole, ownerPersonId, viewerPersonI
         acc.investment += Number(m.totalInvestment || 0)
         acc.fees += Number(m.fees || 0)
         acc.profit += Number(m.netProfit || 0)
+        acc.commission += Number(m.commissionEarned || 0)
         acc.received += Number(m.totalReceived || 0)
         acc.receivable += Number(m.receivable || 0)
         return acc
       },
-      { currency: '', investment: 0, fees: 0, profit: 0, received: 0, receivable: 0 }
+      { currency: '', investment: 0, fees: 0, profit: 0, commission: 0, received: 0, receivable: 0 }
     )
   }, [sortedRows])
 
@@ -1190,6 +1192,11 @@ export function SukukList({ initialSukuk, userRole, ownerPersonId, viewerPersonI
                         Profit{sortIndicator('profit')}
                       </button>
                     </TableHead>
+                    {userRole === 'OWNER' && ownerView === 'sold' && (
+                      <TableHead className="px-2 py-1.5 text-xs whitespace-nowrap text-right">
+                        Commission
+                      </TableHead>
+                    )}
                     <TableHead className="px-2 py-1.5 text-xs whitespace-nowrap text-right">
                       <button type="button" onClick={() => toggleSort('received')} className="inline-flex items-center hover:text-gray-900">
                         Received{sortIndicator('received')}
@@ -1275,6 +1282,11 @@ export function SukukList({ initialSukuk, userRole, ownerPersonId, viewerPersonI
                       <TableCell className="px-2 py-1.5 text-gray-700 tabular-nums text-right whitespace-nowrap align-middle">
                         {formatCurrency(metrics.netProfit, metrics.currency)}
                       </TableCell>
+                      {userRole === 'OWNER' && ownerView === 'sold' && (
+                        <TableCell className="px-2 py-1.5 text-gray-700 tabular-nums text-right whitespace-nowrap align-middle">
+                          {formatCurrency(Number(metrics.commissionEarned || 0), metrics.currency)}
+                        </TableCell>
+                      )}
                       <TableCell className="px-2 py-1.5 text-gray-700 tabular-nums text-right whitespace-nowrap align-middle">
                         {formatCurrency(metrics.totalReceived, metrics.currency)}
                       </TableCell>
@@ -1386,6 +1398,11 @@ export function SukukList({ initialSukuk, userRole, ownerPersonId, viewerPersonI
                       <TableCell className="px-2 py-2 text-right font-semibold text-gray-900 tabular-nums whitespace-nowrap">
                         {formatCurrency(totals.profit, totals.currency)}
                       </TableCell>
+                      {userRole === 'OWNER' && ownerView === 'sold' && (
+                        <TableCell className="px-2 py-2 text-right font-semibold text-gray-900 tabular-nums whitespace-nowrap">
+                          {formatCurrency(totals.commission, totals.currency)}
+                        </TableCell>
+                      )}
                       <TableCell className="px-2 py-2 text-right font-semibold text-gray-900 tabular-nums whitespace-nowrap">
                         {formatCurrency(totals.received, totals.currency)}
                       </TableCell>
