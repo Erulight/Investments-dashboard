@@ -1051,7 +1051,7 @@ export function SukukList({ initialSukuk, userRole, ownerPersonId, viewerPersonI
               </button>
             </div>
           )}
-          {userRole === 'OWNER' && (
+          {(userRole === 'OWNER' || userRole === 'PARTNER') && (
             <Button
               onClick={openCreateModal}
               variant="primary"
@@ -1072,7 +1072,7 @@ export function SukukList({ initialSukuk, userRole, ownerPersonId, viewerPersonI
               ? 'Start by creating your first Sukuk investment.'
               : 'Contact the owner to add you to Sukuk investments.'}
           </p>
-          {userRole === 'OWNER' && (
+          {(userRole === 'OWNER' || userRole === 'PARTNER') && (
             <Button onClick={openCreateModal} variant="primary">
               + Add New Deal
             </Button>

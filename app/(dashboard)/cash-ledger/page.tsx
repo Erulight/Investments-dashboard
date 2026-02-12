@@ -4,6 +4,6 @@ import { CashLedgerClient } from './CashLedgerClient'
 export const dynamic = 'force-dynamic'
 
 export default async function CashLedgerPage() {
-  await requireAuth(['OWNER'])
+  await requireAuth(['OWNER', 'PARTNER'])
   return <CashLedgerClient />
 }

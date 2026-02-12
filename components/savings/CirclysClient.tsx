@@ -199,7 +199,7 @@ export function CirclysClient({ initialInvestments, userRole }: CirclysClientPro
             <h1 className="text-3xl font-bold tracking-tight">Circlys Savings</h1>
             <p className="text-sm text-slate-400 mt-1">Track your savings plans and rewards</p>
           </div>
-          {userRole === 'OWNER' && (
+          {(userRole === 'OWNER' || userRole === 'PARTNER') && (
             <Button variant="primary" onClick={() => setShowCreateForm(true)}>
               + New Plan
             </Button>

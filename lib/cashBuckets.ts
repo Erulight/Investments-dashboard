@@ -46,7 +46,7 @@ export const createCashBucket = async (
       excludeFromZakat: Boolean(excludeFromZakat),
       personId: personId || null,
       balance: amount,
-    },
+    } as any,
   })
 
   await tx.cashBucketMovement.create({
@@ -74,6 +74,7 @@ export const withdrawFromBuckets = async (
     notes,
     allocateToInvestment,
     availableOnOrBefore,
+    personId,
   }: {
     amount: number
     currency?: string
@@ -83,6 +84,7 @@ export const withdrawFromBuckets = async (
     notes?: string | null
     allocateToInvestment?: boolean
     availableOnOrBefore?: Date
+    personId?: string | null
   }
 ) => {
   let remaining = amount
@@ -92,6 +94,7 @@ export const withdrawFromBuckets = async (
     where: {
       currency,
       balance: { gt: 0 },
+      ...(personId === undefined ? {} : { personId: personId || null }),
       ...(cutoff ? { haulStartDate: { lte: cutoff } } : {}),
     },
     orderBy: [{ haulStartDate: 'asc' }, { createdAt: 'asc' }],

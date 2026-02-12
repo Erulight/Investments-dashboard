@@ -48,6 +48,119 @@ const receiptTypes = new Set([
   'SELL_RECEIPT',
 ])
 
+const toDate = (value?: string | Date | null) => {
+  if (!value) return null
+  if (value instanceof Date) return value
+  if (typeof value === 'string') {
+    const match = value.match(/^(\d{4})-(\d{2})-(\d{2})/)
+    if (match) {
+      const [, year, month, day] = match
+      return new Date(Number(year), Number(month) - 1, Number(day))
+    }
+  }
+  const date = new Date(value)
+  if (Number.isNaN(date.getTime())) return null
+  return date
+}
+
+const getPeriodMonths = (start?: string | Date | null, end?: string | Date | null) => {
+  const startDate = toDate(start)
+  const endDate = toDate(end)
+  if (!startDate || !endDate) return 0
+  const months = (endDate.getFullYear() - startDate.getFullYear()) * 12
+    + (endDate.getMonth() - startDate.getMonth())
+    + (endDate.getDate() - startDate.getDate()) / 30
+  return Math.max(0, months)
+}
+
+const parseMetadata = (value: unknown) => {
+  if (!value) return null
+  if (typeof value === 'object') return value as any
+  if (typeof value !== 'string') return null
+  try {
+    return JSON.parse(value)
+  } catch {
+    return null
+  }
+}
+
+const getPartnerSukukValueAt = (inv: any, participation: any, asOf: Date) => {
+  const principal = Number.isFinite(participation?.investedAmount) ? Number(participation.investedAmount) : 0
+  if (principal <= 0) return 0
+
+  const apr = Number.isFinite(inv?.interestRate) ? Number(inv.interestRate) : 0
+  const fullFees = Number.isFinite(inv?.fees) ? Number(inv.fees) : 0
+  const startBasis = participation?.acquiredAt ?? inv?.startDate
+  const totalMonthsFull = getPeriodMonths(inv?.startDate, inv?.maturityDate)
+  const monthsHeld = getPeriodMonths(startBasis, inv?.maturityDate)
+  const timeRatio = totalMonthsFull > 0 ? Math.min(1, Math.max(0, monthsHeld / totalMonthsFull)) : 1
+
+  const feesHeld = (principal > 0 && Number.isFinite(inv?.principalAmount) && Number(inv.principalAmount) > 0)
+    ? (fullFees * Math.min(1, principal / Number(inv.principalAmount))) * timeRatio
+    : 0
+
+  const periodYears = monthsHeld ? monthsHeld / 12 : 0
+  const grossProfit = principal > 0 && apr > 0 && periodYears > 0
+    ? principal * (apr / 100) * periodYears
+    : 0
+
+  const manualReceivableFull = Number.isFinite(inv?.receivableAmount) ? Number(inv.receivableAmount) : null
+  const manualReceivable = manualReceivableFull !== null && manualReceivableFull > 0
+    ? manualReceivableFull * timeRatio
+    : null
+
+  const txs = Array.isArray(inv?.transactions) ? inv.transactions : []
+  const commissionFromParticipant = Number.isFinite(participation?.commissionFees)
+    ? Number(participation.commissionFees)
+    : 0
+  const commissionFromTx = txs
+    .filter((tx: any) => tx?.type === 'BUY_FROM_PARTNER' && participation?.personId && tx.personId === participation.personId)
+    .reduce((sum: number, tx: any) => {
+      const meta = parseMetadata(tx.metadata)
+      const commission = Number(meta?.commissionAmount ?? 0)
+      return sum + (Number.isFinite(commission) ? Math.max(0, commission) : 0)
+    }, 0)
+  const commissionPaid = commissionFromParticipant > 0 ? commissionFromParticipant : commissionFromTx
+
+  const netProfitTotal = manualReceivable !== null
+    ? Math.max(0, manualReceivable - commissionPaid)
+    : Math.max(0, grossProfit - feesHeld - commissionPaid)
+
+  const start = toDate(startBasis)
+  const maturity = toDate(inv?.maturityDate)
+  const startTime = start?.getTime() || 0
+  const maturityTime = maturity?.getTime() || 0
+  const totalMs = maturityTime > startTime ? maturityTime - startTime : 0
+  const atMs = asOf.getTime()
+  const elapsedMs = totalMs > 0
+    ? Math.min(Math.max(atMs - startTime, 0), totalMs)
+    : (atMs > startTime ? 1 : 0)
+
+  const accruedProfit = totalMs > 0
+    ? netProfitTotal * (elapsedMs / totalMs)
+    : (atMs > startTime ? netProfitTotal : 0)
+
+  const withdrawnProfit = txs
+    .filter((tx: any) => tx?.type === 'WITHDRAW_PROFIT' && participation?.personId && tx.personId === participation.personId)
+    .filter((tx: any) => {
+      const d = tx?.date instanceof Date ? tx.date : new Date(tx?.date)
+      return !Number.isNaN(d.getTime()) && d.getTime() <= atMs
+    })
+    .reduce((sum: number, tx: any) => sum + Math.abs(Number(tx?.amount) || 0), 0)
+
+  const withdrawnPrincipal = txs
+    .filter((tx: any) => tx?.type === 'WITHDRAW_PRINCIPAL' && participation?.personId && tx.personId === participation.personId)
+    .filter((tx: any) => {
+      const d = tx?.date instanceof Date ? tx.date : new Date(tx?.date)
+      return !Number.isNaN(d.getTime()) && d.getTime() <= atMs
+    })
+    .reduce((sum: number, tx: any) => sum + Math.abs(Number(tx?.amount) || 0), 0)
+
+  const principalOutstanding = Math.max(0, principal - withdrawnPrincipal)
+  const receivable = Math.max(0, accruedProfit - withdrawnProfit)
+  return principalOutstanding + receivable
+}
+
 export default async function ZakatPage() {
   const user = await getCurrentUser()
   if (!user) {
@@ -121,7 +234,134 @@ export default async function ZakatPage() {
     return sum + (Number.isFinite(balance) ? Math.max(0, balance) : 0)
   }, 0)
 
-  const thresholdMet = totalZakatableWealth >= nisabValue
+  const now = new Date()
+  let sukukValueForNisab = 0
+  if (user.role === 'PARTNER' && user.personId) {
+    const participations = await prisma.dealParticipant.findMany({
+      where: {
+        personId: user.personId,
+        investment: {
+          account: { type: 'SUKUK' },
+        },
+      },
+      select: {
+        investedAmount: true,
+        acquiredAt: true,
+        commissionFees: true,
+        personId: true,
+        investment: {
+          select: {
+            id: true,
+            startDate: true,
+            maturityDate: true,
+            interestRate: true,
+            fees: true,
+            principalAmount: true,
+            receivableAmount: true,
+            transactions: {
+              where: {
+                type: { in: ['WITHDRAW_PROFIT', 'WITHDRAW_PRINCIPAL', 'BUY_FROM_PARTNER'] },
+                OR: [{ personId: user.personId }, { personId: null }],
+              },
+              select: { type: true, date: true, amount: true, personId: true, metadata: true },
+              orderBy: { date: 'asc' },
+            },
+          },
+        },
+      },
+    })
+
+    sukukValueForNisab = participations.reduce((sum: number, p: any) => {
+      return sum + getPartnerSukukValueAt(p.investment, p, now)
+    }, 0)
+  }
+
+  if (user.role === 'OWNER') {
+    const ownerPersonId = user.personId || null
+    const investments = await prisma.investment.findMany({
+      where: {
+        account: { type: 'SUKUK' },
+      },
+      select: {
+        id: true,
+        principalAmount: true,
+        startDate: true,
+        maturityDate: true,
+        interestRate: true,
+        fees: true,
+        receivableAmount: true,
+        dealParticipants: {
+          select: { personId: true, investedAmount: true, acquiredAt: true, commissionFees: true },
+        },
+        transactions: {
+          where: {
+            type: { in: ['WITHDRAW_PROFIT', 'WITHDRAW_PRINCIPAL'] },
+          },
+          select: { type: true, date: true, amount: true },
+          orderBy: { date: 'asc' },
+        },
+      },
+    })
+
+    const getOwnerPosition = (inv: any) => {
+      if (!ownerPersonId) return null
+      const dps = Array.isArray(inv.dealParticipants) ? inv.dealParticipants : []
+      return dps.find((p: any) => p?.personId === ownerPersonId) || null
+    }
+
+    sukukValueForNisab = investments.reduce((sum: number, inv: any) => {
+      const pos = getOwnerPosition(inv)
+      const principal = pos ? (Number(pos.investedAmount) || 0) : (Number(inv.principalAmount) || 0)
+      if (principal <= 0) return sum
+
+      const totalMonths = getPeriodMonths(inv.startDate, inv.maturityDate)
+      const periodYears = totalMonths ? totalMonths / 12 : 0
+      const apr = Number(inv.interestRate) || 0
+      const fees = Number(inv.fees) || 0
+      const manualReceivable = Number.isFinite(inv.receivableAmount) ? Number(inv.receivableAmount) : null
+      const totalProfit = manualReceivable !== null && manualReceivable > 0
+        ? manualReceivable
+        : Math.max(0, (principal * (apr / 100) * periodYears) - fees)
+
+      const start = toDate(inv.startDate)
+      const maturity = toDate(inv.maturityDate)
+      const startTime = start?.getTime() || 0
+      const maturityTime = maturity?.getTime() || 0
+      const totalMs = maturityTime > startTime ? maturityTime - startTime : 0
+      const atMs = now.getTime()
+      const elapsedMs = totalMs > 0
+        ? Math.min(Math.max(atMs - startTime, 0), totalMs)
+        : (atMs > startTime ? 1 : 0)
+      const accruedProfit = totalMs > 0
+        ? totalProfit * (elapsedMs / totalMs)
+        : (atMs > startTime ? totalProfit : 0)
+
+      const txs = Array.isArray(inv.transactions) ? inv.transactions : []
+      const withdrawnProfit = txs
+        .filter((tx: any) => tx?.type === 'WITHDRAW_PROFIT')
+        .filter((tx: any) => {
+          const d = tx?.date instanceof Date ? tx.date : new Date(tx?.date)
+          return !Number.isNaN(d.getTime()) && d.getTime() <= atMs
+        })
+        .reduce((s: number, tx: any) => s + Math.abs(Number(tx?.amount) || 0), 0)
+
+      const withdrawnPrincipal = txs
+        .filter((tx: any) => tx?.type === 'WITHDRAW_PRINCIPAL')
+        .filter((tx: any) => {
+          const d = tx?.date instanceof Date ? tx.date : new Date(tx?.date)
+          return !Number.isNaN(d.getTime()) && d.getTime() <= atMs
+        })
+        .reduce((s: number, tx: any) => s + Math.abs(Number(tx?.amount) || 0), 0)
+
+      const principalOutstanding = Math.max(0, principal - withdrawnPrincipal)
+      const receivable = Math.max(0, accruedProfit - withdrawnProfit)
+      return sum + principalOutstanding + receivable
+    }, 0)
+  }
+
+  const totalZakatableWealthForNisab = totalZakatableWealth + sukukValueForNisab
+
+  const thresholdMet = totalZakatableWealthForNisab >= nisabValue
   const nisabMetSetting = await prisma.systemSetting.findUnique({ where: { key: nisabMetKey } })
   const nisabMetSince = nisabMetSetting?.value ? new Date(nisabMetSetting.value) : null
 
@@ -298,7 +538,7 @@ export default async function ZakatPage() {
         <div className="rounded-xl border border-amber-200 bg-amber-50 p-4 text-sm text-amber-900">
           <div className="font-semibold">Below Nisab</div>
           <div className="mt-1">
-            Total zakatable cash is SAR {totalZakatableWealth.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}.
+            Total zakatable wealth is SAR {totalZakatableWealthForNisab.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}.
             Nisab is SAR {nisabValue.toLocaleString(undefined, { minimumFractionDigits: 0, maximumFractionDigits: 0 })}.
           </div>
         </div>

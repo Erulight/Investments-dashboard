@@ -674,8 +674,8 @@ export default async function DashboardPage({
 
       {/* Top Stats Row */}
       <div className="grid grid-cols-2 gap-3 lg:grid-cols-4 items-start auto-rows-min">
-        {user.role === 'OWNER' && (
-          <CashBalanceCard initialCash={Number.isFinite(cashBalance) ? cashBalance : 0} />
+        {(user.role === 'OWNER' || user.role === 'PARTNER') && (
+          <CashBalanceCard initialCash={user.role === 'OWNER' && Number.isFinite(cashBalance) ? cashBalance : 0} />
         )}
         <Card className="p-4">
           <CardContent>

@@ -17,18 +17,26 @@ export async function PATCH(
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
     }
 
-    if (user.role !== 'OWNER') {
-      return NextResponse.json({ error: 'Only owners can edit savings plans' }, { status: 403 })
+    if (user.role === 'PARTNER' && !user.personId) {
+      return NextResponse.json({ error: 'Partner is missing a person profile' }, { status: 400 })
+    }
+    if (user.role !== 'OWNER' && user.role !== 'PARTNER') {
+      return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
     }
 
     const { id } = await params
 
-    const existing = await prisma.investment.findUnique({
-      where: { id },
-      include: { account: true },
+    const existing = await prisma.investment.findFirst({
+      where: {
+        id,
+        ...(user.role === 'PARTNER'
+          ? { dealParticipants: { some: { personId: user.personId! } } }
+          : {}),
+      } as any,
+      include: { account: true } as any,
     })
 
-    if (!existing || existing.account?.type !== 'CIRCLYS') {
+    if (!existing || (existing as any).account?.type !== 'CIRCLYS') {
       return NextResponse.json({ error: 'Savings plan not found' }, { status: 404 })
     }
 
@@ -69,7 +77,7 @@ export async function PATCH(
         dealParticipants: {
           include: { person: true },
         },
-      },
+      } as any,
     })
 
     await createAuditLog(user.id, 'UPDATE', 'INVESTMENT', updated.id, {
@@ -103,18 +111,26 @@ export async function DELETE(
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
     }
 
-    if (user.role !== 'OWNER') {
-      return NextResponse.json({ error: 'Only owners can delete savings plans' }, { status: 403 })
+    if (user.role === 'PARTNER' && !user.personId) {
+      return NextResponse.json({ error: 'Partner is missing a person profile' }, { status: 400 })
+    }
+    if (user.role !== 'OWNER' && user.role !== 'PARTNER') {
+      return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
     }
 
     const { id } = await params
 
-    const existing = await prisma.investment.findUnique({
-      where: { id },
-      include: { account: true },
+    const existing = await prisma.investment.findFirst({
+      where: {
+        id,
+        ...(user.role === 'PARTNER'
+          ? { dealParticipants: { some: { personId: user.personId! } } }
+          : {}),
+      } as any,
+      include: { account: true } as any,
     })
 
-    if (!existing || existing.account?.type !== 'CIRCLYS') {
+    if (!existing || (existing as any).account?.type !== 'CIRCLYS') {
       return NextResponse.json({ error: 'Savings plan not found' }, { status: 404 })
     }
 

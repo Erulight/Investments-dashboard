@@ -14,8 +14,11 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
     }
 
-    if (user.role !== 'OWNER') {
-      return NextResponse.json({ error: 'Only owners can create savings plans' }, { status: 403 })
+    if (user.role === 'PARTNER' && !user.personId) {
+      return NextResponse.json({ error: 'Partner is missing a person profile' }, { status: 400 })
+    }
+    if (user.role !== 'OWNER' && user.role !== 'PARTNER') {
+      return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
     }
 
     const body = await req.json()
@@ -31,6 +34,10 @@ export async function POST(req: NextRequest) {
     }
 
     // Create the savings plan as an investment with ROSCA fields
+    const participants = user.role === 'PARTNER'
+      ? [{ personId: user.personId!, investedAmount: 0, sharePercentage: 100, notes: null }]
+      : (validatedData.participants || [])
+
     const investment = await prisma.investment.create({
       data: {
         accountId: validatedData.accountId,
@@ -68,12 +75,12 @@ export async function POST(req: NextRequest) {
         receivableAmount: 0,
         isIjarah: false,
         category: 'SAVINGS_ROSCA',
-        ...(validatedData.participants && validatedData.participants.length > 0
+        ...(participants && participants.length > 0
           ? {
               dealParticipants: {
-                create: validatedData.participants.map((p: NonNullable<CreateSavingsInput['participants']>[number]) => ({
+                create: participants.map((p: any) => ({
                   personId: p.personId,
-                  investedAmount: p.investedAmount,
+                  investedAmount: Number(p.investedAmount) || 0,
                   currentValue: p.investedAmount,
                   profit: 0,
                   sharePercentage: p.sharePercentage,

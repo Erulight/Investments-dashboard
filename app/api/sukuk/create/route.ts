@@ -10,6 +10,9 @@ import { parseDateInput } from '@/lib/date'
 export async function POST(req: NextRequest) {
   try {
     const user = await requireModuleAccess('sukuk')
+    if (user.role === 'PARTNER' && !user.personId) {
+      return NextResponse.json({ error: 'Partner is missing a person profile' }, { status: 400 })
+    }
     
     const body = await req.json()
     
@@ -68,8 +71,12 @@ export async function POST(req: NextRequest) {
     
     // Create the Sukuk investment with participants in a transaction
     const sukuk = await prisma.$transaction(async (tx: Prisma.TransactionClient) => {
+      const cashBalanceKey = user.role === 'OWNER'
+        ? 'CASH_BALANCE'
+        : `CASH_BALANCE:${user.personId!}`
+
       const cashSetting = await tx.systemSetting.findUnique({
-        where: { key: 'CASH_BALANCE' },
+        where: { key: cashBalanceKey },
       })
       const currentCashRaw = cashSetting ? Number(cashSetting.value) : 0
       let currentCash = Number.isFinite(currentCashRaw) ? currentCashRaw : 0
@@ -77,6 +84,9 @@ export async function POST(req: NextRequest) {
 
       if (nextCash < 0) {
         const bucketAgg = await tx.cashBucket.aggregate({
+          where: (user.role === 'OWNER'
+            ? { personId: null }
+            : { personId: user.personId }) as any,
           _sum: { balance: true },
         })
         const bucketSumRaw = bucketAgg?._sum?.balance
@@ -124,13 +134,13 @@ export async function POST(req: NextRequest) {
       
       if (cashSetting) {
         await tx.systemSetting.update({
-          where: { key: 'CASH_BALANCE' },
+          where: { key: cashBalanceKey },
           data: { value: nextCash.toString() },
         })
       } else {
         await tx.systemSetting.create({
           data: {
-            key: 'CASH_BALANCE',
+            key: cashBalanceKey,
             value: nextCash.toString(),
             description: 'Available cash balance for investments',
           },
@@ -146,13 +156,14 @@ export async function POST(req: NextRequest) {
         notes: 'Investment principal',
         allocateToInvestment: true,
         availableOnOrBefore: startDate,
+        personId: user.role === 'OWNER' ? null : user.personId,
       })
 
       await tx.transaction.create({
         data: {
           accountId: cashAccount.id,
           investmentId: newSukuk.id,
-          personId: user.personId || null,
+          personId: user.role === 'OWNER' ? (user.personId || null) : user.personId,
           type: 'CASH_INVEST',
           amount: -Math.abs(data.principalAmount),
           date: startDate,
@@ -160,14 +171,27 @@ export async function POST(req: NextRequest) {
         },
       })
 
-      // Create participants if provided
-      if (data.participants && data.participants.length > 0) {
+      // Create participants
+      if (user.role === 'PARTNER') {
+        await tx.dealParticipant.create({
+          data: {
+            investmentId: newSukuk.id,
+            personId: user.personId!,
+            investedAmount: data.principalAmount,
+            currentValue: data.principalAmount,
+            acquiredAt: startDate,
+            commissionFees: 0,
+            sharePercentage: 100,
+            notes: null,
+          },
+        })
+      } else if (data.participants && data.participants.length > 0) {
         await tx.dealParticipant.createMany({
           data: data.participants.map((p) => ({
             investmentId: newSukuk.id,
             personId: p.personId,
             investedAmount: p.investedAmount,
-            currentValue: p.investedAmount, // Initialize with invested amount
+            currentValue: p.investedAmount,
             acquiredAt: startDate,
             commissionFees: 0,
             sharePercentage: p.sharePercentage,

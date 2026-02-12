@@ -7,119 +7,100 @@ datasource db {
   url      = env("DATABASE_URL")
 }
 
-// Note: This schema uses PostgreSQL for production.
-// For local development with SQLite, change provider to "sqlite"
-// and update DATABASE_URL (e.g., "file:./dev.db").
-
 model User {
-  id                String   @id @default(cuid())
-  email             String   @unique
-  password          String
-  name              String
-  role              String   @default("VIEWER")
-  canEditAsPartner  Boolean  @default(false)
-  
-  // Module permissions - if null, inherits from role (OWNER has all, VIEWER has none)
-  permissions       String?  // JSON string: {"sukuk": true, "crypto": true, "sip": false, ...}
-  
-  createdAt         DateTime @default(now())
-  updatedAt         DateTime @updatedAt
-
-  personId          String?  @unique
-  person            Person?  @relation(fields: [personId], references: [id])
-  auditLogs         AuditLog[]
+  id               String     @id @default(cuid())
+  email            String     @unique
+  password         String
+  name             String
+  role             String     @default("VIEWER")
+  canEditAsPartner Boolean    @default(false)
+  createdAt        DateTime   @default(now())
+  updatedAt        DateTime   @updatedAt
+  personId         String?    @unique
+  permissions      String?
+  auditLogs        AuditLog[]
+  person           Person?    @relation(fields: [personId], references: [id])
 
   @@index([email])
 }
 
 model Person {
-  id                String   @id @default(cuid())
-  name              String
-  email             String?
-  phone             String?
-  createdAt         DateTime @default(now())
-  updatedAt         DateTime @updatedAt
-
-  user              User?
-  dealParticipants  DealParticipant[]
-  transactions      Transaction[]
-  cashBuckets       CashBucket[]
+  id               String            @id @default(cuid())
+  name             String
+  email            String?
+  phone            String?
+  createdAt        DateTime          @default(now())
+  updatedAt        DateTime          @updatedAt
+  cashBuckets      CashBucket[]
+  dealParticipants DealParticipant[]
+  transactions     Transaction[]
+  user             User?
 
   @@index([email])
 }
 
 model Account {
-  id                String      @id @default(cuid())
-  name              String
-  type              String
-  description       String?
-  currency          String      @default("SAR")
-  isActive          Boolean     @default(true)
-  metadata          String?
-  createdAt         DateTime    @default(now())
-  updatedAt         DateTime    @updatedAt
-
-  investments       Investment[]
-  transactions      Transaction[]
-  valuations        Valuation[]
+  id           String        @id @default(cuid())
+  name         String
+  type         String
+  description  String?
+  currency     String        @default("SAR")
+  isActive     Boolean       @default(true)
+  metadata     String?
+  createdAt    DateTime      @default(now())
+  updatedAt    DateTime      @updatedAt
+  investments  Investment[]
+  transactions Transaction[]
+  valuations   Valuation[]
 
   @@index([type])
 }
 
 model Investment {
-  id                String   @id @default(cuid())
-  accountId         String
-  account           Account  @relation(fields: [accountId], references: [id], onDelete: Cascade)
-  
-  name              String
-  category          String?
-  
-  principalAmount   Float
-  currentValue      Float    @default(0)
-  realizedProfit    Float    @default(0)
-  unrealizedProfit  Float    @default(0)
-  
-  startDate         DateTime
-  maturityDate      DateTime?
-  
-  interestRate      Float?
-  fees              Float    @default(0)
-  totalReceived     Float    @default(0)
-  receivableAmount  Float    @default(0)
-  isIjarah          Boolean  @default(false)
-  reopenedAt        DateTime?
-  
-  notes             String?
-  metadata          String?
-  
-  createdAt         DateTime @default(now())
-  updatedAt         DateTime @updatedAt
-
-  dealParticipants  DealParticipant[]
-  transactions      Transaction[]
-  bucketAllocations InvestmentBucketAllocation[]
+  id                  String                       @id @default(cuid())
+  accountId           String
+  name                String
+  category            String?
+  principalAmount     Float
+  currentValue        Float                        @default(0)
+  realizedProfit      Float                        @default(0)
+  unrealizedProfit    Float                        @default(0)
+  startDate           DateTime
+  maturityDate        DateTime?
+  interestRate        Float?
+  notes               String?
+  metadata            String?
+  createdAt           DateTime                     @default(now())
+  updatedAt           DateTime                     @updatedAt
+  fees                Float                        @default(0)
+  totalReceived       Float                        @default(0)
+  receivableAmount    Float                        @default(0)
+  isIjarah            Boolean                      @default(false)
+  reopenedAt          DateTime?
   cashBucketMovements CashBucketMovement[]
+  dealParticipants    DealParticipant[]
+  account             Account                      @relation(fields: [accountId], references: [id], onDelete: Cascade)
+  bucketAllocations   InvestmentBucketAllocation[]
+  transactions        Transaction[]
 
   @@index([accountId])
   @@index([category])
 }
 
 model CashBucket {
-  id                String   @id @default(cuid())
+  id                String                       @id @default(cuid())
   label             String?
-  currency          String   @default("SAR")
+  currency          String                       @default("SAR")
   haulStartDate     DateTime
   lastZakatPaidDate DateTime?
-  excludeFromZakat  Boolean  @default(false)
-  balance           Float    @default(0)
-  createdAt         DateTime @default(now())
-  updatedAt         DateTime @updatedAt
-
+  balance           Float                        @default(0)
+  createdAt         DateTime                     @default(now())
+  updatedAt         DateTime                     @updatedAt
+  excludeFromZakat  Boolean                      @default(false)
   personId          String?
-  person            Person?  @relation(fields: [personId], references: [id], onDelete: SetNull)
-
-  debt              Debt?
+  person            Person?                      @relation(fields: [personId], references: [id])
   movements         CashBucketMovement[]
+  debt              Debt?
   allocations       InvestmentBucketAllocation[]
 
   @@index([currency])
@@ -128,19 +109,16 @@ model CashBucket {
 }
 
 model CashBucketMovement {
-  id            String     @id @default(cuid())
-  cashBucketId  String
-  cashBucket    CashBucket @relation(fields: [cashBucketId], references: [id], onDelete: Cascade)
-
-  investmentId  String?
-  investment    Investment? @relation(fields: [investmentId], references: [id], onDelete: SetNull)
-
-  amount        Float
-  type          String
-  date          DateTime
-  notes         String?
-
-  createdAt     DateTime @default(now())
+  id           String      @id @default(cuid())
+  cashBucketId String
+  investmentId String?
+  amount       Float
+  type         String
+  date         DateTime
+  notes        String?
+  createdAt    DateTime    @default(now())
+  cashBucket   CashBucket  @relation(fields: [cashBucketId], references: [id], onDelete: Cascade)
+  investment   Investment? @relation(fields: [investmentId], references: [id])
 
   @@index([cashBucketId])
   @@index([investmentId])
@@ -148,15 +126,15 @@ model CashBucketMovement {
 }
 
 model InvestmentBucketAllocation {
-  id                String     @id @default(cuid())
-  investmentId      String
-  investment        Investment @relation(fields: [investmentId], references: [id], onDelete: Cascade)
-  cashBucketId      String
-  cashBucket        CashBucket @relation(fields: [cashBucketId], references: [id], onDelete: Cascade)
+  id                 String     @id @default(cuid())
+  investmentId       String
+  cashBucketId       String
   principalAllocated Float
   principalRemaining Float
-  createdAt         DateTime @default(now())
-  updatedAt         DateTime @updatedAt
+  createdAt          DateTime   @default(now())
+  updatedAt          DateTime   @updatedAt
+  cashBucket         CashBucket @relation(fields: [cashBucketId], references: [id], onDelete: Cascade)
+  investment         Investment @relation(fields: [investmentId], references: [id], onDelete: Cascade)
 
   @@unique([investmentId, cashBucketId])
   @@index([investmentId])
@@ -164,25 +142,21 @@ model InvestmentBucketAllocation {
 }
 
 model DealParticipant {
-  id                String   @id @default(cuid())
-  investmentId      String
-  investment        Investment @relation(fields: [investmentId], references: [id], onDelete: Cascade)
-  
-  personId          String
-  person            Person   @relation(fields: [personId], references: [id], onDelete: Cascade)
-  
-  investedAmount    Float
-  currentValue      Float    @default(0)
-  receivable        Float    @default(0)
-  profit            Float    @default(0)
-  acquiredAt        DateTime?
-  commissionFees    Float    @default(0)
-  
-  sharePercentage   Float?
-  notes             String?
-  
-  createdAt         DateTime @default(now())
-  updatedAt         DateTime @updatedAt
+  id              String     @id @default(cuid())
+  investmentId    String
+  personId        String
+  investedAmount  Float
+  currentValue    Float      @default(0)
+  receivable      Float      @default(0)
+  profit          Float      @default(0)
+  sharePercentage Float?
+  notes           String?
+  createdAt       DateTime   @default(now())
+  updatedAt       DateTime   @updatedAt
+  acquiredAt      DateTime?
+  commissionFees  Float      @default(0)
+  investment      Investment @relation(fields: [investmentId], references: [id], onDelete: Cascade)
+  person          Person     @relation(fields: [personId], references: [id], onDelete: Cascade)
 
   @@unique([investmentId, personId])
   @@index([investmentId])
@@ -190,25 +164,20 @@ model DealParticipant {
 }
 
 model Transaction {
-  id                String          @id @default(cuid())
-  accountId         String
-  account           Account         @relation(fields: [accountId], references: [id], onDelete: Cascade)
-  
-  investmentId      String?
-  investment        Investment?     @relation(fields: [investmentId], references: [id], onDelete: SetNull)
-  
-  personId          String?
-  person            Person?         @relation(fields: [personId], references: [id], onDelete: SetNull)
-  
-  type              String
-  amount            Float
-  date              DateTime
-  description       String?
-  
-  metadata          String?
-  
-  createdAt         DateTime        @default(now())
-  updatedAt         DateTime        @updatedAt
+  id           String      @id @default(cuid())
+  accountId    String
+  investmentId String?
+  personId     String?
+  type         String
+  amount       Float
+  date         DateTime
+  description  String?
+  metadata     String?
+  createdAt    DateTime    @default(now())
+  updatedAt    DateTime    @updatedAt
+  account      Account     @relation(fields: [accountId], references: [id], onDelete: Cascade)
+  investment   Investment? @relation(fields: [investmentId], references: [id])
+  person       Person?     @relation(fields: [personId], references: [id])
 
   @@index([accountId])
   @@index([investmentId])
@@ -217,56 +186,50 @@ model Transaction {
 }
 
 model Valuation {
-  id                String   @id @default(cuid())
-  accountId         String
-  account           Account  @relation(fields: [accountId], references: [id], onDelete: Cascade)
-  
-  date              DateTime
-  navPerUnit        Float
-  totalValue        Float
-  notes             String?
-  
-  createdAt         DateTime @default(now())
-  updatedAt         DateTime @updatedAt
+  id         String   @id @default(cuid())
+  accountId  String
+  date       DateTime
+  navPerUnit Float
+  totalValue Float
+  notes      String?
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+  account    Account  @relation(fields: [accountId], references: [id], onDelete: Cascade)
 
   @@index([accountId])
   @@index([date])
 }
 
 model RecoveryAssumption {
-  id                String   @id @default(cuid())
-  status            String   @unique
-  recoveryRate      Float
-  description       String?
-  
-  createdAt         DateTime @default(now())
-  updatedAt         DateTime @updatedAt
+  id           String   @id @default(cuid())
+  status       String   @unique
+  recoveryRate Float
+  description  String?
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
 }
 
 model Goal {
-  id                String   @id @default(cuid())
-  name              String
-  targetAmount      Float
-  currentAmount     Float    @default(0)
-  targetDate        DateTime?
-  category          String?
-  notes             String?
-  
-  createdAt         DateTime @default(now())
-  updatedAt         DateTime @updatedAt
+  id            String    @id @default(cuid())
+  name          String
+  targetAmount  Float
+  currentAmount Float     @default(0)
+  targetDate    DateTime?
+  category      String?
+  notes         String?
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
 }
 
 model AuditLog {
-  id                String   @id @default(cuid())
-  userId            String
-  user              User     @relation(fields: [userId], references: [id], onDelete: Cascade)
-  
-  action            String
-  entityType        String
-  entityId          String
-  changes           String?
-  
-  createdAt         DateTime @default(now())
+  id         String   @id @default(cuid())
+  userId     String
+  action     String
+  entityType String
+  entityId   String
+  changes    String?
+  createdAt  DateTime @default(now())
+  user       User     @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@index([userId])
   @@index([entityType])
@@ -274,43 +237,41 @@ model AuditLog {
 }
 
 model SystemSetting {
-  id                String   @id @default(cuid())
-  key               String   @unique
-  value             String
-  description       String?
-  
-  createdAt         DateTime @default(now())
-  updatedAt         DateTime @updatedAt
+  id          String   @id @default(cuid())
+  key         String   @unique
+  value       String
+  description String?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
 
   @@index([key])
 }
 
 model Debt {
-  id            String   @id @default(cuid())
-  lenderName    String
-  amount        Float
-  borrowedAt    DateTime
-  notes         String?
-  isArchived    Boolean  @default(false)
-  cashBucketId  String?  @unique
-  cashBucket    CashBucket? @relation(fields: [cashBucketId], references: [id], onDelete: SetNull)
-  createdAt     DateTime @default(now())
-  updatedAt     DateTime @updatedAt
-
-  payments      DebtPayment[]
+  id           String        @id @default(cuid())
+  lenderName   String
+  amount       Float
+  borrowedAt   DateTime
+  notes        String?
+  isArchived   Boolean       @default(false)
+  cashBucketId String?       @unique
+  createdAt    DateTime      @default(now())
+  updatedAt    DateTime      @updatedAt
+  cashBucket   CashBucket?   @relation(fields: [cashBucketId], references: [id])
+  payments     DebtPayment[]
 
   @@index([borrowedAt])
   @@index([lenderName])
 }
 
 model DebtPayment {
-  id            String   @id @default(cuid())
-  debtId        String
-  debt          Debt     @relation(fields: [debtId], references: [id], onDelete: Cascade)
-  amount        Float
-  paidAt        DateTime
-  notes         String?
-  createdAt     DateTime @default(now())
+  id        String   @id @default(cuid())
+  debtId    String
+  amount    Float
+  paidAt    DateTime
+  notes     String?
+  createdAt DateTime @default(now())
+  debt      Debt     @relation(fields: [debtId], references: [id], onDelete: Cascade)
 
   @@index([debtId])
   @@index([paidAt])

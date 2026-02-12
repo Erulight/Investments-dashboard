@@ -23,7 +23,10 @@ const getCashAccount = async (tx: Prisma.TransactionClient, currency = 'SAR') =>
 
 export async function GET(req: NextRequest) {
   try {
-    await requireAuth(['OWNER'])
+    const user = await requireAuth(['OWNER', 'PARTNER'])
+    if (user.role === 'PARTNER' && !user.personId) {
+      return NextResponse.json({ error: 'Partner is missing a person profile' }, { status: 400 })
+    }
     const { searchParams } = new URL(req.url)
     const yearParam = searchParams.get('year')
     const parsedYear = yearParam ? Number(yearParam) : NaN
@@ -31,12 +34,15 @@ export async function GET(req: NextRequest) {
     const yearStart = new Date(selectedYear, 0, 1)
     const yearEnd = new Date(selectedYear + 1, 0, 1)
 
+    const scopeKey = user.role === 'OWNER' ? 'OWNER' : user.personId!
+    const cashBalanceKey = user.role === 'OWNER' ? CASH_BALANCE_KEY : `${CASH_BALANCE_KEY}:${scopeKey}`
+
     const cashAccount = await prisma.account.findFirst({
       where: { type: 'CASH', isActive: true },
     })
 
     const setting = await prisma.systemSetting.findUnique({
-      where: { key: CASH_BALANCE_KEY },
+      where: { key: cashBalanceKey },
     })
     const currentCash = setting ? Number(setting.value) : 0
 
@@ -74,7 +80,10 @@ export async function GET(req: NextRequest) {
     const cashBalance = offset + (Number.isFinite(cashAtEnd) ? cashAtEnd : 0)
 
     const buckets = await prisma.cashBucket.findMany({
-      where: { balance: { gt: 0 } },
+      where: {
+        balance: { gt: 0 },
+        ...(user.role === 'OWNER' ? ({ personId: null } as any) : ({ personId: user.personId } as any)),
+      },
       orderBy: { haulStartDate: 'asc' },
       select: {
         id: true,
@@ -90,6 +99,7 @@ export async function GET(req: NextRequest) {
       ? await prisma.transaction.findMany({
           where: {
             accountId: cashAccount.id,
+            ...(user.role === 'OWNER' ? { personId: null } : { personId: user.personId }),
             date: { gte: yearStart, lt: yearEnd },
           },
           orderBy: { date: 'desc' },
@@ -116,7 +126,10 @@ export async function GET(req: NextRequest) {
 
 export async function POST(req: NextRequest) {
   try {
-    await requireAuth(['OWNER'])
+    const user = await requireAuth(['OWNER', 'PARTNER'])
+    if (user.role === 'PARTNER' && !user.personId) {
+      return NextResponse.json({ error: 'Partner is missing a person profile' }, { status: 400 })
+    }
     const body = await req.json()
     const direction = body.direction === 'OUT' ? 'OUT' : 'IN'
     const amount = Number(body.amount)
@@ -132,10 +145,13 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: 'Amount must be greater than 0' }, { status: 400 })
     }
 
+    const scopeKey = user.role === 'OWNER' ? 'OWNER' : user.personId!
+    const cashBalanceKey = user.role === 'OWNER' ? CASH_BALANCE_KEY : `${CASH_BALANCE_KEY}:${scopeKey}`
+
     const result = await prisma.$transaction(async (tx) => {
       const cashAccount = await getCashAccount(tx, currency)
       const setting = await tx.systemSetting.findUnique({
-        where: { key: CASH_BALANCE_KEY },
+        where: { key: cashBalanceKey },
       })
       const currentCash = setting ? Number(setting.value) : 0
       const delta = direction === 'IN' ? amount : -amount
@@ -147,13 +163,13 @@ export async function POST(req: NextRequest) {
 
       if (setting) {
         await tx.systemSetting.update({
-          where: { key: CASH_BALANCE_KEY },
+          where: { key: cashBalanceKey },
           data: { value: nextCash.toString() },
         })
       } else {
         await tx.systemSetting.create({
           data: {
-            key: CASH_BALANCE_KEY,
+            key: cashBalanceKey,
             value: nextCash.toString(),
             description: 'Available cash balance for investments',
           },
@@ -169,6 +185,7 @@ export async function POST(req: NextRequest) {
           date,
           notes,
           type: 'CASH_IN',
+          personId: user.role === 'OWNER' ? null : user.personId,
         })
       } else {
         await withdrawFromBuckets(tx, {
@@ -178,6 +195,7 @@ export async function POST(req: NextRequest) {
           type: 'CASH_OUT',
           notes,
           availableOnOrBefore: date,
+          personId: user.role === 'OWNER' ? null : user.personId,
         })
       }
 
@@ -185,7 +203,7 @@ export async function POST(req: NextRequest) {
         data: {
           accountId: cashAccount.id,
           investmentId: null,
-          personId: null,
+          personId: user.role === 'OWNER' ? null : user.personId,
           type: direction === 'IN' ? 'CASH_IN' : 'CASH_OUT',
           amount: delta,
           date,
