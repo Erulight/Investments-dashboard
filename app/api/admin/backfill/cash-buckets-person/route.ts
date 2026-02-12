@@ -34,6 +34,12 @@ export async function POST(req: NextRequest) {
     for (const bucket of buckets as any[]) {
       inspected += 1
 
+      const label = typeof bucket?.label === 'string' ? bucket.label : ''
+      if (label === 'Partner Commission' || label.startsWith('Debt •')) {
+        skipped.push({ bucketId: bucket.id, reason: 'Skipped non-owner cash bucket type' })
+        continue
+      }
+
       const investmentIds: string[] = Array.from(
         new Set(
           (Array.isArray(bucket?.movements) ? bucket.movements : [])

@@ -202,9 +202,14 @@ export default async function ZakatPage() {
       excludeFromZakat: false,
       ...(user.role === 'OWNER'
         ? { personId: null }
-        : { personId: user.personId }),
+        : {
+            personId: user.personId,
+            NOT: [
+              { label: 'Partner Commission' },
+              { label: { startsWith: 'Debt •' } },
+            ],
+          }),
     },
-    orderBy: { haulStartDate: 'asc' },
     include: {
       movements: {
         orderBy: { date: 'asc' },

@@ -419,8 +419,9 @@ export async function POST(
           label: 'Partner Commission',
           date,
           notes: notes || null,
-          investmentId: investment.id,
+          investmentId: null,
           type: 'CASH_IN',
+          personId: null,
         })
       }
 
