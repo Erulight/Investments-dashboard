@@ -3,7 +3,6 @@ import { prisma } from '@/lib/db'
 import { requireAuth } from '@/lib/rbac'
 import { logAudit } from '@/lib/audit'
 import { creditBucketsForReceipt } from '@/lib/cashBuckets'
-import { createCashBucket } from '@/lib/cashBuckets'
 
 export async function POST(
   req: NextRequest,
@@ -113,30 +112,15 @@ export async function POST(
         })
       }
 
-      if (user.role === 'PARTNER') {
-        const haulStartDate = new Date(date.getFullYear(), date.getMonth(), date.getDate())
-
-        await createCashBucket(tx, {
-          amount,
-          haulStartDate,
-          currency: investment.account?.currency || 'SAR',
-          label: `Sukuk Receipt • ${investment.name}`,
-          date,
-          notes: notes || null,
-          investmentId: investment.id,
-          type: source === 'PROFIT' ? 'WITHDRAW_PROFIT' : 'WITHDRAW_PRINCIPAL',
-          personId: user.personId || null,
-        })
-      } else {
-        await creditBucketsForReceipt(tx, {
-          investmentId: investment.id,
-          amount,
-          principalReduction: source === 'PRINCIPAL' ? amount : 0,
-          date,
-          type: source === 'PROFIT' ? 'WITHDRAW_PROFIT' : 'WITHDRAW_PRINCIPAL',
-          notes: notes || null,
-        })
-      }
+      await creditBucketsForReceipt(tx, {
+        investmentId: investment.id,
+        amount,
+        principalReduction: source === 'PRINCIPAL' ? amount : 0,
+        date,
+        type: source === 'PROFIT' ? 'WITHDRAW_PROFIT' : 'WITHDRAW_PRINCIPAL',
+        notes: notes || null,
+        personId: user.role === 'PARTNER' ? user.personId! : null,
+      })
 
       const cashAccount = await tx.account.findFirst({
         where: { type: 'CASH', isActive: true },

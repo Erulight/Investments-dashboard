@@ -224,6 +224,7 @@ export const creditBucketsForReceipt = async (
     date,
     type,
     notes,
+    personId,
   }: {
     investmentId: string
     amount: number
@@ -231,12 +232,20 @@ export const creditBucketsForReceipt = async (
     date: Date
     type: MovementType
     notes?: string | null
+    personId?: string | null
   }
 ) => {
   const allocations = await tx.investmentBucketAllocation.findMany({
     where: {
       investmentId,
-    },
+      ...(personId === undefined
+        ? {}
+        : {
+            cashBucket: {
+              personId: personId,
+            },
+          }),
+    } as any,
   })
 
   const principalFocused = principalReduction > 0

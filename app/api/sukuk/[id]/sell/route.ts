@@ -4,6 +4,7 @@ import { requireAuth } from '@/lib/rbac'
 import { logAudit } from '@/lib/audit'
 import { creditBucketsForReceipt } from '@/lib/cashBuckets'
 import { createCashBucket } from '@/lib/cashBuckets'
+import { withdrawFromBuckets } from '@/lib/cashBuckets'
 
 export async function POST(
   req: NextRequest,
@@ -198,6 +199,47 @@ export async function POST(
       : null
 
     const updated = await prisma.$transaction(async (tx: any) => {
+      const dayStart = new Date(date.getFullYear(), date.getMonth(), date.getDate())
+
+      // Buyer must fund the purchase from their own cash buckets/balance.
+      // This is partner-scoped and does not touch the owner's global CASH_BALANCE.
+      if (salePrice > 0) {
+        const buyerCashKey = `CASH_BALANCE:${buyerPersonId}`
+        const buyerSetting = await tx.systemSetting.findUnique({ where: { key: buyerCashKey } })
+        const buyerCurrentRaw = buyerSetting ? Number(buyerSetting.value) : 0
+        const buyerCurrent = Number.isFinite(buyerCurrentRaw) ? buyerCurrentRaw : 0
+        const buyerNext = buyerCurrent - salePrice
+
+        if (buyerNext < -0.0001) {
+          throw new Error('INSUFFICIENT_CASH')
+        }
+
+        if (buyerSetting) {
+          await tx.systemSetting.update({
+            where: { key: buyerCashKey },
+            data: { value: buyerNext.toString() },
+          })
+        } else {
+          await tx.systemSetting.create({
+            data: {
+              key: buyerCashKey,
+              value: buyerNext.toString(),
+              description: 'Available cash balance for investments',
+            },
+          })
+        }
+
+        await withdrawFromBuckets(tx, {
+          amount: salePrice,
+          currency: investment.account?.currency || 'SAR',
+          date,
+          type: 'INVEST_OUT',
+          notes: notes || 'Sukuk purchase',
+          availableOnOrBefore: date,
+          personId: buyerPersonId,
+        })
+      }
+
       const sellerRemaining = seller.investedAmount - amount
       if (sellerRemaining <= 0.000001) {
         await tx.dealParticipant.delete({
@@ -248,6 +290,51 @@ export async function POST(
           },
         })
       }
+
+      // Create (or reuse) a partner-owned haul bucket to represent the acquired principal.
+      // This ensures the partner haul starts at the acquisition date (sell date).
+      const allocationLabel = `Sukuk Principal • ${investment.name}`
+      const existingBucket = await tx.cashBucket.findFirst({
+        where: {
+          personId: buyerPersonId,
+          label: allocationLabel,
+          haulStartDate: dayStart,
+        } as any,
+        select: { id: true },
+      })
+
+      const allocationBucketId = existingBucket?.id
+        ? existingBucket.id
+        : (await createCashBucket(tx, {
+            amount: 0,
+            haulStartDate: dayStart,
+            currency: investment.account?.currency || 'SAR',
+            label: allocationLabel,
+            date,
+            notes: null,
+            investmentId: null,
+            type: 'CASH_IN',
+            personId: buyerPersonId,
+          })).id
+
+      await tx.investmentBucketAllocation.upsert({
+        where: {
+          investmentId_cashBucketId: {
+            investmentId: investment.id,
+            cashBucketId: allocationBucketId,
+          },
+        },
+        update: {
+          principalAllocated: { increment: amount },
+          principalRemaining: { increment: amount },
+        },
+        create: {
+          investmentId: investment.id,
+          cashBucketId: allocationBucketId,
+          principalAllocated: amount,
+          principalRemaining: amount,
+        },
+      })
 
       const cashAccount = await tx.account.findFirst({
         where: { type: 'CASH', isActive: true },
@@ -409,6 +496,7 @@ export async function POST(
         date,
         type: 'SELL_RECEIPT',
         notes: notes || null,
+        personId: null,
       })
 
       if (commissionAmount > 0) {

@@ -46,6 +46,10 @@ describe('POST /api/sukuk/create', () => {
     id: 'user-1',
     email: 'owner@example.local',
     role: 'OWNER',
+    name: 'Owner',
+    personId: null,
+    permissions: null,
+    person: null,
   }
 
   const mockAccount = {
@@ -82,7 +86,7 @@ describe('POST /api/sukuk/create', () => {
 
   it('should successfully create a sukuk with valid data', async () => {
     // Mock auth to return owner user
-    vi.mocked(requireAuth).mockResolvedValue(mockUser)
+    vi.mocked(requireAuth).mockResolvedValue(mockUser as any)
 
     // Mock account exists
     vi.mocked(prisma.account.findUnique).mockResolvedValue(mockAccount as any)
@@ -153,7 +157,7 @@ describe('POST /api/sukuk/create', () => {
   })
 
   it('should return 400 for invalid data', async () => {
-    vi.mocked(requireAuth).mockResolvedValue(mockUser)
+    vi.mocked(requireAuth).mockResolvedValue(mockUser as any)
 
     const invalidData = {
       accountId: 'account-1',
@@ -176,7 +180,7 @@ describe('POST /api/sukuk/create', () => {
   })
 
   it('should return 404 if account not found', async () => {
-    vi.mocked(requireAuth).mockResolvedValue(mockUser)
+    vi.mocked(requireAuth).mockResolvedValue(mockUser as any)
     vi.mocked(prisma.account.findUnique).mockResolvedValue(null)
 
     const request = createMockRequest({
@@ -222,7 +226,7 @@ describe('POST /api/sukuk/create', () => {
   })
 
   it('should create sukuk with participants', async () => {
-    vi.mocked(requireAuth).mockResolvedValue(mockUser)
+    vi.mocked(requireAuth).mockResolvedValue(mockUser as any)
     vi.mocked(prisma.account.findUnique).mockResolvedValue(mockAccount as any)
 
     const dataWithParticipants = {
@@ -312,7 +316,7 @@ describe('POST /api/sukuk/create', () => {
   })
 
   it('should validate principalAmount is positive', async () => {
-    vi.mocked(requireAuth).mockResolvedValue(mockUser)
+    vi.mocked(requireAuth).mockResolvedValue(mockUser as any)
 
     const invalidData = {
       ...validSukukData,
@@ -332,7 +336,7 @@ describe('POST /api/sukuk/create', () => {
   })
 
   it('should validate startDate is a valid date', async () => {
-    vi.mocked(requireAuth).mockResolvedValue(mockUser)
+    vi.mocked(requireAuth).mockResolvedValue(mockUser as any)
 
     const invalidData = {
       ...validSukukData,
