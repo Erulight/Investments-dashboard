@@ -100,12 +100,15 @@ export function SukukList({ initialSukuk, userRole, ownerPersonId, viewerPersonI
     buyerPersonId: '',
     amount: '',
     salePrice: '',
+    paymentMode: 'CASH',
+    debtId: '',
     commissionType: 'FIXED',
     commissionValue: '',
     date: formatDateInput(new Date()),
     notes: '',
   })
   const [partners, setPartners] = useState<any[]>([])
+  const [debts, setDebts] = useState<any[]>([])
   const [actionError, setActionError] = useState('')
   const [actionLoading, setActionLoading] = useState(false)
   const [filters, setFilters] = useState({
@@ -796,6 +799,8 @@ export function SukukList({ initialSukuk, userRole, ownerPersonId, viewerPersonI
       buyerPersonId: '',
       amount: '',
       salePrice: '',
+      paymentMode: 'CASH',
+      debtId: '',
       commissionType: 'FIXED',
       commissionValue: '',
       date: formatDateInput(new Date()),
@@ -824,6 +829,19 @@ export function SukukList({ initialSukuk, userRole, ownerPersonId, viewerPersonI
       } catch (error) {
         console.error('Failed to load partners:', error)
         setActionError('Failed to load partners.')
+      }
+    }
+
+    if (userRole === 'OWNER' && debts.length === 0) {
+      try {
+        const res = await fetch('/api/debts')
+        const data = await res.json().catch(() => ({}))
+        if (!res.ok) {
+          throw new Error(data.error || 'Failed to load debts')
+        }
+        setDebts(Array.isArray(data.debts) ? data.debts : [])
+      } catch (error) {
+        console.error('Failed to load debts:', error)
       }
     }
   }
@@ -883,6 +901,13 @@ export function SukukList({ initialSukuk, userRole, ownerPersonId, viewerPersonI
         setActionLoading(false)
         return
       }
+
+      if (sellForm.paymentMode === 'SETTLE_DEBT' && !sellForm.debtId) {
+        setActionError('Please select a debt to settle')
+        setActionLoading(false)
+        return
+      }
+
       const res = await fetch(`/api/sukuk/${sellTarget.id}/sell`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -890,6 +915,8 @@ export function SukukList({ initialSukuk, userRole, ownerPersonId, viewerPersonI
           buyerPersonId: sellForm.buyerPersonId,
           amount: parseFloat(sellForm.amount),
           salePrice: sellForm.salePrice ? parseFloat(sellForm.salePrice) : undefined,
+          paymentMode: sellForm.paymentMode,
+          debtId: sellForm.paymentMode === 'SETTLE_DEBT' ? sellForm.debtId : undefined,
           commissionType: sellForm.commissionType,
           commissionValue: sellForm.commissionValue ? parseFloat(sellForm.commissionValue) : 0,
           date: isoDate,
@@ -1825,7 +1852,9 @@ export function SukukList({ initialSukuk, userRole, ownerPersonId, viewerPersonI
               />
             </div>
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">Sale Price (Cash)</label>
+              <label className="block text-sm font-medium text-gray-700 mb-1">
+                {sellForm.paymentMode === 'SETTLE_DEBT' ? 'Settlement Amount (Debt)' : 'Sale Price (Cash)'}
+              </label>
               <input
                 type="number"
                 min="0"
@@ -1840,11 +1869,59 @@ export function SukukList({ initialSukuk, userRole, ownerPersonId, viewerPersonI
 
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">Payment Mode</label>
+              <select
+                value={sellForm.paymentMode}
+                onChange={(e) => setSellForm((prev) => ({ ...prev, paymentMode: e.target.value, debtId: '' }))}
+                className="w-full px-4 py-2 border border-gray-300 rounded-lg bg-white focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+              >
+                <option value="CASH">Cash</option>
+                <option value="SETTLE_DEBT">Settle Debt (no cash)</option>
+              </select>
+            </div>
+
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">Debt</label>
+              <select
+                value={sellForm.debtId}
+                onChange={(e) => setSellForm((prev) => ({ ...prev, debtId: e.target.value }))}
+                className="w-full px-4 py-2 border border-gray-300 rounded-lg bg-white focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                disabled={sellForm.paymentMode !== 'SETTLE_DEBT'}
+                required={sellForm.paymentMode === 'SETTLE_DEBT'}
+              >
+                <option value="">Select debt</option>
+                {(() => {
+                  const partner = partners.find((p: any) => p.id === sellForm.buyerPersonId)
+                  const partnerName = (partner?.name || '').toString().trim().toLowerCase()
+                  const list = partnerName
+                    ? debts.filter((d: any) => (d.lenderName || '').toString().trim().toLowerCase() === partnerName)
+                    : debts
+
+                  return list.map((d: any) => {
+                    const paid = Array.isArray(d.payments)
+                      ? d.payments.reduce((s: number, p: any) => s + (Number(p.amount) || 0), 0)
+                      : 0
+                    const outstanding = Math.max(0, (Number(d.amount) || 0) - paid)
+                    const label = `${d.lenderName} • Outstanding ${outstanding.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`
+                    return (
+                      <option key={d.id} value={d.id}>
+                        {label}
+                      </option>
+                    )
+                  })
+                })()}
+              </select>
+            </div>
+          </div>
+
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <div>
               <label className="block text-sm font-medium text-gray-700 mb-1">Commission Type</label>
               <select
                 value={sellForm.commissionType}
                 onChange={(e) => setSellForm((prev) => ({ ...prev, commissionType: e.target.value }))}
                 className="w-full px-4 py-2 border border-gray-300 rounded-lg bg-white focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                disabled={sellForm.paymentMode === 'SETTLE_DEBT'}
               >
                 <option value="FIXED">Fixed</option>
                 <option value="PERCENT">Percentage (of partner gross profit)</option>
@@ -1861,6 +1938,7 @@ export function SukukList({ initialSukuk, userRole, ownerPersonId, viewerPersonI
                 onChange={(e) => setSellForm((prev) => ({ ...prev, commissionValue: e.target.value }))}
                 className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
                 placeholder={sellForm.commissionType === 'PERCENT' ? 'e.g. 5' : sellForm.commissionType === 'AUTO' ? 'Leave 0 for auto' : 'e.g. 50'}
+                disabled={sellForm.paymentMode === 'SETTLE_DEBT'}
               />
             </div>
           </div>

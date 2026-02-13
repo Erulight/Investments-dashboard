@@ -18,6 +18,8 @@ export async function POST(
     const buyerPersonId = typeof body.buyerPersonId === 'string' ? body.buyerPersonId : ''
     const amount = Number(body.amount)
     const salePrice = body.salePrice !== undefined ? Number(body.salePrice) : amount
+    const paymentMode = body.paymentMode === 'SETTLE_DEBT' ? 'SETTLE_DEBT' : 'CASH'
+    const debtId = typeof body.debtId === 'string' ? body.debtId : ''
     const commissionType = body.commissionType === 'PERCENT'
       ? 'PERCENT'
       : body.commissionType === 'AUTO'
@@ -37,6 +39,12 @@ export async function POST(
     }
     if (!Number.isFinite(salePrice) || salePrice < 0) {
       return NextResponse.json({ error: 'Sale price must be 0 or more' }, { status: 400 })
+    }
+    if (paymentMode === 'SETTLE_DEBT' && !debtId) {
+      return NextResponse.json({ error: 'Debt is required for settlement' }, { status: 400 })
+    }
+    if (paymentMode === 'SETTLE_DEBT' && commissionValueRaw > 0) {
+      return NextResponse.json({ error: 'Commission is not supported in debt settlement mode' }, { status: 400 })
     }
     if (!Number.isFinite(commissionValueRaw) || commissionValueRaw < 0) {
       return NextResponse.json({ error: 'Commission must be 0 or more' }, { status: 400 })
@@ -185,6 +193,9 @@ export async function POST(
       : 0
 
     const commissionAmount = (() => {
+      if (paymentMode === 'SETTLE_DEBT') {
+        return 0
+      }
       if (commissionType === 'PERCENT') {
         return Math.max(0, (partnerGrossProfit * commissionValueRaw) / 100)
       }
@@ -203,7 +214,7 @@ export async function POST(
 
       // Buyer must fund the purchase from their own cash buckets/balance.
       // This is partner-scoped and does not touch the owner's global CASH_BALANCE.
-      if (salePrice > 0) {
+      if (paymentMode === 'CASH' && salePrice > 0) {
         const buyerCashKey = `CASH_BALANCE:${buyerPersonId}`
         const buyerSetting = await tx.systemSetting.findUnique({ where: { key: buyerCashKey } })
         const buyerCurrentRaw = buyerSetting ? Number(buyerSetting.value) : 0
@@ -238,6 +249,47 @@ export async function POST(
           availableOnOrBefore: date,
           personId: buyerPersonId,
         })
+      }
+
+      if (paymentMode === 'SETTLE_DEBT' && salePrice > 0) {
+        const debt = await tx.debt.findUnique({
+          where: { id: debtId },
+          include: { payments: true, cashBucket: true },
+        })
+
+        if (!debt) {
+          throw new Error('DEBT_NOT_FOUND')
+        }
+
+        const totalPaidBefore = debt.payments.reduce((s: number, p: any) => s + (Number(p.amount) || 0), 0)
+        const outstandingBefore = Math.max(0, Number(debt.amount) - totalPaidBefore)
+        if (salePrice > outstandingBefore + 0.000001) {
+          throw new Error('DEBT_PAYMENT_EXCEEDS_OUTSTANDING')
+        }
+
+        await tx.debtPayment.create({
+          data: {
+            debtId: debt.id,
+            amount: salePrice,
+            paidAt: date,
+            notes: notes || 'Debt settlement via Sukuk transfer',
+          },
+        })
+
+        const totalPaidAfter = totalPaidBefore + salePrice
+        const outstandingAfter = Math.max(0, Number(debt.amount) - totalPaidAfter)
+        const fullyPaid = outstandingAfter <= 0.000001
+
+        if (fullyPaid && debt.cashBucketId) {
+          await tx.cashBucket.update({
+            where: { id: debt.cashBucketId },
+            data: {
+              excludeFromZakat: false,
+              haulStartDate: date,
+              lastZakatPaidDate: null,
+            },
+          })
+        }
       }
 
       const sellerRemaining = seller.investedAmount - amount
@@ -350,11 +402,11 @@ export async function POST(
       await tx.transaction.createMany({
         data: [
           {
-            accountId: cashAccount.id,
+            accountId: investment.accountId,
             investmentId: investment.id,
             personId: sellerPersonId,
             type: 'SELL_TO_PARTNER',
-            amount: Math.abs(salePrice),
+            amount: paymentMode === 'CASH' ? Math.abs(salePrice) : 0,
             date,
             description: notes || null,
             metadata: JSON.stringify({
@@ -363,6 +415,8 @@ export async function POST(
               salePrice,
               commissionAmount,
               accruedProfitAtSale,
+              paymentMode,
+              debtId: paymentMode === 'SETTLE_DEBT' ? debtId : null,
               totalDays,
               investorDays,
               partnerDays,
@@ -380,7 +434,7 @@ export async function POST(
               commissionValueRaw,
             }),
           },
-          ...(accruedProfitAtSale > 0
+          ...(paymentMode === 'CASH' && accruedProfitAtSale > 0
             ? [
                 {
                   accountId: cashAccount.id,
@@ -413,7 +467,7 @@ export async function POST(
                 },
               ]
             : []),
-          ...(commissionAmount > 0
+          ...(paymentMode === 'CASH' && commissionAmount > 0
             ? [
                 {
                   accountId: cashAccount.id,
@@ -454,7 +508,7 @@ export async function POST(
             investmentId: investment.id,
             personId: buyerPersonId,
             type: 'BUY_FROM_PARTNER',
-            amount: -Math.abs(salePrice),
+            amount: paymentMode === 'CASH' ? -Math.abs(salePrice) : 0,
             date,
             description: notes || null,
             metadata: JSON.stringify({
@@ -463,54 +517,58 @@ export async function POST(
               salePrice,
               commissionAmount,
               accruedProfitAtSale,
+              paymentMode,
+              debtId: paymentMode === 'SETTLE_DEBT' ? debtId : null,
             }),
           },
         ],
       })
 
-      const cashSetting = await tx.systemSetting.findUnique({
-        where: { key: 'CASH_BALANCE' },
-      })
-      const currentCash = cashSetting ? Number(cashSetting.value) : 0
-      const nextCash = currentCash + salePrice + commissionAmount + accruedProfitAtSale
-
-      if (cashSetting) {
-        await tx.systemSetting.update({
+      if (paymentMode === 'CASH') {
+        const cashSetting = await tx.systemSetting.findUnique({
           where: { key: 'CASH_BALANCE' },
-          data: { value: nextCash.toString() },
         })
-      } else {
-        await tx.systemSetting.create({
-          data: {
-            key: 'CASH_BALANCE',
-            value: nextCash.toString(),
-            description: 'Available cash balance for investments',
-          },
-        })
-      }
+        const currentCash = cashSetting ? Number(cashSetting.value) : 0
+        const nextCash = currentCash + salePrice + commissionAmount + accruedProfitAtSale
 
-      await creditBucketsForReceipt(tx, {
-        investmentId: investment.id,
-        amount: salePrice + accruedProfitAtSale,
-        principalReduction: amount,
-        date,
-        type: 'SELL_RECEIPT',
-        notes: notes || null,
-        personId: null,
-      })
+        if (cashSetting) {
+          await tx.systemSetting.update({
+            where: { key: 'CASH_BALANCE' },
+            data: { value: nextCash.toString() },
+          })
+        } else {
+          await tx.systemSetting.create({
+            data: {
+              key: 'CASH_BALANCE',
+              value: nextCash.toString(),
+              description: 'Available cash balance for investments',
+            },
+          })
+        }
 
-      if (commissionAmount > 0) {
-        await createCashBucket(tx, {
-          amount: commissionAmount,
-          haulStartDate: date,
-          currency: investment.account?.currency || 'SAR',
-          label: 'Partner Commission',
+        await creditBucketsForReceipt(tx, {
+          investmentId: investment.id,
+          amount: salePrice + accruedProfitAtSale,
+          principalReduction: amount,
           date,
+          type: 'SELL_RECEIPT',
           notes: notes || null,
-          investmentId: null,
-          type: 'CASH_IN',
           personId: null,
         })
+
+        if (commissionAmount > 0) {
+          await createCashBucket(tx, {
+            amount: commissionAmount,
+            haulStartDate: date,
+            currency: investment.account?.currency || 'SAR',
+            label: 'Partner Commission',
+            date,
+            notes: notes || null,
+            investmentId: null,
+            type: 'CASH_IN',
+            personId: null,
+          })
+        }
       }
 
       await logAudit(tx, {
@@ -527,6 +585,8 @@ export async function POST(
             commissionValue: commissionValueRaw,
             commissionAmount,
             date,
+            paymentMode,
+            debtId: paymentMode === 'SETTLE_DEBT' ? debtId : null,
           },
         }),
       })
@@ -544,11 +604,27 @@ export async function POST(
         statusCode = 401
       } else if (error.message === 'Forbidden') {
         statusCode = 403
+      } else if (error.message === 'INSUFFICIENT_CASH') {
+        statusCode = 400
+      } else if (error.message === 'DEBT_NOT_FOUND') {
+        statusCode = 400
+      } else if (error.message === 'DEBT_PAYMENT_EXCEEDS_OUTSTANDING') {
+        statusCode = 400
       }
     }
 
     return NextResponse.json(
-      { error: error instanceof Error ? error.message : 'Failed to sell' },
+      {
+        error: error instanceof Error
+          ? error.message === 'INSUFFICIENT_CASH'
+            ? 'Insufficient partner cash balance'
+            : error.message === 'DEBT_NOT_FOUND'
+              ? 'Debt not found'
+              : error.message === 'DEBT_PAYMENT_EXCEEDS_OUTSTANDING'
+                ? 'Settlement exceeds outstanding debt amount'
+                : error.message
+          : 'Failed to sell',
+      },
       { status: statusCode }
     )
   }
