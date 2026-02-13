@@ -1,11 +1,11 @@
 'use client'
 
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import { motion } from 'framer-motion'
-import ReactGridLayout, { Responsive } from 'react-grid-layout'
+import { Responsive } from 'react-grid-layout'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/Card'
 
-const ResponsiveGridLayout = (ReactGridLayout as any).WidthProvider(Responsive)
+const ResponsiveAny = Responsive as any
 
 type RglLayouts = Record<string, any[]>
 
@@ -90,6 +90,29 @@ export function AnalyticsGrid({
   }, [])
 
   const [layouts, setLayouts] = useState<RglLayouts>(defaultLayouts)
+  const containerRef = useRef<HTMLDivElement | null>(null)
+  const [containerWidth, setContainerWidth] = useState<number>(0)
+
+  useEffect(() => {
+    const el = containerRef.current
+    if (!el) return
+
+    const update = () => {
+      const next = Math.round(el.getBoundingClientRect().width)
+      setContainerWidth((prev) => (prev !== next ? next : prev))
+    }
+
+    update()
+
+    if (typeof ResizeObserver === 'undefined') {
+      const id = window.setInterval(update, 500)
+      return () => window.clearInterval(id)
+    }
+
+    const ro = new ResizeObserver(() => update())
+    ro.observe(el)
+    return () => ro.disconnect()
+  }, [])
 
   useEffect(() => {
     try {
@@ -111,6 +134,10 @@ export function AnalyticsGrid({
     } catch {
       // ignore
     }
+  }
+
+  const onLayoutChangeAny = (_layout: any, all: any) => {
+    onLayoutsChange(Array.isArray(_layout) ? _layout : [], all as RglLayouts)
   }
 
   const formatMoney = (n: number) => `SAR ${Math.round(n).toLocaleString()}`
@@ -183,7 +210,7 @@ export function AnalyticsGrid({
   }
 
   return (
-    <div className="space-y-3">
+    <div className="space-y-3" ref={containerRef}>
       <div className="flex items-center justify-between">
         <div>
           <div className="text-sm font-semibold text-gray-900">Analytics</div>
@@ -191,15 +218,17 @@ export function AnalyticsGrid({
         </div>
       </div>
 
-      <ResponsiveGridLayout
+      {containerWidth > 0 && (
+      <ResponsiveAny
         className="analytics-grid"
         layouts={layouts}
+        width={containerWidth}
         breakpoints={{ lg: 1200, md: 996, sm: 640, xs: 480, xxs: 0 }}
         cols={{ lg: 12, md: 12, sm: 6, xs: 6, xxs: 6 }}
         rowHeight={32}
         margin={[12, 12]}
         containerPadding={[0, 0]}
-        onLayoutChange={onLayoutsChange}
+        onLayoutChange={onLayoutChangeAny as any}
         isResizable
         isDraggable
         draggableHandle="[data-drag-handle]"
@@ -324,7 +353,8 @@ export function AnalyticsGrid({
             </motion.div>
           </div>
         ))}
-      </ResponsiveGridLayout>
+      </ResponsiveAny>
+      )}
     </div>
   )
 }
