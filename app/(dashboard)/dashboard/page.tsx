@@ -6,6 +6,7 @@ import { YearFilter } from '@/components/dashboard/YearFilter'
 import { CashBalanceCard } from '@/components/dashboard/CashBalanceCard'
 import { ReportButton } from '@/components/dashboard/ReportButton'
 import { DashboardCharts } from '@/components/dashboard/DashboardCharts'
+import { AnalyticsGrid } from '@/components/dashboard/AnalyticsGrid'
 
 export const dynamic = 'force-dynamic'
 
@@ -711,6 +712,13 @@ export default async function DashboardPage({
           </CardContent>
         </Card>
       </div>
+
+      <AnalyticsGrid
+        selectedYear={selectedYear}
+        totalInvested={totalInvested}
+        portfolioValue={displayedValue}
+        yearlyReturnValue={yearlyProfitValue}
+      />
 
       {user.role === 'PARTNER' && user.personId && (
         <div className="grid grid-cols-2 gap-3 lg:grid-cols-4 items-start auto-rows-min">
