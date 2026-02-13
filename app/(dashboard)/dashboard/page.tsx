@@ -657,6 +657,78 @@ export default async function DashboardPage({
     return points
   })()
 
+  const activity = await (async () => {
+    const take = 12
+    if (user.role === 'OWNER') {
+      const txs = await prisma.transaction.findMany({
+        where: {
+          date: { lt: yearEnd },
+          OR: [
+            { investment: { name: { notIn: DEMO_INVESTMENT_NAMES } } },
+            { investmentId: null },
+          ],
+        },
+        orderBy: { date: 'desc' },
+        take,
+        select: {
+          id: true,
+          date: true,
+          type: true,
+          amount: true,
+          description: true,
+          investment: { select: { name: true } },
+          account: { select: { type: true } },
+        },
+      })
+
+      return txs.map((t) => ({
+        id: t.id,
+        date: t.date.toISOString(),
+        type: t.type,
+        amount: Number(t.amount) || 0,
+        description: t.description ?? null,
+        investmentName: t.investment?.name ?? null,
+        accountType: t.account?.type ?? null,
+      }))
+    }
+
+    if (user.role === 'PARTNER' && user.personId) {
+      const txs = await prisma.transaction.findMany({
+        where: {
+          personId: user.personId,
+          date: { lt: yearEnd },
+          OR: [
+            { investment: { name: { notIn: DEMO_INVESTMENT_NAMES } } },
+            { investmentId: null },
+          ],
+        },
+        orderBy: { date: 'desc' },
+        take,
+        select: {
+          id: true,
+          date: true,
+          type: true,
+          amount: true,
+          description: true,
+          investment: { select: { name: true } },
+          account: { select: { type: true } },
+        },
+      })
+
+      return txs.map((t) => ({
+        id: t.id,
+        date: t.date.toISOString(),
+        type: t.type,
+        amount: Number(t.amount) || 0,
+        description: t.description ?? null,
+        investmentName: t.investment?.name ?? null,
+        accountType: t.account?.type ?? null,
+      }))
+    }
+
+    return [] as any[]
+  })()
+
   return (
     <div className="space-y-6 animate-fade-in">
       {/* Header */}
@@ -718,6 +790,10 @@ export default async function DashboardPage({
         totalInvested={totalInvested}
         portfolioValue={displayedValue}
         yearlyReturnValue={yearlyProfitValue}
+        monthlyCashflow={monthlyCashflow}
+        monthlyPortfolioValue={monthlyPortfolioValue}
+        typeBreakdowns={typeBreakdowns}
+        activity={activity}
       />
 
       {user.role === 'PARTNER' && user.personId && (

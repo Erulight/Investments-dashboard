@@ -9,7 +9,19 @@ const ResponsiveGridLayout = (ReactGridLayout as any).WidthProvider(Responsive)
 
 type RglLayouts = Record<string, any[]>
 
-type WidgetKey = 'kpis' | 'cashflow' | 'allocation' | 'notes'
+type SeriesPoint = { label: string; value: number }
+type TypeBreakdown = { type: string; invested: number; value: number; count: number }
+type ActivityItem = {
+  id: string
+  date: string
+  type: string
+  amount: number
+  description: string | null
+  investmentName: string | null
+  accountType: string | null
+}
+
+type WidgetKey = 'kpis' | 'cashflow' | 'trend' | 'allocation' | 'activity'
 
 type Widget = {
   key: WidgetKey
@@ -23,19 +35,28 @@ export function AnalyticsGrid({
   totalInvested,
   portfolioValue,
   yearlyReturnValue,
+  monthlyCashflow,
+  monthlyPortfolioValue,
+  typeBreakdowns,
+  activity,
 }: {
   storageKey?: string
   selectedYear: number
   totalInvested: number
   portfolioValue: number
   yearlyReturnValue: number
+  monthlyCashflow: SeriesPoint[]
+  monthlyPortfolioValue: SeriesPoint[]
+  typeBreakdowns: TypeBreakdown[]
+  activity: ActivityItem[]
 }) {
   const widgets = useMemo<Widget[]>(
     () => [
       { key: 'kpis', title: 'Analytics KPIs', description: `Snapshot • ${selectedYear}` },
-      { key: 'cashflow', title: 'Cashflow', description: 'Mini trend' },
-      { key: 'allocation', title: 'Allocation', description: 'Top categories' },
-      { key: 'notes', title: 'Notes', description: 'Pin reminders' },
+      { key: 'cashflow', title: 'Cashflow', description: 'Monthly net' },
+      { key: 'trend', title: 'Portfolio Trend', description: 'Monthly total value' },
+      { key: 'allocation', title: 'Allocation', description: 'By investment type' },
+      { key: 'activity', title: 'Activity Feed', description: 'Latest events' },
     ],
     [selectedYear]
   )
@@ -44,22 +65,25 @@ export function AnalyticsGrid({
     const lg: any[] = [
       { i: 'kpis', x: 0, y: 0, w: 6, h: 4 },
       { i: 'cashflow', x: 6, y: 0, w: 6, h: 4 },
-      { i: 'allocation', x: 0, y: 4, w: 7, h: 4 },
-      { i: 'notes', x: 7, y: 4, w: 5, h: 4 },
+      { i: 'trend', x: 0, y: 4, w: 6, h: 4 },
+      { i: 'allocation', x: 6, y: 4, w: 6, h: 4 },
+      { i: 'activity', x: 0, y: 8, w: 12, h: 5 },
     ]
 
     const md: any[] = [
       { i: 'kpis', x: 0, y: 0, w: 6, h: 4 },
       { i: 'cashflow', x: 6, y: 0, w: 6, h: 4 },
-      { i: 'allocation', x: 0, y: 4, w: 12, h: 4 },
-      { i: 'notes', x: 0, y: 8, w: 12, h: 4 },
+      { i: 'trend', x: 0, y: 4, w: 12, h: 4 },
+      { i: 'allocation', x: 0, y: 8, w: 12, h: 4 },
+      { i: 'activity', x: 0, y: 12, w: 12, h: 5 },
     ]
 
     const sm: any[] = [
       { i: 'kpis', x: 0, y: 0, w: 6, h: 4 },
       { i: 'cashflow', x: 0, y: 4, w: 6, h: 4 },
-      { i: 'allocation', x: 0, y: 8, w: 6, h: 4 },
-      { i: 'notes', x: 0, y: 12, w: 6, h: 4 },
+      { i: 'trend', x: 0, y: 8, w: 6, h: 4 },
+      { i: 'allocation', x: 0, y: 12, w: 6, h: 4 },
+      { i: 'activity', x: 0, y: 16, w: 6, h: 6 },
     ]
 
     return { lg, md, sm, xs: sm, xxs: sm }
@@ -90,6 +114,73 @@ export function AnalyticsGrid({
   }
 
   const formatMoney = (n: number) => `SAR ${Math.round(n).toLocaleString()}`
+
+  const formatCompact = (n: number) => {
+    const abs = Math.abs(n)
+    if (abs >= 1_000_000_000) return `${(n / 1_000_000_000).toFixed(1)}B`
+    if (abs >= 1_000_000) return `${(n / 1_000_000).toFixed(1)}M`
+    if (abs >= 1_000) return `${(n / 1_000).toFixed(1)}K`
+    return `${Math.round(n)}`
+  }
+
+  const MiniBar = ({ points }: { points: SeriesPoint[] }) => {
+    const values = points.map((p) => p.value)
+    const maxAbs = Math.max(1, ...values.map((v) => Math.abs(v)))
+    return (
+      <div className="grid grid-cols-12 gap-1 items-end h-24">
+        {points.map((p) => {
+          const raw = p.value
+          const h = Math.max(2, Math.round((Math.abs(raw) / maxAbs) * 100))
+          const color = raw >= 0 ? 'bg-emerald-500' : 'bg-red-500'
+          return (
+            <div key={p.label} className="col-span-1 flex flex-col items-center gap-1">
+              <div className={`w-full rounded-sm ${color}`} style={{ height: `${h}%` }} title={`${p.label}: ${p.value}`} />
+              <div className="text-[10px] text-gray-400 leading-none">{p.label}</div>
+            </div>
+          )
+        })}
+      </div>
+    )
+  }
+
+  const MiniLine = ({ points }: { points: SeriesPoint[] }) => {
+    const values = points.map((p) => p.value)
+    const min = Math.min(...values)
+    const max = Math.max(...values)
+    const w = 420
+    const h = 110
+    const pad = 8
+    const span = Math.max(1e-9, max - min)
+
+    const scaleX = (i: number) => {
+      if (points.length <= 1) return pad
+      return pad + (i / (points.length - 1)) * (w - pad * 2)
+    }
+    const scaleY = (v: number) => {
+      const t = (v - min) / span
+      return pad + (1 - t) * (h - pad * 2)
+    }
+
+    const d = points
+      .map((p, i) => {
+        const x = scaleX(i)
+        const y = scaleY(p.value)
+        return `${i === 0 ? 'M' : 'L'} ${x.toFixed(1)} ${y.toFixed(1)}`
+      })
+      .join(' ')
+
+    return (
+      <div className="w-full">
+        <svg viewBox={`0 0 ${w} ${h}`} className="w-full h-24">
+          <path d={d} fill="none" stroke="#0f172a" strokeWidth="2" />
+        </svg>
+        <div className="flex justify-between text-[11px] text-gray-400 -mt-1">
+          <span>{formatCompact(min)}</span>
+          <span>{formatCompact(max)}</span>
+        </div>
+      </div>
+    )
+  }
 
   return (
     <div className="space-y-3">
@@ -167,36 +258,66 @@ export function AnalyticsGrid({
                   )}
 
                   {w.key === 'cashflow' && (
-                    <div className="h-full flex items-center justify-center text-sm text-gray-400">
-                      Add a cashflow mini-chart here
+                    <div className="space-y-2">
+                      <MiniBar points={monthlyCashflow} />
+                      <div className="flex items-center justify-between text-[11px] text-gray-400">
+                        <span>Net</span>
+                        <span className="tabular-nums">{formatCompact(monthlyCashflow.reduce((s, p) => s + (Number(p.value) || 0), 0))}</span>
+                      </div>
                     </div>
+                  )}
+
+                  {w.key === 'trend' && (
+                    <MiniLine points={monthlyPortfolioValue} />
                   )}
 
                   {w.key === 'allocation' && (
-                    <div className="h-full flex items-center justify-center text-sm text-gray-400">
-                      Add allocation breakdown here
+                    <div className="space-y-2">
+                      {typeBreakdowns.length === 0 ? (
+                        <div className="h-full flex items-center justify-center text-sm text-gray-400">No data</div>
+                      ) : (
+                        typeBreakdowns.slice(0, 6).map((t) => {
+                          const total = typeBreakdowns.reduce((s, x) => s + (Number(x.value) || 0), 0)
+                          const pct = total > 0 ? (t.value / total) * 100 : 0
+                          return (
+                            <div key={t.type} className="space-y-1">
+                              <div className="flex items-center justify-between text-[11px]">
+                                <div className="font-medium text-gray-700">{t.type}</div>
+                                <div className="text-gray-400 tabular-nums">SAR {Math.round(t.value).toLocaleString()} ({pct.toFixed(1)}%)</div>
+                              </div>
+                              <div className="h-2 w-full bg-gray-100 rounded">
+                                <div className="h-2 bg-slate-800 rounded" style={{ width: `${Math.max(1, Math.min(100, pct))}%` }} />
+                              </div>
+                            </div>
+                          )
+                        })
+                      )}
                     </div>
                   )}
 
-                  {w.key === 'notes' && (
-                    <textarea
-                      className="h-full w-full resize-none rounded-lg border border-gray-200 bg-white px-3 py-2 text-sm outline-none focus:border-slate-500 focus:ring-1 focus:ring-slate-500"
-                      placeholder="Type notes…"
-                      onChange={(e) => {
-                        try {
-                          localStorage.setItem(`${storageKey}:notes`, e.target.value)
-                        } catch {
-                          // ignore
-                        }
-                      }}
-                      defaultValue={(() => {
-                        try {
-                          return localStorage.getItem(`${storageKey}:notes`) || ''
-                        } catch {
-                          return ''
-                        }
-                      })()}
-                    />
+                  {w.key === 'activity' && (
+                    <div className="space-y-2 overflow-auto h-full pr-1">
+                      {activity.length === 0 ? (
+                        <div className="h-full flex items-center justify-center text-sm text-gray-400">No recent activity</div>
+                      ) : (
+                        activity.map((a) => {
+                          const dt = new Date(a.date)
+                          const dateLabel = Number.isNaN(dt.getTime()) ? a.date : dt.toLocaleDateString('en-CA')
+                          const amt = Number(a.amount) || 0
+                          const amtClass = amt >= 0 ? 'text-emerald-600' : 'text-red-600'
+                          return (
+                            <div key={a.id} className="flex items-start justify-between gap-3 rounded-lg bg-gray-50 p-3">
+                              <div className="min-w-0">
+                                <div className="text-[11px] text-gray-400">{dateLabel}</div>
+                                <div className="text-sm font-semibold text-gray-900 truncate">{a.investmentName || a.accountType || a.type}</div>
+                                <div className="text-[11px] text-gray-400 truncate">{a.description || a.type}</div>
+                              </div>
+                              <div className={`text-sm font-semibold tabular-nums ${amtClass}`}>SAR {Math.abs(amt).toLocaleString()}</div>
+                            </div>
+                          )
+                        })
+                      )}
+                    </div>
                   )}
                 </CardContent>
               </Card>
