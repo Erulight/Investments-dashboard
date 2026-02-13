@@ -1,7 +1,7 @@
 'use client'
 
 import { useEffect, useMemo, useRef, useState } from 'react'
-import { motion } from 'framer-motion'
+import { animate, motion, useMotionValue, useTransform } from 'framer-motion'
 import { Responsive } from 'react-grid-layout'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/Card'
 
@@ -27,6 +27,26 @@ type Widget = {
   key: WidgetKey
   title: string
   description?: string
+}
+
+function AnimatedNumber({ value }: { value: number }) {
+  const mv = useMotionValue(0)
+  const rounded = useTransform(mv, (v) => Math.round(v))
+  const [text, setText] = useState('0')
+
+  useEffect(() => {
+    const controls = animate(mv, Number.isFinite(value) ? value : 0, {
+      duration: 0.8,
+      ease: 'easeOut',
+    })
+    const unsub = rounded.on('change', (v) => setText(String(v)))
+    return () => {
+      controls.stop()
+      unsub()
+    }
+  }, [mv, rounded, value])
+
+  return <span>{Number(text).toLocaleString()}</span>
 }
 
 export function AnalyticsGrid({
@@ -161,7 +181,14 @@ export function AnalyticsGrid({
           const color = raw >= 0 ? 'bg-emerald-500' : 'bg-red-500'
           return (
             <div key={p.label} className="col-span-1 flex flex-col items-center gap-1">
-              <div className={`w-full rounded-sm ${color}`} style={{ height: `${h}%` }} title={`${p.label}: ${p.value}`} />
+              <motion.div
+                className={`w-full rounded-sm ${color}`}
+                style={{ height: `${h}%` }}
+                title={`${p.label}: ${p.value}`}
+                initial={{ height: '2%' }}
+                animate={{ height: `${h}%` }}
+                transition={{ type: 'spring', stiffness: 220, damping: 26 }}
+              />
               <div className="text-[10px] text-gray-400 leading-none">{p.label}</div>
             </div>
           )
@@ -199,7 +226,15 @@ export function AnalyticsGrid({
     return (
       <div className="w-full">
         <svg viewBox={`0 0 ${w} ${h}`} className="w-full h-24">
-          <path d={d} fill="none" stroke="#0f172a" strokeWidth="2" />
+          <motion.path
+            d={d}
+            fill="none"
+            stroke="#0f172a"
+            strokeWidth="2"
+            initial={{ pathLength: 0, opacity: 0.4 }}
+            animate={{ pathLength: 1, opacity: 1 }}
+            transition={{ duration: 0.9, ease: 'easeInOut' }}
+          />
         </svg>
         <div className="flex justify-between text-[11px] text-gray-400 -mt-1">
           <span>{formatCompact(min)}</span>
@@ -239,14 +274,27 @@ export function AnalyticsGrid({
         {widgets.map((w, idx) => (
           <div key={w.key} className="h-full">
             <motion.div
-              initial={{ opacity: 0, y: 10, filter: 'blur(6px)' }}
-              animate={{ opacity: 1, y: 0, filter: 'blur(0px)' }}
-              transition={{ type: 'spring', stiffness: 260, damping: 24, delay: Math.min(0.2, idx * 0.04) }}
-              whileHover={{ y: -4 }}
+              initial={{ opacity: 0, y: 18, scale: 0.985, filter: 'blur(8px)' }}
+              animate={{ opacity: 1, y: 0, scale: 1, filter: 'blur(0px)' }}
+              transition={{ type: 'spring', stiffness: 260, damping: 22, delay: Math.min(0.25, idx * 0.06) }}
+              whileHover={{ y: -8, scale: 1.01 }}
               className="h-full"
             >
               <Card className="group relative h-full p-0 overflow-hidden">
-                <div className="pointer-events-none absolute -inset-10 opacity-0 blur-2xl transition-opacity duration-300 group-hover:opacity-100" style={{ background: 'radial-gradient(circle at 30% 10%, rgba(59,130,246,0.20), transparent 55%), radial-gradient(circle at 70% 60%, rgba(16,185,129,0.18), transparent 55%)' }} />
+                <motion.div
+                  className="pointer-events-none absolute -inset-10 blur-2xl"
+                  style={{ background: 'radial-gradient(circle at 30% 10%, rgba(59,130,246,0.26), transparent 55%), radial-gradient(circle at 70% 60%, rgba(16,185,129,0.22), transparent 55%)' }}
+                  initial={{ opacity: 0 }}
+                  animate={{ opacity: 0.12 }}
+                  whileHover={{ opacity: 0.38 }}
+                  transition={{ duration: 0.25 }}
+                />
+                <motion.div
+                  className="pointer-events-none absolute inset-0"
+                  initial={{ opacity: 0 }}
+                  animate={{ opacity: 1 }}
+                  transition={{ duration: 0.2 }}
+                />
                 <CardHeader className="p-4 pb-2">
                   <div className="flex items-start justify-between gap-2">
                     <div className="min-w-0">
@@ -269,15 +317,15 @@ export function AnalyticsGrid({
                     <div className="grid grid-cols-2 gap-3">
                       <div className="rounded-lg bg-gray-50 p-3">
                         <div className="text-[11px] text-gray-400">Total Invested</div>
-                        <div className="text-base font-semibold tabular-nums text-gray-900">{formatMoney(totalInvested)}</div>
+                        <div className="text-base font-semibold tabular-nums text-gray-900">SAR <AnimatedNumber value={Math.round(totalInvested)} /></div>
                       </div>
                       <div className="rounded-lg bg-gray-50 p-3">
                         <div className="text-[11px] text-gray-400">Portfolio Value</div>
-                        <div className="text-base font-semibold tabular-nums text-gray-900">{formatMoney(portfolioValue)}</div>
+                        <div className="text-base font-semibold tabular-nums text-gray-900">SAR <AnimatedNumber value={Math.round(portfolioValue)} /></div>
                       </div>
                       <div className="rounded-lg bg-gray-50 p-3">
                         <div className="text-[11px] text-gray-400">Yearly Return</div>
-                        <div className="text-base font-semibold tabular-nums text-emerald-600">{formatMoney(yearlyReturnValue)}</div>
+                        <div className="text-base font-semibold tabular-nums text-emerald-600">SAR <AnimatedNumber value={Math.round(yearlyReturnValue)} /></div>
                       </div>
                       <div className="rounded-lg bg-gray-50 p-3">
                         <div className="text-[11px] text-gray-400">Year</div>
