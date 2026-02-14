@@ -259,6 +259,53 @@ export function SukukList({ initialSukuk, userRole, ownerPersonId, viewerPersonI
     }
   }
 
+  const handleReturnToOwner = async (investment: any) => {
+    if (actionLoading) return
+    if (!ownerPersonId) {
+      setActionError('Owner profile is missing')
+      return
+    }
+
+    const principal = Number(investment?.principalAmount ?? 0)
+    if (!Number.isFinite(principal) || principal <= 0) {
+      setActionError('Invalid principal amount')
+      return
+    }
+
+    const confirmed = confirm('Return this Sukuk to owner for SAR 0?')
+    if (!confirmed) return
+
+    setActionLoading(true)
+    setActionError('')
+    try {
+      const isoDate = new Date().toISOString().split('T')[0]
+      const res = await fetch(`/api/sukuk/${investment.id}/sell`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          buyerPersonId: ownerPersonId,
+          amount: principal,
+          salePrice: 0,
+          paymentMode: 'CASH',
+          commissionType: 'FIXED',
+          commissionValue: 0,
+          date: isoDate,
+          notes: 'Return to owner',
+        }),
+      })
+      const data = await res.json().catch(() => ({}))
+      if (!res.ok) {
+        setActionError(data.error || 'Failed to return Sukuk')
+        return
+      }
+      router.refresh()
+    } catch {
+      setActionError('Failed to return Sukuk')
+    } finally {
+      setActionLoading(false)
+    }
+  }
+
   const handleReceiveAndClose = async (investment: any, metrics: any) => {
     if (actionLoading) return
 
@@ -1561,7 +1608,7 @@ export function SukukList({ initialSukuk, userRole, ownerPersonId, viewerPersonI
                             <Button
                               size="sm"
                               variant="ghost"
-                              onClick={() => openSellModal(inv)}
+                              onClick={() => handleReturnToOwner(inv)}
                               disabled={actionLoading}
                               title="Return Sukuk"
                               aria-label="Return Sukuk"
