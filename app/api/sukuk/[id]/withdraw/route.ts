@@ -3,6 +3,7 @@ import { prisma } from '@/lib/db'
 import { requireAuth } from '@/lib/rbac'
 import { logAudit } from '@/lib/audit'
 import { creditBucketsForReceipt } from '@/lib/cashBuckets'
+import { createCashBucket } from '@/lib/cashBuckets'
 
 export async function POST(
   req: NextRequest,
@@ -112,15 +113,35 @@ export async function POST(
         })
       }
 
-      await creditBucketsForReceipt(tx, {
-        investmentId: investment.id,
-        amount,
-        principalReduction: source === 'PRINCIPAL' ? amount : 0,
-        date,
-        type: source === 'PROFIT' ? 'WITHDRAW_PROFIT' : 'WITHDRAW_PRINCIPAL',
-        notes: notes || null,
-        personId: user.role === 'PARTNER' ? user.personId! : null,
-      })
+      if (user.role === 'PARTNER') {
+        const participants = Array.isArray(investment.dealParticipants)
+          ? investment.dealParticipants
+          : []
+        const acquiredAtRaw = participants[0]?.acquiredAt || investment.startDate
+        const acquiredAt = acquiredAtRaw instanceof Date ? acquiredAtRaw : new Date(acquiredAtRaw)
+        const haulStartDate = Number.isNaN(acquiredAt.getTime()) ? date : acquiredAt
+
+        await createCashBucket(tx, {
+          amount,
+          haulStartDate,
+          currency: investment.account?.currency || 'SAR',
+          label: `Sukuk Receipt • ${investment.name}`,
+          date,
+          notes: notes || null,
+          investmentId: investment.id,
+          personId: user.personId || null,
+          type: source === 'PROFIT' ? 'WITHDRAW_PROFIT' : 'WITHDRAW_PRINCIPAL',
+        })
+      } else {
+        await creditBucketsForReceipt(tx, {
+          investmentId: investment.id,
+          amount,
+          principalReduction: source === 'PRINCIPAL' ? amount : 0,
+          date,
+          type: source === 'PROFIT' ? 'WITHDRAW_PROFIT' : 'WITHDRAW_PRINCIPAL',
+          notes: notes || null,
+        })
+      }
 
       const cashAccount = await tx.account.findFirst({
         where: { type: 'CASH', isActive: true },
