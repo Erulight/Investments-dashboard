@@ -43,9 +43,6 @@ export async function POST(
     if (paymentMode === 'SETTLE_DEBT' && !debtId) {
       return NextResponse.json({ error: 'Debt is required for settlement' }, { status: 400 })
     }
-    if (paymentMode === 'SETTLE_DEBT' && commissionValueRaw > 0) {
-      return NextResponse.json({ error: 'Commission is not supported in debt settlement mode' }, { status: 400 })
-    }
     if (!Number.isFinite(commissionValueRaw) || commissionValueRaw < 0) {
       return NextResponse.json({ error: 'Commission must be 0 or more' }, { status: 400 })
     }
@@ -193,9 +190,6 @@ export async function POST(
       : 0
 
     const commissionAmount = (() => {
-      if (paymentMode === 'SETTLE_DEBT') {
-        return 0
-      }
       if (commissionType === 'PERCENT') {
         return Math.max(0, (partnerGrossProfit * commissionValueRaw) / 100)
       }
@@ -205,6 +199,7 @@ export async function POST(
       }
       return Math.max(0, commissionValueRaw)
     })()
+    const settlementPayment = paymentMode === 'SETTLE_DEBT' ? salePrice + commissionAmount : salePrice
     const sharePercentage = investment.principalAmount > 0
       ? (amount / investment.principalAmount) * 100
       : null
@@ -251,7 +246,7 @@ export async function POST(
         })
       }
 
-      if (paymentMode === 'SETTLE_DEBT' && salePrice > 0) {
+      if (paymentMode === 'SETTLE_DEBT' && settlementPayment > 0) {
         const debt = await tx.debt.findUnique({
           where: { id: debtId },
           include: { payments: true, cashBucket: true },
@@ -263,20 +258,20 @@ export async function POST(
 
         const totalPaidBefore = debt.payments.reduce((s: number, p: any) => s + (Number(p.amount) || 0), 0)
         const outstandingBefore = Math.max(0, Number(debt.amount) - totalPaidBefore)
-        if (salePrice > outstandingBefore + 0.000001) {
+        if (settlementPayment > outstandingBefore + 0.000001) {
           throw new Error('DEBT_PAYMENT_EXCEEDS_OUTSTANDING')
         }
 
         await tx.debtPayment.create({
           data: {
             debtId: debt.id,
-            amount: salePrice,
+            amount: settlementPayment,
             paidAt: date,
             notes: notes || 'Debt settlement via Sukuk transfer',
           },
         })
 
-        const totalPaidAfter = totalPaidBefore + salePrice
+        const totalPaidAfter = totalPaidBefore + settlementPayment
         const outstandingAfter = Math.max(0, Number(debt.amount) - totalPaidAfter)
         const fullyPaid = outstandingAfter <= 0.000001
 
