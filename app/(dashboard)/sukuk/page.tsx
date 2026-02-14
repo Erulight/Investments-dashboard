@@ -297,9 +297,9 @@ export default async function InvestmentsPage() {
   const totalWithdrawn = (() => {
     const activeReceived = displayedInvestments.reduce((sum, inv) => sum + getViewerReceived(inv), 0)
     if (user.role !== 'OWNER' || !user.personId) return round2(activeReceived)
-    const soldProfitAccrued = investments.reduce((sum, inv) => sum + getOwnerRealizedProfitFromSales(inv), 0)
-    const soldProfitMeta = investments.reduce((sum, inv) => sum + getOwnerRealizedFromSellMeta(inv).profit, 0)
-    return round2(activeReceived + Math.max(soldProfitAccrued, soldProfitMeta))
+    // Only count amounts that were actually received (cash/withdrawals) as "Received".
+    // For sold deals in SETTLE_DEBT mode, profit is earned but not received until partner closes.
+    return round2(activeReceived)
   })()
 
   const totalCommissionEarned = (() => {
@@ -319,7 +319,15 @@ export default async function InvestmentsPage() {
     return Math.max(fromCommissionTx, fromSellMeta)
   })()
 
-  const totalReceivable = round2(Math.max(0, totalNetProfit - totalWithdrawn))
+  const totalPendingFromSoldDeals = (() => {
+    if (user.role !== 'OWNER' || !user.personId) return 0
+    const soldProfitAccrued = investments.reduce((sum, inv) => sum + getOwnerRealizedProfitFromSales(inv), 0)
+    const soldProfitMeta = investments.reduce((sum, inv) => sum + getOwnerRealizedFromSellMeta(inv).profit, 0)
+    // Prefer explicit SELL_PROFIT_ACCRUED if it exists, otherwise fall back to sale metadata.
+    return round2(Math.max(soldProfitAccrued, soldProfitMeta))
+  })()
+
+  const totalReceivable = round2(Math.max(0, (totalNetProfit - totalWithdrawn) + totalPendingFromSoldDeals))
 
   const totalValue = totalInvested
   const totalReturn = totalNetProfit
@@ -509,6 +517,15 @@ export default async function InvestmentsPage() {
             <p className="text-sm font-bold mt-0.5">{avgDaysToMaturity === null ? '—' : Math.round(avgDaysToMaturity).toLocaleString()}</p>
           </div>
         </div>
+
+        {user.role === 'OWNER' && totalPendingFromSoldDeals > 0.01 && (
+          <div className="mt-3">
+            <div className="bg-white/5 rounded-lg p-3 border border-white/10">
+              <p className="text-[11px] text-slate-400 uppercase tracking-wider">Pending (Sold Deals)</p>
+              <p className="text-sm font-bold mt-0.5">SAR {totalPendingFromSoldDeals.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</p>
+            </div>
+          </div>
+        )}
 
         {platformTotals.length > 0 && (
           <div className="mt-3 bg-white/5 rounded-lg p-3 border border-white/10">
