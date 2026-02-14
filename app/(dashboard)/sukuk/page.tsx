@@ -192,6 +192,25 @@ export default async function InvestmentsPage() {
     return Math.max(0, profit)
   }
 
+  const getOwnerRealizedFromSellMeta = (inv: any) => {
+    if (user.role !== 'OWNER' || !user.personId) return { profit: 0, commission: 0 }
+    const transactions = Array.isArray(inv.transactions) ? inv.transactions : []
+    return transactions
+      .filter((tx: any) => tx.type === 'SELL_TO_PARTNER' && tx.personId === user.personId)
+      .reduce(
+        (acc: { profit: number, commission: number }, tx: any) => {
+          const meta = parseMetadata(tx.metadata)
+          const profit = Number(meta?.accruedProfitAtSale ?? 0)
+          const commission = Number(meta?.commissionAmount ?? 0)
+          return {
+            profit: acc.profit + (Number.isFinite(profit) ? Math.max(0, profit) : 0),
+            commission: acc.commission + (Number.isFinite(commission) ? Math.max(0, commission) : 0),
+          }
+        },
+        { profit: 0, commission: 0 }
+      )
+  }
+
   const getNetProfit = (inv: any) => {
     const principal = inv.myParticipation?.investedAmount ?? inv.principalAmount
     const investment = Number.isFinite(principal) ? principal : 0
@@ -268,20 +287,24 @@ export default async function InvestmentsPage() {
     if (user.role === 'OWNER') {
       const activeProfit = displayedInvestments.reduce((sum, inv) => sum + getNetProfit(inv), 0)
       const soldProfit = investments.reduce((sum, inv) => sum + getOwnerRealizedProfitFromSales(inv), 0)
-      return round2(activeProfit + soldProfit)
+      const soldFromMeta = investments.reduce((sum, inv) => sum + getOwnerRealizedFromSellMeta(inv).profit, 0)
+      return round2(activeProfit + Math.max(soldProfit, soldFromMeta))
     }
 
     return round2(displayedInvestments.reduce((sum, inv) => sum + getNetProfit(inv), 0))
   })()
 
-  const totalWithdrawn = round2(displayedInvestments.reduce((sum, inv) => {
-    const received = getViewerReceived(inv)
-    return sum + received
-  }, 0))
+  const totalWithdrawn = (() => {
+    const activeReceived = displayedInvestments.reduce((sum, inv) => sum + getViewerReceived(inv), 0)
+    if (user.role !== 'OWNER' || !user.personId) return round2(activeReceived)
+    const soldProfitAccrued = investments.reduce((sum, inv) => sum + getOwnerRealizedProfitFromSales(inv), 0)
+    const soldProfitMeta = investments.reduce((sum, inv) => sum + getOwnerRealizedFromSellMeta(inv).profit, 0)
+    return round2(activeReceived + Math.max(soldProfitAccrued, soldProfitMeta))
+  })()
 
   const totalCommissionEarned = (() => {
     if (user.role !== 'OWNER' || !user.personId) return 0
-    return investments.reduce((sum, inv) => {
+    const fromCommissionTx = investments.reduce((sum, inv) => {
       const transactions = Array.isArray(inv.transactions) ? inv.transactions : []
       const commission = transactions
         .filter((tx: any) => tx.type === 'PARTNER_COMMISSION' && tx.personId === user.personId)
@@ -291,6 +314,9 @@ export default async function InvestmentsPage() {
         }, 0)
       return sum + Math.max(0, commission)
     }, 0)
+
+    const fromSellMeta = investments.reduce((sum, inv) => sum + getOwnerRealizedFromSellMeta(inv).commission, 0)
+    return Math.max(fromCommissionTx, fromSellMeta)
   })()
 
   const totalReceivable = round2(Math.max(0, totalNetProfit - totalWithdrawn))
