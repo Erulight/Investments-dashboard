@@ -914,11 +914,19 @@ export function SukukList({ initialSukuk, userRole, ownerPersonId, viewerPersonI
         body: JSON.stringify({
           buyerPersonId: sellForm.buyerPersonId,
           amount: parseFloat(sellForm.amount),
-          salePrice: sellForm.salePrice ? parseFloat(sellForm.salePrice) : undefined,
+          salePrice: sellForm.paymentMode === 'SETTLE_DEBT'
+            ? parseFloat(sellForm.amount)
+            : sellForm.salePrice
+              ? parseFloat(sellForm.salePrice)
+              : undefined,
           paymentMode: sellForm.paymentMode,
           debtId: sellForm.paymentMode === 'SETTLE_DEBT' ? sellForm.debtId : undefined,
           commissionType: sellForm.commissionType,
-          commissionValue: sellForm.commissionValue ? parseFloat(sellForm.commissionValue) : 0,
+          commissionValue: sellForm.paymentMode === 'SETTLE_DEBT'
+            ? 0
+            : sellForm.commissionValue
+              ? parseFloat(sellForm.commissionValue)
+              : 0,
           date: isoDate,
           notes: sellForm.notes,
         }),
@@ -1859,10 +1867,11 @@ export function SukukList({ initialSukuk, userRole, ownerPersonId, viewerPersonI
                 type="number"
                 min="0"
                 step="0.01"
-                value={sellForm.salePrice}
+                value={sellForm.paymentMode === 'SETTLE_DEBT' ? sellForm.amount : sellForm.salePrice}
                 onChange={(e) => setSellForm((prev) => ({ ...prev, salePrice: e.target.value }))}
                 className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                placeholder="Defaults to amount"
+                placeholder={sellForm.paymentMode === 'SETTLE_DEBT' ? 'Locked to amount' : 'Defaults to amount'}
+                disabled={sellForm.paymentMode === 'SETTLE_DEBT'}
               />
             </div>
           </div>
