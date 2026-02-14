@@ -922,11 +922,9 @@ export function SukukList({ initialSukuk, userRole, ownerPersonId, viewerPersonI
           paymentMode: sellForm.paymentMode,
           debtId: sellForm.paymentMode === 'SETTLE_DEBT' ? sellForm.debtId : undefined,
           commissionType: sellForm.commissionType,
-          commissionValue: sellForm.paymentMode === 'SETTLE_DEBT'
-            ? 0
-            : sellForm.commissionValue
-              ? parseFloat(sellForm.commissionValue)
-              : 0,
+          commissionValue: sellForm.commissionValue
+            ? parseFloat(sellForm.commissionValue)
+            : 0,
           date: isoDate,
           notes: sellForm.notes,
         }),
@@ -1930,7 +1928,6 @@ export function SukukList({ initialSukuk, userRole, ownerPersonId, viewerPersonI
                 value={sellForm.commissionType}
                 onChange={(e) => setSellForm((prev) => ({ ...prev, commissionType: e.target.value }))}
                 className="w-full px-4 py-2 border border-gray-300 rounded-lg bg-white focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                disabled={sellForm.paymentMode === 'SETTLE_DEBT'}
               >
                 <option value="FIXED">Fixed</option>
                 <option value="PERCENT">Percentage (of partner gross profit)</option>
@@ -1947,7 +1944,6 @@ export function SukukList({ initialSukuk, userRole, ownerPersonId, viewerPersonI
                 onChange={(e) => setSellForm((prev) => ({ ...prev, commissionValue: e.target.value }))}
                 className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
                 placeholder={sellForm.commissionType === 'PERCENT' ? 'e.g. 5' : sellForm.commissionType === 'AUTO' ? 'Leave 0 for auto' : 'e.g. 50'}
-                disabled={sellForm.paymentMode === 'SETTLE_DEBT'}
               />
             </div>
           </div>
