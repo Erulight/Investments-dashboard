@@ -327,7 +327,7 @@ export default async function InvestmentsPage() {
     return round2(Math.max(soldProfitAccrued, soldProfitMeta))
   })()
 
-  const totalReceivable = round2(Math.max(0, (totalNetProfit - totalWithdrawn) + totalPendingFromSoldDeals))
+  const totalReceivable = round2(Math.max(0, totalNetProfit - totalWithdrawn))
 
   const totalValue = totalInvested
   const totalReturn = totalNetProfit
