@@ -5,6 +5,17 @@ import { logAudit } from '@/lib/audit'
 import { creditBucketsForReceipt } from '@/lib/cashBuckets'
 import { createCashBucket } from '@/lib/cashBuckets'
 
+const parseMetadata = (value: unknown) => {
+  if (!value) return null
+  if (typeof value === 'object') return value as any
+  if (typeof value !== 'string') return null
+  try {
+    return JSON.parse(value)
+  } catch {
+    return null
+  }
+}
+
 export async function POST(
   req: NextRequest,
   { params }: { params: Promise<{ id: string }> }
@@ -28,6 +39,7 @@ export async function POST(
       include: {
         account: true,
         dealParticipants: true,
+        transactions: true,
       },
     })
 
@@ -79,6 +91,81 @@ export async function POST(
     }
 
     const updated = await prisma.$transaction(async (tx: any) => {
+      const settleOwnerOnPartnerWithdraw = async () => {
+        if (user.role !== 'PARTNER' || !user.personId) return
+
+        const transactions = Array.isArray(investment.transactions) ? investment.transactions : []
+        const saleTx = transactions
+          .filter((t: any) => t.type === 'SELL_TO_PARTNER')
+          .sort((a: any, b: any) => new Date(b.date).getTime() - new Date(a.date).getTime())[0]
+
+        if (!saleTx) return
+        const meta = parseMetadata(saleTx.metadata)
+        if (meta?.paymentMode !== 'SETTLE_DEBT') return
+
+        const buyerPersonId = typeof meta?.buyerPersonId === 'string' ? meta.buyerPersonId : null
+        if (!buyerPersonId || buyerPersonId !== user.personId) return
+
+        const profit = Number(meta?.accruedProfitAtSale ?? 0)
+        const commission = Number(meta?.commissionAmount ?? 0)
+        const pending = (Number.isFinite(profit) ? Math.max(0, profit) : 0)
+          + (Number.isFinite(commission) ? Math.max(0, commission) : 0)
+
+        if (pending <= 0.000001) return
+
+        const alreadySettled = transactions.some((t: any) => {
+          if (t.type !== 'SOLD_DEAL_SETTLEMENT') return false
+          const m = parseMetadata(t.metadata)
+          return m?.sourceTxId === saleTx.id
+        })
+        if (alreadySettled) return
+
+        const cashAccount = await tx.account.findFirst({
+          where: { type: 'CASH', isActive: true },
+        }) ?? await tx.account.create({
+          data: {
+            name: 'Cash Balance',
+            type: 'CASH',
+            currency: investment.account?.currency || 'SAR',
+            description: 'Cash ledger account',
+          },
+        })
+
+        const haulStartDate = investment.startDate instanceof Date
+          ? investment.startDate
+          : new Date(investment.startDate)
+
+        await createCashBucket(tx, {
+          amount: pending,
+          haulStartDate,
+          currency: investment.account?.currency || 'SAR',
+          label: `Sold Deal Settlement • ${investment.name}`,
+          date,
+          notes: null,
+          investmentId: investment.id,
+          personId: null,
+          type: 'CASH_IN',
+        })
+
+        await tx.transaction.create({
+          data: {
+            accountId: cashAccount.id,
+            investmentId: investment.id,
+            personId: null,
+            type: 'SOLD_DEAL_SETTLEMENT',
+            amount: Math.abs(pending),
+            date,
+            description: 'Settlement of sold deal profit/commission on partner withdrawal',
+            metadata: JSON.stringify({
+              sourceTxId: saleTx.id,
+              buyerPersonId,
+              paymentMode: 'SETTLE_DEBT',
+              accruedProfitAtSale: pending,
+            }),
+          },
+        })
+      }
+
       const updatedInvestment = await tx.investment.update({
         where: { id },
         data: {
@@ -132,6 +219,10 @@ export async function POST(
           personId: user.personId || null,
           type: source === 'PROFIT' ? 'WITHDRAW_PROFIT' : 'WITHDRAW_PRINCIPAL',
         })
+
+        // Partner withdrawal acts as the "close" event for settle-debt sales:
+        // settle the owner's pending profit/commission into cash (zakat starts from original haul start).
+        await settleOwnerOnPartnerWithdraw()
       } else {
         await creditBucketsForReceipt(tx, {
           investmentId: investment.id,
