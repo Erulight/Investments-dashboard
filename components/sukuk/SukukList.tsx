@@ -306,10 +306,12 @@ export function SukukList({ initialSukuk, userRole, ownerPersonId, viewerPersonI
       }
 
       if (remainingPrincipal > 0.01) {
-        const res = await fetch(`/api/sukuk/${investment.id}/rollback`, {
+        const res = await fetch(`/api/sukuk/${investment.id}/withdraw`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
+            source: 'PRINCIPAL',
+            amount: remainingPrincipal,
             date: isoDate,
             notes: 'Receive & close',
           }),
@@ -1531,15 +1533,17 @@ export function SukukList({ initialSukuk, userRole, ownerPersonId, viewerPersonI
 
                       {userRole === 'PARTNER' && (
                         <TableCell className="px-2 py-1.5 align-middle">
-                          <div className="flex flex-nowrap items-center gap-2 whitespace-nowrap">
+                          <div className="flex flex-nowrap items-center gap-1.5 whitespace-nowrap">
                             <Button
                               size="sm"
                               variant="secondary"
                               onClick={() => handleReceiveAndClose(inv, metrics)}
                               disabled={actionLoading}
                               title="Receive & Close"
+                              aria-label="Receive & Close"
+                              className="h-8 w-8 px-0 py-0 shrink-0"
                             >
-                              Receive & Close
+                              <Icon><WithdrawIcon /></Icon>
                             </Button>
 
                             <Button
@@ -1548,8 +1552,34 @@ export function SukukList({ initialSukuk, userRole, ownerPersonId, viewerPersonI
                               onClick={() => handleReopen(inv)}
                               disabled={actionLoading}
                               title="Redo"
+                              aria-label="Redo"
+                              className="h-8 w-8 px-0 py-0 shrink-0"
                             >
-                              Redo
+                              <Icon><ReopenIcon /></Icon>
+                            </Button>
+
+                            <Button
+                              size="sm"
+                              variant="ghost"
+                              onClick={() => openSellModal(inv)}
+                              disabled={actionLoading}
+                              title="Return Sukuk"
+                              aria-label="Return Sukuk"
+                              className="h-8 w-8 px-0 py-0 shrink-0"
+                            >
+                              <Icon><SellIcon /></Icon>
+                            </Button>
+
+                            <Button
+                              size="sm"
+                              variant="danger"
+                              onClick={() => handleDelete(inv.id)}
+                              disabled={deletingId === inv.id}
+                              title={deletingId === inv.id ? 'Deleting…' : 'Delete'}
+                              aria-label={deletingId === inv.id ? 'Deleting…' : 'Delete'}
+                              className="h-8 w-8 px-0 py-0 shrink-0"
+                            >
+                              {deletingId === inv.id ? '…' : <Icon><TrashIcon /></Icon>}
                             </Button>
                           </div>
                         </TableCell>
