@@ -199,7 +199,6 @@ export async function POST(
       }
       return Math.max(0, commissionValueRaw)
     })()
-    const settlementPayment = paymentMode === 'SETTLE_DEBT' ? salePrice + commissionAmount : salePrice
     const sharePercentage = investment.principalAmount > 0
       ? (amount / investment.principalAmount) * 100
       : null
@@ -246,7 +245,7 @@ export async function POST(
         })
       }
 
-      if (paymentMode === 'SETTLE_DEBT' && settlementPayment > 0) {
+      if (paymentMode === 'SETTLE_DEBT' && salePrice > 0) {
         const debt = await tx.debt.findUnique({
           where: { id: debtId },
           include: { payments: true, cashBucket: true },
@@ -258,20 +257,20 @@ export async function POST(
 
         const totalPaidBefore = debt.payments.reduce((s: number, p: any) => s + (Number(p.amount) || 0), 0)
         const outstandingBefore = Math.max(0, Number(debt.amount) - totalPaidBefore)
-        if (settlementPayment > outstandingBefore + 0.000001) {
+        if (salePrice > outstandingBefore + 0.000001) {
           throw new Error('DEBT_PAYMENT_EXCEEDS_OUTSTANDING')
         }
 
         await tx.debtPayment.create({
           data: {
             debtId: debt.id,
-            amount: settlementPayment,
+            amount: salePrice,
             paidAt: date,
             notes: notes || 'Debt settlement via Sukuk transfer',
           },
         })
 
-        const totalPaidAfter = totalPaidBefore + settlementPayment
+        const totalPaidAfter = totalPaidBefore + salePrice
         const outstandingAfter = Math.max(0, Number(debt.amount) - totalPaidAfter)
         const fullyPaid = outstandingAfter <= 0.000001
 
