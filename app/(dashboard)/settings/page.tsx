@@ -19,15 +19,12 @@ function Accordion({ sections }: { sections: AccordionSection[] }) {
   return (
     <div className="space-y-3">
       {sections.map((section) => (
-        <details key={section.id} open className="border border-slate-200 rounded-lg bg-white">
-          <summary className="w-full flex items-center justify-between px-4 py-3 text-left cursor-pointer select-none hover:bg-slate-50">
-            <div>
-              <div className="text-sm font-semibold text-slate-900">{section.title}</div>
-              {section.description && (
-                <div className="text-xs text-slate-500 mt-0.5">{section.description}</div>
-              )}
-            </div>
-            <span className="text-slate-500 text-lg leading-none">+</span>
+        <details key={section.id} className="border border-slate-200 rounded-lg bg-white">
+          <summary className="px-4 py-3 text-left cursor-pointer select-none hover:bg-slate-50">
+            <div className="text-sm font-semibold text-slate-900">{section.title}</div>
+            {section.description && (
+              <div className="text-xs text-slate-500 mt-0.5">{section.description}</div>
+            )}
           </summary>
           <div className="px-4 pb-4">
             {section.content}
