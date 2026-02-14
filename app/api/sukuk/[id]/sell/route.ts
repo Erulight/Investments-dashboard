@@ -286,6 +286,36 @@ export async function POST(
         }
       }
 
+      if (paymentMode === 'SETTLE_DEBT' && commissionAmount > 0) {
+        const cashSetting = await tx.systemSetting.findUnique({ where: { key: 'CASH_BALANCE' } })
+        const currentCash = cashSetting ? Number(cashSetting.value) : 0
+        const nextCash = currentCash + commissionAmount
+
+        if (cashSetting) {
+          await tx.systemSetting.update({ where: { key: 'CASH_BALANCE' }, data: { value: nextCash.toString() } })
+        } else {
+          await tx.systemSetting.create({
+            data: {
+              key: 'CASH_BALANCE',
+              value: nextCash.toString(),
+              description: 'Available cash balance for investments',
+            },
+          })
+        }
+
+        await createCashBucket(tx, {
+          amount: commissionAmount,
+          haulStartDate: date,
+          currency: investment.account?.currency || 'SAR',
+          label: 'Partner Commission',
+          date,
+          notes: notes || null,
+          investmentId: null,
+          type: 'CASH_IN',
+          personId: sellerPersonId,
+        })
+      }
+
       const sellerRemaining = seller.investedAmount - amount
       if (sellerRemaining <= 0.000001) {
         await tx.dealParticipant.delete({
@@ -461,7 +491,7 @@ export async function POST(
                 },
               ]
             : []),
-          ...(paymentMode === 'CASH' && commissionAmount > 0
+          ...(commissionAmount > 0
             ? [
                 {
                   accountId: cashAccount.id,
