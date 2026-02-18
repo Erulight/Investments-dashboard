@@ -396,6 +396,10 @@ export default async function ZakatPage() {
 
   const zakatEnabled = Boolean(effectiveNisabStart)
 
+  // For OWNER we anchor haul to when nisab was first met.
+  // For PARTNER we let each bucket's haul start from its own start/lastPaid date.
+  const useGlobalNisabForHaul = user.role === 'OWNER'
+
   const rows: BucketRow[] = buckets
     .map((bucket: any): BucketRow | null => {
     const lastPaid = bucket.lastZakatPaidDate ? new Date(bucket.lastZakatPaidDate) : null
@@ -404,7 +408,7 @@ export default async function ZakatPage() {
       ? lastPaid
       : bucketStart
 
-    const nisabStart = effectiveNisabStart
+    const nisabStart = useGlobalNisabForHaul ? effectiveNisabStart : null
     const effectiveHaulStart = nisabStart && nisabStart.getTime() > effectiveStart.getTime()
       ? nisabStart
       : effectiveStart
