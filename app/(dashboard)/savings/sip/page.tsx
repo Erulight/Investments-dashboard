@@ -1,4 +1,4 @@
-import React, { type ReactElement } from 'react'
+import type { JSX } from 'react'
 import { Prisma } from '@prisma/client'
 import { getCurrentUser } from '@/lib/auth'
 import { prisma } from '@/lib/db'
@@ -17,7 +17,9 @@ type InvestmentWithRelations = Prisma.InvestmentGetPayload<{
   }
 }>
 
-export default async function SIPPage(): Promise<ReactElement> {
+type DealParticipantWithUser = InvestmentWithRelations['dealParticipants'][number]
+
+export default async function SIPPage(): Promise<JSX.Element> {
   const user = await getCurrentUser()
   
   if (!user) {
@@ -48,7 +50,7 @@ export default async function SIPPage(): Promise<ReactElement> {
   const filteredInvestments: InvestmentWithRelations[] = user.role === 'OWNER' 
     ? investments
     : investments.filter((inv: InvestmentWithRelations) => 
-        inv.dealParticipants.some((dp) => dp.person?.user?.id === user.id)
+        inv.dealParticipants.some((dp: DealParticipantWithUser) => dp.person?.user?.id === user.id)
       )
 
   // Transform to match client component types (convert Date to string, null to undefined)
