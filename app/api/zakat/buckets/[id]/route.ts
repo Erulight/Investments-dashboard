@@ -70,7 +70,13 @@ export async function GET(
       take: 500,
     })
 
-    return NextResponse.json({ bucket, transactions })
+    const activeHaulStartDate = bucket.lastZakatPaidDate || bucket.haulStartDate
+
+    return NextResponse.json({
+      bucket,
+      transactions,
+      activeHaulStartDate,
+    })
   } catch (error) {
     console.error('Zakat bucket details error:', error)
 
