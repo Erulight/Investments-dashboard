@@ -131,19 +131,20 @@ export async function POST(
           },
         })
 
-        const haulStartDate = investment.startDate instanceof Date
-          ? investment.startDate
-          : new Date(investment.startDate)
+        const saleDate = saleTx.date ? new Date(saleTx.date) : date
+        const haulStartDate = Number.isNaN(saleDate.getTime())
+          ? date
+          : new Date(saleDate.getFullYear(), saleDate.getMonth(), saleDate.getDate())
 
         await createCashBucket(tx, {
           amount: pending,
           haulStartDate,
           currency: investment.account?.currency || 'SAR',
-          label: `Sold Deal Settlement • ${investment.name}`,
+          label: `Sold Deal Settlement · ${investment.name}`,
           date,
           notes: null,
           investmentId: investment.id,
-          personId: null,
+          personId: saleTx.personId || null,
           type: 'CASH_IN',
         })
 
@@ -151,7 +152,7 @@ export async function POST(
           data: {
             accountId: cashAccount.id,
             investmentId: investment.id,
-            personId: null,
+            personId: saleTx.personId || null,
             type: 'SOLD_DEAL_SETTLEMENT',
             amount: Math.abs(pending),
             date,

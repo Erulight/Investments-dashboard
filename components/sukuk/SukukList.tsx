@@ -328,12 +328,18 @@ export function SukukList({ initialSukuk, userRole, ownerPersonId, viewerPersonI
     const confirmed = confirm(`This will:\n- ${confirmLines.join('\n- ')}\n\nContinue?`)
     if (!confirmed) return
 
+    const defaultDate = formatDateInput(new Date())
+    const inputDate = window.prompt('Closing date (YYYY-MM-DD)', defaultDate) || ''
+    const isoDate = toIsoDateInput(inputDate)
+    if (!isoDate) {
+      alert('Invalid closing date')
+      return
+    }
+
     setActionLoading(true)
     setActionError('')
 
     try {
-      const isoDate = new Date().toISOString().split('T')[0]
-
       if (receivable > 0.01) {
         const res = await fetch(`/api/sukuk/${investment.id}/withdraw`, {
           method: 'POST',
