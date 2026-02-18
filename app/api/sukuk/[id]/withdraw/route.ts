@@ -5,6 +5,8 @@ import { logAudit } from '@/lib/audit'
 import { creditBucketsForReceipt } from '@/lib/cashBuckets'
 import { createCashBucket } from '@/lib/cashBuckets'
 
+const CASH_BALANCE_KEY = 'CASH_BALANCE'
+
 const parseMetadata = (value: unknown) => {
   if (!value) return null
   if (typeof value === 'object') return value as any
@@ -180,21 +182,24 @@ export async function POST(
         },
       })
 
+      const scopeKey = user.role === 'OWNER' ? 'OWNER' : user.personId!
+      const cashBalanceKey = user.role === 'OWNER' ? CASH_BALANCE_KEY : `${CASH_BALANCE_KEY}:${scopeKey}`
+
       const cashSetting = await tx.systemSetting.findUnique({
-        where: { key: 'CASH_BALANCE' },
+        where: { key: cashBalanceKey },
       })
       const currentCash = cashSetting ? Number(cashSetting.value) : 0
       const nextCash = currentCash + amount
 
       if (cashSetting) {
         await tx.systemSetting.update({
-          where: { key: 'CASH_BALANCE' },
+          where: { key: cashBalanceKey },
           data: { value: nextCash.toString() },
         })
       } else {
         await tx.systemSetting.create({
           data: {
-            key: 'CASH_BALANCE',
+            key: cashBalanceKey,
             value: nextCash.toString(),
             description: 'Available cash balance for investments',
           },
