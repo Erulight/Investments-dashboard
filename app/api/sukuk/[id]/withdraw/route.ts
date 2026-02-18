@@ -205,9 +205,31 @@ export async function POST(
         const participants = Array.isArray(investment.dealParticipants)
           ? investment.dealParticipants
           : []
-        const acquiredAtRaw = participants[0]?.acquiredAt || investment.startDate
+        const buyerParticipant = participants.find((p: any) => p.personId === user.personId) || participants[0]
+
+        const sellTxs = Array.isArray(investment.transactions)
+          ? investment.transactions.filter((t: any) => {
+              if (t.type !== 'SELL_TO_PARTNER') return false
+              const meta = parseMetadata(t.metadata)
+              return meta?.buyerPersonId === user.personId
+            })
+          : []
+
+        const earliestBuyDate = sellTxs.reduce<Date | null>((earliest: Date | null, tx: any) => {
+          const txDate = tx?.date ? new Date(tx.date) : null
+          if (!txDate || Number.isNaN(txDate.getTime())) return earliest
+          if (!earliest) return txDate
+          return txDate.getTime() < earliest.getTime() ? txDate : earliest
+        }, null)
+
+        const acquiredAtRaw = buyerParticipant?.acquiredAt
+          || earliestBuyDate
+          || investment.startDate
+
         const acquiredAt = acquiredAtRaw instanceof Date ? acquiredAtRaw : new Date(acquiredAtRaw)
-        const haulStartDate = Number.isNaN(acquiredAt.getTime()) ? date : acquiredAt
+        const haulStartDate = Number.isNaN(acquiredAt.getTime())
+          ? date
+          : new Date(acquiredAt.getFullYear(), acquiredAt.getMonth(), acquiredAt.getDate())
 
         await createCashBucket(tx, {
           amount,
