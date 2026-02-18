@@ -4,7 +4,7 @@ import { requireAuth } from '@/lib/rbac'
 
 export async function GET(req: NextRequest) {
   try {
-    await requireAuth(['OWNER'])
+    await requireAuth(['OWNER', 'PARTNER'])
 
     const { searchParams } = new URL(req.url)
     const typeParam = searchParams.get('type')
