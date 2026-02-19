@@ -40,12 +40,13 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: 'Partner not found' }, { status: 404 })
     }
 
-    await prisma.$transaction(async (tx) => {
+    const result = await prisma.$transaction(async (tx) => {
       if (rebuildZakatBuckets) {
+        let updated = 0
         const buckets = await tx.cashBucket.findMany({
           where: {
             personId: partnerPersonId,
-            excludeFromZakat: false,
+            OR: [{ excludeFromZakat: false }, { excludeFromZakat: null }],
             NOT: [
               { label: { startsWith: 'Debt •' } },
               { label: 'Partner Commission' },
@@ -93,9 +94,10 @@ export async function POST(req: NextRequest) {
             where: { id: b.id },
             data: { haulStartDate: nextHaulStart },
           })
+          updated += 1
         }
 
-        return
+        return { mode: 'REBUILD_ZAKAT_BUCKETS', updated }
       }
 
       const buckets = await tx.cashBucket.findMany({
@@ -135,9 +137,11 @@ export async function POST(req: NextRequest) {
           },
         })
       }
+
+      return { mode: 'RESET_PARTNER' }
     })
 
-    return NextResponse.json({ success: true })
+    return NextResponse.json({ success: true, ...result })
   } catch (error) {
     console.error('Reset partner error:', error)
 
