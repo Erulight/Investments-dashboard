@@ -46,10 +46,14 @@ export async function GET(req: NextRequest) {
     })
     const currentCash = setting ? Number(setting.value) : 0
 
+    const txScope = user.role === 'OWNER'
+      ? ({ personId: null } as any)
+      : ({ personId: user.personId } as any)
+
     const allCashTxSum = cashAccount
       ? (
           await prisma.transaction.aggregate({
-            where: { accountId: cashAccount.id },
+            where: { accountId: cashAccount.id, ...txScope },
             _sum: { amount: true },
           })
         )._sum.amount || 0
@@ -62,7 +66,7 @@ export async function GET(req: NextRequest) {
     const cashAtStart = cashAccount
       ? (
           await prisma.transaction.aggregate({
-            where: { accountId: cashAccount.id, date: { lt: yearStart } },
+            where: { accountId: cashAccount.id, date: { lt: yearStart }, ...txScope },
             _sum: { amount: true },
           })
         )._sum.amount || 0
@@ -71,7 +75,7 @@ export async function GET(req: NextRequest) {
     const cashAtEnd = cashAccount
       ? (
           await prisma.transaction.aggregate({
-            where: { accountId: cashAccount.id, date: { lt: yearEnd } },
+            where: { accountId: cashAccount.id, date: { lt: yearEnd }, ...txScope },
             _sum: { amount: true },
           })
         )._sum.amount || 0
