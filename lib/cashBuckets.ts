@@ -254,13 +254,33 @@ export const creditBucketsForReceipt = async (
     : allocations.filter((alloc: { principalAllocated: number }) => alloc.principalAllocated > 0)
 
   if (usableAllocations.length === 0) {
+    let haulStartDate = date
+    if (personId) {
+      const participation = await tx.dealParticipant.findFirst({
+        where: {
+          investmentId,
+          personId,
+        },
+        select: {
+          acquiredAt: true,
+          investment: { select: { startDate: true } },
+        },
+      })
+
+      const acquiredAt = participation?.acquiredAt || participation?.investment?.startDate
+      if (acquiredAt instanceof Date && !Number.isNaN(acquiredAt.getTime())) {
+        haulStartDate = new Date(acquiredAt.getFullYear(), acquiredAt.getMonth(), acquiredAt.getDate())
+      }
+    }
+
     await createCashBucket(tx, {
       amount,
-      haulStartDate: date,
+      haulStartDate,
       date,
-      notes,
-      type,
+      notes: notes || null,
       investmentId,
+      type,
+      personId: personId === undefined ? undefined : personId,
     })
     return
   }
