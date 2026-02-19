@@ -41,10 +41,15 @@ export async function POST(
     }
 
     const result = await prisma.$transaction(async (tx: any) => {
+      const scopePersonId = user.role === 'PARTNER' ? user.personId : null
+
       const receiptMovements = await tx.cashBucketMovement.findMany({
         where: {
           investmentId: id,
           type: { in: RECEIPT_TYPES as unknown as string[] },
+          cashBucket: {
+            personId: scopePersonId,
+          },
         },
       })
 
@@ -52,6 +57,7 @@ export async function POST(
         where: {
           investmentId: id,
           type: { in: RECEIPT_TYPES as unknown as string[] },
+          personId: scopePersonId,
         },
       })
 
@@ -80,29 +86,70 @@ export async function POST(
         return { success: true }
       }
 
-      const cashSetting = await tx.systemSetting.findUnique({
-        where: { key: 'CASH_BALANCE' },
-      })
-      const currentCash = cashSetting ? Number(cashSetting.value) : 0
-      const nextCash = currentCash - totalReceipt
+      const cashBalanceKey = user.role === 'PARTNER'
+        ? `CASH_BALANCE:${user.personId}`
+        : 'CASH_BALANCE'
 
-      if (nextCash < 0) {
+      const cashSetting = await tx.systemSetting.findUnique({
+        where: { key: cashBalanceKey },
+      })
+
+      let currentCash = cashSetting ? Number(cashSetting.value) : 0
+      if (!Number.isFinite(currentCash)) currentCash = 0
+
+      // For partners, compute cash from their bucket balances so we don't rely on stale settings.
+      if (user.role === 'PARTNER') {
+        const agg = await tx.cashBucket.aggregate({
+          where: {
+            personId: user.personId,
+            NOT: [
+              { label: { startsWith: 'Debt •' } },
+              { label: 'Partner Commission' },
+            ],
+          } as any,
+          _sum: { balance: true },
+        })
+        const sum = agg._sum.balance || 0
+        currentCash = Number.isFinite(sum) ? sum : 0
+      }
+
+      const nextCash = currentCash - totalReceipt
+      if (nextCash < -0.000001) {
         throw new Error('INSUFFICIENT_CASH')
       }
 
       if (cashSetting) {
         await tx.systemSetting.update({
-          where: { key: 'CASH_BALANCE' },
-          data: { value: nextCash.toString() },
+          where: { key: cashBalanceKey },
+          data: { value: Math.max(0, nextCash).toString() },
         })
       } else {
         await tx.systemSetting.create({
           data: {
-            key: 'CASH_BALANCE',
-            value: nextCash.toString(),
+            key: cashBalanceKey,
+            value: Math.max(0, nextCash).toString(),
             description: 'Available cash balance for investments',
           },
         })
+      }
+
+      if (receiptMovements.length > 0) {
+        const bucketIds = Array.from(new Set(receiptMovements.map((m: any) => m.cashBucketId)))
+        const buckets = await tx.cashBucket.findMany({
+          where: { id: { in: bucketIds } },
+          select: { id: true, balance: true },
+        })
+        const bucketMap = new Map<string, number>(
+          buckets.map((b: any) => [String(b.id), Number(b.balance) || 0])
+        )
+        for (const movement of receiptMovements) {
+          const movementAmount = Number(movement.amount) || 0
+          const bal = bucketMap.get(String(movement.cashBucketId)) ?? 0
+          if (bal + 0.000001 < movementAmount) {
+            throw new Error('INSUFFICIENT_CASH')
+          }
+          bucketMap.set(String(movement.cashBucketId), bal - movementAmount)
+        }
       }
 
       for (const movement of receiptMovements) {
