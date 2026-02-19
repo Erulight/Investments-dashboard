@@ -243,6 +243,30 @@ export async function POST(
           availableOnOrBefore: date,
           personId: buyerPersonId,
         })
+
+        // Also write to cash ledger (CASH account) for consistency.
+        const cashAccount = await tx.account.findFirst({
+          where: { type: 'CASH', isActive: true },
+        })
+        if (cashAccount) {
+          await tx.transaction.create({
+            data: {
+              accountId: cashAccount.id,
+              investmentId: investment.id,
+              personId: buyerPersonId,
+              type: 'INVEST_OUT',
+              amount: -Math.abs(salePrice),
+              date,
+              description: notes || 'Sukuk purchase',
+              metadata: JSON.stringify({
+                source: 'BUY_FROM_PARTNER',
+                sellerPersonId,
+                principalTransferred: amount,
+                salePrice,
+              }),
+            },
+          })
+        }
       }
 
       if (paymentMode === 'SETTLE_DEBT' && salePrice > 0) {

@@ -46,6 +46,51 @@ export async function GET(req: NextRequest) {
     })
     const currentCash = setting ? Number(setting.value) : 0
 
+    // For partners, the person-scoped CASH_BALANCE:<personId> setting is the source of truth.
+    // Transaction history may be incomplete for older flows, which would make derived balances incorrect.
+    if (user.role === 'PARTNER') {
+      const buckets = await prisma.cashBucket.findMany({
+        where: {
+          balance: { gt: 0 },
+          personId: user.personId,
+        } as any,
+        orderBy: { haulStartDate: 'asc' },
+        select: {
+          id: true,
+          label: true,
+          balance: true,
+          currency: true,
+          haulStartDate: true,
+          lastZakatPaidDate: true,
+        },
+      })
+
+      const cashAccount = await prisma.account.findFirst({
+        where: { type: 'CASH', isActive: true },
+      })
+
+      const transactions = cashAccount
+        ? await prisma.transaction.findMany({
+            where: {
+              accountId: cashAccount.id,
+              personId: user.personId,
+              date: { gte: yearStart, lt: yearEnd },
+            },
+            orderBy: { date: 'desc' },
+            take: 10,
+          })
+        : []
+
+      return NextResponse.json({
+        cashBalance: Number.isFinite(currentCash) ? currentCash : 0,
+        cashAtStart: Number.isFinite(currentCash) ? currentCash : 0,
+        cashAtEnd: Number.isFinite(currentCash) ? currentCash : 0,
+        transactions,
+        buckets,
+        selectedYear,
+      })
+    }
+
     const txScope = user.role === 'OWNER'
       ? ({ personId: null } as any)
       : ({ personId: user.personId } as any)
