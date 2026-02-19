@@ -34,6 +34,8 @@ export async function POST(req: NextRequest) {
       await tx.investmentBucketAllocation.deleteMany({})
       await tx.cashBucket.deleteMany({})
       await tx.transaction.deleteMany({})
+      await tx.debtPayment.deleteMany({})
+      await tx.debt.deleteMany({})
       await tx.dealParticipant.deleteMany({})
       await tx.investment.deleteMany({})
       await tx.valuation.deleteMany({})
