@@ -49,10 +49,26 @@ export async function GET(req: NextRequest) {
     // For partners, the person-scoped CASH_BALANCE:<personId> setting is the source of truth.
     // Transaction history may be incomplete for older flows, which would make derived balances incorrect.
     if (user.role === 'PARTNER') {
+      const bucketAgg = await prisma.cashBucket.aggregate({
+        where: {
+          personId: user.personId,
+          NOT: [
+            { label: { startsWith: 'Debt •' } },
+            { label: 'Partner Commission' },
+          ],
+        } as any,
+        _sum: { balance: true },
+      })
+      const bucketSum = bucketAgg._sum.balance || 0
+
       const buckets = await prisma.cashBucket.findMany({
         where: {
           balance: { gt: 0 },
           personId: user.personId,
+          NOT: [
+            { label: { startsWith: 'Debt •' } },
+            { label: 'Partner Commission' },
+          ],
         } as any,
         orderBy: { haulStartDate: 'asc' },
         select: {
@@ -82,9 +98,9 @@ export async function GET(req: NextRequest) {
         : []
 
       return NextResponse.json({
-        cashBalance: Number.isFinite(currentCash) ? currentCash : 0,
-        cashAtStart: Number.isFinite(currentCash) ? currentCash : 0,
-        cashAtEnd: Number.isFinite(currentCash) ? currentCash : 0,
+        cashBalance: Number.isFinite(bucketSum) ? bucketSum : 0,
+        cashAtStart: Number.isFinite(bucketSum) ? bucketSum : 0,
+        cashAtEnd: Number.isFinite(bucketSum) ? bucketSum : 0,
         transactions,
         buckets,
         selectedYear,
