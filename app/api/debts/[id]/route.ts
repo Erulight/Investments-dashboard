@@ -137,11 +137,29 @@ export async function DELETE(
         })
       }
 
+      const debtBorrowedAt = debt.borrowedAt ? new Date(debt.borrowedAt) : null
+
       await tx.transaction.deleteMany({
         where: {
           investmentId: null,
           type: { in: ['DEBT_BORROW', 'DEBT_PAYMENT', 'DEBT_PAYMENT_UNDO'] },
-          metadata: { contains: `"debtId":"${id}"` },
+          OR: [
+            { metadata: { contains: `"debtId":"${id}"` } },
+            ...(debt.cashBucketId
+              ? ([{ metadata: { contains: `"cashBucketId":"${debt.cashBucketId}"` } }] as any)
+              : []),
+            // Fallback for older rows with missing/changed metadata
+            ...(debtBorrowedAt
+              ? ([
+                  {
+                    type: 'DEBT_BORROW',
+                    amount: Number(debt.amount) || 0,
+                    date: debtBorrowedAt,
+                    description: { contains: debt.lenderName },
+                  },
+                ] as any)
+              : []),
+          ],
         },
       })
 
