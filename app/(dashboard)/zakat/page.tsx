@@ -41,6 +41,15 @@ const addDays = (date: Date, days: number) => {
   return next
 }
 
+const diffDaysFloor = (start: Date, end: Date) => {
+  const startTime = start.getTime()
+  const endTime = end.getTime()
+  if (!Number.isFinite(startTime) || !Number.isFinite(endTime)) return 0
+  const diffMs = endTime - startTime
+  if (diffMs <= 0) return 0
+  return Math.floor(diffMs / (1000 * 60 * 60 * 24))
+}
+
 const receiptTypes = new Set([
   'WITHDRAW_PROFIT',
   'WITHDRAW_PRINCIPAL',
@@ -404,23 +413,36 @@ export default async function ZakatPage() {
     .map((bucket: any): BucketRow | null => {
     const lastPaid = bucket.lastZakatPaidDate ? new Date(bucket.lastZakatPaidDate) : null
     const bucketStart = new Date(bucket.haulStartDate)
-    const effectiveStart = lastPaid && !Number.isNaN(lastPaid.getTime())
-      ? lastPaid
-      : bucketStart
+
+    // Haul should roll forward even if zakat wasn't paid.
+    // lastZakatPaidDate is used only to determine whether the most recent completed haul is already settled.
+    const effectiveStart = bucketStart
 
     const nisabStart = useGlobalNisabForHaul ? effectiveNisabStart : null
     const effectiveHaulStart = nisabStart && nisabStart.getTime() > effectiveStart.getTime()
       ? nisabStart
       : effectiveStart
-    const haulCompleteDate = addDays(effectiveHaulStart, 354)
     const now = new Date()
-    const haulCompleted = now.getTime() >= haulCompleteDate.getTime()
+
+    const daysSinceStart = diffDaysFloor(effectiveHaulStart, now)
+    const haulIndex = Math.floor(daysSinceStart / 354)
+    const currentHaulStart = addDays(effectiveHaulStart, haulIndex * 354)
+    const currentHaulEnd = addDays(currentHaulStart, 354)
+    const haulCompleted = now.getTime() >= currentHaulEnd.getTime()
+
+    // We charge zakat for the most recent completed haul that is not covered by lastZakatPaidDate.
+    const lastPaidTime = lastPaid && !Number.isNaN(lastPaid.getTime()) ? lastPaid.getTime() : null
+    const mostRecentCompletedIndex = haulCompleted ? haulIndex : Math.max(0, haulIndex - 1)
+    const dueHaulStart = addDays(effectiveHaulStart, mostRecentCompletedIndex * 354)
+    const dueHaulEnd = addDays(dueHaulStart, 354)
+    const dueHaulCompleted = now.getTime() >= dueHaulEnd.getTime()
+    const dueIsUnpaid = dueHaulCompleted && (!lastPaidTime || lastPaidTime < dueHaulEnd.getTime())
 
     const idleMovements = bucket.movements.filter((movement: any) => {
       const movementDate = new Date(movement.date)
       if (movement.type === 'ZAKAT_PAID') return false
-      if (movementDate < effectiveHaulStart) return false
-      if (movementDate > haulCompleteDate) return false
+      if (movementDate < dueHaulStart) return false
+      if (movementDate > dueHaulEnd) return false
       // Exclude Circlys receipt payout — it shouldn't count as idle cash
       // for this bucket's haul period (it arrived later and inflates the balance)
       if (movement.type === 'CASH_IN' && movement.notes && String(movement.notes).includes('Circlys receipt')) return false
@@ -442,8 +464,8 @@ export default async function ZakatPage() {
         if (new Date(movement.createdAt) < reopenedAt) return false
       }
       const movementDate = new Date(movement.date)
-      if (movementDate < effectiveHaulStart) return false
-      return movementDate >= haulCompleteDate
+      if (movementDate < dueHaulStart) return false
+      return movementDate >= dueHaulEnd
     })
     const dedupedMap = new Map<string, typeof rawReceipts[number]>()
     rawReceipts.forEach((movement: any) => {
@@ -460,7 +482,7 @@ export default async function ZakatPage() {
     const dueReceipts = Array.from(dedupedMap.values())
     const receiptsTotal = dueReceipts.reduce((sum: number, m: any) => sum + m.amount, 0)
     const zakatBase = idleBase + receiptsTotal
-    const zakatDue = haulCompleted ? zakatBase * 0.025 : 0
+    const zakatDue = dueIsUnpaid ? zakatBase * 0.025 : 0
 
     const payments = bucket.movements
       .filter((movement: any) => movement.type === 'ZAKAT_PAID')
@@ -505,7 +527,7 @@ export default async function ZakatPage() {
       label: bucket.label,
       currency: bucket.currency,
       balance: displayBalance,
-      haulStartDate: effectiveHaulStart.toISOString().split('T')[0],
+      haulStartDate: currentHaulStart.toISOString().split('T')[0],
       lastZakatPaidDate: bucket.lastZakatPaidDate
         ? bucket.lastZakatPaidDate.toISOString().split('T')[0]
         : null,
@@ -518,7 +540,7 @@ export default async function ZakatPage() {
             amount: Math.abs(lastPayment.amount),
           }
         : null,
-      haulCompleteDate: haulCompleteDate.toISOString().split('T')[0],
+      haulCompleteDate: currentHaulEnd.toISOString().split('T')[0],
       idleBase,
       haulCompleted,
       source,
