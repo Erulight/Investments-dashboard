@@ -261,12 +261,15 @@ export async function POST(
           throw new Error('DEBT_PAYMENT_EXCEEDS_OUTSTANDING')
         }
 
+        const debtPaymentNotesBase = notes || 'Debt settlement via Sukuk transfer'
+        const debtPaymentNotes = `${debtPaymentNotesBase} [INVESTMENT:${investment.id}]`
+
         await tx.debtPayment.create({
           data: {
             debtId: debt.id,
             amount: salePrice,
             paidAt: date,
-            notes: notes || 'Debt settlement via Sukuk transfer',
+            notes: debtPaymentNotes,
           },
         })
 

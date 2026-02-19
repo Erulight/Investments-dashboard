@@ -7,6 +7,17 @@ import type { Prisma } from '@prisma/client'
 import { creditBucketsForReceipt, withdrawFromBuckets } from '@/lib/cashBuckets'
 import { parseDateInput } from '@/lib/date'
 
+const parseMetadata = (value: unknown) => {
+  if (!value) return null
+  if (typeof value === 'object') return value as any
+  if (typeof value !== 'string') return null
+  try {
+    return JSON.parse(value)
+  } catch {
+    return null
+  }
+}
+
 const getCashAccount = async (tx: Prisma.TransactionClient, currency = 'SAR') => {
   const existing = await tx.account.findFirst({
     where: { type: 'CASH', isActive: true },
@@ -390,6 +401,60 @@ export async function DELETE(
     
     // Delete the sukuk and reverse cash/bucket effects
     await prisma.$transaction(async (tx) => {
+      const settleDebtSales = await tx.transaction.findMany({
+        where: {
+          investmentId: id,
+          type: 'SELL_TO_PARTNER',
+        },
+        select: { id: true, date: true, metadata: true },
+      })
+
+      for (const saleTx of settleDebtSales) {
+        const meta = parseMetadata(saleTx.metadata)
+        if (meta?.paymentMode !== 'SETTLE_DEBT') continue
+        const debtId = typeof meta?.debtId === 'string' ? meta.debtId : ''
+        const salePrice = Number(meta?.salePrice ?? 0)
+        if (!debtId || !Number.isFinite(salePrice) || salePrice <= 0) continue
+
+        const day = saleTx.date ? new Date(saleTx.date) : null
+        const dayStart = day ? new Date(day.getFullYear(), day.getMonth(), day.getDate()) : null
+        const dayEnd = day ? new Date(day.getFullYear(), day.getMonth(), day.getDate() + 1) : null
+
+        await tx.debtPayment.deleteMany({
+          where: {
+            debtId,
+            amount: salePrice,
+            ...(dayStart && dayEnd
+              ? ({ paidAt: { gte: dayStart, lt: dayEnd } } as any)
+              : {}),
+            OR: [
+              { notes: { contains: `[INVESTMENT:${id}]` } },
+              { notes: { contains: 'Debt settlement via Sukuk transfer' } },
+            ],
+          } as any,
+        })
+
+        const debt = await tx.debt.findUnique({
+          where: { id: debtId },
+          include: { payments: true },
+        })
+
+        if (debt?.cashBucketId) {
+          const totalPaid = debt.payments.reduce((s: number, p: any) => s + (Number(p.amount) || 0), 0)
+          const outstanding = Math.max(0, Number(debt.amount) - totalPaid)
+          if (outstanding > 0.000001) {
+            await tx.cashBucket.update({
+              where: { id: debt.cashBucketId },
+              data: {
+                excludeFromZakat: true,
+                haulStartDate: debt.borrowedAt,
+                lastZakatPaidDate: null,
+              },
+            })
+          }
+        }
+      }
+
       const commissionTxs = await tx.transaction.findMany({
         where: {
           type: 'PARTNER_COMMISSION',
