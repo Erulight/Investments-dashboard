@@ -14,6 +14,7 @@ export async function POST(req: NextRequest) {
     const partnerPersonId = typeof body.partnerPersonId === 'string' ? body.partnerPersonId.trim() : ''
     const confirmText = typeof body.confirmText === 'string' ? body.confirmText.trim() : ''
     const password = typeof body.password === 'string' ? body.password : ''
+    const rebuildZakatBuckets = body.rebuildZakatBuckets === true
 
     if (!partnerPersonId) {
       return NextResponse.json({ error: 'Partner is required' }, { status: 400 })
@@ -40,6 +41,63 @@ export async function POST(req: NextRequest) {
     }
 
     await prisma.$transaction(async (tx) => {
+      if (rebuildZakatBuckets) {
+        const buckets = await tx.cashBucket.findMany({
+          where: {
+            personId: partnerPersonId,
+            excludeFromZakat: false,
+            NOT: [
+              { label: { startsWith: 'Debt •' } },
+              { label: 'Partner Commission' },
+            ],
+          } as any,
+          select: {
+            id: true,
+            haulStartDate: true,
+            label: true,
+            allocations: {
+              select: { investmentId: true },
+              take: 1,
+            },
+            movements: {
+              select: { investmentId: true },
+              where: { investmentId: { not: null } },
+              orderBy: { createdAt: 'desc' },
+              take: 5,
+            },
+          },
+        })
+
+        for (const b of buckets) {
+          const invFromAlloc = b.allocations?.[0]?.investmentId || null
+          const invFromMove = b.movements?.find((m) => typeof m.investmentId === 'string')?.investmentId || null
+          const investmentId = invFromAlloc || invFromMove
+          if (!investmentId) continue
+
+          const participation = await tx.dealParticipant.findFirst({
+            where: {
+              investmentId,
+              personId: partnerPersonId,
+            },
+            select: {
+              acquiredAt: true,
+              investment: { select: { startDate: true } },
+            },
+          })
+
+          const acquiredAt = participation?.acquiredAt || participation?.investment?.startDate || null
+          if (!(acquiredAt instanceof Date) || Number.isNaN(acquiredAt.getTime())) continue
+
+          const nextHaulStart = new Date(acquiredAt.getFullYear(), acquiredAt.getMonth(), acquiredAt.getDate())
+          await tx.cashBucket.update({
+            where: { id: b.id },
+            data: { haulStartDate: nextHaulStart },
+          })
+        }
+
+        return
+      }
+
       const buckets = await tx.cashBucket.findMany({
         where: { personId: partnerPersonId } as any,
         select: { id: true },

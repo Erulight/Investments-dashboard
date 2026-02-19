@@ -14,6 +14,7 @@ export function PartnerReset() {
   const [isOpen, setIsOpen] = useState(false)
   const [partners, setPartners] = useState<PartnerOption[]>([])
   const [partnerPersonId, setPartnerPersonId] = useState('')
+  const [rebuildZakatBuckets, setRebuildZakatBuckets] = useState(false)
   const [confirmText, setConfirmText] = useState('')
   const [password, setPassword] = useState('')
   const [error, setError] = useState('')
@@ -38,6 +39,7 @@ export function PartnerReset() {
   const openModal = () => {
     setIsOpen(true)
     setPartnerPersonId('')
+    setRebuildZakatBuckets(false)
     setConfirmText('')
     setPassword('')
     setError('')
@@ -61,6 +63,7 @@ export function PartnerReset() {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           partnerPersonId,
+          rebuildZakatBuckets,
           confirmText,
           password,
         }),
@@ -69,7 +72,7 @@ export function PartnerReset() {
       if (!res.ok) {
         throw new Error(data.error || 'Failed to reset partner')
       }
-      setMessage('Partner reset completed. Refreshing...')
+      setMessage(rebuildZakatBuckets ? 'Zakat buckets rebuilt. Refreshing...' : 'Partner reset completed. Refreshing...')
       setTimeout(() => window.location.reload(), 800)
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to reset partner')
@@ -85,7 +88,8 @@ export function PartnerReset() {
       </CardHeader>
       <CardContent className="space-y-4">
         <p className="text-xs text-gray-500">
-          Resets one partner&apos;s cash ledger and buckets back to a clean state. This does not delete Sukuk deals.
+          Reset a partner&apos;s cash state, or rebuild their Zakat bucket haul dates.
+          This does not delete Sukuk deals.
         </p>
         <Button variant="danger" onClick={openModal}>
           Reset a Partner
@@ -106,8 +110,8 @@ export function PartnerReset() {
           )}
 
           <p className="text-sm text-gray-600">
-            Select a partner, then type <span className="font-semibold">RESET PARTNER</span> or enter your owner
-            password.
+            Select a partner. You can optionally rebuild Zakat bucket haul dates.
+            Then type <span className="font-semibold">RESET PARTNER</span> or enter your owner password.
           </p>
 
           <div className="space-y-3">
@@ -124,6 +128,16 @@ export function PartnerReset() {
                 </option>
               ))}
             </select>
+
+            <label className="flex items-center gap-2 text-sm text-gray-700">
+              <input
+                type="checkbox"
+                checked={rebuildZakatBuckets}
+                onChange={(e) => setRebuildZakatBuckets(e.target.checked)}
+                className="h-4 w-4"
+              />
+              Rebuild Zakat buckets (fix haul start dates)
+            </label>
 
             <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
               <input
