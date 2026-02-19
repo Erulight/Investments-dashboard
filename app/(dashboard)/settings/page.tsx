@@ -3,6 +3,7 @@ import { requireAuth } from '@/lib/rbac'
 import { Card, CardHeader, CardTitle, CardContent } from '@/components/ui/Card'
 import { SukukPlatformManager } from '@/components/settings/SukukPlatformManager'
 import { PortfolioReset } from '@/components/settings/PortfolioReset'
+import { PartnerReset } from '@/components/settings/PartnerReset'
 import { InvestmentTypeManager } from '@/components/settings/InvestmentTypeManager'
 import { NisabSettings } from '@/components/settings/NisabSettings'
 import { UserList } from '@/components/users/UserList'
@@ -87,7 +88,12 @@ export default async function SettingsPage() {
       id: 'maintenance',
       title: 'Maintenance',
       description: 'Reset and housekeeping actions',
-      content: <PortfolioReset />,
+      content: (
+        <div className="space-y-4">
+          <PartnerReset />
+          <PortfolioReset />
+        </div>
+      ),
     },
     {
       id: 'users',
