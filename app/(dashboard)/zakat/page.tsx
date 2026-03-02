@@ -5,7 +5,6 @@ import { ZakatDashboard } from '@/components/zakat/ZakatDashboard'
 export const dynamic = 'force-dynamic'
 
 const NISAB_KEY = 'NISAB_VALUE'
-const DEFAULT_NISAB = 55000
 
 type BucketRow = {
   id: string
@@ -200,8 +199,8 @@ export default async function ZakatPage() {
   }
 
   const nisabSetting = await prisma.systemSetting.findUnique({ where: { key: NISAB_KEY } })
-  const nisabRaw = nisabSetting ? Number(nisabSetting.value) : DEFAULT_NISAB
-  const nisabValue = Number.isFinite(nisabRaw) && nisabRaw > 0 ? nisabRaw : DEFAULT_NISAB
+  const nisabRaw = nisabSetting ? Number(nisabSetting.value) : null
+  const nisabValue = nisabRaw !== null && Number.isFinite(nisabRaw) && nisabRaw > 0 ? nisabRaw : null
 
   const scopeKey = user.role === 'OWNER' ? 'OWNER' : user.personId!
   const nisabMetKey = `NISAB_MET_SINCE:${scopeKey}`
@@ -380,13 +379,14 @@ export default async function ZakatPage() {
 
   const totalZakatableWealthForNisab = totalZakatableWealth + sukukValueForNisab
 
-  const thresholdMet = totalZakatableWealthForNisab >= nisabValue
+  const nisabConfigured = nisabValue !== null
+  const thresholdMet = nisabConfigured ? totalZakatableWealthForNisab >= nisabValue : false
   const nisabMetSetting = await prisma.systemSetting.findUnique({ where: { key: nisabMetKey } })
   const nisabMetSince = nisabMetSetting?.value ? new Date(nisabMetSetting.value) : null
 
   // Haul starts when nisab is met, and restarts when wealth drops below nisab.
   // We persist the crossing time to keep haul-year stable.
-  if (thresholdMet) {
+  if (nisabConfigured && thresholdMet) {
     if (!nisabMetSince || Number.isNaN(nisabMetSince.getTime())) {
       const now = new Date()
       const dayStart = new Date(now.getFullYear(), now.getMonth(), now.getDate())
@@ -404,7 +404,7 @@ export default async function ZakatPage() {
     await prisma.systemSetting.delete({ where: { key: nisabMetKey } })
   }
 
-  const effectiveNisabStart = thresholdMet
+  const effectiveNisabStart = nisabConfigured && thresholdMet
     ? (nisabMetSince && !Number.isNaN(nisabMetSince.getTime()) ? nisabMetSince : new Date())
     : null
 
@@ -601,7 +601,13 @@ export default async function ZakatPage() {
         </p>
       </div>
 
-      {!zakatEnabled && (
+      {!nisabConfigured && (
+        <div className="rounded-xl border border-amber-200 bg-amber-50 p-4 text-sm text-amber-900">
+          <div className="font-semibold">Nisab not configured — please set it in Settings</div>
+        </div>
+      )}
+
+      {nisabConfigured && !zakatEnabled && (
         <div className="rounded-xl border border-amber-200 bg-amber-50 p-4 text-sm text-amber-900">
           <div className="font-semibold">Below Nisab</div>
           <div className="mt-1">

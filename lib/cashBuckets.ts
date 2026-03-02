@@ -235,94 +235,147 @@ export const creditBucketsForReceipt = async (
     personId?: string | null
   }
 ) => {
-  const allocations = await tx.investmentBucketAllocation.findMany({
-    where: {
-      investmentId,
-      ...(personId === undefined
-        ? {}
-        : {
-            cashBucket: {
-              personId: personId,
-            },
-          }),
-    } as any,
-  })
+  const isProfitOnly = type === 'WITHDRAW_PROFIT'
+  const isPrincipalOnly = type === 'WITHDRAW_PRINCIPAL' || type === 'ROLLBACK_PRINCIPAL'
+  const isSellReceipt = type === 'SELL_RECEIPT'
 
-  const principalFocused = principalReduction > 0
-  const usableAllocations = principalFocused
-    ? allocations.filter((alloc: { principalRemaining: number }) => alloc.principalRemaining > 0)
-    : allocations.filter((alloc: { principalAllocated: number }) => alloc.principalAllocated > 0)
+  const principalAmount = isPrincipalOnly
+    ? Math.max(0, amount)
+    : isSellReceipt
+      ? Math.max(0, principalReduction)
+      : 0
 
-  if (usableAllocations.length === 0) {
-    let haulStartDate = date
-    if (personId) {
-      const participation = await tx.dealParticipant.findFirst({
-        where: {
+  const profitAmount = isProfitOnly
+    ? Math.max(0, amount)
+    : isSellReceipt
+      ? Math.max(0, amount - Math.max(0, principalReduction))
+      : 0
+
+  const creditToAllocatedBuckets = async (creditAmount: number, reductionAmount: number) => {
+    if (creditAmount <= 0) return
+
+    const allocations = await tx.investmentBucketAllocation.findMany({
+      where: {
+        investmentId,
+        ...(personId === undefined
+          ? {}
+          : {
+              cashBucket: {
+                personId: personId,
+              },
+            }),
+      } as any,
+    })
+
+    const principalFocused = reductionAmount > 0
+    const usableAllocations = principalFocused
+      ? allocations.filter((alloc: { principalRemaining: number }) => alloc.principalRemaining > 0)
+      : allocations.filter((alloc: { principalAllocated: number }) => alloc.principalAllocated > 0)
+
+    if (usableAllocations.length === 0) {
+      let haulStartDate = date
+      if (personId) {
+        const participation = await tx.dealParticipant.findFirst({
+          where: {
+            investmentId,
+            personId,
+          },
+          select: {
+            acquiredAt: true,
+            investment: { select: { startDate: true } },
+          },
+        })
+
+        const acquiredAt = participation?.acquiredAt || participation?.investment?.startDate
+        if (acquiredAt instanceof Date && !Number.isNaN(acquiredAt.getTime())) {
+          haulStartDate = new Date(acquiredAt.getFullYear(), acquiredAt.getMonth(), acquiredAt.getDate())
+        }
+      }
+
+      await createCashBucket(tx, {
+        amount: creditAmount,
+        haulStartDate,
+        date,
+        notes: notes || null,
+        investmentId,
+        type,
+        personId: personId === undefined ? undefined : personId,
+      })
+      return
+    }
+
+    const totalRemaining = usableAllocations.reduce(
+      (
+        sum: number,
+        alloc: { principalRemaining: number; principalAllocated: number }
+      ) => sum + (principalFocused ? alloc.principalRemaining : alloc.principalAllocated),
+      0
+    )
+    const cappedReduction = principalFocused ? Math.min(reductionAmount, totalRemaining) : 0
+
+    for (const alloc of usableAllocations) {
+      const ratioBasis = principalFocused ? alloc.principalRemaining : alloc.principalAllocated
+      const ratio = totalRemaining > 0 ? ratioBasis / totalRemaining : 0
+      const cashShare = creditAmount * ratio
+      const principalShare = cappedReduction * ratio
+
+      await tx.cashBucket.update({
+        where: { id: alloc.cashBucketId },
+        data: { balance: { increment: cashShare } },
+      })
+
+      await tx.cashBucketMovement.create({
+        data: {
+          cashBucketId: alloc.cashBucketId,
           investmentId,
-          personId,
-        },
-        select: {
-          acquiredAt: true,
-          investment: { select: { startDate: true } },
+          amount: cashShare,
+          type,
+          date,
+          notes: notes || null,
         },
       })
 
-      const acquiredAt = participation?.acquiredAt || participation?.investment?.startDate
-      if (acquiredAt instanceof Date && !Number.isNaN(acquiredAt.getTime())) {
-        haulStartDate = new Date(acquiredAt.getFullYear(), acquiredAt.getMonth(), acquiredAt.getDate())
+      if (principalShare > 0) {
+        await tx.investmentBucketAllocation.update({
+          where: { id: alloc.id },
+          data: {
+            principalRemaining: Math.max(0, alloc.principalRemaining - principalShare),
+          },
+        })
       }
     }
+  }
+
+  const creditProfitToNewBucket = async (profit: number) => {
+    if (profit <= 0) return
+
+    const inv = await tx.investment.findUnique({
+      where: { id: investmentId },
+      select: { name: true },
+    })
 
     await createCashBucket(tx, {
-      amount,
-      haulStartDate,
+      amount: profit,
+      haulStartDate: date,
       date,
       notes: notes || null,
       investmentId,
-      type,
-      personId: personId === undefined ? undefined : personId,
+      type: 'CASH_IN',
+      excludeFromZakat: false,
+      personId: personId ?? null,
+      label: `Profit • ${inv?.name || investmentId}`,
     })
-    return
   }
 
-  const totalRemaining = usableAllocations.reduce(
-    (
-      sum: number,
-      alloc: { principalRemaining: number; principalAllocated: number }
-    ) => sum + (principalFocused ? alloc.principalRemaining : alloc.principalAllocated),
-    0
-  )
-  const cappedReduction = principalFocused ? Math.min(principalReduction, totalRemaining) : 0
+  if (principalAmount > 0) {
+    await creditToAllocatedBuckets(principalAmount, principalAmount)
+  }
 
-  for (const alloc of usableAllocations) {
-    const ratioBasis = principalFocused ? alloc.principalRemaining : alloc.principalAllocated
-    const ratio = totalRemaining > 0 ? ratioBasis / totalRemaining : 0
-    const cashShare = amount * ratio
-    const principalShare = cappedReduction * ratio
+  if (profitAmount > 0) {
+    await creditProfitToNewBucket(profitAmount)
+  }
 
-    await tx.cashBucket.update({
-      where: { id: alloc.cashBucketId },
-      data: { balance: { increment: cashShare } },
-    })
-
-    await tx.cashBucketMovement.create({
-      data: {
-        cashBucketId: alloc.cashBucketId,
-        investmentId,
-        amount: cashShare,
-        type,
-        date,
-        notes: notes || null,
-      },
-    })
-
-    if (principalShare > 0) {
-      await tx.investmentBucketAllocation.update({
-        where: { id: alloc.id },
-        data: {
-          principalRemaining: Math.max(0, alloc.principalRemaining - principalShare),
-        },
-      })
-    }
+  if (!isProfitOnly && !isPrincipalOnly && !isSellReceipt) {
+    await creditToAllocatedBuckets(Math.max(0, amount), Math.max(0, principalReduction))
   }
 }

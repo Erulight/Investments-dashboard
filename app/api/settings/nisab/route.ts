@@ -3,7 +3,6 @@ import { prisma } from '@/lib/db'
 import { requireAuth } from '@/lib/rbac'
 
 const NISAB_KEY = 'NISAB_VALUE'
-const DEFAULT_NISAB = 55000
 
 export async function GET() {
   try {
@@ -11,8 +10,8 @@ export async function GET() {
     const setting = await prisma.systemSetting.findUnique({
       where: { key: NISAB_KEY },
     })
-    const valueRaw = setting ? Number(setting.value) : DEFAULT_NISAB
-    const value = Number.isFinite(valueRaw) ? valueRaw : DEFAULT_NISAB
+    const valueRaw = setting ? Number(setting.value) : null
+    const value = valueRaw !== null && Number.isFinite(valueRaw) && valueRaw > 0 ? valueRaw : null
     return NextResponse.json({ nisabValue: value })
   } catch (error) {
     console.error('Nisab fetch error:', error)
