@@ -118,16 +118,9 @@ export async function POST(
       const outstandingAfter = Math.max(0, Number(debt.amount) - totalPaidAfter)
       const fullyPaid = outstandingAfter <= 0.000001
 
-      if (fullyPaid && debt.cashBucketId) {
-        await tx.cashBucket.update({
-          where: { id: debt.cashBucketId },
-          data: {
-            excludeFromZakat: false,
-            haulStartDate: paidAt,
-            lastZakatPaidDate: null,
-          },
-        })
-      }
+      // FIX 2: Do NOT flip debt buckets to zakatable when fully paid
+      // Debt-originated cash is never zakatable regardless of repayment status
+      // Owner surplus cash after repayment will be captured by other personal buckets naturally
 
       const updated = await tx.debt.findUnique({
         where: { id: debt.id },

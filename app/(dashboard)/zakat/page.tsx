@@ -210,7 +210,12 @@ export default async function ZakatPage() {
     where: {
       excludeFromZakat: false,
       ...(user.role === 'OWNER'
-        ? { personId: null }
+        ? { 
+            OR: [
+              { personId: null },                    // Original owner buckets
+              { personId: user.personId || null }    // Commission buckets with owner's personId
+            ]
+          }
         : {
             personId: user.personId,
             NOT: [
@@ -438,9 +443,12 @@ export default async function ZakatPage() {
     const dueHaulCompleted = now.getTime() >= dueHaulEnd.getTime()
     const dueIsUnpaid = dueHaulCompleted && (!lastPaidTime || lastPaidTime < dueHaulEnd.getTime())
 
+    // FIX 4: Exclude INVEST_OUT from idle cash base calculation
+    // INVEST_OUT represents deployed money, not spent money - it should not reduce zakatable base
     const idleMovements = bucket.movements.filter((movement: any) => {
       const movementDate = new Date(movement.date)
       if (movement.type === 'ZAKAT_PAID') return false
+      if (movement.type === 'INVEST_OUT') return false // FIX 4: Exclude investments from idle base
       if (movementDate < dueHaulStart) return false
       if (movementDate > dueHaulEnd) return false
       // Exclude Circlys receipt payout — it shouldn't count as idle cash
@@ -454,18 +462,46 @@ export default async function ZakatPage() {
       idleMovements.reduce((sum: number, movement: any) => sum + movement.amount, 0)
     )
 
+    // FIX 3: Replace dueHaulEnd filter with per-movement hawl age check
+    // FIX 5: Exclude receipt movements from defaulted/late investments  
+    // FIX 7: Confirm Ijarah exclusion applies to all receipt movement types
     const rawReceipts = bucket.movements.filter((movement: any) => {
       if (!receiptTypes.has(movement.type)) return false
       if (!movement.investmentId) return false
       if (!movement.investment) return false
+      
+      // FIX 7: Exclude ALL Ijarah receipt movements (already correct)
       if (movement.investment?.isIjarah) return false
+      
+      // FIX 5: Exclude receipts from defaulted/late investments
+      // Check if investment has recovery status indicating default/written-off
+      if (movement.investment?.category === 'DEFAULT_LEGAL' || 
+          movement.investment?.category === 'WRITTEN_OFF') return false
+      
+      // Check metadata for recovery status if category doesn't indicate it
+      const metadata = parseMetadata(movement.investment?.metadata)
+      if (metadata?.recoveryStatus === 'DEFAULT_LEGAL' || 
+          metadata?.recoveryStatus === 'WRITTEN_OFF') return false
+      
       if (movement.investment?.reopenedAt) {
         const reopenedAt = new Date(movement.investment.reopenedAt)
         if (new Date(movement.createdAt) < reopenedAt) return false
       }
+      
       const movementDate = new Date(movement.date)
-      if (movementDate < dueHaulStart) return false
-      return movementDate >= dueHaulEnd
+      
+      // FIX 3: Replace window filter with per-movement hawl age check
+      // A receipt is zakatable if:
+      // 1. Days from bucket.haulStartDate to movement.date >= 354
+      // 2. lastZakatPaidDate is null OR movement is after lastZakatPaidDate
+      const daysSinceHaulStart = diffDaysFloor(bucketStart, movementDate)
+      if (daysSinceHaulStart < 354) return false // Movement hasn't completed a full hawl yet
+      
+      // Check if movement is after last zakat payment
+      const lastPaidTime = lastPaid && !Number.isNaN(lastPaid.getTime()) ? lastPaid.getTime() : null
+      if (lastPaidTime && movementDate.getTime() <= lastPaidTime) return false
+      
+      return true
     })
     const dedupedMap = new Map<string, typeof rawReceipts[number]>()
     rawReceipts.forEach((movement: any) => {
