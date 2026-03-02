@@ -8,19 +8,18 @@ datasource db {
 }
 
 model User {
-  id               String         @id @default(cuid())
-  email            String         @unique
+  id               String     @id @default(cuid())
+  email            String     @unique
   password         String
   name             String
-  role             String         @default("VIEWER")
-  canEditAsPartner Boolean        @default(false)
-  createdAt        DateTime       @default(now())
-  updatedAt        DateTime       @updatedAt
-  personId         String?        @unique
+  role             String     @default("VIEWER")
+  canEditAsPartner Boolean    @default(false)
+  createdAt        DateTime   @default(now())
+  updatedAt        DateTime   @updatedAt
+  personId         String?    @unique
   permissions      String?
   auditLogs        AuditLog[]
-  zakatPayments    ZakatPayment[]
-  person           Person?        @relation(fields: [personId], references: [id])
+  person           Person?    @relation(fields: [personId], references: [id])
 
   @@index([email])
 }
@@ -35,7 +34,6 @@ model Person {
   cashBuckets      CashBucket[]
   dealParticipants DealParticipant[]
   transactions     Transaction[]
-  zakatPayments    ZakatPayment[]
   user             User?
 
   @@index([email])
@@ -81,7 +79,6 @@ model Investment {
   reopenedAt          DateTime?
   cashBucketMovements CashBucketMovement[]
   dealParticipants    DealParticipant[]
-  zakatPayments       ZakatPayment[]
   account             Account                      @relation(fields: [accountId], references: [id], onDelete: Cascade)
   bucketAllocations   InvestmentBucketAllocation[]
   transactions        Transaction[]
@@ -278,26 +275,4 @@ model DebtPayment {
 
   @@index([debtId])
   @@index([paidAt])
-}
-
-model ZakatPayment {
-  id            String     @id @default(cuid())
-  investmentId  String
-  userId        String
-  personId      String?
-  amount        Float
-  date          DateTime
-  notes         String?
-  paymentMethod String     @default("MANUAL")
-  status        String     @default("COMPLETED")
-  createdAt     DateTime   @default(now())
-  updatedAt     DateTime   @updatedAt
-  investment    Investment @relation(fields: [investmentId], references: [id], onDelete: Cascade)
-  user          User       @relation(fields: [userId], references: [id], onDelete: Cascade)
-  person        Person?    @relation(fields: [personId], references: [id])
-
-  @@index([investmentId])
-  @@index([userId])
-  @@index([personId])
-  @@index([date])
 }
