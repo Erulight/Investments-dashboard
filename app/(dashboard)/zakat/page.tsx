@@ -556,7 +556,7 @@ export default async function ZakatPage() {
       label: bucket.label,
       currency: bucket.currency,
       balance: displayBalance,
-      haulStartDate: currentHaulStart.toISOString().split('T')[0],
+      haulStartDate: effectiveHaulStart.toISOString().split('T')[0],
       lastZakatPaidDate: bucket.lastZakatPaidDate
         ? bucket.lastZakatPaidDate.toISOString().split('T')[0]
         : null,
@@ -569,7 +569,7 @@ export default async function ZakatPage() {
             amount: Math.abs(lastPayment.amount),
           }
         : null,
-      haulCompleteDate: currentHaulEnd.toISOString().split('T')[0],
+      haulCompleteDate: addDays(effectiveHaulStart, 354).toISOString().split('T')[0],
       idleBase,
       haulCompleted,
       source,
