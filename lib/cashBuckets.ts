@@ -351,12 +351,19 @@ export const creditBucketsForReceipt = async (
 
     const inv = await tx.investment.findUnique({
       where: { id: investmentId },
-      select: { name: true },
+      select: { name: true, startDate: true, account: { select: { type: true } } },
     })
+
+    const isSukuk = inv?.account?.type === 'SUKUK'
+    const startDate = inv?.startDate instanceof Date ? inv.startDate : new Date(inv?.startDate as any)
+    const sukukHaulStart = !Number.isNaN(startDate.getTime())
+      ? new Date(startDate.getFullYear(), startDate.getMonth(), startDate.getDate())
+      : date
+    const haulStartDate = isSukuk ? sukukHaulStart : date
 
     await createCashBucket(tx, {
       amount: profit,
-      haulStartDate: date,
+      haulStartDate,
       date,
       notes: notes || null,
       investmentId,

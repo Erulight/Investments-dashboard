@@ -23,6 +23,10 @@ async function main() {
   const apply = hasFlag('--apply')
   const dump = hasFlag('--dump')
 
+  const deleteBucketId = parseArgValue('--delete-bucket-id')
+  const fixBucketId = parseArgValue('--fix-bucket-id')
+  const fixInvestmentId = parseArgValue('--fix-investment-id')
+
   const setAllArg = parseArgValue('--set-all')
   const setAllDate = setAllArg ? new Date(setAllArg) : null
   if (setAllArg && (!setAllDate || Number.isNaN(setAllDate.getTime()))) {
@@ -40,6 +44,93 @@ async function main() {
 
   console.log(`Mode: ${apply ? 'APPLY' : 'DRY-RUN'}`)
   console.log(`Since: ${toYmdLocal(sinceDay)}`)
+
+  if (deleteBucketId) {
+    const bucket = await prisma.cashBucket.findUnique({
+      where: { id: deleteBucketId },
+      select: { id: true, label: true, balance: true, createdAt: true, haulStartDate: true },
+    })
+
+    if (!bucket) {
+      console.log(`Bucket not found: ${deleteBucketId}`)
+    } else {
+      console.log(
+        `[DELETE] ${bucket.label || '(no label)'} (${bucket.id})\n` +
+          `         balance=${bucket.balance}\n` +
+          `         createdAt=${toYmdLocal(startOfDay(new Date(bucket.createdAt)))}\n` +
+          `         haulStartDate=${toYmdLocal(startOfDay(new Date(bucket.haulStartDate)))}\n`
+      )
+
+      const movementCount = await prisma.cashBucketMovement.count({
+        where: { cashBucketId: bucket.id },
+      })
+      console.log(`         movements=${movementCount}`)
+
+      if (apply) {
+        await prisma.cashBucketMovement.deleteMany({
+          where: { cashBucketId: bucket.id },
+        })
+        await prisma.cashBucket.delete({
+          where: { id: bucket.id },
+        })
+        console.log('         deleted')
+      } else {
+        console.log('         dry-run (not deleted)')
+      }
+    }
+
+    // Allow combining with other flags in one run.
+  }
+
+  if (fixBucketId) {
+    if (!fixInvestmentId) {
+      throw new Error('Missing --fix-investment-id when using --fix-bucket-id')
+    }
+
+    const inv = await prisma.investment.findUnique({
+      where: { id: fixInvestmentId },
+      select: { id: true, startDate: true, name: true },
+    })
+    if (!inv) {
+      throw new Error(`Investment not found: ${fixInvestmentId}`)
+    }
+
+    const start = inv.startDate instanceof Date ? inv.startDate : new Date(inv.startDate as any)
+    if (Number.isNaN(start.getTime())) {
+      throw new Error(`Invalid investment.startDate for ${fixInvestmentId}`)
+    }
+    const proposed = startOfDay(start)
+
+    const bucket = await prisma.cashBucket.findUnique({
+      where: { id: fixBucketId },
+      select: { id: true, label: true, haulStartDate: true, createdAt: true },
+    })
+    if (!bucket) {
+      throw new Error(`Bucket not found: ${fixBucketId}`)
+    }
+
+    console.log(
+      `[UPDATE] ${bucket.label || '(no label)'} (${bucket.id})\n` +
+        `         investment=${inv.name || inv.id} (${inv.id})\n` +
+        `         currentHaulStart=${toYmdLocal(startOfDay(new Date(bucket.haulStartDate)))}\n` +
+        `         proposedHaulStart=${toYmdLocal(proposed)}\n`
+    )
+
+    if (apply) {
+      await prisma.cashBucket.update({
+        where: { id: bucket.id },
+        data: { haulStartDate: proposed },
+      })
+      console.log('         updated')
+    } else {
+      console.log('         dry-run (not updated)')
+    }
+  }
+
+  if ((deleteBucketId || fixBucketId) && !dump) {
+    return
+  }
+
   if (dump) {
     const buckets = await prisma.cashBucket.findMany({
       where: { label: { startsWith: 'Profit •' } },
