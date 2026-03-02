@@ -168,6 +168,11 @@ export async function PUT(
             ? (parseDateInput(data.startDate) ?? new Date(data.startDate))
             : new Date(data.startDate))
         : existingSukuk.startDate
+      const adjustmentDate = data.adjustmentDate !== undefined
+        ? (typeof data.adjustmentDate === 'string'
+            ? (parseDateInput(data.adjustmentDate) ?? new Date(data.adjustmentDate))
+            : new Date(data.adjustmentDate as any))
+        : new Date()
       const maturityDate = data.maturityDate !== undefined
         ? (data.maturityDate
             ? (typeof data.maturityDate === 'string'
@@ -178,6 +183,9 @@ export async function PUT(
 
       if (data.startDate !== undefined && Number.isNaN(startDate.getTime())) {
         return NextResponse.json({ error: 'Invalid startDate' }, { status: 400 })
+      }
+      if (data.adjustmentDate !== undefined && Number.isNaN(adjustmentDate.getTime())) {
+        return NextResponse.json({ error: 'Invalid adjustmentDate' }, { status: 400 })
       }
       if (data.maturityDate !== undefined && maturityDate && Number.isNaN(maturityDate.getTime())) {
         return NextResponse.json({ error: 'Invalid maturityDate' }, { status: 400 })
@@ -270,7 +278,7 @@ export async function PUT(
             investmentId: id,
             amount: Math.abs(principalDelta),
             principalReduction: Math.abs(principalDelta),
-            date: new Date(),
+            date: adjustmentDate,
             type: 'WITHDRAW_PRINCIPAL',
             notes: 'Principal decrease',
           })
@@ -283,7 +291,7 @@ export async function PUT(
             personId: user.personId || null,
             type: principalDelta > 0 ? 'CASH_OUT' : 'CASH_IN',
             amount: -principalDelta,
-            date: new Date(),
+            date: adjustmentDate,
             description: 'Principal adjustment',
             metadata: JSON.stringify({
               previousPrincipal: existingSukuk.principalAmount,

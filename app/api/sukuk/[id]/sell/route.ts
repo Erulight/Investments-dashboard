@@ -31,6 +31,10 @@ export async function POST(
     const notes = typeof body.notes === 'string' ? body.notes : ''
     const date = body.date ? new Date(body.date) : new Date()
 
+    if (body.date && Number.isNaN(date.getTime())) {
+      return NextResponse.json({ error: 'Invalid date' }, { status: 400 })
+    }
+
     if (!buyerPersonId) {
       return NextResponse.json({ error: 'Buyer is required' }, { status: 400 })
     }

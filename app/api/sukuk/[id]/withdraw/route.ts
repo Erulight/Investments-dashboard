@@ -32,6 +32,10 @@ export async function POST(
     const notes = typeof body.notes === 'string' ? body.notes : ''
     const date = body.date ? new Date(body.date) : new Date()
 
+    if (body.date && Number.isNaN(date.getTime())) {
+      return NextResponse.json({ error: 'Invalid date' }, { status: 400 })
+    }
+
     if (!Number.isFinite(amount) || amount <= 0) {
       return NextResponse.json({ error: 'Amount must be greater than 0' }, { status: 400 })
     }

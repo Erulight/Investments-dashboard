@@ -35,6 +35,9 @@ export const updateSukukSchema = z.object({
   category: z.string().optional(),
   principalAmount: z.number().positive('Principal amount must be positive').optional(),
   currentValue: z.number().min(0, 'Current value cannot be negative').optional(),
+  adjustmentDate: z.string().optional().refine((date) => !date || !isNaN(Date.parse(date)), {
+    message: 'Invalid adjustment date',
+  }),
   startDate: z.string().optional().refine((date) => !date || !isNaN(Date.parse(date)), {
     message: 'Invalid start date',
   }),

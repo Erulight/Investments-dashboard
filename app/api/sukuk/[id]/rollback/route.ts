@@ -48,6 +48,10 @@ export async function POST(
     const date = body.date ? new Date(body.date) : new Date()
     const notes = typeof body.notes === 'string' ? body.notes : ''
 
+    if (body.date && Number.isNaN(date.getTime())) {
+      return NextResponse.json({ error: 'Invalid date' }, { status: 400 })
+    }
+
     const investment = await prisma.investment.findUnique({
       where: { id },
       include: {
