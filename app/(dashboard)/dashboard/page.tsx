@@ -585,6 +585,36 @@ export default async function DashboardPage({
 
   const displayedValue = user.role === 'OWNER' ? cashBalance + totalValue : totalValue
   const yearlyProfitValue = await (async () => {
+    if (user.role === 'OWNER') {
+      if (!cashAccount) return 0
+      const ownerPersonId = user.personId || null
+      const txSum = await prisma.transaction.aggregate({
+        where: {
+          accountId: cashAccount.id,
+          date: { gte: yearStart, lt: yearEnd },
+          type: {
+            in: ['WITHDRAW_PROFIT', 'SELL_PROFIT_ACCRUED', 'PARTNER_COMMISSION', 'SOLD_DEAL_SETTLEMENT'],
+          },
+          AND: [
+            {
+              OR: [
+                { personId: null },
+                ...(ownerPersonId ? [{ personId: ownerPersonId }] : []),
+              ],
+            },
+            {
+              OR: [
+                { investment: { name: { notIn: DEMO_INVESTMENT_NAMES } } },
+                { investmentId: null },
+              ],
+            },
+          ],
+        } as any,
+        _sum: { amount: true },
+      })
+      return Math.max(0, Math.abs(Number(txSum._sum.amount || 0)))
+    }
+
     if (user.role !== 'PARTNER' || !user.personId) return yearlyValueChange.change
     const txSum = await prisma.transaction.aggregate({
       where: {
@@ -603,7 +633,7 @@ export default async function DashboardPage({
 
   const yearlyReturnPercentage = user.role === 'PARTNER'
     ? (totalInvested > 0 ? (yearlyProfitValue / totalInvested) * 100 : 0)
-    : yearlyValueChange.pct
+    : (totalInvested > 0 ? (yearlyProfitValue / totalInvested) * 100 : 0)
   const netWorth = user.role === 'OWNER'
     ? displayedValue - roscaDebt - debtsAtEnd
     : displayedValue - roscaDebt
