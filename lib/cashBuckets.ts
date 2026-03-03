@@ -356,23 +356,11 @@ export const creditBucketsForReceipt = async (
 
     const investmentName = inv?.name || investmentId
     const bucketLabel = `Profit • ${investmentName}`
-    const dayStart = new Date(date.getFullYear(), date.getMonth(), date.getDate())
-    const dayEnd = new Date(date.getFullYear(), date.getMonth(), date.getDate() + 1)
 
     const existingProfitBucket = await tx.cashBucket.findFirst({
       where: {
         label: bucketLabel,
         personId: personId ?? null,
-        movements: {
-          some: {
-            investmentId,
-            type: 'CASH_IN',
-            date: {
-              gte: dayStart,
-              lt: dayEnd,
-            },
-          },
-        },
       },
       select: { id: true },
     })
@@ -390,10 +378,10 @@ export const creditBucketsForReceipt = async (
           amount: profit,
           type: 'CASH_IN',
           date,
-          notes: notes || null,
+          notes: 'Profit receipt',
         },
       })
-      return
+      return existingProfitBucket
     }
 
     const isSukuk = inv?.account?.type === 'SUKUK'

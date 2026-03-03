@@ -236,6 +236,7 @@ export async function POST(
           date,
           type: source === 'PROFIT' ? 'WITHDRAW_PROFIT' : 'WITHDRAW_PRINCIPAL',
           notes: notes || null,
+          personId: null,
         })
       }
 
