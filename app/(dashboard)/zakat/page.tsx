@@ -437,7 +437,8 @@ export default async function ZakatPage() {
   const isoDay = (d: Date) => startOfDay(d).toISOString().split('T')[0]
   const movementDay = (m: any) => {
     const d = m?.date instanceof Date ? m.date : new Date(m?.date)
-    return Number.isNaN(d.getTime()) ? null : startOfDay(d)
+    if (Number.isNaN(d.getTime())) return null
+    return new Date(d.getFullYear(), d.getMonth(), d.getDate())
   }
   const movementAmount = (m: any) => {
     if (m?.type === 'SELL_RECEIPT') {
@@ -470,16 +471,6 @@ export default async function ZakatPage() {
     return false
   }
 
-  const getBalanceAt = (movements: any[], at: Date) => {
-    const atTime = at.getTime()
-    return movements
-      .filter((m: any) => {
-        const d = movementDay(m)
-        return d ? d.getTime() < atTime : false
-      })
-      .reduce((s, m) => s + Number(m?.amount || 0), 0)
-  }
-
   const buildRowKey = (parts: string[]) => parts.join('|')
   const movementHasRowPaid = (payments: any[], rowKey: string) => {
     return payments.some((p) => typeof p?.notes === 'string' && p.notes.includes(`ZAKAT_ROW=${rowKey}`))
@@ -502,16 +493,7 @@ export default async function ZakatPage() {
           ? bucket.label.split(' \u2022 ').slice(0, 2).join(' \u2022 ')
           : source
 
-      const receiptInBucket = bucket.movements
-        .filter(
-          (m: any) =>
-            m.type === 'CASH_IN' &&
-            m.notes &&
-            String(m.notes).includes('Circlys receipt'),
-        )
-        .reduce((s: number, m: any) => s + Number(m.amount || 0), 0)
-
-      const displayBalance = bucket.balance - receiptInBucket
+      const displayBalance = Number(bucket.balance) || 0
 
       const payments = (Array.isArray(bucket.movements) ? bucket.movements : [])
         .filter((m: any) => m?.type === 'ZAKAT_PAID')
@@ -626,7 +608,7 @@ export default async function ZakatPage() {
             .filter((q) => q.receiptDay.getTime() < periodEndTime)
             .reduce((s, q) => s + q.amount, 0)
 
-          const balanceAtEnd = Math.max(0, getBalanceAt(movements, periodEnd))
+          const balanceAtEnd = Math.max(0, Number(bucket.balance) || 0)
           const ratio = poolOutstanding > 0 ? Math.min(1, balanceAtEnd / poolOutstanding) : 0
           const idleAmount = Math.max(0, r.amount * ratio)
 
@@ -683,7 +665,7 @@ export default async function ZakatPage() {
         for (let i = 0; i < completed; i++) {
           const periodStart = addDays(start, i * 354)
           const periodEnd = addDays(start, (i + 1) * 354)
-          const balanceAtEnd = Math.max(0, getBalanceAt(movements, periodEnd))
+          const balanceAtEnd = Math.max(0, Number(bucket.balance) || 0)
           if (balanceAtEnd <= 0) continue
 
           const rowKey = buildRowKey(['DEPOSIT', bucket.id, isoDay(periodStart), isoDay(periodEnd)])
