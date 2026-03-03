@@ -588,7 +588,7 @@ export default async function DashboardPage({
     if (user.role === 'OWNER') {
       if (!cashAccount) return 0
       const ownerPersonId = user.personId || null
-      const txSum = await prisma.transaction.aggregate({
+      const txs = await prisma.transaction.findMany({
         where: {
           accountId: cashAccount.id,
           date: { gte: yearStart, lt: yearEnd },
@@ -610,9 +610,15 @@ export default async function DashboardPage({
             },
           ],
         } as any,
-        _sum: { amount: true },
+        select: { amount: true },
       })
-      return Math.max(0, Math.abs(Number(txSum._sum.amount || 0)))
+
+      const sum = txs.reduce((s: number, t: any) => {
+        const n = Number(t?.amount)
+        if (!Number.isFinite(n) || n <= 0) return s
+        return s + n
+      }, 0)
+      return Math.max(0, sum)
     }
 
     if (user.role !== 'PARTNER' || !user.personId) return yearlyValueChange.change
