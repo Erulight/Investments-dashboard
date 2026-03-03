@@ -595,31 +595,39 @@ export default async function DashboardPage({
           type: {
             in: ['WITHDRAW_PROFIT', 'SELL_PROFIT_ACCRUED', 'PARTNER_COMMISSION'],
           },
-          AND: [
-            {
-              OR: [
-                { investment: { name: { notIn: DEMO_INVESTMENT_NAMES } } },
-                { investmentId: null },
-              ],
-            },
+          OR: [
+            { investment: { name: { notIn: DEMO_INVESTMENT_NAMES } } },
+            { investmentId: null },
           ],
         } as any,
-        select: { amount: true, type: true, personId: true },
+        select: { amount: true, type: true, personId: true, description: true },
       })
+
+      console.log(`Found ${txs.length} transactions for yearly return:`, txs.map(t => ({ type: t.type, amount: t.amount, personId: t.personId, description: t.description })))
 
       const sum = txs.reduce((s: number, t: any) => {
         const n = Number(t?.amount)
         if (!Number.isFinite(n) || n <= 0) return s
 
-        // Partner commission is owner income even if personId is set on the transaction.
-        if (t?.type === 'PARTNER_COMMISSION') return s + n
+        // Always include partner commission as owner income
+        if (t?.type === 'PARTNER_COMMISSION') {
+          console.log(`Including PARTNER_COMMISSION: ${n}`)
+          return s + n
+        }
 
+        // For other types, only include owner-scoped transactions
         const pid = typeof t?.personId === 'string' ? t.personId : null
         const isOwnerScoped = pid === null || (ownerPersonId ? pid === ownerPersonId : false)
-        if (!isOwnerScoped) return s
+        if (!isOwnerScoped) {
+          console.log(`Excluding ${t.type} (personId: ${pid}, not owner-scoped)`)
+          return s
+        }
 
+        console.log(`Including ${t.type}: ${n}`)
         return s + n
       }, 0)
+      
+      console.log(`Total yearly return sum: ${sum}`)
       return Math.max(0, sum)
     }
 
