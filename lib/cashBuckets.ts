@@ -225,6 +225,7 @@ export const creditBucketsForReceipt = async (
     type,
     notes,
     personId,
+    profitHaulStartDate,
   }: {
     investmentId: string
     amount: number
@@ -233,6 +234,7 @@ export const creditBucketsForReceipt = async (
     type: MovementType
     notes?: string | null
     personId?: string | null
+    profitHaulStartDate?: Date
   }
 ) => {
   const isProfitOnly = type === 'WITHDRAW_PROFIT'
@@ -273,6 +275,40 @@ export const creditBucketsForReceipt = async (
       : allocations.filter((alloc: { principalAllocated: number }) => alloc.principalAllocated > 0)
 
     if (usableAllocations.length === 0) {
+      if (type === 'WITHDRAW_PRINCIPAL' && personId) {
+        const inv = await tx.investment.findUnique({
+          where: { id: investmentId },
+          select: { name: true },
+        })
+        const label = `Sukuk Principal • ${inv?.name || investmentId}`
+        const existing = await tx.cashBucket.findFirst({
+          where: {
+            label,
+            personId: personId,
+          },
+          select: { id: true },
+        })
+
+        if (existing) {
+          await tx.cashBucket.update({
+            where: { id: existing.id },
+            data: { balance: { increment: creditAmount } },
+          })
+
+          await tx.cashBucketMovement.create({
+            data: {
+              cashBucketId: existing.id,
+              investmentId,
+              amount: creditAmount,
+              type,
+              date,
+              notes: notes || null,
+            },
+          })
+          return
+        }
+      }
+
       let haulStartDate = date
       if (personId) {
         const participation = await tx.dealParticipant.findFirst({
@@ -389,7 +425,11 @@ export const creditBucketsForReceipt = async (
     const sukukHaulStart = !Number.isNaN(startDate.getTime())
       ? new Date(startDate.getFullYear(), startDate.getMonth(), startDate.getDate())
       : date
-    const haulStartDate = isSukuk ? sukukHaulStart : date
+    const explicit = profitHaulStartDate instanceof Date ? profitHaulStartDate : profitHaulStartDate ? new Date(profitHaulStartDate as any) : null
+    const explicitHaulStart = explicit && !Number.isNaN(explicit.getTime())
+      ? new Date(explicit.getFullYear(), explicit.getMonth(), explicit.getDate())
+      : null
+    const haulStartDate = explicitHaulStart ?? (isSukuk ? sukukHaulStart : date)
 
     await createCashBucket(tx, {
       amount: profit,

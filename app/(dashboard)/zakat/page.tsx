@@ -524,7 +524,8 @@ export default async function ZakatPage() {
 
           const start = inv.startDate instanceof Date ? inv.startDate : new Date(inv.startDate as any)
           if (Number.isNaN(start.getTime())) return null
-          const duration = diffDaysFloor(startOfDay(start), day)
+          const eligibilityAnchor = user.role === 'PARTNER' ? bucketStart : start
+          const duration = diffDaysFloor(startOfDay(eligibilityAnchor), day)
           if (duration < 354) return null
 
           const amount = movementAmount(m)

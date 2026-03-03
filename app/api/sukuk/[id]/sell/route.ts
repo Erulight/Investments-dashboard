@@ -343,7 +343,7 @@ export async function POST(
           notes: notes || null,
           investmentId: null,
           type: 'CASH_IN',
-          personId: sellerPersonId,
+          personId: null,
         })
       }
 

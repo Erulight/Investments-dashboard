@@ -72,36 +72,41 @@ export async function POST(
         ? investment.dealParticipants
         : []
 
-      const isSoleOwner = participants.length === 1 && participants[0]?.personId === user.personId
-      if (!isSoleOwner) {
-        return NextResponse.json({ error: 'This Sukuk is not fully owned by you' }, { status: 403 })
+      const partnerParticipant = participants.find((p: any) => p?.personId === user.personId)
+      if (!partnerParticipant) {
+        return NextResponse.json(
+          { error: 'You are not a participant in this deal' },
+          { status: 403 },
+        )
       }
     }
 
-    if (source === 'PRINCIPAL' && amount > investment.principalAmount) {
-      return NextResponse.json(
-        { error: 'Amount exceeds principal amount' },
-        { status: 400 }
-      )
-    }
-
-    if (source === 'PROFIT') {
-      const receivable = Number(investment.receivableAmount || 0)
-      const received = Number(investment.totalReceived || 0)
-      const remainingProfit = Math.max(0, (Number.isFinite(receivable) ? receivable : 0) - (Number.isFinite(received) ? received : 0))
-
-      if (receivable <= 0.000001) {
+    if (user.role === 'OWNER') {
+      if (source === 'PRINCIPAL' && amount > investment.principalAmount) {
         return NextResponse.json(
-          { error: 'Profit receivable is not set for this deal' },
-          { status: 400 },
+          { error: 'Amount exceeds principal amount' },
+          { status: 400 }
         )
       }
 
-      if (amount > remainingProfit + 0.000001) {
-        return NextResponse.json(
-          { error: 'Amount exceeds remaining profit receivable' },
-          { status: 400 },
-        )
+      if (source === 'PROFIT') {
+        const receivable = Number(investment.receivableAmount || 0)
+        const received = Number(investment.totalReceived || 0)
+        const remainingProfit = Math.max(0, (Number.isFinite(receivable) ? receivable : 0) - (Number.isFinite(received) ? received : 0))
+
+        if (receivable <= 0.000001) {
+          return NextResponse.json(
+            { error: 'Profit receivable is not set for this deal' },
+            { status: 400 },
+          )
+        }
+
+        if (amount > remainingProfit + 0.000001) {
+          return NextResponse.json(
+            { error: 'Amount exceeds remaining profit receivable' },
+            { status: 400 },
+          )
+        }
       }
     }
 
@@ -207,18 +212,22 @@ export async function POST(
         })
       }
 
-      const updatedInvestment = await tx.investment.update({
-        where: { id },
-        data: {
-          totalReceived: source === 'PROFIT'
-            ? investment.totalReceived + amount
-            : investment.totalReceived,
-          principalAmount: source === 'PRINCIPAL'
-            ? investment.principalAmount - amount
-            : investment.principalAmount,
-          currentValue: Math.max(0, investment.currentValue - amount),
-        },
-      })
+      let updatedInvestment = investment
+
+      if (user.role === 'OWNER') {
+        updatedInvestment = await tx.investment.update({
+          where: { id },
+          data: {
+            totalReceived: source === 'PROFIT'
+              ? investment.totalReceived + amount
+              : investment.totalReceived,
+            principalAmount: source === 'PRINCIPAL'
+              ? investment.principalAmount - amount
+              : investment.principalAmount,
+            currentValue: Math.max(0, investment.currentValue - amount),
+          },
+        })
+      }
 
       const scopeKey = user.role === 'OWNER' ? 'OWNER' : user.personId!
       const cashBalanceKey = user.role === 'OWNER' ? CASH_BALANCE_KEY : `${CASH_BALANCE_KEY}:${scopeKey}`
@@ -245,6 +254,48 @@ export async function POST(
       }
 
       if (user.role === 'PARTNER') {
+        const partnerPersonId = user.personId!
+        const participants = Array.isArray(investment.dealParticipants)
+          ? investment.dealParticipants
+          : []
+        const partnerParticipant = participants.find((p: any) => p?.personId === partnerPersonId)
+        if (!partnerParticipant) {
+          throw new Error('Forbidden')
+        }
+
+        const reopenedAtRaw = investment.reopenedAt ? new Date(investment.reopenedAt) : null
+        const reopenedAt = reopenedAtRaw && !Number.isNaN(reopenedAtRaw.getTime()) ? reopenedAtRaw : null
+
+        const sums = await tx.cashBucketMovement.groupBy({
+          by: ['type'],
+          where: {
+            investmentId: investment.id,
+            type: { in: ['WITHDRAW_PROFIT', 'WITHDRAW_PRINCIPAL'] },
+            cashBucket: { personId: partnerPersonId },
+            ...(reopenedAt ? { createdAt: { gte: reopenedAt } } : {}),
+          } as any,
+          _sum: { amount: true },
+        })
+
+        const withdrawnProfit = Math.abs(Number(sums.find((s: any) => s.type === 'WITHDRAW_PROFIT')?._sum?.amount || 0))
+        const withdrawnPrincipal = Math.abs(Number(sums.find((s: any) => s.type === 'WITHDRAW_PRINCIPAL')?._sum?.amount || 0))
+
+        const principalCapRaw = Number(partnerParticipant.investedAmount || 0)
+        const profitCapRaw = Number(partnerParticipant.receivable || 0)
+
+        const principalCap = Number.isFinite(principalCapRaw) ? principalCapRaw : 0
+        const profitCap = Number.isFinite(profitCapRaw) ? profitCapRaw : 0
+
+        const remainingPrincipal = Math.max(0, principalCap - withdrawnPrincipal)
+        const remainingProfit = Math.max(0, profitCap - withdrawnProfit)
+
+        if (source === 'PRINCIPAL' && amount > remainingPrincipal + 0.000001) {
+          throw new Error('AMOUNT_EXCEEDS_PARTNER_PRINCIPAL')
+        }
+        if (source === 'PROFIT' && amount > remainingProfit + 0.000001) {
+          throw new Error('AMOUNT_EXCEEDS_PARTNER_PROFIT')
+        }
+
         await creditBucketsForReceipt(tx, {
           investmentId: investment.id,
           amount,
@@ -252,10 +303,41 @@ export async function POST(
           date,
           type: source === 'PROFIT' ? 'WITHDRAW_PROFIT' : 'WITHDRAW_PRINCIPAL',
           notes: notes || null,
-          personId: user.personId || null,
+          personId: partnerPersonId,
+          profitHaulStartDate: partnerParticipant.acquiredAt ? new Date(partnerParticipant.acquiredAt) : undefined,
         })
 
-        // Partner withdrawal acts as the "close" event for settle-debt sales:
+        await tx.dealParticipant.update({
+          where: { id: partnerParticipant.id },
+          data: {
+            investedAmount: source === 'PRINCIPAL'
+              ? Math.max(0, Number(partnerParticipant.investedAmount || 0) - amount)
+              : partnerParticipant.investedAmount,
+            currentValue: source === 'PRINCIPAL'
+              ? Math.max(0, Number(partnerParticipant.currentValue || 0) - amount)
+              : partnerParticipant.currentValue,
+            receivable: source === 'PROFIT'
+              ? Math.max(0, Number(partnerParticipant.receivable || 0) - amount)
+              : partnerParticipant.receivable,
+            profit: source === 'PROFIT'
+              ? Math.max(0, Number(partnerParticipant.profit || 0) - amount)
+        else if (error.message === 'AMOUNT_EXCEEDS_PARTNER_PRINCIPAL') {
+        statusCode = 400
+      } else if (error.message === 'AMOUNT_EXCEEDS_PARTNER_PROFIT') {       : partnerParticipant.profit,
+        statusCode = 400
+            },
+    }        })
+
+
+       
+        // Partner withdrawal a Error
+          ? error.message ===c'AMOUNT_tXCEEDS_PARTNER_PRINCIPAL'
+            ? 'Amount exceeds your remaining principal'
+            : es as.message === 'AMOUNT_EXCEEDS_PARTNER_PROFIT'
+              t 'Amounthexceeds your remaining profit'
+              : e "close" eve
+  n       t for settle-debt sale,
+     s:
         // settle the owner's pending profit/commission into cash.
         await settleOwnerOnPartnerWithdraw()
       } else {
