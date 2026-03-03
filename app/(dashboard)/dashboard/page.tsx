@@ -603,31 +603,13 @@ export default async function DashboardPage({
         select: { amount: true, type: true, personId: true, description: true },
       })
 
-      console.log(`Found ${txs.length} transactions for yearly return:`, txs.map(t => ({ type: t.type, amount: t.amount, personId: t.personId, description: t.description })))
-
       const sum = txs.reduce((s: number, t: any) => {
         const n = Number(t?.amount)
         if (!Number.isFinite(n) || n <= 0) return s
 
-        // Always include partner commission as owner income
-        if (t?.type === 'PARTNER_COMMISSION') {
-          console.log(`Including PARTNER_COMMISSION: ${n}`)
-          return s + n
-        }
-
-        // For other types, only include owner-scoped transactions
-        const pid = typeof t?.personId === 'string' ? t.personId : null
-        const isOwnerScoped = pid === null || (ownerPersonId ? pid === ownerPersonId : false)
-        if (!isOwnerScoped) {
-          console.log(`Excluding ${t.type} (personId: ${pid}, not owner-scoped)`)
-          return s
-        }
-
-        console.log(`Including ${t.type}: ${n}`)
+        // Always include all transaction types - no personId filtering
         return s + n
       }, 0)
-      
-      console.log(`Total yearly return sum: ${sum}`)
       return Math.max(0, sum)
     }
 
