@@ -598,24 +598,26 @@ export default async function DashboardPage({
           AND: [
             {
               OR: [
-                { personId: null },
-                ...(ownerPersonId ? [{ personId: ownerPersonId }] : []),
-              ],
-            },
-            {
-              OR: [
                 { investment: { name: { notIn: DEMO_INVESTMENT_NAMES } } },
                 { investmentId: null },
               ],
             },
           ],
         } as any,
-        select: { amount: true },
+        select: { amount: true, type: true, personId: true },
       })
 
       const sum = txs.reduce((s: number, t: any) => {
         const n = Number(t?.amount)
         if (!Number.isFinite(n) || n <= 0) return s
+
+        // Partner commission is owner income even if personId is set on the transaction.
+        if (t?.type === 'PARTNER_COMMISSION') return s + n
+
+        const pid = typeof t?.personId === 'string' ? t.personId : null
+        const isOwnerScoped = pid === null || (ownerPersonId ? pid === ownerPersonId : false)
+        if (!isOwnerScoped) return s
+
         return s + n
       }, 0)
       return Math.max(0, sum)
