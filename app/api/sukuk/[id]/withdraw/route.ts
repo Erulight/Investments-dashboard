@@ -146,23 +146,35 @@ export async function POST(
 
         if (!saleTx) return
         const meta = parseMetadata(saleTx.metadata)
-        if (meta?.paymentMode !== 'SETTLE_DEBT') return
-
         const buyerPersonId = typeof meta?.buyerPersonId === 'string' ? meta.buyerPersonId : null
         if (!buyerPersonId || buyerPersonId !== user.personId) return
 
+        const sellerPersonId = typeof saleTx.personId === 'string' ? saleTx.personId : null
+
         const profit = Number(meta?.accruedProfitAtSale ?? 0)
         const commission = Number(meta?.commissionAmount ?? 0)
-        const pending = (Number.isFinite(profit) ? Math.max(0, profit) : 0)
+        const pendingFromMetadata = (Number.isFinite(profit) ? Math.max(0, profit) : 0)
           + (Number.isFinite(commission) ? Math.max(0, commission) : 0)
 
-        if (pending <= 0.000001) return
+        const ownerParticipant = sellerPersonId
+          ? await tx.dealParticipant.findFirst({
+              where: {
+                investmentId: investment.id,
+                personId: sellerPersonId,
+              },
+              select: { id: true, receivable: true },
+            })
+          : null
+        const pendingFromParticipantRaw = Number(ownerParticipant?.receivable ?? 0)
+        const pendingFromParticipant = Number.isFinite(pendingFromParticipantRaw)
+          ? Math.max(0, pendingFromParticipantRaw)
+          : 0
 
-        const alreadySettled = transactions.some((t: any) => {
-          if (t.type !== 'SOLD_DEAL_SETTLEMENT') return false
-          const m = parseMetadata(t.metadata)
-          return m?.sourceTxId === saleTx.id
-        })
+        const totalPending = Math.max(pendingFromMetadata, pendingFromParticipant)
+
+        if (totalPending <= 0.000001) return
+
+        const alreadySettled = transactions.some((t: any) => t.type === 'SOLD_DEAL_SETTLEMENT')
         if (alreadySettled) return
 
         const cashAccount = await tx.account.findFirst({
@@ -182,14 +194,14 @@ export async function POST(
           : new Date(saleDate.getFullYear(), saleDate.getMonth(), saleDate.getDate())
 
         await createCashBucket(tx, {
-          amount: pending,
+          amount: totalPending,
           haulStartDate,
           currency: investment.account?.currency || 'SAR',
           label: `Sold Deal Settlement · ${investment.name}`,
           date,
           notes: null,
           investmentId: investment.id,
-          personId: saleTx.personId || null,
+          personId: null,
           type: 'CASH_IN',
         })
 
@@ -197,19 +209,48 @@ export async function POST(
           data: {
             accountId: cashAccount.id,
             investmentId: investment.id,
-            personId: saleTx.personId || null,
+            personId: null,
             type: 'SOLD_DEAL_SETTLEMENT',
-            amount: Math.abs(pending),
+            amount: Math.abs(totalPending),
             date,
             description: 'Settlement of sold deal profit/commission on partner withdrawal',
             metadata: JSON.stringify({
               sourceTxId: saleTx.id,
               buyerPersonId,
-              paymentMode: 'SETTLE_DEBT',
-              accruedProfitAtSale: pending,
+              sellerPersonId,
+              paymentMode: meta?.paymentMode ?? null,
+              pendingFromMetadata,
+              pendingFromParticipant,
+              totalPending,
             }),
           },
         })
+
+        const cashSetting = await tx.systemSetting.findUnique({ where: { key: CASH_BALANCE_KEY } })
+        const currentCashRaw = cashSetting ? Number(cashSetting.value) : 0
+        const currentCash = Number.isFinite(currentCashRaw) ? currentCashRaw : 0
+        const nextCash = currentCash + totalPending
+        if (cashSetting) {
+          await tx.systemSetting.update({
+            where: { key: CASH_BALANCE_KEY },
+            data: { value: nextCash.toString() },
+          })
+        } else {
+          await tx.systemSetting.create({
+            data: {
+              key: CASH_BALANCE_KEY,
+              value: nextCash.toString(),
+              description: 'Available cash balance for investments',
+            },
+          })
+        }
+
+        if (ownerParticipant) {
+          await tx.dealParticipant.update({
+            where: { id: ownerParticipant.id },
+            data: { receivable: 0 },
+          })
+        }
       }
 
       let updatedInvestment = investment
