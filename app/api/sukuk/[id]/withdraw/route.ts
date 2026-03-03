@@ -36,6 +36,16 @@ export async function POST(
       return NextResponse.json({ error: 'Invalid date' }, { status: 400 })
     }
 
+    const today = new Date()
+    const todayStart = new Date(today.getFullYear(), today.getMonth(), today.getDate())
+    const dateStart = new Date(date.getFullYear(), date.getMonth(), date.getDate())
+    if (dateStart.getTime() > todayStart.getTime()) {
+      return NextResponse.json(
+        { error: 'Withdrawal date cannot be in the future' },
+        { status: 400 },
+      )
+    }
+
     if (!Number.isFinite(amount) || amount <= 0) {
       return NextResponse.json({ error: 'Amount must be greater than 0' }, { status: 400 })
     }
