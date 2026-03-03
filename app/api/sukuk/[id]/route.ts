@@ -409,6 +409,21 @@ export async function DELETE(
     
     // Delete the sukuk and reverse cash/bucket effects
     await prisma.$transaction(async (tx) => {
+      // Capture any profit buckets that were created for this Sukuk so we can
+      // remove them after reversing movements.
+      const profitBuckets = await tx.cashBucket.findMany({
+        where: {
+          label: { startsWith: 'Profit \u2022' },
+          movements: {
+            some: {
+              investmentId: id,
+              type: 'CASH_IN',
+            },
+          },
+        },
+        select: { id: true },
+      })
+      const profitBucketIds = profitBuckets.map((b: any) => b.id)
       const settleDebtSales = await tx.transaction.findMany({
         where: {
           investmentId: id,
@@ -550,6 +565,15 @@ export async function DELETE(
             id: {
               in: commissionMovements.map((m) => m.id),
             },
+          },
+        })
+      }
+
+      // Remove any profit buckets that were created for this Sukuk.
+      if (profitBucketIds.length > 0) {
+        await tx.cashBucket.deleteMany({
+          where: {
+            id: { in: profitBucketIds },
           },
         })
       }

@@ -206,6 +206,29 @@ export async function POST(
         },
       })
 
+      // Remove any profit buckets that were created for this Sukuk for this scope.
+      const profitBuckets = await tx.cashBucket.findMany({
+        where: {
+          label: `Profit \u2022 ${investment.name}`,
+          personId: scopePersonId,
+          movements: {
+            some: {
+              investmentId: id,
+              type: 'CASH_IN',
+            },
+          },
+        },
+        select: { id: true },
+      })
+
+      if (profitBuckets.length > 0) {
+        await tx.cashBucket.deleteMany({
+          where: {
+            id: { in: profitBuckets.map((b: any) => b.id) },
+          },
+        })
+      }
+
       await logAudit(tx, {
         userId: user.id,
         action: 'UPDATE',
