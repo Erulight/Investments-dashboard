@@ -412,176 +412,209 @@ export default async function ZakatPage() {
 
   const rows: BucketRow[] = buckets
     .map((bucket: any): BucketRow | null => {
-    const lastPaid = bucket.lastZakatPaidDate ? new Date(bucket.lastZakatPaidDate) : null
-    const bucketStart = new Date(bucket.haulStartDate)
+      const now = new Date()
 
-    // Haul should roll forward even if zakat wasn't paid.
-    // lastZakatPaidDate is used only to determine whether the most recent completed haul is already settled.
-    const effectiveStart = bucketStart
+      const bucketStart = new Date(bucket.haulStartDate)
+      if (Number.isNaN(bucketStart.getTime())) return null
 
-    const effectiveHaulStart = effectiveStart
-    const now = new Date()
+      const lastPaid = bucket.lastZakatPaidDate ? new Date(bucket.lastZakatPaidDate) : null
+      const lastPaidTime =
+        lastPaid && !Number.isNaN(lastPaid.getTime()) ? lastPaid.getTime() : null
 
-    const daysSinceStart = diffDaysFloor(effectiveHaulStart, now)
-    const haulIndex = Math.floor(daysSinceStart / 354)
-    const currentHaulStart = addDays(effectiveHaulStart, haulIndex * 354)
-    const currentHaulEnd = addDays(currentHaulStart, 354)
-    const haulCompleted = now.getTime() >= currentHaulEnd.getTime()
+      // Haul 1 always starts from bucket.haulStartDate.
+      // Subsequent hauls are 354-day blocks from this same anchor.
+      const daysSinceStart = diffDaysFloor(bucketStart, now)
+      const completedHauls = Math.floor(daysSinceStart / 354)
 
-    // We charge zakat for the most recent completed haul that is not covered by lastZakatPaidDate.
-    const lastPaidTime = lastPaid && !Number.isNaN(lastPaid.getTime()) ? lastPaid.getTime() : null
-    const mostRecentCompletedIndex = haulCompleted ? haulIndex : Math.max(0, haulIndex - 1)
-    const dueHaulStart = addDays(effectiveHaulStart, mostRecentCompletedIndex * 354)
-    const dueHaulEnd = addDays(dueHaulStart, 354)
-    const dueHaulCompleted = now.getTime() >= dueHaulEnd.getTime()
-    const dueIsUnpaid = dueHaulCompleted && (!lastPaidTime || lastPaidTime < dueHaulEnd.getTime())
+      const isProfitBucket =
+        typeof bucket.label === 'string' && bucket.label.startsWith('Profit  b7')
+      const isCirclys =
+        typeof bucket.label === 'string' && bucket.label.startsWith('Circlys')
 
-    // FIX 4: Exclude INVEST_OUT from idle cash base calculation
-    // INVEST_OUT represents deployed money, not spent money - it should not reduce zakatable base
-    const idleMovements = bucket.movements.filter((movement: any) => {
-      const movementDate = new Date(movement.date)
-      if (movement.type === 'ZAKAT_PAID') return false
-      if (movement.type === 'INVEST_OUT') return false // FIX 4: Exclude investments from idle base
-      if (movementDate < dueHaulStart) return false
-      if (movementDate > dueHaulEnd) return false
-      // Exclude Circlys receipt payout — it shouldn't count as idle cash
-      // for this bucket's haul period (it arrived later and inflates the balance)
-      if (movement.type === 'CASH_IN' && movement.notes && String(movement.notes).includes('Circlys receipt')) return false
-      return true
-    })
+      let totalIdleBase = 0
+      let totalReceipts = 0
+      const allDueReceipts: any[] = []
 
-    const idleBase = Math.max(
-      0,
-      idleMovements.reduce((sum: number, movement: any) => sum + movement.amount, 0)
-    )
+      // Iterate over ALL completed 354-day periods since haulStartDate.
+      // For each period [periodStart, periodEnd):
+      //   - If lastZakatPaidDate >= periodEnd: that haul is already settled  b7 skip.
+      //   - Otherwise, compute idleBase and receipts only from movements whose
+      //     date falls inside this specific period.
+      for (let i = 0; i < completedHauls; i++) {
+        const periodStart = addDays(bucketStart, i * 354)
+        const periodEnd = addDays(periodStart, 354)
 
-    // FIX 3: Replace dueHaulEnd filter with per-movement hawl age check
-    // FIX 5: Exclude receipt movements from defaulted/late investments  
-    // FIX 7: Confirm Ijarah exclusion applies to all receipt movement types
-    const rawReceipts = bucket.movements.filter((movement: any) => {
-      if (!receiptTypes.has(movement.type)) return false
-      if (!movement.investmentId) return false
-      if (!movement.investment) return false
-      
-      // FIX 7: Exclude ALL Ijarah receipt movements (already correct)
-      if (movement.investment?.isIjarah) return false
-      
-      // FIX 5: Exclude receipts from defaulted/late investments
-      // Check if investment has recovery status indicating default/written-off
-      if (movement.investment?.category === 'DEFAULT_LEGAL' || 
-          movement.investment?.category === 'WRITTEN_OFF') return false
-      
-      // Check metadata for recovery status if category doesn't indicate it
-      const metadata = parseMetadata(movement.investment?.metadata)
-      if (metadata?.recoveryStatus === 'DEFAULT_LEGAL' || 
-          metadata?.recoveryStatus === 'WRITTEN_OFF') return false
-      
-      if (movement.investment?.reopenedAt) {
-        const reopenedAt = new Date(movement.investment.reopenedAt)
-        if (new Date(movement.createdAt) < reopenedAt) return false
-      }
-      
-      const movementDate = new Date(movement.date)
-      
-      // FIX 3: Replace window filter with per-movement hawl age check
-      // A receipt is zakatable if:
-      // 1. Days from bucket.haulStartDate to movement.date >= 354
-      // 2. lastZakatPaidDate is null OR movement is after lastZakatPaidDate
-      const daysSinceHaulStart = diffDaysFloor(bucketStart, movementDate)
-      if (daysSinceHaulStart < 354) return false // Movement hasn't completed a full hawl yet
-      
-      // Check if movement is after last zakat payment
-      const lastPaidTime = lastPaid && !Number.isNaN(lastPaid.getTime()) ? lastPaid.getTime() : null
-      if (lastPaidTime && movementDate.getTime() <= lastPaidTime) return false
-      
-      return true
-    })
-    const dedupedMap = new Map<string, typeof rawReceipts[number]>()
-    rawReceipts.forEach((movement: any) => {
-      const key = [
-        movement.investmentId,
-        movement.type,
-        movement.amount,
-        new Date(movement.date).toISOString().split('T')[0],
-      ].join('|')
-      if (!dedupedMap.has(key)) {
-        dedupedMap.set(key, movement)
-      }
-    })
-    const dueReceipts = Array.from(dedupedMap.values())
-    const receiptsTotal = dueReceipts.reduce((sum: number, m: any) => sum + m.amount, 0)
-    const zakatBase = idleBase + receiptsTotal
-    const zakatDue = dueIsUnpaid ? zakatBase * 0.025 : 0
+        // If zakat for this period was already paid (payment on/after period end),
+        // we treat this haul as settled.
+        if (lastPaidTime && lastPaidTime >= periodEnd.getTime()) {
+          continue
+        }
 
-    const payments = bucket.movements
-      .filter((movement: any) => movement.type === 'ZAKAT_PAID')
-      .sort((a: any, b: any) => new Date(b.date).getTime() - new Date(a.date).getTime())
-
-    const lastPayment = payments[0]
-
-    const alloc = bucket.allocations?.[0]
-    const source = alloc?.investment?.name
-      || bucket.label
-      || 'General'
-    const sourceType = alloc?.investment?.account?.type || 'OTHER'
-
-    // Group Circlys monthly buckets by investment name
-    // Labels look like "Circlys • February 2025 • 2025-03"
-    const isCirclys = typeof bucket.label === 'string' && bucket.label.startsWith('Circlys')
-    const sourceGroup = isCirclys && bucket.label
-      ? bucket.label.split(' • ').slice(0, 2).join(' • ')
-      : source
-
-    // Subtract Circlys receipt payout from displayed balance so it
-    // reflects only the actual monthly contributions, not the full ROSCA pot.
-    const receiptInBucket = bucket.movements
-      .filter((m: any) => m.type === 'CASH_IN' && m.notes && String(m.notes).includes('Circlys receipt'))
-      .reduce((s: number, m: any) => s + m.amount, 0)
-    const displayBalance = bucket.balance - receiptInBucket
-
-    // Hide buckets that are effectively empty (cash was added then fully invested out)
-    // to avoid cluttering the zakat dashboard with many "General" 0 rows.
-    const isEffectivelyEmpty =
-      Number(bucket.balance || 0) <= 0 &&
-      idleBase <= 0 &&
-      receiptsTotal <= 0 &&
-      zakatDue <= 0 &&
-      dueReceipts.length === 0 &&
-      payments.length === 0
-
-    if (isEffectivelyEmpty) return null
-
-    return {
-      id: bucket.id,
-      label: bucket.label,
-      currency: bucket.currency,
-      balance: displayBalance,
-      haulStartDate: effectiveHaulStart.toISOString().split('T')[0],
-      lastZakatPaidDate: bucket.lastZakatPaidDate
-        ? bucket.lastZakatPaidDate.toISOString().split('T')[0]
-        : null,
-      receiptsTotal,
-      zakatDue,
-      lastPayment: lastPayment
-        ? {
-            id: lastPayment.id,
-            date: new Date(lastPayment.date).toISOString().split('T')[0],
-            amount: Math.abs(lastPayment.amount),
+        // Idle cash base for this haul period
+        const idleMovements = bucket.movements.filter((movement: any) => {
+          const movementDate = new Date(movement.date)
+          if (Number.isNaN(movementDate.getTime())) return false
+          if (movementDate < periodStart || movementDate >= periodEnd) return false
+          if (movement.type === 'ZAKAT_PAID') return false
+          if (movement.type === 'INVEST_OUT') return false
+          // Exclude Circlys receipt payout from idle base
+          if (
+            movement.type === 'CASH_IN' &&
+            movement.notes &&
+            String(movement.notes).includes('Circlys receipt')
+          ) {
+            return false
           }
-        : null,
-      haulCompleteDate: addDays(effectiveHaulStart, 354).toISOString().split('T')[0],
-      idleBase,
-      haulCompleted,
-      source,
-      sourceGroup,
-      sourceType,
-      dueReceipts: dueReceipts.map((m) => ({
-        date: new Date(m.date).toISOString().split('T')[0],
-        amount: m.amount,
-        type: m.type,
-        investmentName: m.investment?.name || null,
-      })),
-    }
+          return true
+        })
+
+        const idleBaseForPeriod = Math.max(
+          0,
+          idleMovements.reduce(
+            (sum: number, movement: any) => sum + Number(movement.amount || 0),
+            0,
+          ),
+        )
+
+        // Receipts per haul period (BUG 1 + BUG 3)
+        const periodReceipts = bucket.movements.filter((movement: any) => {
+          const movementDate = new Date(movement.date)
+          if (Number.isNaN(movementDate.getTime())) return false
+          if (movementDate < periodStart || movementDate >= periodEnd) return false
+
+          // Decide if this movement is a receipt:
+          // - For profit buckets ("Profit  b7 ..."), CASH_IN is itself the profit receipt.
+          // - For other buckets, use classic receiptTypes (WITHDRAW_PROFIT, etc).
+          let isReceipt = false
+          if (isProfitBucket && movement.type === 'CASH_IN') {
+            isReceipt = true
+          } else if (receiptTypes.has(movement.type)) {
+            isReceipt = true
+          }
+          if (!isReceipt) return false
+
+          // For normal receipt movements, enforce investment-based filters
+          // (exclude Ijarah and defaulted/written-off deals). For pure profit
+          // buckets without an investment attached, skip these checks.
+          if (!isProfitBucket) {
+            if (!movement.investmentId || !movement.investment) return false
+            if (movement.investment?.isIjarah) return false
+
+            const metadata = parseMetadata(movement.investment?.metadata)
+            const category = movement.investment?.category
+            if (
+              category === 'DEFAULT_LEGAL' ||
+              category === 'WRITTEN_OFF' ||
+              metadata?.recoveryStatus === 'DEFAULT_LEGAL' ||
+              metadata?.recoveryStatus === 'WRITTEN_OFF'
+            ) {
+              return false
+            }
+
+            if (movement.investment?.reopenedAt) {
+              const reopenedAt = new Date(movement.investment.reopenedAt)
+              if (new Date(movement.createdAt) < reopenedAt) return false
+            }
+          }
+
+          return true
+        })
+
+        periodReceipts.forEach((m: any) => allDueReceipts.push(m))
+
+        const receiptsForPeriod = periodReceipts.reduce(
+          (sum: number, m: any) => sum + Number(m.amount || 0),
+          0,
+        )
+
+        totalIdleBase += idleBaseForPeriod
+        totalReceipts += receiptsForPeriod
+      }
+
+      const zakatBase = totalIdleBase + totalReceipts
+      const hasUnpaidHaul = completedHauls > 0 && zakatBase > 0
+      const zakatDue = hasUnpaidHaul ? zakatBase * 0.025 : 0
+
+      // Current (open) haul window  b7 purely informational
+      const currentHaulStart = addDays(bucketStart, completedHauls * 354)
+      const currentHaulEnd = addDays(currentHaulStart, 354)
+      const haulCompleted = now.getTime() >= currentHaulEnd.getTime()
+
+      const payments = bucket.movements
+        .filter((movement: any) => movement.type === 'ZAKAT_PAID')
+        .sort(
+          (a: any, b: any) =>
+            new Date(b.date).getTime() - new Date(a.date).getTime(),
+        )
+
+      const lastPayment = payments[0]
+
+      const alloc = bucket.allocations?.[0]
+      const source = alloc?.investment?.name || bucket.label || 'General'
+      const sourceType = alloc?.investment?.account?.type || 'OTHER'
+
+      const sourceGroup =
+        isCirclys && bucket.label
+          ? bucket.label.split('  b7 ').slice(0, 2).join('  b7 ')
+          : source
+
+      // Subtract Circlys receipt payout from displayed balance to show only contributions.
+      const receiptInBucket = bucket.movements
+        .filter(
+          (m: any) =>
+            m.type === 'CASH_IN' &&
+            m.notes &&
+            String(m.notes).includes('Circlys receipt'),
+        )
+        .reduce((s: number, m: any) => s + Number(m.amount || 0), 0)
+
+      const displayBalance = bucket.balance - receiptInBucket
+
+      const isEffectivelyEmpty =
+        Number(bucket.balance || 0) <= 0 &&
+        totalIdleBase <= 0 &&
+        totalReceipts <= 0 &&
+        zakatDue <= 0 &&
+        allDueReceipts.length === 0 &&
+        payments.length === 0
+
+      if (isEffectivelyEmpty) return null
+
+      return {
+        id: bucket.id,
+        label: bucket.label,
+        currency: bucket.currency,
+        balance: displayBalance,
+        haulStartDate: bucketStart.toISOString().split('T')[0],
+        lastZakatPaidDate: bucket.lastZakatPaidDate
+          ? bucket.lastZakatPaidDate.toISOString().split('T')[0]
+          : null,
+        receiptsTotal: totalReceipts,
+        zakatDue,
+        lastPayment: lastPayment
+          ? {
+              id: lastPayment.id,
+              date: new Date(lastPayment.date).toISOString().split('T')[0],
+              amount: Math.abs(Number(lastPayment.amount || 0)),
+            }
+          : null,
+        // Show the end date of the most recently completed haul
+        haulCompleteDate: addDays(
+          bucketStart,
+          completedHauls * 354,
+        ).toISOString().split('T')[0],
+        idleBase: totalIdleBase,
+        haulCompleted,
+        source,
+        sourceGroup,
+        sourceType,
+        dueReceipts: allDueReceipts.map((m: any) => ({
+          date: new Date(m.date).toISOString().split('T')[0],
+          amount: Number(m.amount || 0),
+          type: m.type,
+          investmentName: m.investment?.name || null,
+        })),
+      }
     })
     .filter((row: BucketRow | null): row is BucketRow => row !== null)
 
