@@ -31,6 +31,8 @@ export async function POST(req: NextRequest) {
     const bucketId = typeof body.bucketId === 'string' ? body.bucketId : ''
     const amount = Number(body.amount)
     const date = body.date ? new Date(body.date) : new Date()
+    const periodEndRaw = body.periodEnd
+    const periodEnd = periodEndRaw ? new Date(periodEndRaw) : null
     const notes = typeof body.notes === 'string' ? body.notes : ''
 
     if (!bucketId) {
@@ -56,11 +58,18 @@ export async function POST(req: NextRequest) {
         return NextResponse.json({ error: 'Bucket balance is too low' }, { status: 400 })
       }
 
+      // lastZakatPaidDate represents the most recent haul period end that has
+      // been settled. When paying for a specific haul row, the client passes
+      // periodEnd so we can anchor future haul calculations correctly even if
+      // the payment happens later than the haul's completion date.
+      const lastZakatDateToStore =
+        periodEnd && !Number.isNaN(periodEnd.getTime()) ? periodEnd : date
+
       await tx.cashBucket.update({
         where: { id: bucketId },
         data: {
           balance: { decrement: amount },
-          lastZakatPaidDate: date,
+          lastZakatPaidDate: lastZakatDateToStore,
         },
       })
 

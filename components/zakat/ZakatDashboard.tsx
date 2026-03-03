@@ -18,6 +18,7 @@ type ReceiptEntry = {
 
 type BucketRow = {
   id: string
+  periodIndex: number
   label?: string | null
   currency: string
   balance: number
@@ -27,6 +28,7 @@ type BucketRow = {
   idleBase: number
   receiptsTotal: number
   zakatDue: number
+  isPaid: boolean
   haulCompleted: boolean
   source: string
   sourceGroup: string
@@ -227,6 +229,7 @@ export function ZakatDashboard({
           amount,
           date: isoDate,
           notes: payNotes,
+          periodEnd: payTarget.haulCompleteDate,
         }),
       })
       const data = await res.json().catch(() => ({}))
@@ -504,12 +507,13 @@ export function ZakatDashboard({
                       if (isExpanded) {
                         groupBuckets.forEach(bucket => {
                           // Extract month label (last part after •)
-                          const monthLabel = bucket.label?.split(' • ').slice(2).join(' • ') || bucket.label || ''
+                          const monthLabelBase = bucket.label?.split(' • ').slice(2).join(' • ') || bucket.label || ''
+                          const monthLabel = `${monthLabelBase || bucket.id.slice(0, 8)} • Hawl ${bucket.periodIndex}`
                           rows.push(
                             <tr key={bucket.id} className="hover:bg-gray-50 transition-colors bg-white">
                               <td className="py-2 px-3 pl-10">
                                 <div className="text-sm text-gray-700" title={bucket.label || ''}>
-                                  {monthLabel || bucket.id.slice(0, 8)}
+                                  {monthLabel}
                                 </div>
                               </td>
                               <td className="py-2 px-3 text-gray-600 text-xs whitespace-nowrap">{bucket.haulStartDate}</td>
@@ -524,15 +528,21 @@ export function ZakatDashboard({
                               </td>
                               <td className="py-2 px-3 text-center">
                                 <span className={`inline-flex px-2 py-0.5 rounded-full text-[11px] font-medium ${
-                                  bucket.haulCompleted ? 'bg-green-50 text-green-700' : 'bg-amber-50 text-amber-700'
+                                  bucket.isPaid
+                                    ? 'bg-green-50 text-green-700'
+                                    : bucket.zakatDue > 0
+                                    ? 'bg-amber-50 text-amber-700'
+                                    : 'bg-gray-100 text-gray-500'
                                 }`}>
-                                  {bucket.haulCompleted ? 'Complete' : 'Pending'}
+                                  {bucket.isPaid ? 'Paid' : bucket.zakatDue > 0 ? 'Has Due' : 'No Activity'}
                                 </span>
                               </td>
                               <td className="py-2 px-3 text-right">
                                 <div className="flex items-center justify-end gap-1">
                                   <Button size="sm" variant="secondary" onClick={() => openDetails(bucket)}>Details</Button>
-                                  <Button size="sm" variant="primary" disabled={bucket.zakatDue <= 0} onClick={() => openPay(bucket)}>Pay</Button>
+                                  {!bucket.isPaid && bucket.zakatDue > 0 && (
+                                    <Button size="sm" variant="primary" onClick={() => openPay(bucket)}>Pay</Button>
+                                  )}
                                   {bucket.lastPayment && (
                                     <Button size="sm" variant="ghost" disabled={rollbackLoading} onClick={() => handleRollback(bucket)}>Undo</Button>
                                   )}
@@ -549,8 +559,8 @@ export function ZakatDashboard({
                       rows.push(
                         <tr key={bucket.id} className="hover:bg-gray-50 transition-colors">
                           <td className="py-2.5 px-3">
-                            <div className="font-medium text-gray-900 truncate max-w-[200px]" title={bucket.label || bucket.source}>
-                              {bucket.label || bucket.source}
+                            <div className="font-medium text-gray-900 truncate max-w-[260px]" title={bucket.label || bucket.source}>
+                              {(bucket.label || bucket.source) ? `${bucket.label || bucket.source} — Hawl ${bucket.periodIndex}` : `Hawl ${bucket.periodIndex}`}
                             </div>
                             {activeTab === 'all' && (
                               <div className="text-[11px] text-gray-400 truncate max-w-[200px]">{bucket.source}</div>
@@ -568,17 +578,21 @@ export function ZakatDashboard({
                           </td>
                           <td className="py-2.5 px-3 text-center">
                             <span className={`inline-flex px-2 py-0.5 rounded-full text-[11px] font-medium ${
-                              bucket.haulCompleted
+                              bucket.isPaid
                                 ? 'bg-green-50 text-green-700'
-                                : 'bg-amber-50 text-amber-700'
+                                : bucket.zakatDue > 0
+                                ? 'bg-amber-50 text-amber-700'
+                                : 'bg-gray-100 text-gray-500'
                             }`}>
-                              {bucket.haulCompleted ? 'Complete' : 'Pending'}
+                              {bucket.isPaid ? 'Paid' : bucket.zakatDue > 0 ? 'Has Due' : 'No Activity'}
                             </span>
                           </td>
                           <td className="py-2.5 px-3 text-right">
                             <div className="flex items-center justify-end gap-1">
                               <Button size="sm" variant="secondary" onClick={() => openDetails(bucket)}>Details</Button>
-                              <Button size="sm" variant="primary" disabled={bucket.zakatDue <= 0} onClick={() => openPay(bucket)}>Pay</Button>
+                              {!bucket.isPaid && bucket.zakatDue > 0 && (
+                                <Button size="sm" variant="primary" onClick={() => openPay(bucket)}>Pay</Button>
+                              )}
                               {bucket.lastPayment && (
                                 <Button size="sm" variant="ghost" disabled={rollbackLoading} onClick={() => handleRollback(bucket)}>Undo</Button>
                               )}
@@ -746,7 +760,7 @@ export function ZakatDashboard({
           )}
           {payTarget && (
             <div className="text-sm text-gray-600">
-              Bucket {payTarget.id.slice(0, 8)} • Due {payTarget.currency} {payTarget.zakatDue.toFixed(2)}
+              {payTarget.label || payTarget.source} — Hawl {payTarget.periodIndex} • Due {payTarget.currency} {payTarget.zakatDue.toFixed(2)}
             </div>
           )}
           <DateInput
