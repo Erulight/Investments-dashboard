@@ -85,6 +85,26 @@ export async function POST(
       )
     }
 
+    if (source === 'PROFIT') {
+      const receivable = Number(investment.receivableAmount || 0)
+      const received = Number(investment.totalReceived || 0)
+      const remainingProfit = Math.max(0, (Number.isFinite(receivable) ? receivable : 0) - (Number.isFinite(received) ? received : 0))
+
+      if (receivable <= 0.000001) {
+        return NextResponse.json(
+          { error: 'Profit receivable is not set for this deal' },
+          { status: 400 },
+        )
+      }
+
+      if (amount > remainingProfit + 0.000001) {
+        return NextResponse.json(
+          { error: 'Amount exceeds remaining profit receivable' },
+          { status: 400 },
+        )
+      }
+    }
+
     const dayStart = new Date(date.getFullYear(), date.getMonth(), date.getDate())
     const dayEnd = new Date(date.getFullYear(), date.getMonth(), date.getDate() + 1)
     const reopenedAt = investment.reopenedAt ? new Date(investment.reopenedAt) : null
