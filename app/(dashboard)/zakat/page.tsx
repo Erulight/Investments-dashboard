@@ -473,7 +473,7 @@ export default async function ZakatPage() {
   const getBalanceAt = (movements: any[], at: Date) => {
     const atTime = at.getTime()
     return movements
-      .filter((m) => {
+      .filter((m: any) => {
         const d = movementDay(m)
         return d ? d.getTime() < atTime : false
       })
@@ -519,10 +519,10 @@ export default async function ZakatPage() {
       const lastPayment = payments[0]
 
       const movements = Array.isArray(bucket.movements) ? bucket.movements : []
-      const receiptMovements = movements.filter((m) => isReceiptMovement(m, isProfitBucket))
+      const receiptMovements = movements.filter((m: any) => isReceiptMovement(m, isProfitBucket))
 
       const qualifyingReceipts = receiptMovements
-        .map((m) => {
+        .map((m: any) => {
           const day = movementDay(m)
           if (!day) return null
 
@@ -675,7 +675,7 @@ export default async function ZakatPage() {
 
       bucketRows.push(...completedIdleRows)
 
-      const hasAnyInvestOut = movements.some((m) => m?.type === 'INVEST_OUT')
+      const hasAnyInvestOut = movements.some((m: any) => m?.type === 'INVEST_OUT')
       if (!hasAnyInvestOut) {
         const start = startOfDay(bucketStart)
         const elapsed = diffDaysFloor(start, now)
