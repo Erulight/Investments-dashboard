@@ -544,7 +544,8 @@ export default async function ZakatPage() {
           0,
         )
 
-        totalIdleBase += idleBaseForPeriod
+        const effectiveIdleBaseForPeriod = isProfitBucket ? 0 : idleBaseForPeriod
+        totalIdleBase += effectiveIdleBaseForPeriod
         totalReceipts += receiptsForPeriod
       }
 
@@ -552,9 +553,10 @@ export default async function ZakatPage() {
       const hasUnpaidHaul = completedHauls > 0 && zakatBase > 0
       const zakatDue = hasUnpaidHaul ? zakatBase * 0.025 : 0
 
-      // Current (open) haul window   purely informational
-      const currentHaulStart = addDays(haulAnchor, completedHauls * 354)
-      const currentHaulEnd = addDays(currentHaulStart, 354)
+      // Current (open) haul window  purely informational
+      const displayHaulIndex = completedHauls + 1
+      const currentHaulStart = addDays(haulAnchor, (displayHaulIndex - 1) * 354)
+      const currentHaulEnd = addDays(haulAnchor, displayHaulIndex * 354)
       const haulCompleted = now.getTime() >= currentHaulEnd.getTime()
 
       const payments = bucket.movements
@@ -618,7 +620,7 @@ export default async function ZakatPage() {
         // Show the end date of the most recently completed haul
         haulCompleteDate: addDays(
           haulAnchor,
-          completedHauls * 354,
+          displayHaulIndex * 354,
         ).toISOString().split('T')[0],
         idleBase: totalIdleBase,
         haulCompleted,
