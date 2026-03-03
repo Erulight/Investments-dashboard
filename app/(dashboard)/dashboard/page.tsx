@@ -55,6 +55,8 @@ export default async function DashboardPage({
   const debtsAtStart = await getOutstandingDebtsAt(yearStart)
   const debtsAtEnd = await getOutstandingDebtsAt(yearEnd)
 
+  const dashboardDebug = process.env.DASHBOARD_DEBUG === '1'
+
   const cashAccount =
     user.role === 'OWNER'
       ? await prisma.account.findFirst({ where: { type: 'CASH', isActive: true } })
@@ -96,6 +98,15 @@ export default async function DashboardPage({
   const cashAtStart = await cashAt(yearStart)
   const cashAtEnd = await cashAt(yearEnd)
   const cashBalance = cashAtEnd
+
+  if (dashboardDebug && user.role === 'OWNER') {
+    console.log('[DASHBOARD_DEBUG] year', selectedYear)
+    console.log('[DASHBOARD_DEBUG] debtsAtStart', debtsAtStart)
+    console.log('[DASHBOARD_DEBUG] debtsAtEnd', debtsAtEnd)
+    console.log('[DASHBOARD_DEBUG] cashAtStart', cashAtStart)
+    console.log('[DASHBOARD_DEBUG] cashAtEnd', cashAtEnd)
+    console.log('[DASHBOARD_DEBUG] cashBalance', cashBalance)
+  }
 
   let totalInvested = 0
   let totalValue = 0
@@ -580,6 +591,17 @@ export default async function DashboardPage({
     const endNetWorth = endAssets - debtsAtEnd
     const change = endNetWorth - startNetWorth
     const pct = startNetWorth > 0 ? (change / startNetWorth) * 100 : 0
+
+    if (dashboardDebug) {
+      console.log('[DASHBOARD_DEBUG] investmentsValueAtStart', startValue)
+      console.log('[DASHBOARD_DEBUG] investmentsValueAtEnd', endValue)
+      console.log('[DASHBOARD_DEBUG] startAssets', startAssets)
+      console.log('[DASHBOARD_DEBUG] endAssets', endAssets)
+      console.log('[DASHBOARD_DEBUG] startNetWorth', startNetWorth)
+      console.log('[DASHBOARD_DEBUG] endNetWorth', endNetWorth)
+      console.log('[DASHBOARD_DEBUG] netWorthChange', change)
+      console.log('[DASHBOARD_DEBUG] netWorthChangePct', pct)
+    }
     return { start: startNetWorth, end: endNetWorth, change, pct }
   })()
 
@@ -595,26 +617,6 @@ export default async function DashboardPage({
           type: {
             in: ['WITHDRAW_PROFIT', 'SELL_PROFIT_ACCRUED', 'PARTNER_COMMISSION'],
           },
-          OR: [
-            { investment: { name: { notIn: DEMO_INVESTMENT_NAMES } } },
-            { investmentId: null },
-          ],
-        } as any,
-        select: { amount: true, type: true, personId: true, description: true },
-      })
-
-      const sum = txs.reduce((s: number, t: any) => {
-        const n = Number(t?.amount)
-        if (!Number.isFinite(n) || n <= 0) return s
-
-        // Always include all transaction types - no personId filtering
-        return s + n
-      }, 0)
-      return Math.max(0, sum)
-    }
-
-    if (user.role !== 'PARTNER' || !user.personId) return yearlyValueChange.change
-    const txSum = await prisma.transaction.aggregate({
       where: {
         personId: user.personId,
         date: { gte: yearStart, lt: yearEnd },
