@@ -354,6 +354,48 @@ export const creditBucketsForReceipt = async (
       select: { name: true, startDate: true, account: { select: { type: true } } },
     })
 
+    const investmentName = inv?.name || investmentId
+    const bucketLabel = `Profit • ${investmentName}`
+    const dayStart = new Date(date.getFullYear(), date.getMonth(), date.getDate())
+    const dayEnd = new Date(date.getFullYear(), date.getMonth(), date.getDate() + 1)
+
+    const existingProfitBucket = await tx.cashBucket.findFirst({
+      where: {
+        label: bucketLabel,
+        personId: personId ?? null,
+        movements: {
+          some: {
+            investmentId,
+            type: 'CASH_IN',
+            date: {
+              gte: dayStart,
+              lt: dayEnd,
+            },
+          },
+        },
+      },
+      select: { id: true },
+    })
+
+    if (existingProfitBucket) {
+      await tx.cashBucket.update({
+        where: { id: existingProfitBucket.id },
+        data: { balance: { increment: profit } },
+      })
+
+      await tx.cashBucketMovement.create({
+        data: {
+          cashBucketId: existingProfitBucket.id,
+          investmentId,
+          amount: profit,
+          type: 'CASH_IN',
+          date,
+          notes: notes || null,
+        },
+      })
+      return
+    }
+
     const isSukuk = inv?.account?.type === 'SUKUK'
     const startDate = inv?.startDate instanceof Date ? inv.startDate : new Date(inv?.startDate as any)
     const sukukHaulStart = !Number.isNaN(startDate.getTime())
@@ -370,7 +412,7 @@ export const creditBucketsForReceipt = async (
       type: 'CASH_IN',
       excludeFromZakat: false,
       personId: personId ?? null,
-      label: `Profit • ${inv?.name || investmentId}`,
+      label: bucketLabel,
     })
   }
 
