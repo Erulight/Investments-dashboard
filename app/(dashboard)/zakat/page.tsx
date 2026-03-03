@@ -51,8 +51,6 @@ const diffDaysFloor = (start: Date, end: Date) => {
 
 const receiptTypes = new Set([
   'WITHDRAW_PROFIT',
-  'WITHDRAW_PRINCIPAL',
-  'ROLLBACK_PRINCIPAL',
   'SELL_RECEIPT',
 ])
 
@@ -451,8 +449,9 @@ export default async function ZakatPage() {
         }
 
         // Idle cash base for this haul period
-        // INCLUDE: CASH_IN, CASH_OUT, INVEST_OUT (using signed amounts).
-        // EXCLUDE: ZAKAT_PAID and receipt movement types (handled separately).
+        // INCLUDE: CASH_IN, CASH_OUT, INVEST_OUT, WITHDRAW_PRINCIPAL, ROLLBACK_PRINCIPAL
+        // (using signed amounts).
+        // EXCLUDE: ZAKAT_PAID and true receipt movement types (WITHDRAW_PROFIT, SELL_RECEIPT).
         const idleBaseForPeriod = Math.max(
           0,
           bucket.movements
@@ -461,11 +460,7 @@ export default async function ZakatPage() {
               if (Number.isNaN(movementDate.getTime())) return false
               if (movementDate < periodStart || movementDate >= periodEnd) return false
               if (movement.type === 'ZAKAT_PAID') return false
-              if (
-                ['WITHDRAW_PROFIT', 'WITHDRAW_PRINCIPAL', 'ROLLBACK_PRINCIPAL', 'SELL_RECEIPT'].includes(
-                  movement.type,
-                )
-              ) {
+              if (['WITHDRAW_PROFIT', 'SELL_RECEIPT'].includes(movement.type)) {
                 return false
               }
               // Exclude Circlys receipt payout from idle base
@@ -533,7 +528,22 @@ export default async function ZakatPage() {
         periodReceipts.forEach((m: any) => allDueReceipts.push(m))
 
         const receiptsForPeriod = periodReceipts.reduce(
-          (sum: number, m: any) => sum + Number(m.amount || 0),
+          (sum: number, m: any) => {
+            // For SELL_RECEIPT, only the profit portion (amount - principalReduction)
+            // is zakatable. If principalReduction is missing or invalid, skip.
+            if (m.type === 'SELL_RECEIPT') {
+              const amount = Number(m.amount || 0)
+              const principalReduction = m.principalReduction
+              const principal = Number(principalReduction)
+              if (!Number.isFinite(principal)) return sum
+              const profitPortion = amount - principal
+              if (!Number.isFinite(profitPortion) || profitPortion <= 0) return sum
+              return sum + profitPortion
+            }
+
+            // WITHDRAW_PROFIT and CASH_IN in profit buckets: use full amount.
+            return sum + Number(m.amount || 0)
+          },
           0,
         )
 
@@ -627,6 +637,22 @@ export default async function ZakatPage() {
       }
     })
     .filter((row: BucketRow | null): row is BucketRow => row !== null)
+  console.log(
+    'ZAKAT BUCKETS:',
+    JSON.stringify(
+      rows.map((r) => ({
+        label: r.label,
+        haulStart: r.haulStartDate,
+        balance: r.balance,
+        idleBase: r.idleBase,
+        receipts: r.receiptsTotal,
+        zakatDue: r.zakatDue,
+        status: r.haulCompleted ? 'COMPLETED' : 'OPEN',
+      })),
+      null,
+      2,
+    ),
+  )
 
   return (
     <div className="space-y-6">
