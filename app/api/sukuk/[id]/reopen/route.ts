@@ -45,13 +45,27 @@ export async function POST(
         ? { personId: user.personId }
         : { OR: [{ personId: null }, { personId: user.personId || null }] }
 
+      const profitBucketsForScope = await tx.cashBucket.findMany({
+        where: {
+          label: { startsWith: `Profit \u2022 ${investment.name}` },
+          ...(scopeFilter as any),
+        },
+        select: { id: true },
+      })
+      const profitBucketIdsForScope = profitBucketsForScope.map((b: any) => b.id)
+
       const receiptMovements = await tx.cashBucketMovement.findMany({
         where: {
           investmentId: id,
           type: { in: RECEIPT_TYPES as unknown as string[] },
-          cashBucket: {
-            ...(scopeFilter as any),
-          },
+          ...(profitBucketIdsForScope.length > 0
+            ? {
+                OR: [
+                  { cashBucketId: { in: profitBucketIdsForScope } },
+                  { cashBucket: { ...(scopeFilter as any) } },
+                ],
+              }
+            : { cashBucket: { ...(scopeFilter as any) } }),
         },
       })
 
@@ -202,18 +216,10 @@ export async function POST(
       })
 
       // Remove any profit buckets that were created for this Sukuk for this scope.
-      const profitBuckets = await tx.cashBucket.findMany({
-        where: {
-          label: { startsWith: `Profit \u2022 ${investment.name}` },
-          ...(scopeFilter as any),
-        },
-        select: { id: true },
-      })
-
-      if (profitBuckets.length > 0) {
+      if (profitBucketIdsForScope.length > 0) {
         await tx.cashBucket.deleteMany({
           where: {
-            id: { in: profitBuckets.map((b: any) => b.id) },
+            id: { in: profitBucketIdsForScope },
           },
         })
       }
