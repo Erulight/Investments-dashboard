@@ -41,14 +41,16 @@ export async function POST(
     }
 
     const result = await prisma.$transaction(async (tx: any) => {
-      const scopePersonId = user.role === 'PARTNER' ? user.personId : null
+      const scopeFilter = user.role === 'PARTNER'
+        ? { personId: user.personId }
+        : { OR: [{ personId: null }, { personId: user.personId || null }] }
 
       const receiptMovements = await tx.cashBucketMovement.findMany({
         where: {
           investmentId: id,
           type: { in: RECEIPT_TYPES as unknown as string[] },
           cashBucket: {
-            personId: scopePersonId,
+            ...(scopeFilter as any),
           },
         },
       })
@@ -57,7 +59,7 @@ export async function POST(
         where: {
           investmentId: id,
           type: { in: RECEIPT_TYPES as unknown as string[] },
-          personId: scopePersonId,
+          ...(scopeFilter as any),
         },
       })
 
@@ -178,22 +180,14 @@ export async function POST(
         }
       }
 
-      if (receiptMovements.length > 0) {
-        await tx.cashBucketMovement.deleteMany({
-          where: {
-            investmentId: id,
-            type: { in: RECEIPT_TYPES as unknown as string[] },
-          },
-        })
+      const movementIds = receiptMovements.map((m: any) => m.id)
+      if (movementIds.length > 0) {
+        await tx.cashBucketMovement.deleteMany({ where: { id: { in: movementIds } } })
       }
 
-      if (receiptTransactions.length > 0) {
-        await tx.transaction.deleteMany({
-          where: {
-            investmentId: id,
-            type: { in: RECEIPT_TYPES as unknown as string[] },
-          },
-        })
+      const transactionIds = receiptTransactions.map((t: any) => t.id)
+      if (transactionIds.length > 0) {
+        await tx.transaction.deleteMany({ where: { id: { in: transactionIds } } })
       }
 
       const updatedInvestment = await tx.investment.update({
@@ -202,6 +196,7 @@ export async function POST(
           totalReceived: Math.max(0, investment.totalReceived - profitReceipt),
           principalAmount: investment.principalAmount + principalReceipt,
           currentValue: investment.currentValue + principalReceipt,
+          receivableAmount: investment.receivableAmount,
           reopenedAt: new Date(),
         },
       })
@@ -209,14 +204,8 @@ export async function POST(
       // Remove any profit buckets that were created for this Sukuk for this scope.
       const profitBuckets = await tx.cashBucket.findMany({
         where: {
-          label: `Profit \u2022 ${investment.name}`,
-          personId: scopePersonId,
-          movements: {
-            some: {
-              investmentId: id,
-              type: 'CASH_IN',
-            },
-          },
+          label: { startsWith: `Profit \u2022 ${investment.name}` },
+          ...(scopeFilter as any),
         },
         select: { id: true },
       })

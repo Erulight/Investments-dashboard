@@ -77,11 +77,15 @@ export async function POST(
 
     const dayStart = new Date(date.getFullYear(), date.getMonth(), date.getDate())
     const dayEnd = new Date(date.getFullYear(), date.getMonth(), date.getDate() + 1)
+    const reopenedAt = investment.reopenedAt ? new Date(investment.reopenedAt) : null
     const existingTransaction = await prisma.transaction.findFirst({
       where: {
         investmentId: investment.id,
         type: source === 'PROFIT' ? 'WITHDRAW_PROFIT' : 'WITHDRAW_PRINCIPAL',
         amount: Math.abs(amount),
+        ...(reopenedAt && !Number.isNaN(reopenedAt.getTime())
+          ? { createdAt: { gte: reopenedAt } }
+          : {}),
         date: {
           gte: dayStart,
           lt: dayEnd,
