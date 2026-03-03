@@ -658,7 +658,7 @@ export default async function ZakatPage() {
       bucketRows.push(...completedIdleRows)
 
       const hasAnyInvestOut = movements.some((m: any) => m?.type === 'INVEST_OUT')
-      if (!hasAnyInvestOut) {
+      if (!hasAnyInvestOut && !isProfitBucket) {
         const start = startOfDay(bucketStart)
         const elapsed = diffDaysFloor(start, now)
         const completed = Math.floor(elapsed / 354)
