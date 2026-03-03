@@ -68,6 +68,13 @@ export async function POST(
         return NextResponse.json({ error: 'Partner is missing a person profile' }, { status: 400 })
       }
 
+      console.log('PARTNER WITHDRAW START', {
+        investmentId: id,
+        userId: user.id,
+        personId: user.personId,
+        body,
+      })
+
       const participants = Array.isArray(investment.dealParticipants)
         ? investment.dealParticipants
         : []
@@ -295,78 +302,116 @@ export async function POST(
       }
 
       if (user.role === 'PARTNER') {
-        const partnerPersonId = user.personId!
-        const participants = Array.isArray(investment.dealParticipants)
-          ? investment.dealParticipants
-          : []
-        const partnerParticipant = participants.find((p: any) => p?.personId === partnerPersonId)
-        if (!partnerParticipant) {
-          throw new Error('Forbidden')
-        }
+        try {
+          const partnerPersonId = user.personId!
+          const participants = Array.isArray(investment.dealParticipants)
+            ? investment.dealParticipants
+            : []
+          const partnerParticipant = participants.find((p: any) => p?.personId === partnerPersonId)
 
-        const reopenedAtRaw = investment.reopenedAt ? new Date(investment.reopenedAt) : null
-        const reopenedAt = reopenedAtRaw && !Number.isNaN(reopenedAtRaw.getTime()) ? reopenedAtRaw : null
-
-        const sums = await tx.cashBucketMovement.groupBy({
-          by: ['type'],
-          where: {
+          console.log('PARTNER WITHDRAW PARTICIPANT LOOKUP', {
             investmentId: investment.id,
-            type: { in: ['WITHDRAW_PROFIT', 'WITHDRAW_PRINCIPAL'] },
-            cashBucket: { personId: partnerPersonId },
-            ...(reopenedAt ? { createdAt: { gte: reopenedAt } } : {}),
-          } as any,
-          _sum: { amount: true },
-        })
+            partnerPersonId,
+            participantsCount: participants.length,
+            found: Boolean(partnerParticipant),
+          })
 
-        const withdrawnProfit = Math.abs(Number(sums.find((s: any) => s.type === 'WITHDRAW_PROFIT')?._sum?.amount || 0))
-        const withdrawnPrincipal = Math.abs(Number(sums.find((s: any) => s.type === 'WITHDRAW_PRINCIPAL')?._sum?.amount || 0))
+          if (!partnerParticipant) {
+            throw new Error('Forbidden')
+          }
 
-        const principalCapRaw = Number(partnerParticipant.investedAmount || 0)
-        const profitCapRaw = Number(partnerParticipant.receivable || 0)
+          const reopenedAtRaw = investment.reopenedAt ? new Date(investment.reopenedAt) : null
+          const reopenedAt = reopenedAtRaw && !Number.isNaN(reopenedAtRaw.getTime()) ? reopenedAtRaw : null
 
-        const principalCap = Number.isFinite(principalCapRaw) ? principalCapRaw : 0
-        const profitCap = Number.isFinite(profitCapRaw) ? profitCapRaw : 0
+          const sums = await tx.cashBucketMovement.groupBy({
+            by: ['type'],
+            where: {
+              investmentId: investment.id,
+              type: { in: ['WITHDRAW_PROFIT', 'WITHDRAW_PRINCIPAL'] },
+              cashBucket: { personId: partnerPersonId },
+              ...(reopenedAt ? { createdAt: { gte: reopenedAt } } : {}),
+            } as any,
+            _sum: { amount: true },
+          })
 
-        const remainingPrincipal = Math.max(0, principalCap - withdrawnPrincipal)
-        const remainingProfit = Math.max(0, profitCap - withdrawnProfit)
+          const withdrawnProfit = Math.abs(Number(sums.find((s: any) => s.type === 'WITHDRAW_PROFIT')?._sum?.amount || 0))
+          const withdrawnPrincipal = Math.abs(Number(sums.find((s: any) => s.type === 'WITHDRAW_PRINCIPAL')?._sum?.amount || 0))
 
-        if (source === 'PRINCIPAL' && amount > remainingPrincipal + 0.000001) {
-          throw new Error('AMOUNT_EXCEEDS_PARTNER_PRINCIPAL')
+          const principalCapRaw = Number(partnerParticipant.investedAmount || 0)
+          const profitCapRaw = Number(partnerParticipant.receivable || 0)
+
+          const principalCap = Number.isFinite(principalCapRaw) ? principalCapRaw : 0
+          const profitCap = Number.isFinite(profitCapRaw) ? profitCapRaw : 0
+
+          const remainingPrincipal = Math.max(0, principalCap - withdrawnPrincipal)
+          const remainingProfit = Math.max(0, profitCap - withdrawnProfit)
+
+          console.log('PARTNER WITHDRAW CAPS', {
+            investmentId: investment.id,
+            partnerPersonId,
+            source,
+            amount,
+            principalCap,
+            withdrawnPrincipal,
+            remainingPrincipal,
+            profitCap,
+            withdrawnProfit,
+            remainingProfit,
+          })
+
+          if (source === 'PRINCIPAL' && amount > remainingPrincipal + 0.000001) {
+            throw new Error('AMOUNT_EXCEEDS_PARTNER_PRINCIPAL')
+          }
+          if (source === 'PROFIT' && amount > remainingProfit + 0.000001) {
+            throw new Error('AMOUNT_EXCEEDS_PARTNER_PROFIT')
+          }
+
+          console.log('PARTNER WITHDRAW creditBucketsForReceipt START', {
+            investmentId: investment.id,
+            partnerPersonId,
+            amount,
+            source,
+          })
+
+          await creditBucketsForReceipt(tx, {
+            investmentId: investment.id,
+            amount,
+            principalReduction: source === 'PRINCIPAL' ? amount : 0,
+            date,
+            type: source === 'PROFIT' ? 'WITHDRAW_PROFIT' : 'WITHDRAW_PRINCIPAL',
+            notes: notes || null,
+            personId: partnerPersonId,
+            profitHaulStartDate: partnerParticipant.acquiredAt ? new Date(partnerParticipant.acquiredAt) : undefined,
+          })
+
+          console.log('PARTNER WITHDRAW creditBucketsForReceipt DONE', {
+            investmentId: investment.id,
+            partnerPersonId,
+          })
+
+          await tx.dealParticipant.update({
+            where: { id: partnerParticipant.id },
+            data: {
+              investedAmount: source === 'PRINCIPAL'
+                ? Math.max(0, Number(partnerParticipant.investedAmount || 0) - amount)
+                : partnerParticipant.investedAmount,
+              currentValue: source === 'PRINCIPAL'
+                ? Math.max(0, Number(partnerParticipant.currentValue || 0) - amount)
+                : partnerParticipant.currentValue,
+              receivable: source === 'PROFIT'
+                ? Math.max(0, Number(partnerParticipant.receivable || 0) - amount)
+                : partnerParticipant.receivable,
+              profit: source === 'PROFIT'
+                ? Math.max(0, Number(partnerParticipant.profit || 0) - amount)
+                : partnerParticipant.profit,
+            },
+          })
+
+          await settleOwnerOnPartnerWithdraw()
+        } catch (err) {
+          console.error('PARTNER WITHDRAW ERROR (inside tx):', err)
+          throw err
         }
-        if (source === 'PROFIT' && amount > remainingProfit + 0.000001) {
-          throw new Error('AMOUNT_EXCEEDS_PARTNER_PROFIT')
-        }
-
-        await creditBucketsForReceipt(tx, {
-          investmentId: investment.id,
-          amount,
-          principalReduction: source === 'PRINCIPAL' ? amount : 0,
-          date,
-          type: source === 'PROFIT' ? 'WITHDRAW_PROFIT' : 'WITHDRAW_PRINCIPAL',
-          notes: notes || null,
-          personId: partnerPersonId,
-          profitHaulStartDate: partnerParticipant.acquiredAt ? new Date(partnerParticipant.acquiredAt) : undefined,
-        })
-
-        await tx.dealParticipant.update({
-          where: { id: partnerParticipant.id },
-          data: {
-            investedAmount: source === 'PRINCIPAL'
-              ? Math.max(0, Number(partnerParticipant.investedAmount || 0) - amount)
-              : partnerParticipant.investedAmount,
-            currentValue: source === 'PRINCIPAL'
-              ? Math.max(0, Number(partnerParticipant.currentValue || 0) - amount)
-              : partnerParticipant.currentValue,
-            receivable: source === 'PROFIT'
-              ? Math.max(0, Number(partnerParticipant.receivable || 0) - amount)
-              : partnerParticipant.receivable,
-            profit: source === 'PROFIT'
-              ? Math.max(0, Number(partnerParticipant.profit || 0) - amount)
-              : partnerParticipant.profit,
-          },
-        })
-
-        await settleOwnerOnPartnerWithdraw()
       } else {
         await creditBucketsForReceipt(tx, {
           investmentId: investment.id,
@@ -423,6 +468,19 @@ export async function POST(
     return NextResponse.json({ success: true, investment: updated })
   } catch (error) {
     console.error('Withdraw error:', error)
+
+    if (error && typeof error === 'object') {
+      // Prefer explicit error logging for partner withdrawals since they have been hanging/silently failing.
+      try {
+        const user = await requireAuth(['OWNER', 'PARTNER'])
+        if (user.role === 'PARTNER') {
+          console.error('PARTNER WITHDRAW ERROR:', error)
+          return NextResponse.json({ error: String(error) }, { status: 500 })
+        }
+      } catch {
+        // ignore
+      }
+    }
 
     let statusCode = 500
     if (error instanceof Error) {
