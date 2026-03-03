@@ -593,7 +593,7 @@ export default async function DashboardPage({
           accountId: cashAccount.id,
           date: { gte: yearStart, lt: yearEnd },
           type: {
-            in: ['WITHDRAW_PROFIT', 'SELL_PROFIT_ACCRUED', 'PARTNER_COMMISSION', 'SOLD_DEAL_SETTLEMENT'],
+            in: ['WITHDRAW_PROFIT', 'SELL_PROFIT_ACCRUED', 'PARTNER_COMMISSION'],
           },
           AND: [
             {
