@@ -416,12 +416,16 @@ export default async function ZakatPage() {
       if (Number.isNaN(bucketStart.getTime())) return null
 
       const lastPaid = bucket.lastZakatPaidDate ? new Date(bucket.lastZakatPaidDate) : null
-      const lastPaidTime =
-        lastPaid && !Number.isNaN(lastPaid.getTime()) ? lastPaid.getTime() : null
+      const lastPaidDay =
+        lastPaid && !Number.isNaN(lastPaid.getTime())
+          ? new Date(lastPaid.getFullYear(), lastPaid.getMonth(), lastPaid.getDate())
+          : null
 
-      // Haul 1 always starts from bucket.haulStartDate.
-      // Subsequent hauls are 354-day blocks from this same anchor.
-      const daysSinceStart = diffDaysFloor(bucketStart, now)
+      // Haul periods are 354-day blocks starting from lastZakatPaidDate when present,
+      // otherwise from the original haulStartDate.
+      const haulAnchor = lastPaidDay || bucketStart
+
+      const daysSinceStart = diffDaysFloor(haulAnchor, now)
       const completedHauls = Math.floor(daysSinceStart / 354)
 
       const isProfitBucket =
@@ -433,20 +437,13 @@ export default async function ZakatPage() {
       let totalReceipts = 0
       const allDueReceipts: any[] = []
 
-      // Iterate over ALL completed 354-day periods since haulStartDate.
+      // Iterate over ALL completed 354-day periods since the haul anchor.
       // For each period [periodStart, periodEnd):
-      //   - If lastZakatPaidDate >= periodEnd: that haul is already settled  \u2022 skip.
-      //   - Otherwise, compute idleBase and receipts only from movements whose
-      //     date falls inside this specific period.
+      //   - Compute idleBase and receipts only from movements whose date falls
+      //     inside this specific period.
       for (let i = 0; i < completedHauls; i++) {
-        const periodStart = addDays(bucketStart, i * 354)
+        const periodStart = addDays(haulAnchor, i * 354)
         const periodEnd = addDays(periodStart, 354)
-
-        // If zakat for this period was already paid (payment on/after period end),
-        // we treat this haul as settled.
-        if (lastPaidTime && lastPaidTime >= periodEnd.getTime()) {
-          continue
-        }
 
         // Idle cash base for this haul period
         // INCLUDE: CASH_IN, CASH_OUT, INVEST_OUT, WITHDRAW_PRINCIPAL, ROLLBACK_PRINCIPAL
@@ -479,7 +476,7 @@ export default async function ZakatPage() {
             ),
         )
 
-        // Receipts per haul period (BUG 1 + BUG 3)
+        // Receipts per haul period
         const periodReceipts = bucket.movements.filter((movement: any) => {
           const movementDate = new Date(movement.date)
           if (Number.isNaN(movementDate.getTime())) return false
@@ -555,8 +552,8 @@ export default async function ZakatPage() {
       const hasUnpaidHaul = completedHauls > 0 && zakatBase > 0
       const zakatDue = hasUnpaidHaul ? zakatBase * 0.025 : 0
 
-      // Current (open) haul window  \u2022 purely informational
-      const currentHaulStart = addDays(bucketStart, completedHauls * 354)
+      // Current (open) haul window   purely informational
+      const currentHaulStart = addDays(haulAnchor, completedHauls * 354)
       const currentHaulEnd = addDays(currentHaulStart, 354)
       const haulCompleted = now.getTime() >= currentHaulEnd.getTime()
 
@@ -620,7 +617,7 @@ export default async function ZakatPage() {
           : null,
         // Show the end date of the most recently completed haul
         haulCompleteDate: addDays(
-          bucketStart,
+          haulAnchor,
           completedHauls * 354,
         ).toISOString().split('T')[0],
         idleBase: totalIdleBase,
