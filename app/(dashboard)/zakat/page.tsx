@@ -427,7 +427,7 @@ export default async function ZakatPage() {
       const completedHauls = Math.floor(daysSinceStart / 354)
 
       const isProfitBucket =
-        typeof bucket.label === 'string' && bucket.label.startsWith('Profit  b7')
+        typeof bucket.label === 'string' && bucket.label.startsWith('Profit \u2022')
       const isCirclys =
         typeof bucket.label === 'string' && bucket.label.startsWith('Circlys')
 
@@ -437,7 +437,7 @@ export default async function ZakatPage() {
 
       // Iterate over ALL completed 354-day periods since haulStartDate.
       // For each period [periodStart, periodEnd):
-      //   - If lastZakatPaidDate >= periodEnd: that haul is already settled  b7 skip.
+      //   - If lastZakatPaidDate >= periodEnd: that haul is already settled  \u2022 skip.
       //   - Otherwise, compute idleBase and receipts only from movements whose
       //     date falls inside this specific period.
       for (let i = 0; i < completedHauls; i++) {
@@ -451,29 +451,37 @@ export default async function ZakatPage() {
         }
 
         // Idle cash base for this haul period
-        const idleMovements = bucket.movements.filter((movement: any) => {
-          const movementDate = new Date(movement.date)
-          if (Number.isNaN(movementDate.getTime())) return false
-          if (movementDate < periodStart || movementDate >= periodEnd) return false
-          if (movement.type === 'ZAKAT_PAID') return false
-          if (movement.type === 'INVEST_OUT') return false
-          // Exclude Circlys receipt payout from idle base
-          if (
-            movement.type === 'CASH_IN' &&
-            movement.notes &&
-            String(movement.notes).includes('Circlys receipt')
-          ) {
-            return false
-          }
-          return true
-        })
-
+        // INCLUDE: CASH_IN, CASH_OUT, INVEST_OUT (using signed amounts).
+        // EXCLUDE: ZAKAT_PAID and receipt movement types (handled separately).
         const idleBaseForPeriod = Math.max(
           0,
-          idleMovements.reduce(
-            (sum: number, movement: any) => sum + Number(movement.amount || 0),
-            0,
-          ),
+          bucket.movements
+            .filter((movement: any) => {
+              const movementDate = new Date(movement.date)
+              if (Number.isNaN(movementDate.getTime())) return false
+              if (movementDate < periodStart || movementDate >= periodEnd) return false
+              if (movement.type === 'ZAKAT_PAID') return false
+              if (
+                ['WITHDRAW_PROFIT', 'WITHDRAW_PRINCIPAL', 'ROLLBACK_PRINCIPAL', 'SELL_RECEIPT'].includes(
+                  movement.type,
+                )
+              ) {
+                return false
+              }
+              // Exclude Circlys receipt payout from idle base
+              if (
+                movement.type === 'CASH_IN' &&
+                movement.notes &&
+                String(movement.notes).includes('Circlys receipt')
+              ) {
+                return false
+              }
+              return true
+            })
+            .reduce(
+              (sum: number, movement: any) => sum + Number(movement.amount || 0),
+              0,
+            ),
         )
 
         // Receipts per haul period (BUG 1 + BUG 3)
@@ -483,7 +491,7 @@ export default async function ZakatPage() {
           if (movementDate < periodStart || movementDate >= periodEnd) return false
 
           // Decide if this movement is a receipt:
-          // - For profit buckets ("Profit  b7 ..."), CASH_IN is itself the profit receipt.
+          // - For profit buckets ("Profit \u2022 ..."), CASH_IN is itself the profit receipt.
           // - For other buckets, use classic receiptTypes (WITHDRAW_PROFIT, etc).
           let isReceipt = false
           if (isProfitBucket && movement.type === 'CASH_IN') {
@@ -515,6 +523,8 @@ export default async function ZakatPage() {
               const reopenedAt = new Date(movement.investment.reopenedAt)
               if (new Date(movement.createdAt) < reopenedAt) return false
             }
+
+            if (!movement.investment?.maturityDate) return false
           }
 
           return true
@@ -535,7 +545,7 @@ export default async function ZakatPage() {
       const hasUnpaidHaul = completedHauls > 0 && zakatBase > 0
       const zakatDue = hasUnpaidHaul ? zakatBase * 0.025 : 0
 
-      // Current (open) haul window  b7 purely informational
+      // Current (open) haul window  \u2022 purely informational
       const currentHaulStart = addDays(bucketStart, completedHauls * 354)
       const currentHaulEnd = addDays(currentHaulStart, 354)
       const haulCompleted = now.getTime() >= currentHaulEnd.getTime()
@@ -555,7 +565,7 @@ export default async function ZakatPage() {
 
       const sourceGroup =
         isCirclys && bucket.label
-          ? bucket.label.split('  b7 ').slice(0, 2).join('  b7 ')
+          ? bucket.label.split(' \u2022 ').slice(0, 2).join(' \u2022 ')
           : source
 
       // Subtract Circlys receipt payout from displayed balance to show only contributions.
