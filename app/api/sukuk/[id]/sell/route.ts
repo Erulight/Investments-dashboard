@@ -457,7 +457,7 @@ export async function POST(
       await tx.transaction.createMany({
         data: [
           {
-            accountId: investment.accountId,
+            accountId: cashAccount.id,
             investmentId: investment.id,
             personId: sellerPersonId,
             type: 'SELL_TO_PARTNER',
