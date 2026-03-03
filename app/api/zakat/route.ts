@@ -29,6 +29,7 @@ export async function POST(req: NextRequest) {
     }
     const body = await req.json().catch(() => ({}))
     const bucketId = typeof body.bucketId === 'string' ? body.bucketId : ''
+    const rowId = typeof body.rowId === 'string' ? body.rowId : ''
     const amount = Number(body.amount)
     const date = body.date ? new Date(body.date) : new Date()
     const periodEndRaw = body.periodEnd
@@ -37,6 +38,9 @@ export async function POST(req: NextRequest) {
 
     if (!bucketId) {
       return NextResponse.json({ error: 'Bucket is required' }, { status: 400 })
+    }
+    if (!rowId) {
+      return NextResponse.json({ error: 'Row id is required' }, { status: 400 })
     }
     if (!Number.isFinite(amount) || amount <= 0) {
       return NextResponse.json({ error: 'Amount must be greater than 0' }, { status: 400 })
@@ -47,7 +51,7 @@ export async function POST(req: NextRequest) {
         where: {
           id: bucketId,
           ...(user.role === 'OWNER'
-            ? { personId: null }
+            ? { OR: [{ personId: null }, { personId: user.personId || null }] }
             : { personId: user.personId }),
         },
       })
@@ -58,20 +62,15 @@ export async function POST(req: NextRequest) {
         return NextResponse.json({ error: 'Bucket balance is too low' }, { status: 400 })
       }
 
-      // lastZakatPaidDate represents the most recent haul period end that has
-      // been settled. When paying for a specific haul row, the client passes
-      // periodEnd so we can anchor future haul calculations correctly even if
-      // the payment happens later than the haul's completion date.
-      const lastZakatDateToStore =
-        periodEnd && !Number.isNaN(periodEnd.getTime()) ? periodEnd : date
-
       await tx.cashBucket.update({
         where: { id: bucketId },
         data: {
           balance: { decrement: amount },
-          lastZakatPaidDate: lastZakatDateToStore,
         },
       })
+
+      const rowMarker = `ZAKAT_ROW=${rowId}`
+      const combinedNotes = notes ? `${notes} | ${rowMarker}` : rowMarker
 
       const movement = await tx.cashBucketMovement.create({
         data: {
@@ -79,7 +78,7 @@ export async function POST(req: NextRequest) {
           amount: -amount,
           type: 'ZAKAT_PAID',
           date,
-          notes: notes || null,
+          notes: combinedNotes,
         },
       })
 
@@ -150,7 +149,9 @@ export async function POST(req: NextRequest) {
           description: notes || 'Zakat payment',
           metadata: JSON.stringify({
             bucketId,
+            rowId,
             movementId: movement.id,
+            periodEnd: periodEnd && !Number.isNaN(periodEnd.getTime()) ? periodEnd.toISOString() : null,
           }),
         },
       })

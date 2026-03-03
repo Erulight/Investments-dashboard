@@ -18,7 +18,7 @@ export async function GET(
       where: {
         id,
         ...(user.role === 'OWNER'
-          ? { personId: null }
+          ? { OR: [{ personId: null }, { personId: user.personId || null }] }
           : { personId: user.personId }),
       },
       select: {

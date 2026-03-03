@@ -18,6 +18,7 @@ type ReceiptEntry = {
 
 type BucketRow = {
   id: string
+  bucketId: string
   periodIndex: number
   label?: string | null
   currency: string
@@ -225,7 +226,8 @@ export function ZakatDashboard({
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          bucketId: payTarget.id,
+          bucketId: payTarget.bucketId,
+          rowId: payTarget.id,
           amount,
           date: isoDate,
           notes: payNotes,
@@ -256,7 +258,7 @@ export function ZakatDashboard({
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          bucketId: bucket.id,
+          bucketId: bucket.bucketId,
           movementId: bucket.lastPayment.id,
         }),
       })
@@ -278,7 +280,7 @@ export function ZakatDashboard({
     setDetailsError('')
     setDetailsData(null)
     try {
-      const res = await fetch(`/api/zakat/buckets/${bucket.id}`)
+      const res = await fetch(`/api/zakat/buckets/${bucket.bucketId}`)
       const data = await res.json().catch(() => ({}))
       if (!res.ok) {
         throw new Error(data.error || 'Failed to load bucket details')

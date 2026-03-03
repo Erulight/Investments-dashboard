@@ -24,7 +24,7 @@ export async function POST(req: NextRequest) {
         where: {
           id: bucketId,
           ...(user.role === 'OWNER'
-            ? { personId: null }
+            ? { OR: [{ personId: null }, { personId: user.personId || null }] }
             : { personId: user.personId }),
         },
       })
