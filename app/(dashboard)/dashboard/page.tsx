@@ -609,7 +609,6 @@ export default async function DashboardPage({
   const yearlyProfitValue = await (async () => {
     if (user.role === 'OWNER') {
       if (!cashAccount) return 0
-      const ownerPersonId = user.personId || null
       const txs = await prisma.transaction.findMany({
         where: {
           accountId: cashAccount.id,
@@ -617,6 +616,50 @@ export default async function DashboardPage({
           type: {
             in: ['WITHDRAW_PROFIT', 'SELL_PROFIT_ACCRUED', 'PARTNER_COMMISSION'],
           },
+          OR: [
+            { investment: { name: { notIn: DEMO_INVESTMENT_NAMES } } },
+            { investmentId: null },
+          ],
+        } as any,
+        select: { amount: true, type: true, personId: true, description: true, date: true },
+        orderBy: { date: 'asc' },
+      })
+
+      const sum = txs.reduce((s: number, t: any) => {
+        const n = Number(t?.amount)
+        if (!Number.isFinite(n) || n <= 0) return s
+        return s + n
+      }, 0)
+
+      if (dashboardDebug) {
+        const byType = txs.reduce((m: Record<string, number>, t: any) => {
+          const n = Number(t?.amount)
+          if (!Number.isFinite(n) || n <= 0) return m
+          const k = String(t?.type || 'UNKNOWN')
+          m[k] = (m[k] || 0) + n
+          return m
+        }, {})
+
+        console.log('[DASHBOARD_DEBUG] yearlyReturnTxCount', txs.length)
+        console.log('[DASHBOARD_DEBUG] yearlyReturnByType', byType)
+        console.log('[DASHBOARD_DEBUG] yearlyReturnSum', sum)
+        console.log(
+          '[DASHBOARD_DEBUG] yearlyReturnTxs',
+          txs.map((t: any) => ({
+            date: t?.date instanceof Date ? t.date.toISOString().slice(0, 10) : String(t?.date),
+            type: t?.type,
+            amount: t?.amount,
+            personId: t?.personId,
+            description: t?.description,
+          }))
+        )
+      }
+
+      return Math.max(0, sum)
+    }
+
+    if (user.role !== 'PARTNER' || !user.personId) return yearlyValueChange.change
+    const txSum = await prisma.transaction.aggregate({
       where: {
         personId: user.personId,
         date: { gte: yearStart, lt: yearEnd },
