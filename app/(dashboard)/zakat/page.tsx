@@ -550,14 +550,32 @@ export default async function ZakatPage() {
       }
 
       const zakatBase = totalIdleBase + totalReceipts
-      const hasUnpaidHaul = completedHauls > 0 && zakatBase > 0
+      // Haul due window is based on the most recently COMPLETED 354-day period
+      // from the haul anchor. If no full haul has completed yet, we treat the
+      // first 354-day window as pending.
+      const hasCompletedHaul = completedHauls >= 1
+      const dueHaulEnd = hasCompletedHaul
+        ? addDays(haulAnchor, completedHauls * 354)
+        : addDays(haulAnchor, 354)
+      const dueHaulStart = hasCompletedHaul
+        ? addDays(haulAnchor, (completedHauls - 1) * 354)
+        : haulAnchor
+
+      // Zakat is only due when at least one full haul has completed AND the
+      // last Zakat payment (if any) is strictly before the end of this due
+      // haul window.
+      const lastPaidForCheck = lastPaidDay
+      const isDueWindowUnpaid = hasCompletedHaul
+        ? !lastPaidForCheck || lastPaidForCheck < dueHaulEnd
+        : false
+      const hasUnpaidHaul = isDueWindowUnpaid && zakatBase > 0
       const zakatDue = hasUnpaidHaul ? zakatBase * 0.025 : 0
 
-      // Current (open) haul window  purely informational
-      const displayHaulIndex = completedHauls + 1
-      const currentHaulStart = addDays(haulAnchor, (displayHaulIndex - 1) * 354)
-      const currentHaulEnd = addDays(haulAnchor, displayHaulIndex * 354)
-      const haulCompleted = now.getTime() >= currentHaulEnd.getTime()
+      // Haul is considered completed when "now" is on or after the end of the
+      // current due window (i.e. the most recent completed haul when
+      // hasCompletedHaul is true, or the first 354-day window when still
+      // pending).
+      const haulCompleted = now.getTime() >= dueHaulEnd.getTime()
 
       const payments = bucket.movements
         .filter((movement: any) => movement.type === 'ZAKAT_PAID')
@@ -620,7 +638,7 @@ export default async function ZakatPage() {
         // Show the end date of the most recently completed haul
         haulCompleteDate: addDays(
           haulAnchor,
-          displayHaulIndex * 354,
+          hasCompletedHaul ? completedHauls * 354 : 354,
         ).toISOString().split('T')[0],
         idleBase: totalIdleBase,
         haulCompleted,
