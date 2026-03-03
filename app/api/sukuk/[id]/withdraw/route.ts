@@ -321,24 +321,10 @@ export async function POST(
               : partnerParticipant.receivable,
             profit: source === 'PROFIT'
               ? Math.max(0, Number(partnerParticipant.profit || 0) - amount)
-        else if (error.message === 'AMOUNT_EXCEEDS_PARTNER_PRINCIPAL') {
-        statusCode = 400
-      } else if (error.message === 'AMOUNT_EXCEEDS_PARTNER_PROFIT') {       : partnerParticipant.profit,
-        statusCode = 400
-            },
-    }        })
+              : partnerParticipant.profit,
+          },
+        })
 
-
-       
-        // Partner withdrawal a Error
-          ? error.message ===c'AMOUNT_tXCEEDS_PARTNER_PRINCIPAL'
-            ? 'Amount exceeds your remaining principal'
-            : es as.message === 'AMOUNT_EXCEEDS_PARTNER_PROFIT'
-              t 'Amounthexceeds your remaining profit'
-              : e "close" eve
-  n       t for settle-debt sale,
-     s:
-        // settle the owner's pending profit/commission into cash.
         await settleOwnerOnPartnerWithdraw()
       } else {
         await creditBucketsForReceipt(tx, {
@@ -403,11 +389,23 @@ export async function POST(
         statusCode = 401
       } else if (error.message === 'Forbidden') {
         statusCode = 403
+      } else if (error.message === 'AMOUNT_EXCEEDS_PARTNER_PRINCIPAL') {
+        statusCode = 400
+      } else if (error.message === 'AMOUNT_EXCEEDS_PARTNER_PROFIT') {
+        statusCode = 400
       }
     }
 
     return NextResponse.json(
-      { error: error instanceof Error ? error.message : 'Failed to withdraw' },
+      {
+        error: error instanceof Error
+          ? error.message === 'AMOUNT_EXCEEDS_PARTNER_PRINCIPAL'
+            ? 'Amount exceeds your remaining principal'
+            : error.message === 'AMOUNT_EXCEEDS_PARTNER_PROFIT'
+              ? 'Amount exceeds your remaining profit'
+              : error.message
+          : 'Failed to withdraw',
+      },
       { status: statusCode }
     )
   }
