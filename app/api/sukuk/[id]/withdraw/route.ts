@@ -473,6 +473,71 @@ export async function POST(
       return updatedInvestment
     })
 
+    // FIX 3: when partner closes (fully withdraws principal), notify owner that profit+commission is ready.
+    if (user.role === 'PARTNER' && user.personId && source === 'PRINCIPAL') {
+      const participant = await prisma.dealParticipant.findFirst({
+        where: {
+          investmentId: investment.id,
+          personId: user.personId,
+        },
+        select: { investedAmount: true },
+      })
+
+      const remaining = Number(participant?.investedAmount ?? 0)
+      const partnerClosed = Number.isFinite(remaining) ? remaining <= 0.000001 : false
+
+      if (partnerClosed) {
+        const transactions = Array.isArray(investment.transactions) ? investment.transactions : []
+        const saleTx = transactions
+          .filter((t: any) => t.type === 'SELL_TO_PARTNER')
+          .sort((a: any, b: any) => new Date(b.date).getTime() - new Date(a.date).getTime())[0]
+        const meta = saleTx ? parseMetadata(saleTx.metadata) : null
+        const sellerPersonId = saleTx && typeof saleTx.personId === 'string' ? saleTx.personId : null
+
+        if (sellerPersonId) {
+          const ownerUser = await prisma.user.findFirst({
+            where: { personId: sellerPersonId },
+            select: { id: true },
+          })
+
+          if (ownerUser?.id) {
+            const profit = Number(meta?.accruedProfitAtSale ?? 0)
+            const commission = Number(meta?.commissionAmount ?? 0)
+            const profitAmount = Number.isFinite(profit) ? Math.max(0, profit) : 0
+            const commissionAmount = Number.isFinite(commission) ? Math.max(0, commission) : 0
+
+            const message = `${user.name} has closed ${investment.name} — SAR ${profitAmount.toFixed(2)} profit + SAR ${commissionAmount.toFixed(2)} commission ready to receive`
+            const key = `NOTIFICATION:${ownerUser.id}:${investment.id}`
+            await prisma.systemSetting.upsert({
+              where: { key },
+              update: {
+                value: JSON.stringify({
+                  message,
+                  investmentId: investment.id,
+                  createdAt: new Date().toISOString(),
+                  readAt: null,
+                  amounts: { profit: profitAmount, commission: commissionAmount },
+                  partnerPersonId: user.personId,
+                }),
+              },
+              create: {
+                key,
+                value: JSON.stringify({
+                  message,
+                  investmentId: investment.id,
+                  createdAt: new Date().toISOString(),
+                  readAt: null,
+                  amounts: { profit: profitAmount, commission: commissionAmount },
+                  partnerPersonId: user.personId,
+                }),
+                description: 'Unread notification: sold deal ready to receive',
+              },
+            })
+          }
+        }
+      }
+    }
+
     return NextResponse.json({ success: true, investment: updated })
   } catch (error) {
     console.error('Withdraw error:', error)

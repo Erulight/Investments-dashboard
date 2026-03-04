@@ -2,7 +2,7 @@
 
 import { useEffect, useMemo, useState } from 'react'
 import type { ReactNode } from 'react'
-import { useRouter } from 'next/navigation'
+import { useRouter, useSearchParams } from 'next/navigation'
 import { Table, TableHeader, TableBody, TableFooter, TableRow, TableHead, TableCell } from '@/components/ui/Table'
 import { Button } from '@/components/ui/Button'
 import { Modal } from './SukukModal'
@@ -69,6 +69,7 @@ interface SukukListProps {
 
 export function SukukList({ initialSukuk, userRole, ownerPersonId, viewerPersonId }: SukukListProps) {
   const router = useRouter()
+  const searchParams = useSearchParams()
   const [sukuk, setSukuk] = useState<any[]>(
     Array.isArray(initialSukuk) ? initialSukuk : []
   )
@@ -796,7 +797,14 @@ export function SukukList({ initialSukuk, userRole, ownerPersonId, viewerPersonI
   const openWithdrawModal = (investment: any, metricsOverride?: any) => {
     setActionError('')
 
-    const metrics = metricsOverride || getMetrics(investment)
+    const participantList = Array.isArray(investment?.dealParticipants)
+      ? investment.dealParticipants
+      : []
+    const isSoldDealForOwner = userRole === 'OWNER' && ownerPersonId
+      ? (participantList.length > 0 && !participantList.some((p: any) => p?.personId === ownerPersonId))
+      : false
+
+    const metrics = metricsOverride || (isSoldDealForOwner ? getSoldDealMetrics(investment) : getMetrics(investment))
 
     // Compute viewer-specific remaining principal and profit
     const currencyLabel = investment?.account?.currency || 'SAR'
@@ -804,14 +812,13 @@ export function SukukList({ initialSukuk, userRole, ownerPersonId, viewerPersonI
     let principalRemaining = 0
     const receivableRemaining = Math.max(0, Number(metrics?.receivable ?? 0))
 
+    const partnerClosed = Boolean(investment?.partnerClosed)
+
     if (userRole === 'OWNER') {
       const principalRaw = Number(investment?.principalAmount ?? 0)
       principalRemaining = Number.isFinite(principalRaw) ? Math.max(0, principalRaw) : 0
     } else {
       // PARTNER: use their participation investedAmount as canonical principal
-      const participantList = Array.isArray(investment.dealParticipants)
-        ? investment.dealParticipants
-        : []
       const myParticipation = investment.myParticipation
         || (viewerPersonId
           ? participantList.find((p: any) => p?.personId === viewerPersonId)
@@ -828,15 +835,40 @@ export function SukukList({ initialSukuk, userRole, ownerPersonId, viewerPersonI
           ? 'PRINCIPAL'
           : 'PROFIT'
 
+    const enforcedType: 'PRINCIPAL' | 'PROFIT' | 'BOTH' =
+      (userRole === 'OWNER' && isSoldDealForOwner)
+        ? 'PROFIT'
+        : defaultType
+
+    const principalForForm = (userRole === 'OWNER' && isSoldDealForOwner) ? '' : (principalRemaining > 0 ? principalRemaining.toFixed(2) : '')
+
     setWithdrawTarget({ inv: investment, metrics })
     setWithdrawForm({
-      type: defaultType,
-      principalAmount: principalRemaining > 0 ? principalRemaining.toFixed(2) : '',
-      profitAmount: receivableRemaining > 0 ? receivableRemaining.toFixed(2) : '',
+      type: enforcedType,
+      principalAmount: principalForForm,
+      profitAmount: isSoldDealForOwner
+        ? (Number(metrics?.netProfit || 0) > 0 ? Number(metrics.netProfit || 0).toFixed(2) : '')
+        : (receivableRemaining > 0 ? receivableRemaining.toFixed(2) : ''),
       date: formatDateInput(new Date()),
       notes: '',
     })
   }
+
+  useEffect(() => {
+    const receiveId = searchParams?.get('receive')
+    if (!receiveId) return
+
+    const inv = sukuk.find((s: any) => s?.id === receiveId)
+    if (!inv) return
+
+    openWithdrawModal(inv)
+
+    const next = new URLSearchParams(Array.from(searchParams.entries()))
+    next.delete('receive')
+    const qs = next.toString()
+    router.replace(qs ? `?${qs}` : '?')
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [searchParams, sukuk])
 
   const openSellModal = async (investment: any) => {
     setActionError('')
@@ -877,6 +909,39 @@ export function SukukList({ initialSukuk, userRole, ownerPersonId, viewerPersonI
     setActionError('')
     setActionLoading(true)
     try {
+      const participantList = Array.isArray(withdrawTarget.inv?.dealParticipants)
+        ? withdrawTarget.inv.dealParticipants
+        : []
+      const isSoldDealForOwner = userRole === 'OWNER' && ownerPersonId
+        ? (participantList.length > 0 && !participantList.some((p: any) => p?.personId === ownerPersonId))
+        : false
+      const partnerClosed = Boolean(withdrawTarget.inv?.partnerClosed)
+
+      // FIX 4: for sold deals, owner does not withdraw principal and does not directly withdraw profit/commission
+      // from the investment. Profit bucket settlement + commission bucket are credited on partner closure.
+      // Confirm here simply acknowledges and marks the notification as read.
+      if (userRole === 'OWNER' && isSoldDealForOwner && partnerClosed) {
+        const res = await fetch('/api/notifications/dismiss', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ investmentId: withdrawTarget.inv.id }),
+        })
+        const data = await res.json().catch(() => ({}))
+        if (!res.ok) {
+          setActionError(data.error || 'Failed to mark notification as read')
+          return
+        }
+        setWithdrawTarget(null)
+        router.refresh()
+        return
+      }
+
+      if (userRole === 'OWNER' && isSoldDealForOwner && !partnerClosed) {
+        setActionError('Waiting for partner to close their position before you can receive profit/commission.')
+        setActionLoading(false)
+        return
+      }
+
       const hasPrincipal = withdrawForm.type === 'PRINCIPAL' || withdrawForm.type === 'BOTH'
       const hasProfit = withdrawForm.type === 'PROFIT' || withdrawForm.type === 'BOTH'
 
@@ -1406,6 +1471,11 @@ export function SukukList({ initialSukuk, userRole, ownerPersonId, viewerPersonI
                 {sortedRows.map(({ inv, metrics }) => {
 
                   const participantList = Array.isArray(inv.dealParticipants) ? inv.dealParticipants : []
+                  const isSoldDealForOwner = userRole === 'OWNER' && ownerPersonId
+                    ? (participantList.length > 0 && !participantList.some((p: any) => p?.personId === ownerPersonId))
+                    : false
+                  const partnerClosed = Boolean(inv?.partnerClosed)
+
                   const partnerNames = userRole === 'OWNER'
                     ? participantList
                         .filter((p: any) => !ownerPersonId || p.personId !== ownerPersonId)
@@ -1428,6 +1498,21 @@ export function SukukList({ initialSukuk, userRole, ownerPersonId, viewerPersonI
                         {soldToLabel && (
                           <div className="mt-0.5 text-[10px] font-medium text-blue-700">
                             {soldToLabel}
+                          </div>
+                        )}
+                        {userRole === 'OWNER' && isSoldDealForOwner && (
+                          <div className="mt-1 inline-flex items-center gap-2">
+                            {!partnerClosed ? (
+                              <span className="inline-flex items-center gap-1 rounded-full bg-amber-100 px-2 py-0.5 text-[10px] font-semibold text-amber-800">
+                                <span className="h-1.5 w-1.5 rounded-full bg-amber-600" />
+                                Pending Partner Closure
+                              </span>
+                            ) : (
+                              <span className="inline-flex items-center gap-1 rounded-full bg-emerald-100 px-2 py-0.5 text-[10px] font-semibold text-emerald-800">
+                                <span className="h-1.5 w-1.5 rounded-full bg-emerald-600 animate-pulse" />
+                                Ready to Receive
+                              </span>
+                            )}
                           </div>
                         )}
                       </TableCell>
@@ -1832,21 +1917,67 @@ export function SukukList({ initialSukuk, userRole, ownerPersonId, viewerPersonI
             <label className="block text-sm font-medium text-gray-700 mb-1">
               Receipt Type
             </label>
-            <select
-              value={withdrawForm.type}
-              onChange={(e) =>
-                setWithdrawForm((prev) => ({
-                  ...prev,
-                  type: e.target.value as 'PRINCIPAL' | 'PROFIT' | 'BOTH',
-                }))
+            {withdrawTarget && (() => {
+              const participantList = Array.isArray(withdrawTarget.inv?.dealParticipants)
+                ? withdrawTarget.inv.dealParticipants
+                : []
+              const isSoldDealForOwner = userRole === 'OWNER' && ownerPersonId
+                ? (participantList.length > 0 && !participantList.some((p: any) => p?.personId === ownerPersonId))
+                : false
+
+              if (userRole === 'OWNER' && isSoldDealForOwner) {
+                return (
+                  <div>
+                    <div
+                      className="w-full px-4 py-2 border border-gray-200 rounded-lg bg-gray-50 text-sm text-gray-700"
+                      title="Principal belongs to partner — cannot be received"
+                    >
+                      Profit
+                    </div>
+                    <div className="text-[11px] text-gray-500 mt-1">
+                      Principal belongs to partner — cannot be received.
+                    </div>
+                  </div>
+                )
               }
-              className="w-full px-4 py-2 border border-gray-300 rounded-lg bg-white focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-            >
-              <option value="PRINCIPAL">Principal</option>
-              <option value="PROFIT">Profit</option>
-              <option value="BOTH">Principal + Profit</option>
-            </select>
+
+              return (
+                <select
+                  value={withdrawForm.type}
+                  onChange={(e) =>
+                    setWithdrawForm((prev) => ({
+                      ...prev,
+                      type: e.target.value as 'PRINCIPAL' | 'PROFIT' | 'BOTH',
+                    }))
+                  }
+                  className="w-full px-4 py-2 border border-gray-300 rounded-lg bg-white focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                >
+                  <option value="PRINCIPAL">Principal</option>
+                  <option value="PROFIT">Profit</option>
+                  <option value="BOTH">Principal + Profit</option>
+                </select>
+              )
+            })()}
           </div>
+
+          {withdrawTarget && (() => {
+            const participantList = Array.isArray(withdrawTarget.inv?.dealParticipants)
+              ? withdrawTarget.inv.dealParticipants
+              : []
+            const isSoldDealForOwner = userRole === 'OWNER' && ownerPersonId
+              ? (participantList.length > 0 && !participantList.some((p: any) => p?.personId === ownerPersonId))
+              : false
+            const partnerClosed = Boolean(withdrawTarget.inv?.partnerClosed)
+            if (userRole === 'OWNER' && isSoldDealForOwner && !partnerClosed) {
+              return (
+                <div className="rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 text-xs text-amber-900">
+                  <div className="font-semibold">Pending Partner Closure</div>
+                  <div className="mt-0.5">Waiting for partner to close their position.</div>
+                </div>
+              )
+            }
+            return null
+          })()}
 
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-1">
@@ -1915,6 +2046,17 @@ export function SukukList({ initialSukuk, userRole, ownerPersonId, viewerPersonI
             const principalAmount = Number(withdrawForm.principalAmount || 0) || 0
             const profitAmount = Number(withdrawForm.profitAmount || 0) || 0
 
+            const participantList = Array.isArray(withdrawTarget.inv?.dealParticipants)
+              ? withdrawTarget.inv.dealParticipants
+              : []
+            const isSoldDealForOwner = userRole === 'OWNER' && ownerPersonId
+              ? (participantList.length > 0 && !participantList.some((p: any) => p?.personId === ownerPersonId))
+              : false
+            const partnerClosed = Boolean(withdrawTarget.inv?.partnerClosed)
+            const commissionAmount = isSoldDealForOwner
+              ? Math.max(0, Number(withdrawTarget.metrics?.commissionEarned || 0))
+              : 0
+
             if (!hasPrincipal && !hasProfit) return null
 
             return (
@@ -1931,6 +2073,11 @@ export function SukukList({ initialSukuk, userRole, ownerPersonId, viewerPersonI
                       Profit: {currencyLabel} {profitAmount.toFixed(2)} on {dateLabel}
                     </li>
                   )}
+                  {userRole === 'OWNER' && isSoldDealForOwner && partnerClosed && commissionAmount > 0 && (
+                    <li>
+                      Commission: {currencyLabel} {commissionAmount.toFixed(2)}
+                    </li>
+                  )}
                 </ul>
               </div>
             )
@@ -1940,7 +2087,20 @@ export function SukukList({ initialSukuk, userRole, ownerPersonId, viewerPersonI
             <Button type="button" variant="secondary" onClick={() => setWithdrawTarget(null)} disabled={actionLoading}>
               Cancel
             </Button>
-            <Button type="submit" variant="primary" disabled={actionLoading}>
+            <Button
+              type="submit"
+              variant="primary"
+              disabled={actionLoading || Boolean(withdrawTarget && (() => {
+                const participantList = Array.isArray(withdrawTarget.inv?.dealParticipants)
+                  ? withdrawTarget.inv.dealParticipants
+                  : []
+                const isSoldDealForOwner = userRole === 'OWNER' && ownerPersonId
+                  ? (participantList.length > 0 && !participantList.some((p: any) => p?.personId === ownerPersonId))
+                  : false
+                const partnerClosed = Boolean(withdrawTarget.inv?.partnerClosed)
+                return userRole === 'OWNER' && isSoldDealForOwner && !partnerClosed
+              })())}
+            >
               {actionLoading ? 'Processing...' : 'Confirm'}
             </Button>
           </div>

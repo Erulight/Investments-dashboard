@@ -48,6 +48,31 @@ export default async function InvestmentsPage() {
       },
       orderBy: { createdAt: 'desc' },
     })
+
+    const ownerPersonId = user.personId || null
+    investments = await Promise.all(
+      investments.map(async (inv: any) => {
+        const participants = Array.isArray(inv?.dealParticipants) ? inv.dealParticipants : []
+        const partnerPersonIds = participants
+          .map((p: any) => (typeof p?.personId === 'string' ? p.personId : null))
+          .filter((pid: string | null): pid is string => Boolean(pid) && pid !== ownerPersonId)
+
+        let partnerClosed = false
+        if (partnerPersonIds.length > 0) {
+          const movement = await prisma.cashBucketMovement.findFirst({
+            where: {
+              investmentId: inv.id,
+              type: 'WITHDRAW_PRINCIPAL',
+              cashBucket: { personId: { in: partnerPersonIds } },
+            } as any,
+            select: { id: true },
+          })
+          partnerClosed = Boolean(movement)
+        }
+
+        return { ...inv, partnerClosed }
+      })
+    )
   } else if (user.role === 'PARTNER' && user.personId) {
     const participants = await prisma.dealParticipant.findMany({
       where: {
