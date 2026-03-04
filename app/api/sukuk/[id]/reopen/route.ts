@@ -110,6 +110,10 @@ export async function POST(
         return { success: true }
       }
 
+      // Canonical values for partner flows, derived from SELL_TO_PARTNER metadata
+      let partnerCanonicalPrincipal: number | null = null
+      let partnerCanonicalProfit: number | null = null
+
       const cashBalanceKey = user.role === 'PARTNER'
         ? `CASH_BALANCE:${user.personId}`
         : 'CASH_BALANCE'
@@ -234,14 +238,27 @@ export async function POST(
         console.log('SELL_TX metadata', sellTx?.metadata)
         console.log('SELL_TO_PARTNER metadata:', meta)
 
-        const originalPrincipal = Number(meta?.amountSold || meta?.salePrice || 0)
-        const originalProfit = Number(meta?.partnerGrossProfit || 0)
+        const originalPrincipal = Number(
+          meta?.amountSold ?? meta?.salePrice ?? meta?.amount ?? 0,
+        )
+        const originalProfit = Number(
+          meta?.partnerGrossProfit ?? meta?.profit ?? 0,
+        )
 
         const canonicalPrincipal = originalPrincipal > 0
           ? originalPrincipal
-          : Number(investment.principalAmount || 0)
+          : principalReceipt
+        const canonicalProfit = originalProfit > 0
+          ? originalProfit
+          : profitReceipt
 
-        console.log('CANONICAL VALUES', { canonicalPrincipal, originalProfit })
+        partnerCanonicalPrincipal = canonicalPrincipal
+        partnerCanonicalProfit = canonicalProfit
+
+        console.log('CANONICAL VALUES', {
+          canonicalPrincipal,
+          canonicalProfit,
+        })
 
         const partnerParticipant = await tx.dealParticipant.findFirst({
           where: { investmentId: id, personId: user.personId },
@@ -255,8 +272,8 @@ export async function POST(
             data: {
               investedAmount: canonicalPrincipal,
               currentValue: canonicalPrincipal,
-              profit: originalProfit,
-              receivable: originalProfit,
+              profit: canonicalProfit,
+              receivable: canonicalProfit,
             },
           })
         }
@@ -268,17 +285,43 @@ export async function POST(
           },
           data: {
             principalRemaining: canonicalPrincipal,
+            principalAllocated: canonicalPrincipal,
           },
         })
       }
+
+      // Compute canonical values for the Investment itself.
+      // For OWNER, canonical principal is current principal plus what we just reversed.
+      // For PARTNER, canonical values come from SELL_TO_PARTNER metadata (with receipt fallbacks).
+      const ownerCanonicalPrincipal = investment.principalAmount + principalReceipt
+      const ownerCanonicalCurrent = investment.currentValue + principalReceipt
+
+      const principalAmountValue =
+        user.role === 'PARTNER'
+          ? (partnerCanonicalPrincipal !== null && partnerCanonicalPrincipal > 0
+              ? partnerCanonicalPrincipal
+              : principalReceipt)
+          : ownerCanonicalPrincipal
+
+      const currentValueValue =
+        user.role === 'PARTNER'
+          ? principalAmountValue
+          : ownerCanonicalCurrent
+
+      const receivableAmountValue =
+        user.role === 'PARTNER'
+          ? (partnerCanonicalProfit !== null && partnerCanonicalProfit > 0
+              ? partnerCanonicalProfit
+              : investment.receivableAmount)
+          : investment.receivableAmount
 
       const updatedInvestment = await tx.investment.update({
         where: { id },
         data: {
           totalReceived: Math.max(0, investment.totalReceived - profitReceipt),
-          principalAmount: investment.principalAmount + principalReceipt,
-          currentValue: investment.currentValue + principalReceipt,
-          receivableAmount: investment.receivableAmount,
+          principalAmount: principalAmountValue,
+          currentValue: currentValueValue,
+          receivableAmount: receivableAmountValue,
           reopenedAt: new Date(),
         },
       })
