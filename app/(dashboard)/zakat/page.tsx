@@ -520,6 +520,12 @@ export default async function ZakatPage() {
       const movements = Array.isArray(bucket.movements) ? bucket.movements : []
       const receiptMovements = movements.filter((m: any) => isReceiptMovement(m, isImmediateReceiptBucket))
 
+      // For immediate-receipt buckets (Profit •, Partner Commission):
+      // If there is no receipt yet (no CASH_IN), skip all rows entirely.
+      if (isImmediateReceiptBucket && receiptMovements.length === 0) {
+        return []
+      }
+
       const qualifyingReceipts = receiptMovements
         .map((m: any) => {
           const day = movementDay(m)
@@ -699,7 +705,7 @@ export default async function ZakatPage() {
 
       const hasAnyInvestOut = movements.some((m: any) => m?.type === 'INVEST_OUT')
       const disableDepositIdle = user.role === 'PARTNER' && isSukukPrincipalBucket
-      if (!hasAnyInvestOut && !isProfitBucket && !disableDepositIdle) {
+      if (!hasAnyInvestOut && !isImmediateReceiptBucket && !disableDepositIdle) {
         const start = startOfDay(bucketStart)
         const elapsed = diffDaysFloor(start, now)
         const completed = Math.floor(elapsed / 354)
