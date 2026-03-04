@@ -88,11 +88,12 @@ export function SukukList({ initialSukuk, userRole, ownerPersonId, viewerPersonI
   const [editingSukuk, setEditingSukuk] = useState<any>(null)
   const [deletingId, setDeletingId] = useState<string | null>(null)
   const [detailTarget, setDetailTarget] = useState<any>(null)
-  const [withdrawTarget, setWithdrawTarget] = useState<any>(null)
+  const [withdrawTarget, setWithdrawTarget] = useState<{ inv: any; metrics: any } | null>(null)
   const [sellTarget, setSellTarget] = useState<any>(null)
   const [withdrawForm, setWithdrawForm] = useState({
-    source: 'PROFIT',
-    amount: '',
+    type: 'BOTH' as 'PRINCIPAL' | 'PROFIT' | 'BOTH',
+    principalAmount: '',
+    profitAmount: '',
     date: formatDateInput(new Date()),
     notes: '',
   })
@@ -306,82 +307,10 @@ export function SukukList({ initialSukuk, userRole, ownerPersonId, viewerPersonI
     }
   }
 
-  const handleReceiveAndClose = async (investment: any, metrics: any) => {
+  const handleReceiveAndClose = (investment: any, metrics: any) => {
     if (actionLoading) return
-
-    const receivable = Number(metrics?.receivable ?? 0)
-    const remainingPrincipal = Number(investment?.principalAmount ?? 0)
-    const currencyLabel = investment?.account?.currency || 'SAR'
-
-    const confirmLines: string[] = []
-    if (receivable > 0.01) {
-      confirmLines.push(`Receive remaining profit: ${currencyLabel} ${receivable.toFixed(2)}`)
-    }
-    if (remainingPrincipal > 0.01) {
-      confirmLines.push(`Close principal: ${currencyLabel} ${remainingPrincipal.toFixed(2)}`)
-    }
-    if (confirmLines.length === 0) {
-      alert('Nothing to receive or close for this deal.')
-      return
-    }
-
-    const confirmed = confirm(`This will:\n- ${confirmLines.join('\n- ')}\n\nContinue?`)
-    if (!confirmed) return
-
-    const defaultDate = formatDateInput(new Date())
-    const inputDate = window.prompt('Closing date (YYYY-MM-DD)', defaultDate) || ''
-    const isoDate = toIsoDateInput(inputDate)
-    if (!isoDate) {
-      alert('Invalid closing date')
-      return
-    }
-
-    setActionLoading(true)
-    setActionError('')
-
-    try {
-      if (receivable > 0.01) {
-        const res = await fetch(`/api/sukuk/${investment.id}/withdraw`, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            source: 'PROFIT',
-            amount: receivable,
-            date: isoDate,
-            notes: 'Receive & close',
-          }),
-        })
-        const data = await res.json().catch(() => ({}))
-        if (!res.ok) {
-          setActionError(data.error || 'Failed to receive profit')
-          return
-        }
-      }
-
-      if (remainingPrincipal > 0.01) {
-        const res = await fetch(`/api/sukuk/${investment.id}/withdraw`, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            source: 'PRINCIPAL',
-            amount: remainingPrincipal,
-            date: isoDate,
-            notes: 'Receive & close',
-          }),
-        })
-        const data = await res.json().catch(() => ({}))
-        if (!res.ok) {
-          setActionError(data.error || 'Failed to close principal')
-          return
-        }
-      }
-
-      router.refresh()
-    } catch (error) {
-      setActionError('Failed to close deal')
-    } finally {
-      setActionLoading(false)
-    }
+    // Reuse unified Close Position modal for partner close
+    openWithdrawModal(investment, metrics)
   }
 
   const getPartnerCommissionPaid = (inv: any) => {
@@ -842,8 +771,9 @@ export function SukukList({ initialSukuk, userRole, ownerPersonId, viewerPersonI
 
   const resetWithdrawForm = () => {
     setWithdrawForm({
-      source: 'PROFIT',
-      amount: '',
+      type: 'BOTH',
+      principalAmount: '',
+      profitAmount: '',
       date: formatDateInput(new Date()),
       notes: '',
     })
@@ -863,10 +793,49 @@ export function SukukList({ initialSukuk, userRole, ownerPersonId, viewerPersonI
     })
   }
 
-  const openWithdrawModal = (investment: any) => {
+  const openWithdrawModal = (investment: any, metricsOverride?: any) => {
     setActionError('')
-    setWithdrawTarget(investment)
-    resetWithdrawForm()
+
+    const metrics = metricsOverride || getMetrics(investment)
+
+    // Compute viewer-specific remaining principal and profit
+    const currencyLabel = investment?.account?.currency || 'SAR'
+
+    let principalRemaining = 0
+    const receivableRemaining = Math.max(0, Number(metrics?.receivable ?? 0))
+
+    if (userRole === 'OWNER') {
+      const principalRaw = Number(investment?.principalAmount ?? 0)
+      principalRemaining = Number.isFinite(principalRaw) ? Math.max(0, principalRaw) : 0
+    } else {
+      // PARTNER: use their participation investedAmount as canonical principal
+      const participantList = Array.isArray(investment.dealParticipants)
+        ? investment.dealParticipants
+        : []
+      const myParticipation = investment.myParticipation
+        || (viewerPersonId
+          ? participantList.find((p: any) => p?.personId === viewerPersonId)
+          : null)
+
+      const investedRaw = Number(myParticipation?.investedAmount ?? 0)
+      principalRemaining = Number.isFinite(investedRaw) ? Math.max(0, investedRaw) : 0
+    }
+
+    const defaultType: 'PRINCIPAL' | 'PROFIT' | 'BOTH' =
+      principalRemaining > 0 && receivableRemaining > 0
+        ? 'BOTH'
+        : principalRemaining > 0
+          ? 'PRINCIPAL'
+          : 'PROFIT'
+
+    setWithdrawTarget({ inv: investment, metrics })
+    setWithdrawForm({
+      type: defaultType,
+      principalAmount: principalRemaining > 0 ? principalRemaining.toFixed(2) : '',
+      profitAmount: receivableRemaining > 0 ? receivableRemaining.toFixed(2) : '',
+      date: formatDateInput(new Date()),
+      notes: '',
+    })
   }
 
   const openSellModal = async (investment: any) => {
@@ -908,32 +877,51 @@ export function SukukList({ initialSukuk, userRole, ownerPersonId, viewerPersonI
     setActionError('')
     setActionLoading(true)
     try {
-      if (!withdrawForm.amount) {
-        setActionError('Amount is required')
+      const hasPrincipal = withdrawForm.type === 'PRINCIPAL' || withdrawForm.type === 'BOTH'
+      const hasProfit = withdrawForm.type === 'PROFIT' || withdrawForm.type === 'BOTH'
+
+      const principalAmount = hasPrincipal ? Number(withdrawForm.principalAmount) : 0
+      const profitAmount = hasProfit ? Number(withdrawForm.profitAmount) : 0
+
+      if ((hasPrincipal && (!Number.isFinite(principalAmount) || principalAmount <= 0)) ||
+          (hasProfit && (!Number.isFinite(profitAmount) || profitAmount <= 0))) {
+        setActionError('Please enter valid amounts for the selected receipt type.')
         setActionLoading(false)
         return
       }
+
       const isoDate = toIsoDateInput(withdrawForm.date)
       if (!isoDate) {
         setActionError('Invalid date format')
         setActionLoading(false)
         return
       }
-      const res = await fetch(`/api/sukuk/${withdrawTarget.id}/withdraw`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          source: withdrawForm.source,
-          amount: parseFloat(withdrawForm.amount),
-          date: isoDate,
-          notes: withdrawForm.notes,
-        }),
-      })
-      const data = await res.json()
-      if (!res.ok) {
-        setActionError(data.error || 'Failed to withdraw')
-        return
+      const requests: { source: 'PRINCIPAL' | 'PROFIT'; amount: number }[] = []
+      if (hasProfit && profitAmount > 0) {
+        requests.push({ source: 'PROFIT', amount: profitAmount })
       }
+      if (hasPrincipal && principalAmount > 0) {
+        requests.push({ source: 'PRINCIPAL', amount: principalAmount })
+      }
+
+      for (const req of requests) {
+        const res = await fetch(`/api/sukuk/${withdrawTarget.inv.id}/withdraw`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            source: req.source,
+            amount: req.amount,
+            date: isoDate,
+            notes: withdrawForm.notes,
+          }),
+        })
+        const data = await res.json()
+        if (!res.ok) {
+          setActionError(data.error || 'Failed to withdraw')
+          return
+        }
+      }
+
       setWithdrawTarget(null)
       router.refresh()
     } catch (error) {
@@ -1831,7 +1819,7 @@ export function SukukList({ initialSukuk, userRole, ownerPersonId, viewerPersonI
       <Modal
         isOpen={Boolean(withdrawTarget)}
         onClose={() => setWithdrawTarget(null)}
-        title="Withdraw Cash"
+        title="Close Position"
       >
         <form onSubmit={handleWithdraw} className="space-y-4">
           {actionError && (
@@ -1839,43 +1827,74 @@ export function SukukList({ initialSukuk, userRole, ownerPersonId, viewerPersonI
               {actionError}
             </div>
           )}
+
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-1">
-              Source
+              Receipt Type
             </label>
             <select
-              value={withdrawForm.source}
-              onChange={(e) => setWithdrawForm((prev) => ({ ...prev, source: e.target.value }))}
+              value={withdrawForm.type}
+              onChange={(e) =>
+                setWithdrawForm((prev) => ({
+                  ...prev,
+                  type: e.target.value as 'PRINCIPAL' | 'PROFIT' | 'BOTH',
+                }))
+              }
               className="w-full px-4 py-2 border border-gray-300 rounded-lg bg-white focus:ring-2 focus:ring-blue-500 focus:border-transparent"
             >
-              <option value="PROFIT">Profit</option>
               <option value="PRINCIPAL">Principal</option>
+              <option value="PROFIT">Profit</option>
+              <option value="BOTH">Principal + Profit</option>
             </select>
           </div>
+
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-1">
-              Amount
-            </label>
-            <input
-              type="number"
-              min="0"
-              step="0.01"
-              value={withdrawForm.amount}
-              onChange={(e) => setWithdrawForm((prev) => ({ ...prev, amount: e.target.value }))}
-              className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-              required
-            />
-          </div>
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">
-              Date
+              Date Received
             </label>
             <DateInput
               value={withdrawForm.date}
               onChange={(value) => setWithdrawForm((prev) => ({ ...prev, date: value }))}
-              ariaLabel="Withdrawal date"
+              ariaLabel="Date received"
             />
           </div>
+
+          {(withdrawForm.type === 'PRINCIPAL' || withdrawForm.type === 'BOTH') && (
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">
+                Principal Amount
+              </label>
+              <input
+                type="number"
+                min="0"
+                step="0.01"
+                value={withdrawForm.principalAmount}
+                onChange={(e) =>
+                  setWithdrawForm((prev) => ({ ...prev, principalAmount: e.target.value }))
+                }
+                className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+              />
+            </div>
+          )}
+
+          {(withdrawForm.type === 'PROFIT' || withdrawForm.type === 'BOTH') && (
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">
+                Profit Amount
+              </label>
+              <input
+                type="number"
+                min="0"
+                step="0.01"
+                value={withdrawForm.profitAmount}
+                onChange={(e) =>
+                  setWithdrawForm((prev) => ({ ...prev, profitAmount: e.target.value }))
+                }
+                className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+              />
+            </div>
+          )}
+
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-1">
               Notes
@@ -1887,12 +1906,42 @@ export function SukukList({ initialSukuk, userRole, ownerPersonId, viewerPersonI
               className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
             />
           </div>
+
+          {withdrawTarget && (() => {
+            const currencyLabel = withdrawTarget.inv?.account?.currency || 'SAR'
+            const dateLabel = withdrawForm.date || formatDateInput(new Date())
+            const hasPrincipal = withdrawForm.type === 'PRINCIPAL' || withdrawForm.type === 'BOTH'
+            const hasProfit = withdrawForm.type === 'PROFIT' || withdrawForm.type === 'BOTH'
+            const principalAmount = Number(withdrawForm.principalAmount || 0) || 0
+            const profitAmount = Number(withdrawForm.profitAmount || 0) || 0
+
+            if (!hasPrincipal && !hasProfit) return null
+
+            return (
+              <div className="rounded-lg bg-gray-50 border border-gray-200 p-3 text-xs text-gray-700">
+                <p className="font-semibold mb-1">You will receive:</p>
+                <ul className="list-disc list-inside space-y-0.5">
+                  {hasPrincipal && (
+                    <li>
+                      Principal: {currencyLabel} {principalAmount.toFixed(2)} on {dateLabel}
+                    </li>
+                  )}
+                  {hasProfit && (
+                    <li>
+                      Profit: {currencyLabel} {profitAmount.toFixed(2)} on {dateLabel}
+                    </li>
+                  )}
+                </ul>
+              </div>
+            )
+          })()}
+
           <div className="flex justify-end gap-3">
             <Button type="button" variant="secondary" onClick={() => setWithdrawTarget(null)} disabled={actionLoading}>
               Cancel
             </Button>
             <Button type="submit" variant="primary" disabled={actionLoading}>
-              {actionLoading ? 'Processing...' : 'Withdraw'}
+              {actionLoading ? 'Processing...' : 'Confirm'}
             </Button>
           </div>
         </form>
