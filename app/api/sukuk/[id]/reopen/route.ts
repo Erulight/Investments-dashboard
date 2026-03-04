@@ -204,6 +204,38 @@ export async function POST(
         await tx.transaction.deleteMany({ where: { id: { in: transactionIds } } })
       }
 
+      // For partners, also restore their deal participant record to pre-withdrawal state
+      if (user.role === 'PARTNER' && user.personId) {
+        const partnerParticipant = await tx.dealParticipant.findFirst({
+          where: {
+            investmentId: id,
+            personId: user.personId,
+          },
+        })
+
+        if (partnerParticipant) {
+          const investedRaw = Number(partnerParticipant.investedAmount ?? 0)
+          const currentValueRaw = Number(partnerParticipant.currentValue ?? partnerParticipant.investedAmount ?? 0)
+          const profitRaw = Number(partnerParticipant.profit ?? 0)
+          const receivableRaw = Number(partnerParticipant.receivable ?? 0)
+
+          const nextInvested = investedRaw + principalReceipt
+          const nextCurrentValue = nextInvested
+          const nextProfit = profitRaw + profitReceipt
+          const nextReceivable = receivableRaw + profitReceipt
+
+          await tx.dealParticipant.update({
+            where: { id: partnerParticipant.id },
+            data: {
+              investedAmount: nextInvested,
+              currentValue: nextCurrentValue,
+              profit: nextProfit,
+              receivable: nextReceivable,
+            },
+          })
+        }
+      }
+
       const updatedInvestment = await tx.investment.update({
         where: { id },
         data: {
