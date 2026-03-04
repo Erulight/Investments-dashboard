@@ -496,6 +496,8 @@ export default async function ZakatPage() {
       if (Number.isNaN(bucketStart.getTime())) return []
 
       const isProfitBucket = typeof bucket.label === 'string' && bucket.label.startsWith('Profit \u2022')
+      const isCommissionBucket = typeof bucket.label === 'string' && (bucket.label === 'Partner Commission' || bucket.label.startsWith('Partner Commission'))
+      const isImmediateReceiptBucket = isProfitBucket || isCommissionBucket
       const isCirclys = typeof bucket.label === 'string' && bucket.label.startsWith('Circlys')
       const isSukukPrincipalBucket =
         typeof bucket.label === 'string' && bucket.label.startsWith('Sukuk Principal \u2022')
@@ -516,7 +518,7 @@ export default async function ZakatPage() {
       const lastPayment = payments[0]
 
       const movements = Array.isArray(bucket.movements) ? bucket.movements : []
-      const receiptMovements = movements.filter((m: any) => isReceiptMovement(m, isProfitBucket))
+      const receiptMovements = movements.filter((m: any) => isReceiptMovement(m, isImmediateReceiptBucket))
 
       const qualifyingReceipts = receiptMovements
         .map((m: any) => {
@@ -525,11 +527,13 @@ export default async function ZakatPage() {
 
           const investmentId = typeof m?.investmentId === 'string' ? m.investmentId : null
           const inv = investmentId ? investmentMap.get(investmentId) : null
-          if (!inv) return null
-          if (inv.isIjarah) return null
-          if (hasDefaultOrWrittenOff(inv)) return null
+          if (!isCommissionBucket) {
+            if (!inv) return null
+            if (inv.isIjarah) return null
+            if (hasDefaultOrWrittenOff(inv)) return null
+          }
 
-          if (inv.reopenedAt) {
+          if (inv?.reopenedAt) {
             const reopenedAt = new Date(inv.reopenedAt as any)
             if (!Number.isNaN(reopenedAt.getTime())) {
               const createdAt = new Date(m.createdAt)
@@ -537,9 +541,11 @@ export default async function ZakatPage() {
             }
           }
 
-          const start = inv.startDate instanceof Date ? inv.startDate : new Date(inv.startDate as any)
+          const start = inv?.startDate instanceof Date ? inv.startDate : (inv?.startDate ? new Date(inv.startDate as any) : bucketStart)
           if (Number.isNaN(start.getTime())) return null
-          const eligibilityAnchor = user.role === 'PARTNER' ? bucketStart : start
+          const eligibilityAnchor = (isCommissionBucket
+            ? bucketStart
+            : (user.role === 'PARTNER' ? bucketStart : start))
           const eligibilityStart = startOfDay(eligibilityAnchor)
           const duration = diffDaysFloor(eligibilityStart, day)
           if (duration < 354) return null
@@ -547,11 +553,13 @@ export default async function ZakatPage() {
           const amount = movementAmount(m)
           if (amount <= 0) return null
 
+          const investmentName = inv?.name || bucket.label || 'General'
+
           return {
             movement: m,
             movementId: m.id,
-            investmentId: inv.id,
-            investmentName: inv.name,
+            investmentId: (inv?.id as string) || (investmentId as string),
+            investmentName,
             receiptDay: day,
             eligibilityStart,
             amount,
