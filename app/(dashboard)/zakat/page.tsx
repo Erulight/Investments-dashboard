@@ -585,7 +585,7 @@ export default async function ZakatPage() {
         const rowKind = getRowKind(bucket, rowKey, dueReceipts)
         const daysHeld = diffDaysFloor(r.eligibilityStart, r.receiptDay)
         const why = rowKind === 'COMMISSION'
-          ? `Commission from sale on ${isoDay(r.receiptDay)}, held ${daysHeld} days`
+          ? `Commission from sale on ${isoDay(bucket.haulStartDate)}, held ${daysHeld} days`
           : rowKind === 'PRINCIPAL'
             ? `Principal received on ${isoDay(r.receiptDay)}, investment ran ${daysHeld} days (\u2265354)`
             : `Profit received on ${isoDay(r.receiptDay)}, investment ran ${daysHeld} days (\u2265354)`

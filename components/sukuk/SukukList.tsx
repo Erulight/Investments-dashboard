@@ -348,7 +348,7 @@ export function SukukList({ initialSukuk, userRole, ownerPersonId, viewerPersonI
     const salePrice = Number(sellTx?.meta?.salePrice ?? sellTx?.tx?.amount ?? 0)
 
     const commissionEarned = transactions
-      .filter((tx: any) => tx.type === 'PARTNER_COMMISSION' && (!ownerPersonId || tx.personId === ownerPersonId))
+      .filter((tx: any) => tx.type === 'PARTNER_COMMISSION')
       .reduce((sum: number, tx: any) => {
         const meta = parseMetadata(tx.metadata)
         if (meta?.investmentId && meta.investmentId !== inv.id) return sum

@@ -244,22 +244,44 @@ export async function POST(
         const cashSetting = await tx.systemSetting.findUnique({ where: { key: CASH_BALANCE_KEY } })
         const currentCashRaw = cashSetting ? Number(cashSetting.value) : 0
         const currentCash = Number.isFinite(currentCashRaw) ? currentCashRaw : 0
-        const nextCash = currentCash + totalPending
-        if (cashSetting) {
-          await tx.systemSetting.update({
-            where: { key: CASH_BALANCE_KEY },
-            data: { value: nextCash.toString() },
+        let cashToAdd = totalPending
+
+        const commissionAmount = Number.isFinite(commission) ? Math.max(0, commission) : 0
+        if (commissionAmount > 0) {
+          await createCashBucket(tx, {
+            amount: commissionAmount,
+            haulStartDate,
+            currency: investment.account?.currency || 'SAR',
+            label: 'Partner Commission',
+            date,
+            notes: null,
+            investmentId: null,
+            personId: null,
+            type: 'CASH_IN',
           })
-        } else {
-          await tx.systemSetting.create({
+
+          await tx.transaction.create({
             data: {
-              key: CASH_BALANCE_KEY,
-              value: nextCash.toString(),
-              description: 'Available cash balance for investments',
+              accountId: cashAccount.id,
+              investmentId: investment.id,
+              personId: null,
+              type: 'PARTNER_COMMISSION',
+              amount: Math.abs(commissionAmount),
+              date,
+              description: 'Partner commission received on partner closure',
+              metadata: JSON.stringify({ sourceTxId: saleTx.id }),
             },
           })
+
+          cashToAdd += commissionAmount
         }
 
+        const nextCash = currentCash + cashToAdd
+        if (cashSetting) {
+          await tx.systemSetting.update({ where: { key: CASH_BALANCE_KEY }, data: { value: nextCash.toString() } })
+        } else {
+          await tx.systemSetting.create({ data: { key: CASH_BALANCE_KEY, value: nextCash.toString(), description: 'Available cash balance for investments' } })
+        }
         if (ownerParticipant) {
           await tx.dealParticipant.update({
             where: { id: ownerParticipant.id },

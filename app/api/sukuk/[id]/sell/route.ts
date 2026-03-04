@@ -318,33 +318,6 @@ export async function POST(
       }
 
       if (paymentMode === 'SETTLE_DEBT' && commissionAmount > 0) {
-        const cashSetting = await tx.systemSetting.findUnique({ where: { key: 'CASH_BALANCE' } })
-        const currentCash = cashSetting ? Number(cashSetting.value) : 0
-        const nextCash = currentCash + commissionAmount
-
-        if (cashSetting) {
-          await tx.systemSetting.update({ where: { key: 'CASH_BALANCE' }, data: { value: nextCash.toString() } })
-        } else {
-          await tx.systemSetting.create({
-            data: {
-              key: 'CASH_BALANCE',
-              value: nextCash.toString(),
-              description: 'Available cash balance for investments',
-            },
-          })
-        }
-
-        await createCashBucket(tx, {
-          amount: commissionAmount,
-          haulStartDate: date,
-          currency: investment.account?.currency || 'SAR',
-          label: 'Partner Commission',
-          date,
-          notes: notes || null,
-          investmentId: null,
-          type: 'CASH_IN',
-          personId: null,
-        })
       }
 
       const sellerRemaining = seller.investedAmount - amount
@@ -522,42 +495,6 @@ export async function POST(
                 },
               ]
             : []),
-          ...(commissionAmount > 0
-            ? [
-                {
-                  accountId: cashAccount.id,
-                  investmentId: investment.id,
-                  personId: sellerPersonId,
-                  type: 'PARTNER_COMMISSION',
-                  amount: Math.abs(commissionAmount),
-                  date,
-                  description: notes || 'Partner commission',
-                  metadata: JSON.stringify({
-                    buyerPersonId,
-                    investmentId: investment.id,
-                    principalTransferred: amount,
-                    salePrice,
-                    commissionType,
-                    commissionValue: commissionValueRaw,
-                    commissionAmount,
-                    accruedProfitAtSale,
-                    totalDays,
-                    investorDays,
-                    partnerDays,
-                    totalNetProfitFull,
-                    totalFeesFull,
-                    investorProfit,
-                    investorFeeShare,
-                    partnerGrossProfit,
-                    partnerFeeShare,
-                    feeRecoveredFromPartner,
-                    partnerHoldingYears,
-                    partnerApr,
-                    allowedProfitAtTenApr,
-                  }),
-                },
-              ]
-            : []),
           {
             accountId: investment.accountId,
             investmentId: investment.id,
@@ -584,7 +521,7 @@ export async function POST(
           where: { key: 'CASH_BALANCE' },
         })
         const currentCash = cashSetting ? Number(cashSetting.value) : 0
-        const nextCash = currentCash + salePrice + commissionAmount + accruedProfitAtSale
+        const nextCash = currentCash + salePrice + accruedProfitAtSale
 
         if (cashSetting) {
           await tx.systemSetting.update({
@@ -611,19 +548,6 @@ export async function POST(
           personId: null,
         })
 
-        if (commissionAmount > 0) {
-          await createCashBucket(tx, {
-            amount: commissionAmount,
-            haulStartDate: date,
-            currency: investment.account?.currency || 'SAR',
-            label: 'Partner Commission',
-            date,
-            notes: notes || null,
-            investmentId: null,
-            type: 'CASH_IN',
-            personId: null,
-          })
-        }
       }
 
       await logAudit(tx, {
