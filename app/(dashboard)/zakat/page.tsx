@@ -24,6 +24,8 @@ type BucketRow = {
   source: string
   sourceGroup: string
   sourceType: string
+  rowKind?: 'PROFIT' | 'COMMISSION' | 'IDLE' | 'PRINCIPAL'
+  why?: string | null
   lastPayment: null | {
     id: string
     date: string
@@ -476,6 +478,17 @@ export default async function ZakatPage() {
     return payments.some((p) => typeof p?.notes === 'string' && p.notes.includes(`ZAKAT_ROW=${rowKey}`))
   }
 
+  const getRowKind = (bucket: any, rowKey: string, dueReceipts: any[]) => {
+    const label = typeof bucket?.label === 'string' ? bucket.label : ''
+    if (label === 'Partner Commission') return 'COMMISSION' as const
+    if (rowKey.startsWith('IDLE|') || rowKey.startsWith('DEPOSIT|')) return 'IDLE' as const
+    const t = dueReceipts?.[0]?.type
+    if (t === 'WITHDRAW_PRINCIPAL') return 'PRINCIPAL' as const
+    if (t === 'WITHDRAW_PROFIT') return 'PROFIT' as const
+    if (label.startsWith('Profit \u2022')) return 'PROFIT' as const
+    return 'PROFIT' as const
+  }
+
   const rows: BucketRow[] = buckets
     .flatMap((bucket: any): BucketRow[] => {
       const now = startOfDay(new Date())
@@ -561,6 +574,21 @@ export default async function ZakatPage() {
         const isPaid = movementHasRowPaid(payments, rowKey)
         const zakatBase = r.amount
         const zakatDue = !isPaid && zakatBase > 0 ? zakatBase * 0.025 : 0
+        const dueReceipts = [
+          {
+            date: isoDay(r.receiptDay),
+            amount: Number(r.movement.amount || 0),
+            type: r.movement.type,
+            investmentName: r.investmentName,
+          },
+        ]
+        const rowKind = getRowKind(bucket, rowKey, dueReceipts)
+        const daysHeld = diffDaysFloor(r.eligibilityStart, r.receiptDay)
+        const why = rowKind === 'COMMISSION'
+          ? `Commission from sale on ${isoDay(r.receiptDay)}, held ${daysHeld} days`
+          : rowKind === 'PRINCIPAL'
+            ? `Principal received on ${isoDay(r.receiptDay)}, investment ran ${daysHeld} days (\u2265354)`
+            : `Profit received on ${isoDay(r.receiptDay)}, investment ran ${daysHeld} days (\u2265354)`
         bucketRows.push({
           id: rowKey,
           bucketId: bucket.id,
@@ -581,6 +609,8 @@ export default async function ZakatPage() {
           source: r.investmentName,
           sourceGroup,
           sourceType,
+          rowKind,
+          why,
           lastPayment: lastPayment
             ? {
                 id: lastPayment.id,
@@ -588,14 +618,7 @@ export default async function ZakatPage() {
                 amount: Math.abs(Number(lastPayment.amount || 0)),
               }
             : null,
-          dueReceipts: [
-            {
-              date: isoDay(r.receiptDay),
-              amount: Number(r.movement.amount || 0),
-              type: r.movement.type,
-              investmentName: r.investmentName,
-            },
-          ],
+          dueReceipts,
         })
       })
 
@@ -621,6 +644,7 @@ export default async function ZakatPage() {
           const rowKey = buildRowKey(['IDLE', bucket.id, r.movementId, isoDay(periodStart), isoDay(periodEnd)])
           const isPaid = movementHasRowPaid(payments, rowKey)
           const zakatDue = !isPaid && idleAmount > 0 ? idleAmount * 0.025 : 0
+          const idleDays = diffDaysFloor(periodStart, periodEnd)
 
           completedIdleRows.push({
             id: rowKey,
@@ -642,6 +666,8 @@ export default async function ZakatPage() {
             source: r.investmentName,
             sourceGroup,
             sourceType,
+            rowKind: 'IDLE',
+            why: `Cash idle from ${isoDay(periodStart)} to ${isoDay(periodEnd)} (${idleDays} days)`,
             lastPayment: lastPayment
               ? {
                   id: lastPayment.id,
@@ -678,6 +704,7 @@ export default async function ZakatPage() {
           const rowKey = buildRowKey(['DEPOSIT', bucket.id, isoDay(periodStart), isoDay(periodEnd)])
           const isPaid = movementHasRowPaid(payments, rowKey)
           const zakatDue = !isPaid ? balanceAtEnd * 0.025 : 0
+          const idleDays = diffDaysFloor(periodStart, periodEnd)
 
           bucketRows.push({
             id: rowKey,
@@ -699,6 +726,8 @@ export default async function ZakatPage() {
             source,
             sourceGroup,
             sourceType,
+            rowKind: 'IDLE',
+            why: `Cash idle from ${isoDay(periodStart)} to ${isoDay(periodEnd)} (${idleDays} days)`,
             lastPayment: lastPayment
               ? {
                   id: lastPayment.id,

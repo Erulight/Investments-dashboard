@@ -34,6 +34,8 @@ type BucketRow = {
   source: string
   sourceGroup: string
   sourceType: string
+  rowKind?: 'PROFIT' | 'COMMISSION' | 'IDLE' | 'PRINCIPAL'
+  why?: string | null
   lastPayment: null | {
     id: string
     date: string
@@ -64,6 +66,41 @@ export function ZakatDashboard({
   zakatEnabled?: boolean
 }) {
   const router = useRouter()
+
+  const toDay = (value: string) => {
+    const m = value.match(/^(\d{4})-(\d{2})-(\d{2})/)
+    if (m) return new Date(Number(m[1]), Number(m[2]) - 1, Number(m[3]))
+    const d = new Date(value)
+    return d
+  }
+
+  const addDays = (d: Date, days: number) => {
+    const next = new Date(d)
+    next.setDate(next.getDate() + days)
+    return next
+  }
+
+  const isoDay = (d: Date) => {
+    const day = new Date(d.getFullYear(), d.getMonth(), d.getDate())
+    return day.toISOString().split('T')[0]
+  }
+
+  const hijriEpochStart = new Date(2022, 6, 30) // 1444 AH ~ 2022-07-30
+  const hijriEpochYear = 1444
+  const hijriYearLengthDays = 354
+
+  const getHijriYearWindowForDate = (d: Date) => {
+    const t = d.getTime()
+    const e = hijriEpochStart.getTime()
+    const dayMs = 1000 * 60 * 60 * 24
+    const diffDays = Number.isFinite(t) && Number.isFinite(e) ? Math.floor((t - e) / dayMs) : 0
+    const yearIndex = diffDays >= 0 ? Math.floor(diffDays / hijriYearLengthDays) : -Math.ceil(Math.abs(diffDays) / hijriYearLengthDays)
+    const year = hijriEpochYear + yearIndex
+    const start = addDays(hijriEpochStart, yearIndex * hijriYearLengthDays)
+    const endExclusive = addDays(start, hijriYearLengthDays)
+    const endInclusive = addDays(endExclusive, -1)
+    return { year, start, endExclusive, endInclusive }
+  }
 
   // --- Tab state ---
   const [activeTab, setActiveTab] = useState('all')
@@ -138,6 +175,15 @@ export function ZakatDashboard({
     })
   }
 
+  const kindBadge = (kind?: BucketRow['rowKind']) => {
+    const k = kind || 'PROFIT'
+    const base = 'inline-flex items-center rounded-full px-2 py-0.5 text-[11px] font-semibold'
+    if (k === 'PROFIT') return <span className={`${base} bg-emerald-100 text-emerald-700`}>Profit</span>
+    if (k === 'COMMISSION') return <span className={`${base} bg-blue-100 text-blue-700`}>Commission</span>
+    if (k === 'IDLE') return <span className={`${base} bg-amber-100 text-amber-800`}>Idle Cash</span>
+    return <span className={`${base} bg-gray-100 text-gray-700`}>Principal</span>
+  }
+
   // --- Derived data ---
   const sourceGroups = useMemo(() => {
     const set = new Set(buckets.map(b => b.sourceGroup))
@@ -182,6 +228,68 @@ export function ZakatDashboard({
 
   const totalDue = filteredBuckets.reduce((sum, b) => sum + b.zakatDue, 0)
   const totalBalance = filteredBuckets.reduce((sum, b) => sum + b.balance, 0)
+
+  const hijriSummaries = useMemo(() => {
+    const map = new Map<number, { year: number; start: Date; endExclusive: Date; endInclusive: Date; due: number; total: number; rows: BucketRow[] }>()
+    const eligible = buckets
+      .filter(r => (Number(r.zakatDue) > 0) || r.isPaid || (Number(r.idleBase) > 0) || (Number(r.receiptsTotal) > 0))
+
+    eligible.forEach(r => {
+      const d = toDay(r.haulCompleteDate)
+      if (Number.isNaN(d.getTime())) return
+      const w = getHijriYearWindowForDate(d)
+      const existing = map.get(w.year) || { year: w.year, start: w.start, endExclusive: w.endExclusive, endInclusive: w.endInclusive, due: 0, total: 0, rows: [] }
+      existing.due += Number(r.zakatDue) || 0
+      existing.total += (Number(r.idleBase) || 0) + (Number(r.receiptsTotal) || 0)
+      existing.rows.push(r)
+      map.set(w.year, existing)
+    })
+    return Array.from(map.values()).sort((a, b) => b.year - a.year)
+  }, [buckets])
+
+  const [payAllLoadingYear, setPayAllLoadingYear] = useState<number | null>(null)
+  const [payAllError, setPayAllError] = useState<string>('')
+
+  const payAllForHijriYear = async (year: number) => {
+    if (!zakatEnabled) return
+    const summary = hijriSummaries.find(s => s.year === year)
+    if (!summary) return
+    const dueRows = summary.rows.filter(r => (Number(r.zakatDue) || 0) > 0)
+    if (dueRows.length === 0) return
+
+    const confirmed = confirm(`Pay all Zakat due for ${year} AH (${dueRows.length} items)?`)
+    if (!confirmed) return
+
+    setPayAllLoadingYear(year)
+    setPayAllError('')
+    try {
+      for (const row of dueRows) {
+        const amount = Number(row.zakatDue)
+        if (!Number.isFinite(amount) || amount <= 0) continue
+        const res = await fetch('/api/zakat', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            bucketId: row.bucketId,
+            rowId: row.id,
+            amount,
+            date: new Date().toISOString().slice(0, 10),
+            notes: `Pay all for ${year} AH`,
+            periodEnd: row.haulCompleteDate,
+          }),
+        })
+        const data = await res.json().catch(() => ({}))
+        if (!res.ok) {
+          throw new Error(data.error || 'Failed to pay zakat')
+        }
+      }
+      router.refresh()
+    } catch (err) {
+      setPayAllError(err instanceof Error ? err.message : 'Failed to pay all')
+    } finally {
+      setPayAllLoadingYear(null)
+    }
+  }
 
   const toggleSort = (key: SortKey) => {
     if (sortKey === key) {
@@ -309,6 +417,50 @@ export function ZakatDashboard({
           Zakat is disabled because total zakatable wealth is below Nisab.
         </div>
       )}
+
+      <div className="space-y-2">
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+          {hijriSummaries.map(s => {
+            const allPaid = s.due <= 0.000001
+            const windowText = `${isoDay(s.start)} → ${isoDay(s.endInclusive)}`
+            return (
+              <Card key={s.year}>
+                <CardContent className="py-3 px-4">
+                  <div className="flex items-start justify-between gap-3">
+                    <div>
+                      <div className="text-sm font-semibold text-gray-900">{s.year} AH</div>
+                      <div className="text-[11px] text-gray-500 mt-0.5">{windowText}</div>
+                    </div>
+                    <div className="text-right">
+                      <div className="text-[11px] text-gray-500">Due</div>
+                      <div className={`text-lg font-bold tabular-nums ${allPaid ? 'text-emerald-700' : 'text-amber-700'}`}>SAR {fmt(Math.max(0, s.due))}</div>
+                    </div>
+                  </div>
+                  <div className="mt-2 flex items-center justify-between">
+                    <div className="text-[11px] text-gray-500">{s.rows.length} item{s.rows.length !== 1 ? 's' : ''}</div>
+                    {allPaid ? (
+                      <div className="text-xs font-semibold text-emerald-700">Paid</div>
+                    ) : (
+                      <Button
+                        size="sm"
+                        onClick={() => payAllForHijriYear(s.year)}
+                        disabled={!zakatEnabled || payAllLoadingYear === s.year}
+                      >
+                        {payAllLoadingYear === s.year ? 'Paying...' : 'Pay All'}
+                      </Button>
+                    )}
+                  </div>
+                </CardContent>
+              </Card>
+            )
+          })}
+        </div>
+        {payAllError && (
+          <div className="rounded-lg border border-red-200 bg-red-50 px-4 py-2 text-xs text-red-700">
+            {payAllError}
+          </div>
+        )}
+      </div>
       {/* Summary row */}
       <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
         <Card>
@@ -412,7 +564,7 @@ export function ZakatDashboard({
                 <thead>
                   <tr className="bg-gray-50 text-left text-xs text-gray-500 border-b border-gray-200">
                     <th className="py-2.5 px-3 font-medium cursor-pointer select-none whitespace-nowrap" onClick={() => toggleSort('label')}>
-                      Bucket <SortArrow active={sortKey === 'label'} dir={sortDir} />
+                      Item <SortArrow active={sortKey === 'label'} dir={sortDir} />
                     </th>
                     <th className="py-2.5 px-3 font-medium cursor-pointer select-none whitespace-nowrap" onClick={() => toggleSort('haulStartDate')}>
                       Haul Start <SortArrow active={sortKey === 'haulStartDate'} dir={sortDir} />
@@ -438,32 +590,28 @@ export function ZakatDashboard({
                 </thead>
                 <tbody className="divide-y divide-gray-100">
                   {(() => {
-                    // Group buckets: Circlys groups are collapsible, others show directly
-                    const groups = new Map<string, BucketRow[]>()
-                    const singles: BucketRow[] = []
-                    filteredBuckets.forEach(b => {
-                      if (b.sourceGroup !== b.source) {
-                        // This is a grouped Circlys bucket
-                        const existing = groups.get(b.sourceGroup) || []
-                        existing.push(b)
-                        groups.set(b.sourceGroup, existing)
-                      } else {
-                        singles.push(b)
-                      }
+                    const groupMap = new Map<string, BucketRow[]>()
+                    filteredBuckets.forEach(r => {
+                      const key = r.source && r.source !== 'General' ? r.source : 'General Cash'
+                      const existing = groupMap.get(key) || []
+                      existing.push(r)
+                      groupMap.set(key, existing)
+                    })
+
+                    const entries = Array.from(groupMap.entries()).sort((a, b) => {
+                      if (a[0] === 'General Cash') return 1
+                      if (b[0] === 'General Cash') return -1
+                      return a[0].localeCompare(b[0])
                     })
 
                     const rows: React.ReactNode[] = []
-
-                    // Render grouped Circlys rows
-                    groups.forEach((groupBuckets, groupName) => {
+                    for (const [groupName, groupRows] of entries) {
                       const isExpanded = expandedGroups.has(groupName)
-                      const gBalance = groupBuckets.reduce((s, b) => s + b.balance, 0)
-                      const gIdle = groupBuckets.reduce((s, b) => s + b.idleBase, 0)
-                      const gReceipts = groupBuckets.reduce((s, b) => s + b.receiptsTotal, 0)
-                      const gZakat = groupBuckets.reduce((s, b) => s + b.zakatDue, 0)
-                      const allComplete = groupBuckets.every(b => b.haulCompleted)
-                      const someComplete = groupBuckets.some(b => b.haulCompleted)
-                      const cur = groupBuckets[0]?.currency || 'SAR'
+                      const gBalance = groupRows.reduce((s, r) => s + (Number(r.balance) || 0), 0)
+                      const gIdle = groupRows.reduce((s, r) => s + (Number(r.idleBase) || 0), 0)
+                      const gReceipts = groupRows.reduce((s, r) => s + (Number(r.receiptsTotal) || 0), 0)
+                      const gZakat = groupRows.reduce((s, r) => s + (Number(r.zakatDue) || 0), 0)
+                      const cur = groupRows[0]?.currency || 'SAR'
 
                       rows.push(
                         <tr
@@ -476,133 +624,108 @@ export function ZakatDashboard({
                               <span className="text-gray-400 text-xs">{isExpanded ? '▾' : '▸'}</span>
                               <div>
                                 <div className="font-semibold text-gray-900">{groupName}</div>
-                                <div className="text-[11px] text-gray-400">{groupBuckets.length} payment{groupBuckets.length !== 1 ? 's' : ''}</div>
+                                <div className="text-[11px] text-gray-400">{groupRows.length} item{groupRows.length !== 1 ? 's' : ''}</div>
                               </div>
                             </div>
                           </td>
-                          <td className="py-2.5 px-3 text-gray-400 text-xs whitespace-nowrap">—</td>
-                          <td className="py-2.5 px-3 text-gray-400 text-xs whitespace-nowrap">—</td>
-                          <td className="py-2.5 px-3 text-right font-medium text-gray-900 whitespace-nowrap">{cur} {fmt(gBalance)}</td>
-                          <td className="py-2.5 px-3 text-right text-gray-700 whitespace-nowrap">{cur} {fmt(gIdle)}</td>
-                          <td className="py-2.5 px-3 text-right text-gray-700 whitespace-nowrap">{cur} {fmt(gReceipts)}</td>
-                          <td className="py-2.5 px-3 text-right font-semibold whitespace-nowrap">
-                            <span className={gZakat > 0 ? 'text-emerald-700' : 'text-gray-400'}>
-                              {cur} {fmt(gZakat)}
-                            </span>
-                          </td>
+                          <td className="py-2.5 px-3 text-gray-500">-</td>
+                          <td className="py-2.5 px-3 text-gray-500">-</td>
+                          <td className="py-2.5 px-3 text-right font-medium">{cur} {fmt(gBalance)}</td>
+                          <td className="py-2.5 px-3 text-right">{cur} {fmt(gIdle)}</td>
+                          <td className="py-2.5 px-3 text-right">{cur} {fmt(gReceipts)}</td>
+                          <td className="py-2.5 px-3 text-right font-semibold">{cur} {fmt(gZakat)}</td>
                           <td className="py-2.5 px-3 text-center">
-                            <span className={`inline-flex px-2 py-0.5 rounded-full text-[11px] font-medium ${
-                              allComplete
-                                ? 'bg-green-50 text-green-700'
-                                : someComplete
-                                ? 'bg-blue-50 text-blue-700'
-                                : 'bg-amber-50 text-amber-700'
-                            }`}>
-                              {allComplete ? 'Complete' : someComplete ? 'Partial' : 'Pending'}
-                            </span>
-                          </td>
-                          <td className="py-2.5 px-3"></td>
-                        </tr>
-                      )
-
-                      // Expanded child rows
-                      if (isExpanded) {
-                        groupBuckets.forEach(bucket => {
-                          // Extract month label (last part after •)
-                          const monthLabelBase = bucket.label?.split(' • ').slice(2).join(' • ') || bucket.label || ''
-                          const monthLabel = `${monthLabelBase || bucket.id.slice(0, 8)} • Hawl ${bucket.periodIndex}`
-                          rows.push(
-                            <tr key={bucket.id} className="hover:bg-gray-50 transition-colors bg-white">
-                              <td className="py-2 px-3 pl-10">
-                                <div className="text-sm text-gray-700" title={bucket.label || ''}>
-                                  {monthLabel}
-                                </div>
-                              </td>
-                              <td className="py-2 px-3 text-gray-600 text-xs whitespace-nowrap">{bucket.haulStartDate}</td>
-                              <td className="py-2 px-3 text-gray-600 text-xs whitespace-nowrap">{bucket.haulCompleteDate}</td>
-                              <td className="py-2 px-3 text-right text-sm text-gray-900 whitespace-nowrap">{bucket.currency} {fmt(bucket.balance)}</td>
-                              <td className="py-2 px-3 text-right text-sm text-gray-700 whitespace-nowrap">{bucket.currency} {fmt(bucket.idleBase)}</td>
-                              <td className="py-2 px-3 text-right text-sm text-gray-700 whitespace-nowrap">{bucket.currency} {fmt(bucket.receiptsTotal)}</td>
-                              <td className="py-2 px-3 text-right text-sm font-semibold whitespace-nowrap">
-                                <span className={bucket.zakatDue > 0 ? 'text-emerald-700' : 'text-gray-400'}>
-                                  {bucket.currency} {fmt(bucket.zakatDue)}
-                                </span>
-                              </td>
-                              <td className="py-2 px-3 text-center">
-                                <span className={`inline-flex px-2 py-0.5 rounded-full text-[11px] font-medium ${
-                                  bucket.isPaid
-                                    ? 'bg-green-50 text-green-700'
-                                    : bucket.zakatDue > 0
-                                    ? 'bg-amber-50 text-amber-700'
-                                    : 'bg-gray-100 text-gray-500'
-                                }`}>
-                                  {bucket.isPaid ? 'Paid' : bucket.zakatDue > 0 ? 'Has Due' : 'No Activity'}
-                                </span>
-                              </td>
-                              <td className="py-2 px-3 text-right">
-                                <div className="flex items-center justify-end gap-1">
-                                  <Button size="sm" variant="secondary" onClick={() => openDetails(bucket)}>Details</Button>
-                                  {!bucket.isPaid && bucket.zakatDue > 0 && (
-                                    <Button size="sm" variant="primary" onClick={() => openPay(bucket)}>Pay</Button>
-                                  )}
-                                  {bucket.lastPayment && (
-                                    <Button size="sm" variant="ghost" disabled={rollbackLoading} onClick={() => handleRollback(bucket)}>Undo</Button>
-                                  )}
-                                </div>
-                              </td>
-                            </tr>
-                          )
-                        })
-                      }
-                    })
-
-                    // Render non-grouped (single) rows
-                    singles.forEach(bucket => {
-                      rows.push(
-                        <tr key={bucket.id} className="hover:bg-gray-50 transition-colors">
-                          <td className="py-2.5 px-3">
-                            <div className="font-medium text-gray-900 truncate max-w-[260px]" title={bucket.label || bucket.source}>
-                              {(bucket.label || bucket.source) ? `${bucket.label || bucket.source} — Hawl ${bucket.periodIndex}` : `Hawl ${bucket.periodIndex}`}
-                            </div>
-                            {activeTab === 'all' && (
-                              <div className="text-[11px] text-gray-400 truncate max-w-[200px]">{bucket.source}</div>
+                            {gZakat > 0.000001 ? (
+                              <span className="text-[11px] font-semibold text-amber-700">Due</span>
+                            ) : (
+                              <span className="text-[11px] font-semibold text-emerald-700">Paid</span>
                             )}
                           </td>
-                          <td className="py-2.5 px-3 text-gray-600 whitespace-nowrap">{bucket.haulStartDate}</td>
-                          <td className="py-2.5 px-3 text-gray-600 whitespace-nowrap">{bucket.haulCompleteDate}</td>
-                          <td className="py-2.5 px-3 text-right font-medium text-gray-900 whitespace-nowrap">{bucket.currency} {fmt(bucket.balance)}</td>
-                          <td className="py-2.5 px-3 text-right text-gray-700 whitespace-nowrap">{bucket.currency} {fmt(bucket.idleBase)}</td>
-                          <td className="py-2.5 px-3 text-right text-gray-700 whitespace-nowrap">{bucket.currency} {fmt(bucket.receiptsTotal)}</td>
-                          <td className="py-2.5 px-3 text-right font-semibold whitespace-nowrap">
-                            <span className={bucket.zakatDue > 0 ? 'text-emerald-700' : 'text-gray-400'}>
-                              {bucket.currency} {fmt(bucket.zakatDue)}
-                            </span>
-                          </td>
-                          <td className="py-2.5 px-3 text-center">
-                            <span className={`inline-flex px-2 py-0.5 rounded-full text-[11px] font-medium ${
-                              bucket.isPaid
-                                ? 'bg-green-50 text-green-700'
-                                : bucket.zakatDue > 0
-                                ? 'bg-amber-50 text-amber-700'
-                                : 'bg-gray-100 text-gray-500'
-                            }`}>
-                              {bucket.isPaid ? 'Paid' : bucket.zakatDue > 0 ? 'Has Due' : 'No Activity'}
-                            </span>
-                          </td>
-                          <td className="py-2.5 px-3 text-right">
-                            <div className="flex items-center justify-end gap-1">
-                              <Button size="sm" variant="secondary" onClick={() => openDetails(bucket)}>Details</Button>
-                              {!bucket.isPaid && bucket.zakatDue > 0 && (
-                                <Button size="sm" variant="primary" onClick={() => openPay(bucket)}>Pay</Button>
-                              )}
-                              {bucket.lastPayment && (
-                                <Button size="sm" variant="ghost" disabled={rollbackLoading} onClick={() => handleRollback(bucket)}>Undo</Button>
-                              )}
-                            </div>
-                          </td>
+                          <td className="py-2.5 px-3 text-right text-gray-400 text-xs">Toggle</td>
                         </tr>
                       )
-                    })
+
+                      if (!isExpanded) continue
+
+                      const sorted = [...groupRows].sort((a, b) => {
+                        const da = String(a.haulCompleteDate)
+                        const db = String(b.haulCompleteDate)
+                        if (da < db) return 1
+                        if (da > db) return -1
+                        return (a.label || '').localeCompare(b.label || '')
+                      })
+
+                      sorted.forEach((b) => {
+                        rows.push(
+                          <tr key={b.id} className="hover:bg-gray-50">
+                            <td className="py-2.5 px-3">
+                              <div className="flex items-start justify-between gap-2">
+                                <div>
+                                  <div className="font-medium text-gray-900">{b.label || b.source}</div>
+                                  <div className="mt-1 flex items-center gap-2">
+                                    {kindBadge(b.rowKind)}
+                                    <span className="text-[11px] text-gray-400">{b.sourceType}</span>
+                                  </div>
+                                  {b.why && (
+                                    <div className="text-[11px] text-gray-500 mt-1">{b.why}</div>
+                                  )}
+                                </div>
+                              </div>
+                            </td>
+                            <td className="py-2.5 px-3 text-gray-600">{b.haulStartDate}</td>
+                            <td className="py-2.5 px-3 text-gray-600">{b.haulCompleteDate}</td>
+                            <td className="py-2.5 px-3 text-right">SAR {fmt(b.balance)}</td>
+                            <td className="py-2.5 px-3 text-right">SAR {fmt(b.idleBase)}</td>
+                            <td className="py-2.5 px-3 text-right">SAR {fmt(b.receiptsTotal)}</td>
+                            <td className="py-2.5 px-3 text-right font-semibold">SAR {fmt(b.zakatDue)}</td>
+                            <td className="py-2.5 px-3 text-center">
+                              {b.isPaid ? (
+                                <span className="text-[11px] font-semibold text-emerald-700">Paid</span>
+                              ) : b.zakatDue > 0 ? (
+                                <span className="text-[11px] font-semibold text-amber-700">Due</span>
+                              ) : (
+                                <span className="text-[11px] font-semibold text-gray-500">-</span>
+                              )}
+                            </td>
+                            <td className="py-2.5 px-3 text-right">
+                              <div className="flex justify-end gap-2">
+                                <button
+                                  onClick={(e) => {
+                                    e.stopPropagation()
+                                    openDetails(b)
+                                  }}
+                                  className="text-xs text-gray-500 hover:text-gray-700"
+                                >
+                                  Details
+                                </button>
+                                {b.zakatDue > 0 && (
+                                  <button
+                                    onClick={(e) => {
+                                      e.stopPropagation()
+                                      openPay(b)
+                                    }}
+                                    className="text-xs font-semibold text-emerald-700 hover:text-emerald-800"
+                                  >
+                                    Pay
+                                  </button>
+                                )}
+                                {b.lastPayment && (
+                                  <button
+                                    onClick={(e) => {
+                                      e.stopPropagation()
+                                      handleRollback(b)
+                                    }}
+                                    className="text-xs text-red-600 hover:text-red-700"
+                                  >
+                                    Undo
+                                  </button>
+                                )}
+                              </div>
+                            </td>
+                          </tr>
+                        )
+                      })
+                    }
 
                     return rows
                   })()}
