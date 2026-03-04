@@ -263,14 +263,31 @@ export function SukukList({ initialSukuk, userRole, ownerPersonId, viewerPersonI
 
   const handleReturnToOwner = async (investment: any) => {
     if (actionLoading) return
-    if (!ownerPersonId) {
-      setActionError('Owner profile is missing')
+    const participants = Array.isArray(investment?.dealParticipants) ? investment.dealParticipants : []
+    const myParticipation = investment?.myParticipation
+      || (viewerPersonId ? participants.find((p: any) => p?.personId === viewerPersonId) : null)
+
+    const principalRaw = Number(myParticipation?.investedAmount ?? 0)
+    const principal = Number.isFinite(principalRaw) ? principalRaw : 0
+    if (principal <= 0) {
+      setActionError('Your principal balance is 0')
       return
     }
 
-    const principal = Number(investment?.principalAmount ?? 0)
-    if (!Number.isFinite(principal) || principal <= 0) {
-      setActionError('Invalid principal amount')
+    // Resolve owner personId for buyer when partner is returning the Sukuk
+    const txs = Array.isArray(investment?.transactions) ? investment.transactions : []
+    const latestSell = txs
+      .filter((tx: any) => tx?.type === 'SELL_TO_PARTNER')
+      .map((tx: any) => ({ tx, d: toDate(tx?.date) }))
+      .filter((x: any) => x.d)
+      .sort((a: any, b: any) => (b.d as Date).getTime() - (a.d as Date).getTime())[0]
+
+    const ownerIdFromTx = latestSell?.tx?.personId || null
+    const ownerIdFromParticipants = participants.find((p: any) => !viewerPersonId || p?.personId !== viewerPersonId)?.personId || null
+    const resolvedOwnerId = ownerPersonId || ownerIdFromTx || ownerIdFromParticipants || ''
+
+    if (!resolvedOwnerId) {
+      setActionError('Owner profile is missing')
       return
     }
 
@@ -285,7 +302,7 @@ export function SukukList({ initialSukuk, userRole, ownerPersonId, viewerPersonI
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          buyerPersonId: ownerPersonId,
+          buyerPersonId: resolvedOwnerId,
           amount: principal,
           salePrice: 0,
           paymentMode: 'CASH',

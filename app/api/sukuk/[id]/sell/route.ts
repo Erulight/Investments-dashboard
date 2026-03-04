@@ -575,7 +575,7 @@ export async function POST(
 
     return NextResponse.json(updated)
   } catch (error) {
-    console.error('Sell error:', error)
+    console.error('TRANSFER ERROR:', error)
 
     let statusCode = 500
     if (error instanceof Error) {
