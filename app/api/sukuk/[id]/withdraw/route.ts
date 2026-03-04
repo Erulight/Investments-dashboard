@@ -477,19 +477,6 @@ export async function POST(
   } catch (error) {
     console.error('Withdraw error:', error)
 
-    if (error && typeof error === 'object') {
-      // Prefer explicit error logging for partner withdrawals since they have been hanging/silently failing.
-      try {
-        const user = await requireAuth(['OWNER', 'PARTNER'])
-        if (user.role === 'PARTNER') {
-          console.error('PARTNER WITHDRAW ERROR:', error)
-          return NextResponse.json({ error: String(error) }, { status: 500 })
-        }
-      } catch {
-        // ignore
-      }
-    }
-
     let statusCode = 500
     if (error instanceof Error) {
       if (error.message === 'Unauthorized') {
