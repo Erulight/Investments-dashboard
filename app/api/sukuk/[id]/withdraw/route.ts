@@ -346,13 +346,13 @@ export async function POST(
           const withdrawnPrincipal = Math.abs(Number(sums.find((s: any) => s.type === 'WITHDRAW_PRINCIPAL')?._sum?.amount || 0))
 
           const principalCapRaw = Number(partnerParticipant.investedAmount || 0)
-          const profitCapRaw = Number(partnerParticipant.receivable || 0)
+          const partnerMaxProfitRaw = Number(partnerParticipant.profit || 0)
 
           const principalCap = Number.isFinite(principalCapRaw) ? principalCapRaw : 0
-          const profitCap = Number.isFinite(profitCapRaw) ? profitCapRaw : 0
+          const partnerMaxProfit = Number.isFinite(partnerMaxProfitRaw) ? partnerMaxProfitRaw : 0
 
           const remainingPrincipal = Math.max(0, principalCap - withdrawnPrincipal)
-          const remainingProfit = Math.max(0, profitCap - withdrawnProfit)
+          const remainingProfit = Math.max(0, partnerMaxProfit - withdrawnProfit)
 
           console.log('PARTNER WITHDRAW CAPS', {
             investmentId: investment.id,
@@ -362,15 +362,15 @@ export async function POST(
             principalCap,
             withdrawnPrincipal,
             remainingPrincipal,
-            profitCap,
+            partnerMaxProfit,
             withdrawnProfit,
             remainingProfit,
           })
 
-          if (source === 'PRINCIPAL' && amount > remainingPrincipal + 0.000001) {
+          if (source === 'PRINCIPAL' && amount > remainingPrincipal + 0.01) {
             throw new Error('AMOUNT_EXCEEDS_PARTNER_PRINCIPAL')
           }
-          if (source === 'PROFIT' && amount > remainingProfit + 0.000001) {
+          if (source === 'PROFIT' && amount > remainingProfit + 0.01) {
             throw new Error('AMOUNT_EXCEEDS_PARTNER_PROFIT')
           }
 
