@@ -64,27 +64,35 @@ export async function POST(
     }
 
     if (user.role === 'PARTNER') {
-      if (!user.personId) {
-        return NextResponse.json({ error: 'Partner is missing a person profile' }, { status: 400 })
-      }
+      try {
+        if (!user.personId) {
+          return NextResponse.json(
+            { error: 'Partner is missing a person profile' },
+            { status: 400 },
+          )
+        }
 
-      console.log('PARTNER WITHDRAW START', {
-        investmentId: id,
-        userId: user.id,
-        personId: user.personId,
-        body,
-      })
+        console.log('PARTNER WITHDRAW START', {
+          investmentId: id,
+          userId: user.id,
+          personId: user.personId,
+          body,
+        })
 
-      const participants = Array.isArray(investment.dealParticipants)
-        ? investment.dealParticipants
-        : []
+        const participants = Array.isArray(investment.dealParticipants)
+          ? investment.dealParticipants
+          : []
 
-      const partnerParticipant = participants.find((p: any) => p?.personId === user.personId)
-      if (!partnerParticipant) {
-        return NextResponse.json(
-          { error: 'You are not a participant in this deal' },
-          { status: 403 },
-        )
+        const partnerParticipant = participants.find((p: any) => p?.personId === user.personId)
+        if (!partnerParticipant) {
+          return NextResponse.json(
+            { error: 'You are not a participant in this deal' },
+            { status: 403 },
+          )
+        }
+      } catch (err) {
+        console.error('PARTNER WITHDRAW ERROR:', err)
+        return NextResponse.json({ error: String(err) }, { status: 500 })
       }
     }
 
