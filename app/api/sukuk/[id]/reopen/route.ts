@@ -13,6 +13,12 @@ export async function POST(
     const user = await requireAuth(['OWNER', 'PARTNER'])
     const { id } = await params
 
+    console.log('REOPEN START', {
+      investmentId: id,
+      role: user.role,
+      personId: user.personId,
+    })
+
     const investment = await prisma.investment.findUnique({
       where: { id },
       include: {
@@ -33,6 +39,8 @@ export async function POST(
       const participants = Array.isArray(investment.dealParticipants)
         ? investment.dealParticipants
         : []
+
+      console.log('PARTICIPANTS', participants)
 
       const partnerParticipant = participants.find((p: any) => p?.personId === user.personId)
       if (!partnerParticipant) {
@@ -223,6 +231,7 @@ export async function POST(
           }
         }
 
+        console.log('SELL_TX metadata', sellTx?.metadata)
         console.log('SELL_TO_PARTNER metadata:', meta)
 
         const originalPrincipal = Number(meta?.amountSold || meta?.salePrice || 0)
@@ -232,9 +241,13 @@ export async function POST(
           ? originalPrincipal
           : Number(investment.principalAmount || 0)
 
+        console.log('CANONICAL VALUES', { canonicalPrincipal, originalProfit })
+
         const partnerParticipant = await tx.dealParticipant.findFirst({
           where: { investmentId: id, personId: user.personId },
         })
+
+        console.log('PARTNER PARTICIPANT before restore', partnerParticipant)
 
         if (partnerParticipant) {
           await tx.dealParticipant.update({
@@ -295,30 +308,8 @@ export async function POST(
     })
 
     return NextResponse.json(result)
-  } catch (error) {
-    console.error('Reopen error:', error)
-
-    let statusCode = 500
-    if (error instanceof Error) {
-      if (error.message === 'Unauthorized') {
-        statusCode = 401
-      } else if (error.message === 'Forbidden') {
-        statusCode = 403
-      } else if (error.message === 'INSUFFICIENT_CASH') {
-        statusCode = 400
-      }
-    }
-
-    return NextResponse.json(
-      {
-        error:
-          error instanceof Error && error.message === 'INSUFFICIENT_CASH'
-            ? 'Insufficient cash balance to reopen'
-            : error instanceof Error
-              ? error.message
-              : 'Failed to reopen',
-      },
-      { status: statusCode }
-    )
+  } catch (err) {
+    console.error('REOPEN ERROR:', err)
+    return NextResponse.json({ error: String(err) }, { status: 500 })
   }
 }
