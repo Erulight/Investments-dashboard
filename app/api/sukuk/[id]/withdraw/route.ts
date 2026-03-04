@@ -169,7 +169,6 @@ export async function POST(
         const profit = Number(meta?.accruedProfitAtSale ?? 0)
         const commission = Number(meta?.commissionAmount ?? 0)
         const pendingFromMetadata = (Number.isFinite(profit) ? Math.max(0, profit) : 0)
-          + (Number.isFinite(commission) ? Math.max(0, commission) : 0)
 
         const ownerParticipant = sellerPersonId
           ? await tx.dealParticipant.findFirst({
@@ -185,7 +184,7 @@ export async function POST(
           ? Math.max(0, pendingFromParticipantRaw)
           : 0
 
-        const totalPending = Math.max(pendingFromMetadata, pendingFromParticipant)
+        const totalPending = pendingFromMetadata
 
         if (totalPending <= 0.000001) return
 
@@ -212,7 +211,7 @@ export async function POST(
           amount: totalPending,
           haulStartDate,
           currency: investment.account?.currency || 'SAR',
-          label: `Sold Deal Settlement · ${investment.name}`,
+          label: `Profit • ${investment.name}`,
           date,
           notes: null,
           investmentId: investment.id,
@@ -228,7 +227,7 @@ export async function POST(
             type: 'SOLD_DEAL_SETTLEMENT',
             amount: Math.abs(totalPending),
             date,
-            description: 'Settlement of sold deal profit/commission on partner withdrawal',
+            description: 'Settlement of sold deal profit on partner withdrawal',
             metadata: JSON.stringify({
               sourceTxId: saleTx.id,
               buyerPersonId,
@@ -236,6 +235,7 @@ export async function POST(
               paymentMode: meta?.paymentMode ?? null,
               pendingFromMetadata,
               pendingFromParticipant,
+              commissionAmount: commission,
               totalPending,
             }),
           },
