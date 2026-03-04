@@ -484,6 +484,8 @@ export default async function ZakatPage() {
 
       const isProfitBucket = typeof bucket.label === 'string' && bucket.label.startsWith('Profit \u2022')
       const isCirclys = typeof bucket.label === 'string' && bucket.label.startsWith('Circlys')
+      const isSukukPrincipalBucket =
+        typeof bucket.label === 'string' && bucket.label.startsWith('Sukuk Principal \u2022')
 
       const alloc = bucket.allocations?.[0]
       const source = alloc?.investment?.name || bucket.label || 'General'
@@ -525,7 +527,8 @@ export default async function ZakatPage() {
           const start = inv.startDate instanceof Date ? inv.startDate : new Date(inv.startDate as any)
           if (Number.isNaN(start.getTime())) return null
           const eligibilityAnchor = user.role === 'PARTNER' ? bucketStart : start
-          const duration = diffDaysFloor(startOfDay(eligibilityAnchor), day)
+          const eligibilityStart = startOfDay(eligibilityAnchor)
+          const duration = diffDaysFloor(eligibilityStart, day)
           if (duration < 354) return null
 
           const amount = movementAmount(m)
@@ -537,6 +540,7 @@ export default async function ZakatPage() {
             investmentId: inv.id,
             investmentName: inv.name,
             receiptDay: day,
+            eligibilityStart,
             amount,
           }
         })
@@ -546,6 +550,7 @@ export default async function ZakatPage() {
           investmentId: string
           investmentName: string
           receiptDay: Date
+          eligibilityStart: Date
           amount: number
         }>
 
@@ -563,7 +568,7 @@ export default async function ZakatPage() {
           label: `Receipt \u2022 ${r.investmentName} \u2022 ${isoDay(r.receiptDay)}`,
           currency: bucket.currency,
           balance: displayBalance,
-          haulStartDate: isoDay(r.receiptDay),
+          haulStartDate: isoDay(r.eligibilityStart),
           lastZakatPaidDate: bucket.lastZakatPaidDate
             ? bucket.lastZakatPaidDate.toISOString().split('T')[0]
             : null,
@@ -659,7 +664,8 @@ export default async function ZakatPage() {
       bucketRows.push(...completedIdleRows)
 
       const hasAnyInvestOut = movements.some((m: any) => m?.type === 'INVEST_OUT')
-      if (!hasAnyInvestOut && !isProfitBucket) {
+      const disableDepositIdle = user.role === 'PARTNER' && isSukukPrincipalBucket
+      if (!hasAnyInvestOut && !isProfitBucket && !disableDepositIdle) {
         const start = startOfDay(bucketStart)
         const elapsed = diffDaysFloor(start, now)
         const completed = Math.floor(elapsed / 354)
