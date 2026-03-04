@@ -220,20 +220,33 @@ export default async function InvestmentsPage() {
   const getOwnerRealizedFromSellMeta = (inv: any) => {
     if (user.role !== 'OWNER' || !user.personId) return { profit: 0, commission: 0 }
     const transactions = Array.isArray(inv.transactions) ? inv.transactions : []
-    return transactions
+
+    const sells = transactions
       .filter((tx: any) => tx.type === 'SELL_TO_PARTNER' && tx.personId === user.personId)
-      .reduce(
-        (acc: { profit: number, commission: number }, tx: any) => {
-          const meta = parseMetadata(tx.metadata)
-          const profit = Number(meta?.accruedProfitAtSale ?? 0)
-          const commission = Number(meta?.commissionAmount ?? 0)
-          return {
-            profit: acc.profit + (Number.isFinite(profit) ? Math.max(0, profit) : 0),
-            commission: acc.commission + (Number.isFinite(commission) ? Math.max(0, commission) : 0),
-          }
-        },
-        { profit: 0, commission: 0 }
-      )
+      .map((tx: any) => ({ tx, d: toDate(tx?.date), meta: parseMetadata(tx?.metadata) }))
+      .filter((x: any) => x.d)
+
+    const ownerBuysAfter = transactions
+      .filter((tx: any) => tx.type === 'BUY_FROM_PARTNER' && tx.personId === user.personId)
+      .map((tx: any) => toDate(tx?.date))
+      .filter((d: any) => d)
+
+    const hasBuyAfter = (sellDate: Date) => ownerBuysAfter.some((bd: Date) => (bd as any).getTime() >= (sellDate as any).getTime())
+
+    return sells.reduce(
+      (acc: { profit: number; commission: number }, s: any) => {
+        // If owner later bought back (a BUY_FROM_PARTNER exists after this sell), exclude this sell from realized totals
+        if (hasBuyAfter(s.d as Date)) return acc
+
+        const profit = Number(s.meta?.accruedProfitAtSale ?? 0)
+        const commission = Number(s.meta?.commissionAmount ?? 0)
+        return {
+          profit: acc.profit + (Number.isFinite(profit) ? Math.max(0, profit) : 0),
+          commission: acc.commission + (Number.isFinite(commission) ? Math.max(0, commission) : 0),
+        }
+      },
+      { profit: 0, commission: 0 }
+    )
   }
 
   const getNetProfit = (inv: any) => {

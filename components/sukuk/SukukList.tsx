@@ -334,13 +334,25 @@ export function SukukList({ initialSukuk, userRole, ownerPersonId, viewerPersonI
   const getPartnerCommissionPaid = (inv: any) => {
     if (!viewerPersonId) return 0
     const transactions = Array.isArray(inv.transactions) ? inv.transactions : []
-    return transactions
+
+    const buys = transactions
       .filter((tx: any) => tx.type === 'BUY_FROM_PARTNER' && tx.personId === viewerPersonId)
-      .reduce((sum: number, tx: any) => {
-        const meta = parseMetadata(tx.metadata)
-        const commission = Number(meta?.commissionAmount ?? 0)
-        return sum + (Number.isFinite(commission) ? Math.max(0, commission) : 0)
-      }, 0)
+      .map((tx: any) => ({ tx, d: toDate(tx?.date) }))
+      .filter((x: any) => x.d)
+
+    const sells = transactions
+      .filter((tx: any) => tx.type === 'SELL_TO_PARTNER' && tx.personId === viewerPersonId)
+      .map((tx: any) => toDate(tx?.date))
+      .filter((d: any) => d)
+
+    const hasSellAfter = (buyDate: Date) => sells.some((sd: Date) => (sd as any).getTime() >= (buyDate as any).getTime())
+
+    return buys.reduce((sum: number, b: any) => {
+      if (hasSellAfter(b.d as Date)) return sum
+      const meta = parseMetadata(b.tx?.metadata)
+      const commission = Number(meta?.commissionAmount ?? 0)
+      return sum + (Number.isFinite(commission) ? Math.max(0, commission) : 0)
+    }, 0)
   }
 
   const getSoldDealMetrics = (inv: any) => {
