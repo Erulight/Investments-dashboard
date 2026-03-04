@@ -34,9 +34,9 @@ export async function POST(
         ? investment.dealParticipants
         : []
 
-      const isSoleOwner = participants.length === 1 && participants[0]?.personId === user.personId
-      if (!isSoleOwner) {
-        return NextResponse.json({ error: 'This Sukuk is not fully owned by you' }, { status: 403 })
+      const partnerParticipant = participants.find((p: any) => p?.personId === user.personId)
+      if (!partnerParticipant) {
+        return NextResponse.json({ error: 'You are not a participant in this deal' }, { status: 403 })
       }
     }
 
@@ -204,36 +204,59 @@ export async function POST(
         await tx.transaction.deleteMany({ where: { id: { in: transactionIds } } })
       }
 
-      // For partners, also restore their deal participant record to pre-withdrawal state
+      // For partners, restore their deal participant and allocation from canonical SELL_TO_PARTNER metadata
       if (user.role === 'PARTNER' && user.personId) {
-        const partnerParticipant = await tx.dealParticipant.findFirst({
+        const sellTx = await tx.transaction.findFirst({
           where: {
             investmentId: id,
-            personId: user.personId,
+            type: 'SELL_TO_PARTNER',
           },
+          orderBy: { date: 'asc' },
+        })
+
+        let meta: any = null
+        if (sellTx?.metadata) {
+          try {
+            meta = JSON.parse(sellTx.metadata as string)
+          } catch (err) {
+            console.log('SELL_TO_PARTNER metadata parse error:', err, sellTx.metadata)
+          }
+        }
+
+        console.log('SELL_TO_PARTNER metadata:', meta)
+
+        const originalPrincipal = Number(meta?.amountSold || meta?.salePrice || 0)
+        const originalProfit = Number(meta?.partnerGrossProfit || 0)
+
+        const canonicalPrincipal = originalPrincipal > 0
+          ? originalPrincipal
+          : Number(investment.principalAmount || 0)
+
+        const partnerParticipant = await tx.dealParticipant.findFirst({
+          where: { investmentId: id, personId: user.personId },
         })
 
         if (partnerParticipant) {
-          const investedRaw = Number(partnerParticipant.investedAmount ?? 0)
-          const currentValueRaw = Number(partnerParticipant.currentValue ?? partnerParticipant.investedAmount ?? 0)
-          const profitRaw = Number(partnerParticipant.profit ?? 0)
-          const receivableRaw = Number(partnerParticipant.receivable ?? 0)
-
-          const nextInvested = investedRaw + principalReceipt
-          const nextCurrentValue = nextInvested
-          const nextProfit = profitRaw + profitReceipt
-          const nextReceivable = receivableRaw + profitReceipt
-
           await tx.dealParticipant.update({
             where: { id: partnerParticipant.id },
             data: {
-              investedAmount: nextInvested,
-              currentValue: nextCurrentValue,
-              profit: nextProfit,
-              receivable: nextReceivable,
+              investedAmount: canonicalPrincipal,
+              currentValue: canonicalPrincipal,
+              profit: originalProfit,
+              receivable: originalProfit,
             },
           })
         }
+
+        await tx.investmentBucketAllocation.updateMany({
+          where: {
+            investmentId: id,
+            cashBucket: { personId: user.personId },
+          },
+          data: {
+            principalRemaining: canonicalPrincipal,
+          },
+        })
       }
 
       const updatedInvestment = await tx.investment.update({
