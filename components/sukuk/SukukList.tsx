@@ -944,12 +944,10 @@ export function SukukList({ initialSukuk, userRole, ownerPersonId, viewerPersonI
     const inv = sukuk.find((s: any) => s?.id === receiveId)
     if (!inv) return
 
+    // Auto-open the receipt modal when navigated here with ?receive=,
+    // but avoid mutating the URL here to prevent fighting with
+    // other navigation (e.g. navbar links).
     openWithdrawModal(inv)
-
-    const next = new URLSearchParams(Array.from(searchParams.entries()))
-    next.delete('receive')
-    const qs = next.toString()
-    router.replace(qs ? `?${qs}` : '?')
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [searchParams, sukuk])
 
