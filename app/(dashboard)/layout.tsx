@@ -57,7 +57,7 @@ export default async function DashboardLayout({
         activeAccountTypes={activeAccountTypes.map((a) => a.type)}
         notifications={notifications}
       />
-      <main className="w-full max-w-none px-4 sm:px-6 lg:px-8 pt-20 pb-6">
+      <main className="w-full max-w-none px-4 sm:px-6 lg:px-8 pt-8 pb-6">
         {children}
       </main>
     </div>
