@@ -359,6 +359,7 @@ export async function POST(
         data: {
           totalReceived: user.role === 'PARTNER' ? 0 : Math.max(0, investment.totalReceived - profitReceipt),
           principalAmount: principalAmountValue,
+          currentValue: currentValueValue,
           receivableAmount: receivableAmountValue,
           interestRate: interestRateValue,
           fees: feesValue,
