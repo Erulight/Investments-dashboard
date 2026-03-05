@@ -1,6 +1,5 @@
 'use client'
 
-import Link from 'next/link'
 import { usePathname, useRouter } from 'next/navigation'
 import { useEffect, useMemo, useState } from 'react'
 
@@ -113,7 +112,9 @@ export function Navbar({ user, activeAccountTypes, notifications }: NavbarProps)
     setLoading(true)
     try {
       await fetch('/api/auth/logout', { method: 'POST' })
-      router.push('/login')
+      if (typeof window !== 'undefined') {
+        window.location.href = '/login'
+      }
       router.refresh()
     } catch (error) {
       console.error('Logout failed:', error)
@@ -277,47 +278,31 @@ export function Navbar({ user, activeAccountTypes, notifications }: NavbarProps)
                         {item.name}
                         <svg className="ml-1 w-3 h-3 opacity-60" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                           <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
-                        </svg>
-                      </button>
-                      {openDropdown === item.name && (
-                        <div className="absolute left-0 mt-1 w-56 rounded-lg shadow-xl bg-white dark:bg-slate-900 ring-1 ring-black/10 dark:ring-white/10 overflow-hidden z-[10000]">
-                          <div className="py-1">
-                            {item.children.map((child) => (
-                              <Link
-                                key={child.name}
-                                href={child.href}
-                                className={`flex items-center px-3 py-2.5 text-xs font-medium transition-colors duration-100 ${
-                                  pathname === child.href || pathname?.startsWith(child.href + '/')
-                                    ? 'bg-slate-900/5 dark:bg-white/10 text-slate-900 dark:text-white'
-                                    : 'text-slate-700 dark:text-slate-300 hover:bg-slate-900/5 dark:hover:bg-white/5 hover:text-slate-900 dark:hover:text-white'
-                                }`}
-                              >
-                                <span className="mr-2.5 text-sm">{child.icon}</span>
-                                {child.name}
-                              </Link>
-                            ))}
-                          </div>
-                        </div>
-                      )}
-                    </>
-                  ) : (
-                    <Link
-                      href={item.href}
-                      className={`inline-flex items-center px-3 py-1.5 rounded-full text-xs font-medium transition-all duration-150 border-b-2 ${
-                        isActiveLink(item.href)
-                          ? 'border-slate-900 dark:border-white text-slate-900 dark:text-white'
-                          : 'border-transparent text-slate-700 dark:text-slate-300 hover:border-slate-400/60 dark:hover:border-white/40 hover:text-slate-900 dark:hover:text-white'
                       }`}
                     >
                       <span className="mr-1.5 text-sm">{item.icon}</span>
                       {item.name}
-                    </Link>
-                  )}
-                </div>
-              ))}
-            </div>
-          </div>
-
+                      <svg className="ml-1 w-3 h-3 opacity-60" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+                      </svg>
+                    </button>
+                    {openDropdown === item.name && (
+                      <div className="absolute left-0 mt-1 w-56 rounded-lg shadow-xl bg-white dark:bg-slate-900 ring-1 ring-black/10 dark:ring-white/10 overflow-hidden z-[10000]">
+                        <div className="py-1">
+                          {item.children.map((child) => (
+                            <a
+                              key={child.name}
+                              href={child.href}
+                              className={`flex items-center px-3 py-2.5 text-xs font-medium transition-colors duration-100 ${
+                                pathname === child.href || pathname?.startsWith(child.href + '/')
+                                  ? 'bg-slate-900/5 dark:bg-white/10 text-slate-900 dark:text-white'
+                                  : 'text-slate-700 dark:text-slate-300 hover:bg-slate-900/5 dark:hover:bg-white/5 hover:text-slate-900 dark:hover:text-white'
+                              }`}
+                            >
+                              <span className="mr-2.5 text-sm">{child.icon}</span>
+                              {child.name}
+                            </a>
+                          ))}
           {/* Right: User info, notifications, theme, logout */}
           <div className="flex items-center space-x-2 sm:space-x-3">
             {/* Notification bell */}
@@ -371,7 +356,9 @@ export function Navbar({ user, activeAccountTypes, notifications }: NavbarProps)
                               setNotificationsOpen(false)
                               const from = encodeURIComponent(pathname || '/')
                               const receive = encodeURIComponent(n.investmentId)
-                              router.push(`/sukuk?receive=${receive}&from=${from}`)
+                              if (typeof window !== 'undefined') {
+                                window.location.href = `/sukuk?receive=${receive}&from=${from}`
+                              }
                             }}
                             className="flex-1 inline-flex items-center justify-center rounded-md bg-emerald-600 px-2.5 py-1.5 text-[11px] font-semibold text-white hover:bg-emerald-700"
                           >
@@ -446,7 +433,7 @@ export function Navbar({ user, activeAccountTypes, notifications }: NavbarProps)
             <div className="pt-2 space-y-1">
               {filteredNav.map((item) => (
                 <div key={item.name} className="flex flex-col">
-                  <Link
+                  <a
                     href={item.href}
                     onClick={() => setMobileOpen(false)}
                     className={`flex items-center justify-between px-3 py-2 rounded-md text-xs font-medium ${
@@ -462,11 +449,11 @@ export function Navbar({ user, activeAccountTypes, notifications }: NavbarProps)
                     {item.children && (
                       <span className="text-[10px] text-slate-500 dark:text-slate-400">{item.children.length}</span>
                     )}
-                  </Link>
+                  </a>
                   {item.children && (
                     <div className="ml-7 mt-1 space-y-0.5">
                       {item.children.map((child) => (
-                        <Link
+                        <a
                           key={child.name}
                           href={child.href}
                           onClick={() => setMobileOpen(false)}
@@ -478,7 +465,7 @@ export function Navbar({ user, activeAccountTypes, notifications }: NavbarProps)
                         >
                           <span className="mr-2 text-sm">{child.icon}</span>
                           {child.name}
-                        </Link>
+                        </a>
                       ))}
                     </div>
                   )}
