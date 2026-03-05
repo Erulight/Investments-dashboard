@@ -3,16 +3,7 @@
 import { usePathname, useRouter } from 'next/navigation'
 import { useEffect, useMemo, useState } from 'react'
 
-interface NavItem {
-  name: string
-  href: string
-  roles?: string[]
-  module?: string  // Module permission required
-  icon?: string
-  children?: NavItem[]
-}
-
-const navigation: NavItem[] = [
+const navigation = [
   { name: 'Dashboard', href: '/dashboard', icon: '📊' },
   { name: 'Cash Ledger', href: '/cash-ledger', roles: ['OWNER', 'PARTNER'], icon: '📒' },
   { name: 'Debts', href: '/debts', roles: ['OWNER'], icon: '🧾' },
@@ -34,24 +25,7 @@ const navigation: NavItem[] = [
   { name: 'Settings', href: '/settings', module: 'settings', icon: '⚙️' },
 ]
 
-interface NavbarProps {
-  user: {
-    name: string
-    email: string
-    role: string
-    permissions?: string | null
-  }
-  activeAccountTypes?: string[]
-  notifications?: Array<{
-    key: string
-    investmentId: string
-    message: string
-    createdAt: string
-    amounts?: { profit?: number; commission?: number }
-  }>
-}
-
-function hasAccess(user: NavbarProps['user'], item: NavItem): boolean {
+function hasAccess(user, item) {
   // Check role-based access
   if (item.roles && !item.roles.includes(user.role)) {
     return false
@@ -80,15 +54,15 @@ function hasAccess(user: NavbarProps['user'], item: NavItem): boolean {
   }
 }
 
-export function Navbar({ user, activeAccountTypes, notifications }: NavbarProps) {
+export function Navbar({ user, activeAccountTypes, notifications }) {
   const pathname = usePathname()
   const router = useRouter()
   const [loading, setLoading] = useState(false)
-  const [openDropdown, setOpenDropdown] = useState<string | null>(null)
+  const [openDropdown, setOpenDropdown] = useState(null)
   const [isDark, setIsDark] = useState(false)
   const [mobileOpen, setMobileOpen] = useState(false)
   const [notificationsOpen, setNotificationsOpen] = useState(false)
-  const [dismissLoading, setDismissLoading] = useState<string | null>(null)
+  const [dismissLoading, setDismissLoading] = useState(null)
   const [notifError, setNotifError] = useState('')
 
   useEffect(() => {
@@ -123,7 +97,7 @@ export function Navbar({ user, activeAccountTypes, notifications }: NavbarProps)
     }
   }
 
-  const normalizeType = (s: string) =>
+  const normalizeType = (s) =>
     String(s || '')
       .trim()
       .toUpperCase()
@@ -132,11 +106,11 @@ export function Navbar({ user, activeAccountTypes, notifications }: NavbarProps)
 
   const activeTypes = new Set((Array.isArray(activeAccountTypes) ? activeAccountTypes : []).map(normalizeType))
 
-  const moduleToAccountType: Record<string, string> = {
+  const moduleToAccountType = {
     'business-deals': 'BUSINESS-DEALS',
   }
 
-  const isActiveInvestmentType = (item: NavItem) => {
+  const isActiveInvestmentType = (item) => {
     if (!item.module) return true
     const expected = moduleToAccountType[item.module]
     if (!expected) return true
@@ -149,7 +123,7 @@ export function Navbar({ user, activeAccountTypes, notifications }: NavbarProps)
   }
 
   const filteredNav = navigation
-    .map(item => {
+    .map((item) => {
       if (!hasAccess(user, item)) {
         return null
       }
@@ -173,9 +147,9 @@ export function Navbar({ user, activeAccountTypes, notifications }: NavbarProps)
       
       return item
     })
-    .filter(Boolean) as NavItem[]
+    .filter(Boolean)
 
-  const isActiveLink = (href: string, children?: NavItem[]) => {
+  const isActiveLink = (href, children) => {
     if (pathname === href) return true
     if (pathname?.startsWith(href + '/')) return true
     if (children) {
@@ -185,13 +159,13 @@ export function Navbar({ user, activeAccountTypes, notifications }: NavbarProps)
   }
 
   const sortedNotifications = useMemo(() => {
-    if (!Array.isArray(notifications)) return [] as NonNullable<NavbarProps['notifications']>
+    if (!Array.isArray(notifications)) return []
     return [...notifications].sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime())
   }, [notifications])
 
   const unreadCount = sortedNotifications.length
 
-  const handleDismissNotification = async (investmentId: string) => {
+  const handleDismissNotification = async (investmentId) => {
     if (dismissLoading) return
     setDismissLoading(investmentId)
     setNotifError('')
