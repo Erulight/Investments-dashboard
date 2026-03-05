@@ -648,15 +648,23 @@ export async function POST(
             ? snapshotForRestore.period
             : (investment as any).period ?? null
 
+        console.log('RETURN_TO_OWNER INVESTMENT UPDATE DATA:', {
+          principalAmount: canonicalPrincipal,
+          receivableAmount: canonicalReceivable,
+          interestRate: canonicalInterest,
+          fees: canonicalFees,
+          totalReceived: 0,
+          currentValue: canonicalPrincipal,
+          reopenedAt: date,
+        })
+
         await tx.investment.update({
           where: { id: investment.id },
           data: {
             principalAmount: canonicalPrincipal,
             receivableAmount: canonicalReceivable,
             interestRate: canonicalInterest,
-            feeRate: canonicalFeeRate,
             fees: canonicalFees,
-            period: canonicalPeriod,
             totalReceived: 0,
             currentValue: canonicalPrincipal,
             reopenedAt: date,
