@@ -8,9 +8,9 @@ export async function POST(_req: NextRequest) {
     if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
 
     const investmentId = 'cmmdw3grd0002rzun41d92g70'
-    const receivableAmount = 527.3775216138329
-    const interestRate = 10.518731988472622
-    const fees = 52.737752161383284
+    const receivableAmount = 783.36
+    const interestRate = 11.58
+    const fees = 92.11
 
     const updated = await prisma.investment.update({
       where: { id: investmentId },

@@ -474,7 +474,19 @@ export async function POST(
           amount: Math.abs(amount),
           date,
           description: notes || null,
-          metadata: JSON.stringify({ source }),
+          metadata: JSON.stringify({
+            source,
+            ...(user.role === 'PARTNER' && source === 'PRINCIPAL' ? {
+              snapshotBeforeClose: {
+                principalAmount: investment.principalAmount,
+                receivableAmount: investment.receivableAmount,
+                interestRate: investment.interestRate,
+                feeRate: (investment as any).feeRate ?? null,
+                fees: investment.fees,
+                period: (investment as any).period ?? null,
+              }
+            } : {})
+          }),
         },
       })
 

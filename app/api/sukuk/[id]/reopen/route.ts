@@ -240,18 +240,21 @@ export async function POST(
         console.log('SELL_TX metadata', sellTx?.metadata)
         console.log('SELL_TO_PARTNER metadata:', meta)
 
+        const snap = meta?.snapshot
+        
+        // Use original investment snapshot (full deal values) not partner-share calculations
         const originalPrincipal = Number(
-          meta?.amountSold ?? meta?.salePrice ?? meta?.amount ?? 0,
+          meta?.principalTransferred ?? snap?.principalAmount ?? 0,
         )
         const originalProfit = Number(
-          meta?.partnerGrossProfit ?? meta?.profit ?? 0,
+          snap?.receivableAmount ?? meta?.partnerGrossProfit ?? 0,
         )
 
         const originalApr = Number(
-          meta?.partnerApr ?? meta?.originalInterestRate ?? 0,
+          snap?.interestRate ?? meta?.originalInterestRate ?? 0,
         )
         const originalFees = Number(
-          meta?.partnerFeeShare ?? 0,
+          snap?.fees ?? meta?.partnerFeeShare ?? 0,
         )
 
         const canonicalPrincipal = originalPrincipal > 0
