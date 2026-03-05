@@ -113,6 +113,8 @@ export async function POST(
       // Canonical values for partner flows, derived from SELL_TO_PARTNER metadata
       let partnerCanonicalPrincipal: number | null = null
       let partnerCanonicalProfit: number | null = null
+      let canonicalApr: number | undefined
+      let canonicalFees: number | undefined
 
       const cashBalanceKey = user.role === 'PARTNER'
         ? `CASH_BALANCE:${user.personId}`
@@ -245,12 +247,26 @@ export async function POST(
           meta?.partnerGrossProfit ?? meta?.profit ?? 0,
         )
 
+        const originalApr = Number(
+          meta?.partnerApr ?? meta?.originalInterestRate ?? 0,
+        )
+        const originalFees = Number(
+          meta?.partnerFeeShare ?? 0,
+        )
+
         const canonicalPrincipal = originalPrincipal > 0
           ? originalPrincipal
           : principalReceipt
         const canonicalProfit = originalProfit > 0
           ? originalProfit
           : profitReceipt
+
+        canonicalApr = Number.isFinite(originalApr) && originalApr > 0
+          ? originalApr
+          : 0
+        canonicalFees = Number.isFinite(originalFees) && originalFees >= 0
+          ? originalFees
+          : 0
 
         partnerCanonicalPrincipal = canonicalPrincipal
         partnerCanonicalProfit = canonicalProfit
@@ -315,13 +331,25 @@ export async function POST(
               : investment.receivableAmount)
           : investment.receivableAmount
 
+      const interestRateValue =
+        user.role === 'PARTNER'
+          ? (typeof canonicalApr !== 'undefined' ? canonicalApr : 0)
+          : investment.interestRate
+
+      const feesValue =
+        user.role === 'PARTNER'
+          ? (typeof canonicalFees !== 'undefined' ? canonicalFees : 0)
+          : investment.fees
+
       const updatedInvestment = await tx.investment.update({
         where: { id },
         data: {
-          totalReceived: Math.max(0, investment.totalReceived - profitReceipt),
+          totalReceived: user.role === 'PARTNER' ? 0 : Math.max(0, investment.totalReceived - profitReceipt),
           principalAmount: principalAmountValue,
           currentValue: currentValueValue,
           receivableAmount: receivableAmountValue,
+          interestRate: interestRateValue,
+          fees: feesValue,
           reopenedAt: new Date(),
         },
       })
