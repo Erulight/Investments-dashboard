@@ -783,6 +783,60 @@ export function SukukList({ initialSukuk, userRole, ownerPersonId, viewerPersonI
     )
   }, [sortedRows])
 
+  const [expandedPlatforms, setExpandedPlatforms] = useState<Record<string, boolean>>({})
+
+  useEffect(() => {
+    // Ensure newly-seen platforms default to expanded while preserving existing state
+    setExpandedPlatforms((prev) => {
+      const next = { ...prev }
+      sortedRows.forEach(({ inv }) => {
+        const platform = inv.account?.name || 'Unknown Platform'
+        if (!(platform in next)) {
+          next[platform] = true
+        }
+      })
+      return next
+    })
+  }, [sortedRows])
+
+  const groupedByPlatform = useMemo(() => {
+    const groups: Record<string, {
+      rows: { inv: any; metrics: any }[]
+      totals: {
+        deals: number
+        investment: number
+        profit: number
+        receivable: number
+        currency: string
+      }
+    }> = {}
+
+    sortedRows.forEach(({ inv, metrics }) => {
+      const platform = inv.account?.name || 'Unknown Platform'
+      if (!groups[platform]) {
+        groups[platform] = {
+          rows: [],
+          totals: {
+            deals: 0,
+            investment: 0,
+            profit: 0,
+            receivable: 0,
+            currency: metrics.currency || inv.account?.currency || 'SAR',
+          },
+        }
+      }
+
+      const g = groups[platform]
+      g.rows.push({ inv, metrics })
+      g.totals.deals += 1
+      g.totals.investment += Number(metrics.totalInvestment || 0)
+      g.totals.profit += Number(metrics.netProfit || 0)
+      g.totals.receivable += Number(metrics.receivable || 0)
+    })
+
+    return groups
+  }, [sortedRows])
+
   const toggleSort = (key: string) => {
     setSort((prev) => {
       if (prev.key === key) {
@@ -1497,7 +1551,52 @@ export function SukukList({ initialSukuk, userRole, ownerPersonId, viewerPersonI
                   </TableRow>
                 </TableHeader>
                 <TableBody>
-                {sortedRows.map(({ inv, metrics }) => {
+                {Object.entries(groupedByPlatform).map(([platformName, group]) => {
+                  const expanded = expandedPlatforms[platformName] ?? true
+                  const hasRows = group.rows.length > 0
+                  if (!hasRows) return null
+
+                  const dealsLabel = group.totals.deals === 1 ? '1 deal' : `${group.totals.deals} deals`
+                  const investedLabel = formatCurrency(group.totals.investment, group.totals.currency)
+                  const profitLabel = formatCurrency(group.totals.profit, group.totals.currency)
+                  const receivableLabel = formatCurrency(group.totals.receivable, group.totals.currency)
+
+                  return (
+                    <>
+                      <TableRow
+                        key={`platform-${platformName}`}
+                        className="bg-gray-50 hover:bg-gray-100 cursor-pointer"
+                        onClick={() =>
+                          setExpandedPlatforms((prev) => ({
+                            ...prev,
+                            [platformName]: !(prev[platformName] ?? true),
+                          }))
+                        }
+                      >
+                        <TableCell colSpan={20} className="px-2 py-2 align-middle">
+                          <div className="flex items-center justify-between">
+                            <div className="flex items-center gap-2">
+                              <span className="text-xs text-gray-500">
+                                {expanded ? '▼' : '▶'}
+                              </span>
+                              <span className="text-sm font-semibold text-gray-900">
+                                {platformName}
+                              </span>
+                            </div>
+                            <div className="flex flex-wrap items-center gap-3 text-[11px] text-gray-600">
+                              <span>{dealsLabel}</span>
+                              <span className="hidden sm:inline">•</span>
+                              <span>Invested: {investedLabel}</span>
+                              <span className="hidden sm:inline">•</span>
+                              <span>Profit: {profitLabel}</span>
+                              <span className="hidden sm:inline">•</span>
+                              <span>Receivable: {receivableLabel}</span>
+                            </div>
+                          </div>
+                        </TableCell>
+                      </TableRow>
+
+                      {expanded && group.rows.map(({ inv, metrics }) => {
 
                   const participantList = Array.isArray(inv.dealParticipants) ? inv.dealParticipants : []
                   const isSoldDealForOwner = userRole === 'OWNER' && ownerPersonId
@@ -1514,7 +1613,10 @@ export function SukukList({ initialSukuk, userRole, ownerPersonId, viewerPersonI
                   const soldToLabel = partnerNames.length > 0 ? `Sold to: ${partnerNames.join(', ')}` : ''
 
                   return (
-                    <TableRow key={inv.id} className="hover:bg-blue-50 transition-colors duration-150">
+                    <TableRow
+                      key={inv.id}
+                      className="hover:bg-blue-50 transition-colors duration-150 border-l-4 border-l-blue-50"
+                    >
                       <TableCell className="px-2 py-1.5 font-semibold text-gray-900 align-middle">
                         <button
                           type="button"
@@ -1740,6 +1842,9 @@ export function SukukList({ initialSukuk, userRole, ownerPersonId, viewerPersonI
                         </TableCell>
                       )}
                     </TableRow>
+                  )
+                })}
+                    </>
                   )
                 })}
                 </TableBody>
