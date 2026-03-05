@@ -245,12 +245,26 @@ export async function POST(
         originalInterestRate:
           Number.isFinite(originalInterestFromMeta) && originalInterestFromMeta > 0
             ? originalInterestFromMeta
-            : (Number.isFinite(investment.interestRate) ? investment.interestRate : null),
+            : (Number.isFinite(investment.interestRate) ? investment.interestRate : 0),
         originalFees:
           Number.isFinite(originalFeesFromMeta) && originalFeesFromMeta >= 0
             ? originalFeesFromMeta
             : (Number.isFinite(investment.fees) ? investment.fees : 0),
       }
+
+      const snapshotFromMeta = (firstMeta as any)?.snapshot
+      const snapshot = snapshotFromMeta && typeof snapshotFromMeta === 'object'
+        ? snapshotFromMeta
+        : {
+            principalAmount: baseOriginal.originalPrincipal,
+            receivableAmount: baseOriginal.originalReceivable,
+            interestRate: baseOriginal.originalInterestRate,
+            feeRate: (investment as any).feeRate ?? null,
+            fees: baseOriginal.originalFees,
+            startDate: investment.startDate,
+            maturityDate: investment.maturityDate,
+            period: (investment as any).period ?? null,
+          }
 
       // Buyer must fund the purchase from their own cash buckets/balance.
       // This is partner-scoped and does not touch the owner's global CASH_BALANCE.
@@ -506,6 +520,7 @@ export async function POST(
               originalReceivable: baseOriginal.originalReceivable,
               originalInterestRate: baseOriginal.originalInterestRate,
               originalFees: baseOriginal.originalFees,
+              snapshot,
             }),
           },
           ...(paymentMode === 'CASH' && accruedProfitAtSale > 0
@@ -603,22 +618,26 @@ export async function POST(
         buyerPersonId === originalOwnerPersonId
 
       if (isReturnToOwner && originalOwnerPersonId) {
-        const canonicalPrincipal =
-          Number.isFinite(baseOriginal.originalPrincipal) && baseOriginal.originalPrincipal > 0
-            ? baseOriginal.originalPrincipal
-            : investment.principalAmount
-        const canonicalReceivable =
-          Number.isFinite(baseOriginal.originalReceivable) && baseOriginal.originalReceivable >= 0
-            ? baseOriginal.originalReceivable
-            : (Number.isFinite(investment.receivableAmount) ? investment.receivableAmount : 0)
-        const canonicalInterest =
-          Number.isFinite(baseOriginal.originalInterestRate) && baseOriginal.originalInterestRate > 0
-            ? baseOriginal.originalInterestRate
-            : (Number.isFinite(investment.interestRate) ? investment.interestRate : null)
-        const canonicalFees =
-          Number.isFinite(baseOriginal.originalFees) && baseOriginal.originalFees >= 0
-            ? baseOriginal.originalFees
-            : (Number.isFinite(investment.fees) ? investment.fees : 0)
+        const snapshotForRestore: any = (firstMeta as any)?.snapshot || snapshot
+        const canonicalPrincipal = Number.isFinite(Number(snapshotForRestore?.principalAmount))
+          ? Number(snapshotForRestore.principalAmount)
+          : baseOriginal.originalPrincipal
+        const canonicalReceivable = Number.isFinite(Number(snapshotForRestore?.receivableAmount))
+          ? Number(snapshotForRestore.receivableAmount)
+          : baseOriginal.originalReceivable
+        const canonicalInterest = Number.isFinite(Number(snapshotForRestore?.interestRate))
+          ? Number(snapshotForRestore.interestRate)
+          : baseOriginal.originalInterestRate
+        const canonicalFeeRate = Number.isFinite(Number(snapshotForRestore?.feeRate))
+          ? Number(snapshotForRestore.feeRate)
+          : (investment as any).feeRate ?? null
+        const canonicalFees = Number.isFinite(Number(snapshotForRestore?.fees))
+          ? Number(snapshotForRestore.fees)
+          : baseOriginal.originalFees
+        const canonicalPeriod =
+          typeof snapshotForRestore?.period !== 'undefined'
+            ? snapshotForRestore.period
+            : (investment as any).period ?? null
 
         await tx.investment.update({
           where: { id: investment.id },
@@ -626,7 +645,11 @@ export async function POST(
             principalAmount: canonicalPrincipal,
             receivableAmount: canonicalReceivable,
             interestRate: canonicalInterest,
+            feeRate: canonicalFeeRate,
             fees: canonicalFees,
+            period: canonicalPeriod,
+            totalReceived: 0,
+            currentValue: canonicalPrincipal,
             reopenedAt: date,
           },
         })
