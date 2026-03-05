@@ -1820,7 +1820,7 @@ export function SukukList({ initialSukuk, userRole, ownerPersonId, viewerPersonI
                               aria-label="Rollback"
                               className="h-8 w-8 px-0 py-0 shrink-0"
                             >
-                              <Icon><RollbackIcon /></Icon>
+                              <Icon><ReopenIcon /></Icon>
                             </Button>
 
                             <Button
