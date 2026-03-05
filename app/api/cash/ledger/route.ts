@@ -112,6 +112,7 @@ export async function GET(req: NextRequest) {
       totalPages: Math.ceil(totalCount / limit),
       buckets,
       transactionTypes,
+      userRole: user.role,
     })
   } catch (error) {
     console.error('Cash ledger fetch error:', error)

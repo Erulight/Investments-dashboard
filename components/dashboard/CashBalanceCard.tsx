@@ -16,7 +16,12 @@ interface RecentTx {
   description: string | null
 }
 
-export function CashBalanceCard({ initialCash }: { initialCash: number }) {
+interface PartnerOption {
+  id: string
+  name: string
+}
+
+export function CashBalanceCard({ initialCash, role }: { initialCash: number; role: string }) {
   const searchParams = useSearchParams()
   const selectedYear = searchParams?.get('year') || new Date().getFullYear().toString()
   const [cashBalance, setCashBalance] = useState(String(initialCash ?? 0))
@@ -30,6 +35,12 @@ export function CashBalanceCard({ initialCash }: { initialCash: number }) {
   const [error, setError] = useState('')
   const [showForm, setShowForm] = useState(false)
   const [recentTxs, setRecentTxs] = useState<RecentTx[]>([])
+  const [useTransfer, setUseTransfer] = useState(false)
+  const [transferDirection, setTransferDirection] = useState<'TO_PARTNER' | 'FROM_PARTNER'>('TO_PARTNER')
+  const [partners, setPartners] = useState<PartnerOption[]>([])
+  const [partnersLoading, setPartnersLoading] = useState(false)
+  const [partnersError, setPartnersError] = useState('')
+  const [selectedPartnerId, setSelectedPartnerId] = useState('')
 
   const loadCash = async () => {
     setError('')
@@ -52,6 +63,28 @@ export function CashBalanceCard({ initialCash }: { initialCash: number }) {
     loadCash()
   }, [selectedYear])
 
+  useEffect(() => {
+    const loadPartners = async () => {
+      if (role !== 'OWNER' || !showForm || !useTransfer || partners.length > 0 || partnersLoading) return
+      setPartnersLoading(true)
+      setPartnersError('')
+      try {
+        const res = await fetch('/api/partners')
+        const data = await res.json().catch(() => ({}))
+        if (!res.ok) {
+          throw new Error(data.error || 'Failed to load partners')
+        }
+        const items = Array.isArray(data.partners) ? data.partners : []
+        setPartners(items.map((p: any) => ({ id: p.id, name: p.name })))
+      } catch (err) {
+        setPartnersError(err instanceof Error ? err.message : 'Failed to load partners')
+      } finally {
+        setPartnersLoading(false)
+      }
+    }
+    loadPartners()
+  }, [role, showForm, useTransfer, partners.length, partnersLoading])
+
   const handleSubmit = async (event: React.FormEvent) => {
     event.preventDefault()
     setLoading(true)
@@ -59,29 +92,61 @@ export function CashBalanceCard({ initialCash }: { initialCash: number }) {
     setMessage('')
 
     try {
-      const selectedDate = direction === 'IN' ? haulStartDate : entryDate
+      const selectedDate = useTransfer ? entryDate : direction === 'IN' ? haulStartDate : entryDate
       const isoDate = toIsoDateInput(selectedDate)
       if (!isoDate) {
         throw new Error('Invalid date format')
       }
-      const res = await fetch('/api/cash', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          direction,
-          amount: Number(amount),
-          date: isoDate,
-          notes,
-          haulStartDate: direction === 'IN' ? isoDate : undefined,
-        }),
-      })
-      const data = await res.json().catch(() => ({}))
-      if (!res.ok) {
-        throw new Error(data.error || 'Failed to update cash balance')
+      if (useTransfer) {
+        if (role !== 'OWNER') {
+          throw new Error('Only owner can initiate transfers from this view')
+        }
+        if (!selectedPartnerId) {
+          throw new Error('Please select a partner')
+        }
+
+        const res = await fetch('/api/cash/transfer', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            amount: Number(amount),
+            direction: transferDirection,
+            partnerPersonId: selectedPartnerId,
+            date: isoDate,
+            notes,
+          }),
+        })
+        const data = await res.json().catch(() => ({}))
+        if (!res.ok) {
+          throw new Error(data.error || 'Failed to transfer cash')
+        }
+
+        if (typeof data.ownerCashBalance === 'number') {
+          setCashBalance(String(data.ownerCashBalance))
+        } else {
+          await loadCash()
+        }
+      } else {
+        const res = await fetch('/api/cash', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            direction,
+            amount: Number(amount),
+            date: isoDate,
+            notes,
+            haulStartDate: direction === 'IN' ? isoDate : undefined,
+          }),
+        })
+        const data = await res.json().catch(() => ({}))
+        if (!res.ok) {
+          throw new Error(data.error || 'Failed to update cash balance')
+        }
+        setCashBalance(String(data.cashBalance ?? 0))
       }
-      setCashBalance(String(data.cashBalance ?? 0))
       setAmount('')
       setNotes('')
+      setSelectedPartnerId('')
       setMessage('Saved')
       setShowForm(false)
       await loadCash()
@@ -134,12 +199,21 @@ export function CashBalanceCard({ initialCash }: { initialCash: number }) {
             <form onSubmit={handleSubmit} className="space-y-2 w-full pt-1 border-t border-gray-100">
               <div className="flex gap-2">
                 <select
-                  value={direction}
-                  onChange={(e) => setDirection(e.target.value as 'IN' | 'OUT')}
+                  value={useTransfer ? 'TRANSFER' : direction}
+                  onChange={(e) => {
+                    const value = e.target.value
+                    if (value === 'TRANSFER') {
+                      setUseTransfer(true)
+                    } else {
+                      setUseTransfer(false)
+                      setDirection(value as 'IN' | 'OUT')
+                    }
+                  }}
                   className="rounded-md border border-gray-200 px-2 py-1.5 text-xs focus:border-slate-500 focus:ring-1 focus:ring-slate-500 outline-none"
                 >
                   <option value="IN">Add</option>
                   <option value="OUT">Withdraw</option>
+                  {role === 'OWNER' && <option value="TRANSFER">Transfer</option>}
                 </select>
                 <input
                   type="number"
@@ -153,11 +227,11 @@ export function CashBalanceCard({ initialCash }: { initialCash: number }) {
               </div>
               <div className="flex gap-2">
                 <DateInput
-                  value={direction === 'IN' ? haulStartDate : entryDate}
+                  value={useTransfer ? entryDate : direction === 'IN' ? haulStartDate : entryDate}
                   onChange={(value) => (
-                    direction === 'IN' ? setHaulStartDate(value) : setEntryDate(value)
+                    useTransfer || direction === 'OUT' ? setEntryDate(value) : setHaulStartDate(value)
                   )}
-                  ariaLabel={direction === 'IN' ? 'Ownership date' : 'Withdrawal date'}
+                  ariaLabel={useTransfer ? 'Transfer date' : direction === 'IN' ? 'Ownership date' : 'Withdrawal date'}
                 />
                 <input
                   type="text"
@@ -167,11 +241,51 @@ export function CashBalanceCard({ initialCash }: { initialCash: number }) {
                   placeholder="Notes"
                 />
               </div>
+              {role === 'OWNER' && useTransfer && (
+                <div className="flex flex-col gap-2 text-[11px] text-gray-600">
+                  <div className="flex gap-2">
+                    <select
+                      value={transferDirection}
+                      onChange={(e) => setTransferDirection(e.target.value as 'TO_PARTNER' | 'FROM_PARTNER')}
+                      className="rounded-md border border-gray-200 px-2 py-1.5 text-xs focus:border-slate-500 focus:ring-1 focus:ring-slate-500 outline-none flex-1"
+                    >
+                      <option value="TO_PARTNER">Send to Partner</option>
+                      <option value="FROM_PARTNER">Receive from Partner</option>
+                    </select>
+                  </div>
+                  <div className="flex gap-2 items-center">
+                    <select
+                      value={selectedPartnerId}
+                      onChange={(e) => setSelectedPartnerId(e.target.value)}
+                      className="rounded-md border border-gray-200 px-2 py-1.5 text-xs focus:border-slate-500 focus:ring-1 focus:ring-slate-500 outline-none flex-1"
+                    >
+                      <option value="">{partnersLoading ? 'Loading partners...' : 'Select partner'}</option>
+                      {partners.map((p) => (
+                        <option key={p.id} value={p.id}>{p.name}</option>
+                      ))}
+                    </select>
+                    {partnersError && (
+                      <span className="text-[10px] text-red-500">{partnersError}</span>
+                    )}
+                  </div>
+                </div>
+              )}
               <div className="flex items-center gap-2">
                 <Button type="submit" variant="primary" size="sm" disabled={loading}>
                   {loading ? 'Saving...' : 'Save'}
                 </Button>
-                <button type="button" onClick={() => setShowForm(false)} className="text-xs text-gray-400 hover:text-gray-600">Cancel</button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setShowForm(false)
+                    setUseTransfer(false)
+                    setSelectedPartnerId('')
+                    setPartnersError('')
+                  }}
+                  className="text-xs text-gray-400 hover:text-gray-600"
+                >
+                  Cancel
+                </button>
                 {message && <span className="text-xs text-green-600">{message}</span>}
                 {error && <span className="text-xs text-red-600">{error}</span>}
               </div>

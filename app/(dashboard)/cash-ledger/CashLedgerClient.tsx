@@ -44,6 +44,12 @@ export function CashLedgerClient() {
   const [page, setPage] = useState(1)
   const [typeFilter, setTypeFilter] = useState('')
   const [activeTab, setActiveTab] = useState<'transactions' | 'buckets'>('transactions')
+  const [sendAmount, setSendAmount] = useState('')
+  const [sendDate, setSendDate] = useState('')
+  const [sendNotes, setSendNotes] = useState('')
+  const [sendLoading, setSendLoading] = useState(false)
+  const [sendMessage, setSendMessage] = useState('')
+  const [sendError, setSendError] = useState('')
 
   const loadData = useCallback(async () => {
     setLoading(true)
@@ -126,6 +132,81 @@ export function CashLedgerClient() {
             <div>
               <div className="text-[11px] text-slate-400 uppercase tracking-wider">Total Entries</div>
               <div className="text-xl font-bold tabular-nums">{data.totalCount}</div>
+            </div>
+          </div>
+        )}
+        {data && (data as any).userRole === 'PARTNER' && (
+          <div className="mt-4 bg-white/5 rounded-lg p-4 flex flex-col gap-2 max-w-md">
+            <div className="text-xs font-semibold text-slate-200 uppercase tracking-wider">Send to Owner</div>
+            <div className="flex gap-2 items-center">
+              <input
+                type="number"
+                min="0"
+                step="0.01"
+                value={sendAmount}
+                onChange={(e) => setSendAmount(e.target.value)}
+                className="flex-1 rounded-md border border-slate-500/40 bg-slate-900/30 px-2 py-1.5 text-xs text-white placeholder-slate-400 focus:border-emerald-400 focus:ring-1 focus:ring-emerald-400 outline-none"
+                placeholder="Amount (SAR)"
+              />
+              <input
+                type="date"
+                value={sendDate}
+                onChange={(e) => setSendDate(e.target.value)}
+                className="rounded-md border border-slate-500/40 bg-slate-900/30 px-2 py-1.5 text-xs text-white placeholder-slate-400 focus:border-emerald-400 focus:ring-1 focus:ring-emerald-400 outline-none"
+              />
+            </div>
+            <input
+              type="text"
+              value={sendNotes}
+              onChange={(e) => setSendNotes(e.target.value)}
+              className="rounded-md border border-slate-500/40 bg-slate-900/30 px-2 py-1.5 text-xs text-white placeholder-slate-400 focus:border-emerald-400 focus:ring-1 focus:ring-emerald-400 outline-none"
+              placeholder="Notes (optional)"
+            />
+            <div className="flex items-center gap-2 mt-1">
+              <Button
+                size="sm"
+                variant="primary"
+                disabled={sendLoading}
+                onClick={async () => {
+                  setSendLoading(true)
+                  setSendError('')
+                  setSendMessage('')
+                  try {
+                    const amount = Number(sendAmount)
+                    if (!Number.isFinite(amount) || amount <= 0) {
+                      throw new Error('Amount must be greater than 0')
+                    }
+                    const date = sendDate || new Date().toISOString().slice(0, 10)
+                    const res = await fetch('/api/cash/transfer', {
+                      method: 'POST',
+                      headers: { 'Content-Type': 'application/json' },
+                      body: JSON.stringify({
+                        amount,
+                        direction: 'FROM_PARTNER',
+                        date,
+                        notes: sendNotes,
+                      }),
+                    })
+                    const json = await res.json().catch(() => ({}))
+                    if (!res.ok) {
+                      throw new Error(json.error || 'Failed to transfer cash')
+                    }
+                    setSendAmount('')
+                    setSendNotes('')
+                    setSendDate('')
+                    setSendMessage('Transfer recorded')
+                    await loadData()
+                  } catch (err) {
+                    setSendError(err instanceof Error ? err.message : 'Failed to transfer cash')
+                  } finally {
+                    setSendLoading(false)
+                  }
+                }}
+              >
+                {sendLoading ? 'Sending...' : 'Send to Owner'}
+              </Button>
+              {sendMessage && <span className="text-[11px] text-emerald-300">{sendMessage}</span>}
+              {sendError && <span className="text-[11px] text-red-300">{sendError}</span>}
             </div>
           </div>
         )}
