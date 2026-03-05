@@ -278,32 +278,47 @@ export function Navbar({ user, activeAccountTypes, notifications }: NavbarProps)
                         {item.name}
                         <svg className="ml-1 w-3 h-3 opacity-60" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                           <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+                        </svg>
+                      </button>
+                      {openDropdown === item.name && (
+                        <div className="absolute left-0 mt-1 w-56 rounded-lg shadow-xl bg-white dark:bg-slate-900 ring-1 ring-black/10 dark:ring-white/10 overflow-hidden z-[10000]">
+                          <div className="py-1">
+                            {item.children.map((child) => (
+                              <a
+                                key={child.name}
+                                href={child.href}
+                                className={`flex items-center px-3 py-2.5 text-xs font-medium transition-colors duration-100 ${
+                                  pathname === child.href || pathname?.startsWith(child.href + '/')
+                                    ? 'bg-slate-900/5 dark:bg-white/10 text-slate-900 dark:text-white'
+                                    : 'text-slate-700 dark:text-slate-300 hover:bg-slate-900/5 dark:hover:bg-white/5 hover:text-slate-900 dark:hover:text-white'
+                                }`}
+                              >
+                                <span className="mr-2.5 text-sm">{child.icon}</span>
+                                {child.name}
+                              </a>
+                            ))}
+                          </div>
+                        </div>
+                      )}
+                    </>
+                  ) : (
+                    <a
+                      href={item.href}
+                      className={`inline-flex items-center px-3 py-1.5 rounded-full text-xs font-medium transition-all duration-150 border-b-2 ${
+                        isActiveLink(item.href)
+                          ? 'border-slate-900 dark:border-white text-slate-900 dark:text-white'
+                          : 'border-transparent text-slate-700 dark:text-slate-300 hover:border-slate-400/60 dark:hover:border-white/40 hover:text-slate-900 dark:hover:text-white'
                       }`}
                     >
                       <span className="mr-1.5 text-sm">{item.icon}</span>
                       {item.name}
-                      <svg className="ml-1 w-3 h-3 opacity-60" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
-                      </svg>
-                    </button>
-                    {openDropdown === item.name && (
-                      <div className="absolute left-0 mt-1 w-56 rounded-lg shadow-xl bg-white dark:bg-slate-900 ring-1 ring-black/10 dark:ring-white/10 overflow-hidden z-[10000]">
-                        <div className="py-1">
-                          {item.children.map((child) => (
-                            <a
-                              key={child.name}
-                              href={child.href}
-                              className={`flex items-center px-3 py-2.5 text-xs font-medium transition-colors duration-100 ${
-                                pathname === child.href || pathname?.startsWith(child.href + '/')
-                                  ? 'bg-slate-900/5 dark:bg-white/10 text-slate-900 dark:text-white'
-                                  : 'text-slate-700 dark:text-slate-300 hover:bg-slate-900/5 dark:hover:bg-white/5 hover:text-slate-900 dark:hover:text-white'
-                              }`}
-                            >
-                              <span className="mr-2.5 text-sm">{child.icon}</span>
-                              {child.name}
-                            </a>
-                          ))}
-          {/* Right: User info, notifications, theme, logout */}
+                    </a>
+                  )}
+                </div>
+              ))}
+            </div>
+
+            {/* Right: User info, notifications, theme, logout */}
           <div className="flex items-center space-x-2 sm:space-x-3">
             {/* Notification bell */}
             <div className="relative">
