@@ -259,11 +259,9 @@ export async function POST(
             principalAmount: baseOriginal.originalPrincipal,
             receivableAmount: baseOriginal.originalReceivable,
             interestRate: baseOriginal.originalInterestRate,
-            feeRate: (investment as any).feeRate ?? null,
             fees: baseOriginal.originalFees,
             startDate: investment.startDate,
             maturityDate: investment.maturityDate,
-            period: (investment as any).period ?? null,
           }
 
       // Buyer must fund the purchase from their own cash buckets/balance.
@@ -524,11 +522,28 @@ export async function POST(
                 principalAmount: investment.principalAmount,
                 receivableAmount: investment.receivableAmount,
                 interestRate: investment.interestRate,
-                feeRate: (investment as any).feeRate ?? null,
                 fees: investment.fees,
-                period: (investment as any).period ?? null,
                 startDate: investment.startDate,
                 maturityDate: investment.maturityDate,
+              },
+              investmentSnapshot: {
+                id: investment.id,
+                accountId: investment.accountId,
+                name: investment.name,
+                category: investment.category,
+                principalAmount: investment.principalAmount,
+                currentValue: investment.currentValue,
+                realizedProfit: investment.realizedProfit,
+                unrealizedProfit: investment.unrealizedProfit,
+                startDate: investment.startDate,
+                maturityDate: investment.maturityDate,
+                interestRate: investment.interestRate,
+                notes: investment.notes,
+                metadata: investment.metadata,
+                fees: investment.fees,
+                totalReceived: investment.totalReceived,
+                receivableAmount: investment.receivableAmount,
+                isIjarah: investment.isIjarah,
               },
             }),
           },
@@ -627,55 +642,51 @@ export async function POST(
         buyerPersonId === originalOwnerPersonId
 
       if (isReturnToOwner && originalOwnerPersonId) {
-        const snapshotForRestore: any = (firstMeta as any)?.snapshot || snapshot
-        const canonicalPrincipal = Number.isFinite(Number(snapshotForRestore?.principalAmount))
-          ? Number(snapshotForRestore.principalAmount)
-          : baseOriginal.originalPrincipal
-        const canonicalReceivable = Number.isFinite(Number(snapshotForRestore?.receivableAmount))
-          ? Number(snapshotForRestore.receivableAmount)
-          : baseOriginal.originalReceivable
-        const canonicalInterest = Number.isFinite(Number(snapshotForRestore?.interestRate))
-          ? Number(snapshotForRestore.interestRate)
-          : baseOriginal.originalInterestRate
-        const canonicalFeeRate = Number.isFinite(Number(snapshotForRestore?.feeRate))
-          ? Number(snapshotForRestore.feeRate)
-          : (investment as any).feeRate ?? null
-        const canonicalFees = Number.isFinite(Number(snapshotForRestore?.fees))
-          ? Number(snapshotForRestore.fees)
-          : baseOriginal.originalFees
-        const canonicalPeriod =
-          typeof snapshotForRestore?.period !== 'undefined'
-            ? snapshotForRestore.period
-            : (investment as any).period ?? null
+        const fullSnap: any = (firstMeta as any)?.investmentSnapshot
+        const restoreSnap: any = fullSnap || (body?.restoreSnapshot as any) || {
+          principalAmount: investment.principalAmount,
+          currentValue: investment.principalAmount,
+          receivableAmount: investment.receivableAmount,
+          interestRate: investment.interestRate,
+          fees: investment.fees,
+          totalReceived: Number.isFinite(investment.totalReceived) ? investment.totalReceived : 0,
+          realizedProfit: Number.isFinite(investment.realizedProfit) ? investment.realizedProfit : 0,
+          unrealizedProfit: Number.isFinite(investment.unrealizedProfit) ? investment.unrealizedProfit : 0,
+        }
 
         console.log('RETURN_TO_OWNER INVESTMENT UPDATE DATA:', {
-          principalAmount: canonicalPrincipal,
-          receivableAmount: canonicalReceivable,
-          interestRate: canonicalInterest,
-          fees: canonicalFees,
-          totalReceived: 0,
-          currentValue: canonicalPrincipal,
-          reopenedAt: date,
+          principalAmount: restoreSnap.principalAmount,
+          receivableAmount: restoreSnap.receivableAmount,
+          interestRate: restoreSnap.interestRate,
+          fees: restoreSnap.fees,
+          totalReceived: restoreSnap.totalReceived ?? 0,
+          currentValue: restoreSnap.currentValue ?? restoreSnap.principalAmount,
+          realizedProfit: restoreSnap.realizedProfit ?? 0,
+          unrealizedProfit: restoreSnap.unrealizedProfit ?? 0,
         })
 
         await tx.investment.update({
           where: { id: investment.id },
           data: {
-            principalAmount: canonicalPrincipal,
-            receivableAmount: canonicalReceivable,
-            interestRate: canonicalInterest,
-            fees: canonicalFees,
-            totalReceived: 0,
-            currentValue: canonicalPrincipal,
-            reopenedAt: date,
+            principalAmount: restoreSnap.principalAmount,
+            currentValue: restoreSnap.currentValue ?? restoreSnap.principalAmount,
+            receivableAmount: restoreSnap.receivableAmount,
+            interestRate: restoreSnap.interestRate,
+            fees: restoreSnap.fees,
+            totalReceived: restoreSnap.totalReceived ?? 0,
+            realizedProfit: restoreSnap.realizedProfit ?? 0,
+            unrealizedProfit: restoreSnap.unrealizedProfit ?? 0,
           },
         })
 
-        if (sellerPersonId) {
-          await tx.dealParticipant.deleteMany({
-            where: { investmentId: investment.id, personId: sellerPersonId },
-          })
-        }
+        await tx.dealParticipant.deleteMany({
+          where: {
+            investmentId: investment.id,
+            ...(originalOwnerPersonId
+              ? { personId: { not: originalOwnerPersonId } }
+              : { personId: { not: null } }),
+          },
+        })
 
         const ownerParticipant = await tx.dealParticipant.findFirst({
           where: { investmentId: investment.id, personId: originalOwnerPersonId },
@@ -685,12 +696,12 @@ export async function POST(
           await tx.dealParticipant.update({
             where: { id: ownerParticipant.id },
             data: {
-              investedAmount: canonicalPrincipal,
-              currentValue: canonicalPrincipal,
-              profit: canonicalReceivable,
-              receivable: canonicalReceivable,
+              investedAmount: restoreSnap.principalAmount,
+              currentValue: restoreSnap.currentValue ?? restoreSnap.principalAmount,
+              profit: restoreSnap.receivableAmount,
+              receivable: restoreSnap.receivableAmount,
               sharePercentage: 100,
-              acquiredAt: investment.startDate,
+              acquiredAt: restoreSnap.startDate ?? investment.startDate,
             },
           })
         } else {
@@ -698,12 +709,12 @@ export async function POST(
             data: {
               investmentId: investment.id,
               personId: originalOwnerPersonId,
-              investedAmount: canonicalPrincipal,
-              currentValue: canonicalPrincipal,
-              profit: canonicalReceivable,
-              receivable: canonicalReceivable,
+              investedAmount: restoreSnap.principalAmount,
+              currentValue: restoreSnap.currentValue ?? restoreSnap.principalAmount,
+              profit: restoreSnap.receivableAmount,
+              receivable: restoreSnap.receivableAmount,
               sharePercentage: 100,
-              acquiredAt: investment.startDate,
+              acquiredAt: restoreSnap.startDate ?? investment.startDate,
             },
           })
         }

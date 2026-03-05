@@ -375,6 +375,17 @@ export function SukukList({ initialSukuk, userRole, ownerPersonId, viewerPersonI
           commissionValue: 0,
           date: isoDate,
           notes: 'Return to owner',
+          restoreSnapshot: {
+            principalAmount: Number(investment.principalAmount ?? 0),
+            currentValue: Number(investment.principalAmount ?? 0),
+            receivableAmount: Number(investment.receivableAmount ?? 0),
+            interestRate: Number(investment.interestRate ?? 0),
+            fees: Number(investment.fees ?? 0),
+            totalReceived: Number(investment.totalReceived ?? 0),
+            realizedProfit: Number(investment.realizedProfit ?? 0),
+            unrealizedProfit: Number(investment.unrealizedProfit ?? 0),
+            startDate: investment.startDate,
+          },
         }),
       })
 
