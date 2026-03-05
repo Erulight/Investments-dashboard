@@ -520,7 +520,16 @@ export async function POST(
               originalReceivable: baseOriginal.originalReceivable,
               originalInterestRate: baseOriginal.originalInterestRate,
               originalFees: baseOriginal.originalFees,
-              snapshot,
+              snapshot: {
+                principalAmount: amount,
+                receivableAmount: partnerGrossProfit,
+                interestRate: partnerApr,
+                feeRate: null,
+                fees: partnerFeeShare,
+                startDate: investment.startDate,
+                maturityDate: investment.maturityDate,
+                acquiredAt: date,
+              },
             }),
           },
           ...(paymentMode === 'CASH' && accruedProfitAtSale > 0
