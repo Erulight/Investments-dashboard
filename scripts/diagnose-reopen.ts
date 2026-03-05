@@ -14,14 +14,15 @@ async function main() {
   })
 
   console.log('Investment:', {
+    id: inv?.id,
+    name: inv?.name,
     principalAmount: inv?.principalAmount,
     receivableAmount: inv?.receivableAmount,
     totalReceived: inv?.totalReceived,
     interestRate: inv?.interestRate,
-    feeRate: inv?.feeRate,
     fees: inv?.fees,
-    period: inv?.period,
     reopenedAt: inv?.reopenedAt,
+    startDate: inv?.startDate,
   })
 
   console.log('DealParticipants:')
