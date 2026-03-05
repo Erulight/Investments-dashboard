@@ -6,6 +6,17 @@ import { creditBucketsForReceipt } from '@/lib/cashBuckets'
 import { createCashBucket } from '@/lib/cashBuckets'
 import { withdrawFromBuckets } from '@/lib/cashBuckets'
 
+const parseMetadata = (value: unknown) => {
+  if (!value) return null
+  if (typeof value === 'object') return value as any
+  if (typeof value !== 'string') return null
+  try {
+    return JSON.parse(value)
+  } catch {
+    return null
+  }
+}
+
 export async function POST(
   req: NextRequest,
   { params }: { params: Promise<{ id: string }> }
@@ -209,6 +220,37 @@ export async function POST(
 
     const updated = await prisma.$transaction(async (tx: any) => {
       const dayStart = new Date(date.getFullYear(), date.getMonth(), date.getDate())
+
+      const firstSellTx = await tx.transaction.findFirst({
+        where: { investmentId: investment.id, type: 'SELL_TO_PARTNER' },
+        orderBy: { date: 'asc' },
+      })
+      const firstMeta = parseMetadata(firstSellTx?.metadata)
+      const originalOwnerPersonId = firstSellTx?.personId || null
+
+      const originalPrincipalFromMeta = Number((firstMeta as any)?.originalPrincipal ?? 0)
+      const originalReceivableFromMeta = Number((firstMeta as any)?.originalReceivable ?? 0)
+      const originalInterestFromMeta = Number((firstMeta as any)?.originalInterestRate ?? 0)
+      const originalFeesFromMeta = Number((firstMeta as any)?.originalFees ?? 0)
+
+      const baseOriginal = {
+        originalPrincipal:
+          Number.isFinite(originalPrincipalFromMeta) && originalPrincipalFromMeta > 0
+            ? originalPrincipalFromMeta
+            : investment.principalAmount,
+        originalReceivable:
+          Number.isFinite(originalReceivableFromMeta) && originalReceivableFromMeta >= 0
+            ? originalReceivableFromMeta
+            : (Number.isFinite(investment.receivableAmount) ? investment.receivableAmount : 0),
+        originalInterestRate:
+          Number.isFinite(originalInterestFromMeta) && originalInterestFromMeta > 0
+            ? originalInterestFromMeta
+            : (Number.isFinite(investment.interestRate) ? investment.interestRate : null),
+        originalFees:
+          Number.isFinite(originalFeesFromMeta) && originalFeesFromMeta >= 0
+            ? originalFeesFromMeta
+            : (Number.isFinite(investment.fees) ? investment.fees : 0),
+      }
 
       // Buyer must fund the purchase from their own cash buckets/balance.
       // This is partner-scoped and does not touch the owner's global CASH_BALANCE.
@@ -460,6 +502,10 @@ export async function POST(
               allowedProfitAtTenApr,
               commissionType,
               commissionValueRaw,
+              originalPrincipal: baseOriginal.originalPrincipal,
+              originalReceivable: baseOriginal.originalReceivable,
+              originalInterestRate: baseOriginal.originalInterestRate,
+              originalFees: baseOriginal.originalFees,
             }),
           },
           ...(paymentMode === 'CASH' && accruedProfitAtSale > 0
@@ -548,6 +594,79 @@ export async function POST(
           personId: null,
         })
 
+      }
+
+      const isReturnToOwner =
+        user.role === 'PARTNER' &&
+        !!buyerPersonId &&
+        !!originalOwnerPersonId &&
+        buyerPersonId === originalOwnerPersonId
+
+      if (isReturnToOwner && originalOwnerPersonId) {
+        const canonicalPrincipal =
+          Number.isFinite(baseOriginal.originalPrincipal) && baseOriginal.originalPrincipal > 0
+            ? baseOriginal.originalPrincipal
+            : investment.principalAmount
+        const canonicalReceivable =
+          Number.isFinite(baseOriginal.originalReceivable) && baseOriginal.originalReceivable >= 0
+            ? baseOriginal.originalReceivable
+            : (Number.isFinite(investment.receivableAmount) ? investment.receivableAmount : 0)
+        const canonicalInterest =
+          Number.isFinite(baseOriginal.originalInterestRate) && baseOriginal.originalInterestRate > 0
+            ? baseOriginal.originalInterestRate
+            : (Number.isFinite(investment.interestRate) ? investment.interestRate : null)
+        const canonicalFees =
+          Number.isFinite(baseOriginal.originalFees) && baseOriginal.originalFees >= 0
+            ? baseOriginal.originalFees
+            : (Number.isFinite(investment.fees) ? investment.fees : 0)
+
+        await tx.investment.update({
+          where: { id: investment.id },
+          data: {
+            principalAmount: canonicalPrincipal,
+            receivableAmount: canonicalReceivable,
+            interestRate: canonicalInterest,
+            fees: canonicalFees,
+            reopenedAt: date,
+          },
+        })
+
+        if (sellerPersonId) {
+          await tx.dealParticipant.deleteMany({
+            where: { investmentId: investment.id, personId: sellerPersonId },
+          })
+        }
+
+        const ownerParticipant = await tx.dealParticipant.findFirst({
+          where: { investmentId: investment.id, personId: originalOwnerPersonId },
+        })
+
+        if (ownerParticipant) {
+          await tx.dealParticipant.update({
+            where: { id: ownerParticipant.id },
+            data: {
+              investedAmount: canonicalPrincipal,
+              currentValue: canonicalPrincipal,
+              profit: canonicalReceivable,
+              receivable: canonicalReceivable,
+              sharePercentage: 100,
+              acquiredAt: investment.startDate,
+            },
+          })
+        } else {
+          await tx.dealParticipant.create({
+            data: {
+              investmentId: investment.id,
+              personId: originalOwnerPersonId,
+              investedAmount: canonicalPrincipal,
+              currentValue: canonicalPrincipal,
+              profit: canonicalReceivable,
+              receivable: canonicalReceivable,
+              sharePercentage: 100,
+              acquiredAt: investment.startDate,
+            },
+          })
+        }
       }
 
       await logAudit(tx, {

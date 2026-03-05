@@ -88,12 +88,6 @@ export async function POST(
     }
 
     const netProfit = computeNetProfit(investment)
-    if (netProfit > 0 && investment.totalReceived < netProfit - 0.01) {
-      return NextResponse.json(
-        { error: 'Receivable not fully received yet' },
-        { status: 400 }
-      )
-    }
 
     const updated = await prisma.$transaction(async (tx: any) => {
       const updatedInvestment = await tx.investment.update({
