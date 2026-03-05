@@ -3,7 +3,28 @@
 import { usePathname, useRouter } from 'next/navigation'
 import { useEffect, useMemo, useState } from 'react'
 
-const navigation = [
+type Role = 'OWNER' | 'PARTNER'
+
+interface UserMini {
+  name: string
+  email: string
+  role: Role
+  permissions?: string | null
+}
+
+interface NavChild {
+  name: string
+  href: string
+  icon?: string
+  module?: string
+  roles?: Role[]
+}
+
+interface NavItem extends NavChild {
+  children?: NavChild[]
+}
+
+const navigation: NavItem[] = [
   { name: 'Dashboard', href: '/dashboard', icon: '📊' },
   { name: 'Cash Ledger', href: '/cash-ledger', roles: ['OWNER', 'PARTNER'], icon: '📒' },
   { name: 'Debts', href: '/debts', roles: ['OWNER'], icon: '🧾' },
@@ -25,7 +46,7 @@ const navigation = [
   { name: 'Settings', href: '/settings', module: 'settings', icon: '⚙️' },
 ]
 
-function hasAccess(user, item) {
+function hasAccess(user: UserMini, item: NavChild) {
   // Check role-based access
   if (item.roles && !item.roles.includes(user.role)) {
     return false
@@ -54,15 +75,29 @@ function hasAccess(user, item) {
   }
 }
 
-export function Navbar({ user, activeAccountTypes, notifications }) {
+interface NotificationItem {
+  key: string
+  investmentId: string
+  message: string
+  createdAt: string
+  amounts?: { profit?: number; commission?: number }
+}
+
+interface NavbarProps {
+  user: UserMini
+  activeAccountTypes: string[]
+  notifications: NotificationItem[]
+}
+
+export function Navbar({ user, activeAccountTypes, notifications }: NavbarProps) {
   const pathname = usePathname()
   const router = useRouter()
   const [loading, setLoading] = useState(false)
-  const [openDropdown, setOpenDropdown] = useState(null)
+  const [openDropdown, setOpenDropdown] = useState<string | null>(null)
   const [isDark, setIsDark] = useState(false)
   const [mobileOpen, setMobileOpen] = useState(false)
   const [notificationsOpen, setNotificationsOpen] = useState(false)
-  const [dismissLoading, setDismissLoading] = useState(null)
+  const [dismissLoading, setDismissLoading] = useState<string | null>(null)
   const [notifError, setNotifError] = useState('')
 
   useEffect(() => {
@@ -97,8 +132,8 @@ export function Navbar({ user, activeAccountTypes, notifications }) {
     }
   }
 
-  const normalizeType = (s) =>
-    String(s || '')
+  const normalizeType = (s: unknown) =>
+    String(s ?? '')
       .trim()
       .toUpperCase()
       .replace(/\s+/g, '-')
@@ -106,11 +141,11 @@ export function Navbar({ user, activeAccountTypes, notifications }) {
 
   const activeTypes = new Set((Array.isArray(activeAccountTypes) ? activeAccountTypes : []).map(normalizeType))
 
-  const moduleToAccountType = {
+  const moduleToAccountType: Record<string, string> = {
     'business-deals': 'BUSINESS-DEALS',
   }
 
-  const isActiveInvestmentType = (item) => {
+  const isActiveInvestmentType = (item: NavChild) => {
     if (!item.module) return true
     const expected = moduleToAccountType[item.module]
     if (!expected) return true
@@ -122,38 +157,29 @@ export function Navbar({ user, activeAccountTypes, notifications }) {
     return activeTypes.has(spaced)
   }
 
-  const filteredNav = navigation
-    .map((item) => {
-      if (!hasAccess(user, item)) {
-        return null
-      }
-      
-      // Filter children if item has children
+  const filteredNav: NavItem[] = navigation
+    .filter((item) => hasAccess(user, item))
+    .map((item): NavItem | null => {
       if (item.children) {
         const filteredChildren = item.children
-          .filter(child => hasAccess(user, child))
-          .filter(child => isActiveInvestmentType(child))
-        
-        // Only show parent if it has accessible children
+          .filter((child) => hasAccess(user, child))
+          .filter((child) => isActiveInvestmentType(child))
+
         if (filteredChildren.length === 0) {
           return null
         }
-        
-        return {
-          ...item,
-          children: filteredChildren
-        }
+
+        return { ...item, children: filteredChildren }
       }
-      
       return item
     })
-    .filter(Boolean)
+    .filter((x): x is NavItem => Boolean(x))
 
-  const isActiveLink = (href, children) => {
+  const isActiveLink = (href: string, children?: NavChild[]) => {
     if (pathname === href) return true
     if (pathname?.startsWith(href + '/')) return true
     if (children) {
-      return children.some(child => pathname === child.href || pathname?.startsWith(child.href + '/'))
+      return children.some((child) => pathname === child.href || pathname?.startsWith(child.href + '/'))
     }
     return false
   }
@@ -165,7 +191,7 @@ export function Navbar({ user, activeAccountTypes, notifications }) {
 
   const unreadCount = sortedNotifications.length
 
-  const handleDismissNotification = async (investmentId) => {
+  const handleDismissNotification = async (investmentId: string) => {
     if (dismissLoading) return
     setDismissLoading(investmentId)
     setNotifError('')
