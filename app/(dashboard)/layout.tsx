@@ -2,7 +2,6 @@ import { redirect } from 'next/navigation'
 import { getCurrentUser } from '@/lib/auth'
 import { Navbar } from '@/components/dashboard/Navbar'
 import { prisma } from '@/lib/db'
-import { NotificationBanner } from '@/components/dashboard/NotificationBanner'
 
 export default async function DashboardLayout({
   children,
@@ -56,10 +55,8 @@ export default async function DashboardLayout({
       <Navbar
         user={{ name: user.name, email: user.email, role: user.role, permissions: user.permissions }}
         activeAccountTypes={activeAccountTypes.map((a) => a.type)}
+        notifications={notifications}
       />
-      <div className="w-full max-w-none px-4 sm:px-6 lg:px-8 pt-3">
-        <NotificationBanner notifications={notifications} />
-      </div>
       <main className="w-full max-w-none px-4 sm:px-6 lg:px-8 py-6">
         {children}
       </main>
