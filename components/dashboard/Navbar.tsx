@@ -292,6 +292,8 @@ export function Navbar({ user, activeAccountTypes, notifications }) {
               ))}
             </div>
 
+            </div>
+
             {/* Right: User info, notifications, theme, logout */}
           <div className="flex items-center space-x-2 sm:space-x-3">
             {/* Notification bell */}
