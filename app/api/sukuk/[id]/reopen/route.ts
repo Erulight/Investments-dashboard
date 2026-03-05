@@ -3,6 +3,8 @@ import { prisma } from '@/lib/db'
 import { requireAuth } from '@/lib/rbac'
 import { logAudit } from '@/lib/audit'
 
+// Trivial change to trigger redeploy: added explicit logging below
+
 const RECEIPT_TYPES = ['WITHDRAW_PROFIT', 'WITHDRAW_PRINCIPAL', 'ROLLBACK_PRINCIPAL'] as const
 
 export async function POST(
@@ -343,6 +345,14 @@ export async function POST(
         user.role === 'PARTNER'
           ? (typeof canonicalFees !== 'undefined' ? canonicalFees : 0)
           : investment.fees
+
+      console.log('REOPEN INVESTMENT UPDATE DATA:', {
+        principalAmount: principalAmountValue,
+        receivableAmount: receivableAmountValue,
+        interestRate: interestRateValue,
+        fees: feesValue,
+        totalReceived: user.role === 'PARTNER' ? 0 : Math.max(0, investment.totalReceived - profitReceipt),
+      })
 
       const updatedInvestment = await tx.investment.update({
         where: { id },
