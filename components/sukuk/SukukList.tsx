@@ -134,6 +134,8 @@ export function SukukList({ initialSukuk, userRole, ownerPersonId, viewerPersonI
   const [debts, setDebts] = useState<any[]>([])
   const [actionError, setActionError] = useState('')
   const [actionLoading, setActionLoading] = useState(false)
+  const [returnModalOpen, setReturnModalOpen] = useState(false)
+  const [returnInvestment, setReturnInvestment] = useState<any>(null)
   const [filters, setFilters] = useState({
     platforms: [] as string[],
     terms: [] as string[],
@@ -295,26 +297,68 @@ export function SukukList({ initialSukuk, userRole, ownerPersonId, viewerPersonI
       return
     }
 
-    // Resolve owner personId for buyer when partner is returning the Sukuk
-    const txs = Array.isArray(investment?.transactions) ? investment.transactions : []
-    const latestSell = txs
-      .filter((tx: any) => tx?.type === 'SELL_TO_PARTNER')
-      .map((tx: any) => ({ tx, d: toDate(tx?.date) }))
-      .filter((x: any) => x.d)
-      .sort((a: any, b: any) => (b.d as Date).getTime() - (a.d as Date).getTime())[0]
+    // Get owner personId from SELL_TO_PARTNER transaction
+    const sellTx = investment.transactions?.find(
+      (t: any) => t.type === 'SELL_TO_PARTNER'
+    )
+    const meta = sellTx?.metadata
+      ? JSON.parse(sellTx.metadata) : null
 
-    const ownerIdFromTx = latestSell?.tx?.personId || null
-    const ownerIdFromParticipants = participants.find((p: any) => !viewerPersonId || p?.personId !== viewerPersonId)?.personId || null
-    const resolvedOwnerId = ownerPersonId || ownerIdFromTx || ownerIdFromParticipants || ''
+    // Owner is the one who originally sold — stored in BUY_FROM_PARTNER as sellerPersonId
+    const buyTx = investment.transactions?.find(
+      (t: any) => t.type === 'BUY_FROM_PARTNER'
+    )
+    const buyMeta = buyTx?.metadata
+      ? JSON.parse(buyTx.metadata) : null
 
-    if (!resolvedOwnerId) {
+    const resolvedOwnerPersonId = buyMeta?.sellerPersonId || meta?.sellerPersonId || ownerPersonId
+
+    console.log('RETURN TO OWNER START', {
+      investmentId: investment.id,
+      partnerInvestedAmount: myParticipation?.investedAmount,
+      ownerPersonId: resolvedOwnerPersonId,
+      sellTx: sellTx?.id,
+      buyTx: buyTx?.id,
+      meta,
+      buyMeta,
+    })
+
+    if (!resolvedOwnerPersonId) {
       setActionError('Owner profile is missing')
       return
     }
 
-    const confirmed = confirm('Return this Sukuk to owner for SAR 0?')
-    if (!confirmed) return
+    setReturnInvestment(investment)
+    setReturnModalOpen(true)
+  }
 
+  const confirmReturnToOwner = async () => {
+    if (!returnInvestment) return
+    const investment = returnInvestment
+    const participants = Array.isArray(investment?.dealParticipants) ? investment.dealParticipants : []
+    const myParticipation = investment?.myParticipation
+      || (viewerPersonId ? participants.find((p: any) => p?.personId === viewerPersonId) : null)
+
+    const principalRaw = Number(myParticipation?.investedAmount ?? 0)
+    const principal = Number.isFinite(principalRaw) ? principalRaw : 0
+
+    // Get owner personId from SELL_TO_PARTNER transaction
+    const sellTx = investment.transactions?.find(
+      (t: any) => t.type === 'SELL_TO_PARTNER'
+    )
+    const meta = sellTx?.metadata
+      ? JSON.parse(sellTx.metadata) : null
+
+    // Owner is the one who originally sold — stored in BUY_FROM_PARTNER as sellerPersonId
+    const buyTx = investment.transactions?.find(
+      (t: any) => t.type === 'BUY_FROM_PARTNER'
+    )
+    const buyMeta = buyTx?.metadata
+      ? JSON.parse(buyTx.metadata) : null
+
+    const resolvedOwnerPersonId = buyMeta?.sellerPersonId || meta?.sellerPersonId || ownerPersonId
+
+    setReturnModalOpen(false)
     setActionLoading(true)
     setActionError('')
     try {
@@ -323,7 +367,7 @@ export function SukukList({ initialSukuk, userRole, ownerPersonId, viewerPersonI
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          buyerPersonId: resolvedOwnerId,
+          buyerPersonId: resolvedOwnerPersonId,
           amount: principal,
           salePrice: 0,
           paymentMode: 'CASH',
@@ -333,13 +377,20 @@ export function SukukList({ initialSukuk, userRole, ownerPersonId, viewerPersonI
           notes: 'Return to owner',
         }),
       })
-      const data = await res.json().catch(() => ({}))
+
+      const data = await res.json()
+      console.log('RETURN TO OWNER RESPONSE', res.status, data)
+
       if (!res.ok) {
+        alert(`Failed: ${data.error || 'Unknown error'}`)
         setActionError(data.error || 'Failed to return Sukuk')
         return
       }
+
       router.refresh()
-    } catch {
+    } catch (err) {
+      console.error('RETURN TO OWNER ERROR', err)
+      alert(`Error: ${String(err)}`)
       setActionError('Failed to return Sukuk')
     } finally {
       setActionLoading(false)
@@ -2421,6 +2472,46 @@ export function SukukList({ initialSukuk, userRole, ownerPersonId, viewerPersonI
             </Button>
           </div>
         </form>
+      </Modal>
+
+      {/* Return to Owner Confirmation Modal */}
+      <Modal
+        isOpen={returnModalOpen}
+        onClose={() => setReturnModalOpen(false)}
+        title="Return Deal to Owner"
+      >
+        <div className="space-y-4">
+          <div className="text-sm text-gray-700">
+            <p className="mb-3">
+              Are you sure you want to return <strong>{returnInvestment?.name}</strong> to the owner?
+            </p>
+            <ul className="space-y-1 text-xs">
+              <li>• Your principal: <strong>SAR {formatCurrency(Number(returnInvestment?.myParticipation?.investedAmount || 0))}</strong></li>
+              <li>• Sale price: <strong>SAR 0</strong> (returning at cost)</li>
+              <li>• This action cannot be undone</li>
+            </ul>
+          </div>
+          
+          <div className="flex justify-end space-x-3 pt-4">
+            <Button
+              type="button"
+              variant="secondary"
+              onClick={() => setReturnModalOpen(false)}
+              disabled={actionLoading}
+            >
+              Cancel
+            </Button>
+            <Button
+              type="button"
+              variant="primary"
+              onClick={confirmReturnToOwner}
+              disabled={actionLoading}
+              className="bg-red-600 hover:bg-red-700 text-white"
+            >
+              {actionLoading ? 'Processing...' : 'Confirm Return'}
+            </Button>
+          </div>
+        </div>
       </Modal>
     </>
   )
