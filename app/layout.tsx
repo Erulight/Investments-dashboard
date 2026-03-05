@@ -1,5 +1,6 @@
 import type { Metadata } from 'next'
 import './globals.css'
+import AutoRefresher from '@/components/system/AutoRefresher'
 
 export const metadata: Metadata = {
   title: 'Legacy Loop',
@@ -28,7 +29,10 @@ export default function RootLayout({
           }}
         />
       </head>
-      <body className="bg-background text-foreground">{children}</body>
+      <body className="bg-background text-foreground">
+        <AutoRefresher />
+        {children}
+      </body>
     </html>
   )
 }
