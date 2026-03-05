@@ -242,16 +242,12 @@ export function Navbar({ user, activeAccountTypes, notifications }: NavbarProps)
 
             <div className="flex-shrink-0 flex items-center">
               <div className="flex items-center space-x-2.5">
-                <div className="w-8 h-8 bg-slate-900/10 dark:bg-white/10 rounded-lg flex items-center justify-center text-slate-900 dark:text-white font-bold text-sm">
-                  S
-                </div>
-                <div className="hidden sm:block">
-                  <h1 className="text-sm font-bold text-slate-900 dark:text-white tracking-wide">
-                    Sukuk Portfolio
-                  </h1>
-                  <p className="text-[10px] text-slate-500 dark:text-slate-400 -mt-0.5">
-                    Investment Tracker
-                  </p>
+                <div className="flex items-center gap-2">
+                  <img src="/legacy-loop-logo.png" alt="Legacy Loop" className="h-8 w-8" />
+                  <div>
+                    <div className="font-bold text-sm text-slate-900 dark:text-white">Legacy Loop</div>
+                    <div className="text-xs text-slate-500 dark:text-slate-400">Smart Investment Platform</div>
+                  </div>
                 </div>
               </div>
             </div>

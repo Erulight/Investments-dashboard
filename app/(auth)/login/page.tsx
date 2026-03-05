@@ -39,29 +39,25 @@ export default function LoginPage() {
   }
 
   return (
-    <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-blue-50 via-purple-50 to-pink-50 py-12 px-4 sm:px-6 lg:px-8">
+    <div className="min-h-screen bg-[#f5f0e8] flex items-center justify-center py-12 px-4 sm:px-6 lg:px-8">
       <div className="absolute inset-0 overflow-hidden pointer-events-none">
-        <div className="absolute -top-40 -right-40 w-80 h-80 bg-purple-400 rounded-full mix-blend-multiply filter blur-xl opacity-20 animate-blob"></div>
-        <div className="absolute -bottom-40 -left-40 w-80 h-80 bg-blue-400 rounded-full mix-blend-multiply filter blur-xl opacity-20 animate-blob animation-delay-2000"></div>
+        <div className="absolute -top-40 -right-40 w-80 h-80 bg-[#1c2e4a] rounded-full mix-blend-multiply filter blur-xl opacity-20 animate-blob"></div>
+        <div className="absolute -bottom-40 -left-40 w-80 h-80 bg-[#2f4052] rounded-full mix-blend-multiply filter blur-xl opacity-20 animate-blob animation-delay-2000"></div>
       </div>
       
       <div className="max-w-md w-full space-y-8 relative">
         <div className="text-center">
-          <div className="mx-auto w-20 h-20 bg-gradient-to-br from-blue-500 to-purple-600 rounded-2xl flex items-center justify-center shadow-2xl mb-6">
-            <span className="text-4xl">💎</span>
+          <div className="flex flex-col items-center mb-8">
+            <img src="/legacy-loop-logo.png" alt="Legacy Loop" className="h-20 w-20 mb-4" />
+            <h1 className="text-2xl font-bold text-[#0a1628]">Legacy Loop</h1>
+            <p className="text-sm text-gray-500">Smart Investment Platform</p>
           </div>
-          <h2 className="text-4xl font-bold bg-gradient-to-r from-blue-600 to-purple-600 bg-clip-text text-transparent">
-            Sukuk Portfolio
-          </h2>
-          <p className="mt-2 text-lg text-gray-600 font-medium">
-            Investment Tracker
-          </p>
           <p className="mt-4 text-sm text-gray-500 bg-white/60 backdrop-blur-sm rounded-lg p-3 border border-gray-200">
             Demo: <span className="font-semibold">owner@example.local</span> / <span className="font-semibold">partner@example.local</span>
           </p>
         </div>
         
-        <div className="bg-white/80 backdrop-blur-lg rounded-2xl shadow-2xl p-8 border border-gray-200">
+        <div className="bg-white rounded-2xl shadow-xl p-8 w-full max-w-md">
           <form className="space-y-6" onSubmit={handleSubmit}>
             {error && (
               <div className="rounded-xl bg-red-50 p-4 border border-red-200">
