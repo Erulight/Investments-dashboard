@@ -52,9 +52,6 @@ export default function LoginPage() {
             <h1 className="text-2xl font-bold text-[#0a1628]">Legacy Loop</h1>
             <p className="text-sm text-gray-500">Smart Investment Platform</p>
           </div>
-          <p className="mt-4 text-sm text-gray-500 bg-white/60 backdrop-blur-sm rounded-lg p-3 border border-gray-200">
-            Demo: <span className="font-semibold">owner@example.local</span> / <span className="font-semibold">partner@example.local</span>
-          </p>
         </div>
         
         <div className="bg-white rounded-2xl shadow-xl p-8 w-full max-w-md">
