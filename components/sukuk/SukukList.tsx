@@ -69,6 +69,27 @@ interface SukukListProps {
 
 export function SukukList({ initialSukuk, userRole, ownerPersonId, viewerPersonId }: SukukListProps) {
   const router = useRouter()
+
+  if (typeof window !== 'undefined') {
+    const anyRouter = router as any
+    if (!anyRouter.__debugPatched) {
+      anyRouter.__debugPatched = true
+      if (typeof anyRouter.push === 'function') {
+        const originalPush = anyRouter.push.bind(anyRouter)
+        anyRouter.push = (...args: any[]) => {
+          console.log('router.push called from SukukList:', ...args)
+          return originalPush(...args)
+        }
+      }
+      if (typeof anyRouter.replace === 'function') {
+        const originalReplace = anyRouter.replace.bind(anyRouter)
+        anyRouter.replace = (...args: any[]) => {
+          console.log('router.replace called from SukukList:', ...args)
+          return originalReplace(...args)
+        }
+      }
+    }
+  }
   const searchParams = useSearchParams()
   const [sukuk, setSukuk] = useState<any[]>(
     Array.isArray(initialSukuk) ? initialSukuk : []
