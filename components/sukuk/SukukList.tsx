@@ -1208,44 +1208,6 @@ export function SukukList({ initialSukuk, userRole, ownerPersonId, viewerPersonI
     }
   }
 
-  const handleRollback = async (investment: any) => {
-    if (actionLoading) return
-    setActionError('')
-    const remainingPrincipal = Number(investment?.principalAmount ?? 0)
-    if (!Number.isFinite(remainingPrincipal) || remainingPrincipal <= 0) {
-      alert('No principal balance remaining to rollback.')
-      return
-    }
-    const currencyLabel = investment?.account?.currency || 'SAR'
-    const formatted = remainingPrincipal.toLocaleString(undefined, {
-      minimumFractionDigits: 2,
-      maximumFractionDigits: 2,
-    })
-    const confirmed = confirm(
-      `Rollback will move remaining principal (${currencyLabel} ${formatted}) to cash and close this deal. Continue?`
-    )
-    if (!confirmed) return
-    setActionLoading(true)
-    try {
-      const res = await fetch(`/api/sukuk/${investment.id}/rollback`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          date: new Date().toISOString().split('T')[0],
-        }),
-      })
-      const data = await res.json().catch(() => ({}))
-      if (!res.ok) {
-        alert(data.error || 'Failed to rollback')
-        return
-      }
-      router.refresh()
-    } catch (error) {
-      alert('Failed to rollback')
-    } finally {
-      setActionLoading(false)
-    }
-  }
 
   const handleReopen = async (investment: any) => {
     if (actionLoading) return
@@ -1809,18 +1771,6 @@ export function SukukList({ initialSukuk, userRole, ownerPersonId, viewerPersonI
                               className="h-8 w-8 px-0 py-0 shrink-0"
                             >
                               <Icon><WithdrawIcon /></Icon>
-                            </Button>
-
-                            <Button
-                              size="sm"
-                              variant="secondary"
-                              onClick={() => handleRollback(inv)}
-                              disabled={actionLoading}
-                              title="Rollback"
-                              aria-label="Rollback"
-                              className="h-8 w-8 px-0 py-0 shrink-0"
-                            >
-                              <Icon><ReopenIcon /></Icon>
                             </Button>
 
                             <Button
