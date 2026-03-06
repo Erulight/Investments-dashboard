@@ -143,38 +143,56 @@ export async function POST(
       bucketId = `post-receipt-${investment.id}-${monthIndex}`
     } else {
       // Normal pre-receipt: create a new cash bucket with its own haul
-      const bucket = await prisma.cashBucket.create({
-        data: {
-          label: `Circlys • ${investment.name} • ${monthLabel}`,
-          currency: investment.account?.currency || 'SAR',
-          haulStartDate: contributionDate,
-          balance: amount + reward,
-          movements: {
-            create: [
-              {
-                investmentId: investment.id,
-                amount,
-                type: 'SAVINGS_CONTRIBUTION',
-                date: contributionDate,
-                notes: `Month ${monthIndex + 1}`,
-              },
-              ...(reward > 0
-                ? [
-                    {
-                      investmentId: investment.id,
-                      amount: reward,
-                      type: 'SAVINGS_REWARD',
-                      date: contributionDate,
-                      notes: `Month ${monthIndex + 1}`,
-                    },
-                  ]
-                : []),
-            ],
+      // FIX: Also deduct from cash balance (contributions are money leaving cash)
+      const totalDeduct = amount + reward
+      const currency = investment.account?.currency || 'SAR'
+
+      const result = await prisma.$transaction(async (tx: any) => {
+        const bucket = await tx.cashBucket.create({
+          data: {
+            label: `Circlys • ${investment.name} • ${monthLabel}`,
+            currency,
+            haulStartDate: contributionDate,
+            balance: amount + reward,
+            movements: {
+              create: [
+                {
+                  investmentId: investment.id,
+                  amount,
+                  type: 'SAVINGS_CONTRIBUTION',
+                  date: contributionDate,
+                  notes: `Month ${monthIndex + 1}`,
+                },
+                ...(reward > 0
+                  ? [
+                      {
+                        investmentId: investment.id,
+                        amount: reward,
+                        type: 'SAVINGS_REWARD',
+                        date: contributionDate,
+                        notes: `Month ${monthIndex + 1}`,
+                      },
+                    ]
+                  : []),
+              ],
+            },
           },
-        },
-        select: { id: true, label: true, currency: true, haulStartDate: true, balance: true },
+          select: { id: true, label: true, currency: true, haulStartDate: true, balance: true },
+        })
+
+        // FIX: Deduct contribution from system cash balance
+        const setting = await tx.systemSetting.findUnique({ where: { key: CASH_BALANCE_KEY } })
+        const currentCash = setting ? Number(setting.value) : 0
+        const nextCash = currentCash - totalDeduct
+        if (nextCash < 0) throw new Error('INSUFFICIENT_CASH')
+        if (setting) {
+          await tx.systemSetting.update({ where: { key: CASH_BALANCE_KEY }, data: { value: nextCash.toString() } })
+        }
+
+        return bucket
       })
-      bucketId = bucket.id
+
+      bucketId = result.id
     }
 
     const nextPayments = {
