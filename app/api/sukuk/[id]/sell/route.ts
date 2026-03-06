@@ -233,6 +233,10 @@ export async function POST(
       const originalInterestFromMeta = Number((firstMeta as any)?.originalInterestRate ?? 0)
       const originalFeesFromMeta = Number((firstMeta as any)?.originalFees ?? 0)
 
+      // Return-to-owner guard: if buyer is the original owner and salePrice is 0, no cash should move
+      const buyerIsOwner = !!buyerPersonId && !!originalOwnerPersonId && buyerPersonId === originalOwnerPersonId
+      const isReturnToOwner = salePrice === 0 && buyerIsOwner
+
       const baseOriginal = {
         originalPrincipal:
           Number.isFinite(originalPrincipalFromMeta) && originalPrincipalFromMeta > 0
@@ -547,7 +551,7 @@ export async function POST(
               },
             }),
           },
-          ...(paymentMode === 'CASH' && accruedProfitAtSale > 0
+          ...(paymentMode === 'CASH' && accruedProfitAtSale > 0 && !isReturnToOwner
             ? [
                 {
                   accountId: cashAccount.id,
@@ -601,7 +605,7 @@ export async function POST(
         ],
       })
 
-      if (paymentMode === 'CASH') {
+      if (paymentMode === 'CASH' && !isReturnToOwner) {
         const cashSetting = await tx.systemSetting.findUnique({
           where: { key: 'CASH_BALANCE' },
         })
@@ -634,12 +638,6 @@ export async function POST(
         })
 
       }
-
-      const isReturnToOwner =
-        user.role === 'PARTNER' &&
-        !!buyerPersonId &&
-        !!originalOwnerPersonId &&
-        buyerPersonId === originalOwnerPersonId
 
       if (isReturnToOwner && originalOwnerPersonId) {
         const fullSnap: any = (firstMeta as any)?.investmentSnapshot
