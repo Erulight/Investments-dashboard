@@ -597,6 +597,8 @@ export function SukukList({ initialSukuk, userRole, ownerPersonId, viewerPersonI
     const commissionFees = Number.isFinite(participation?.commissionFees)
       ? Number(participation.commissionFees)
       : 0
+    const round2 = (n: number) => Math.round((n || 0) * 100) / 100
+    
     const netProfit = Math.round((manualReceivable !== null
       ? Math.max(0, manualReceivable - commissionFees)
       : Math.max(0, grossProfit - fees - commissionFees)) * 100) / 100
@@ -626,12 +628,12 @@ export function SukukList({ initialSukuk, userRole, ownerPersonId, viewerPersonI
       periodMonths,
       maturityDate: inv.maturityDate,
       daysRemaining,
-      fees,
-      netProfit,
+      fees: round2(fees),
+      netProfit: round2(netProfit),
       commissionEarned: 0,
       commissionPaid: userRole === 'OWNER' ? 0 : getPartnerCommissionPaid(inv),
       totalReceived,
-      receivable,
+      receivable: round2(receivable),
       currency,
       progress,
       paymentStatus,
