@@ -75,6 +75,46 @@ export async function POST(req: NextRequest) {
         ? 'CASH_BALANCE'
         : `CASH_BALANCE:${user.personId!}`
 
+      // CRITICAL FIX: Calculate cash balance AS OF the deal start date
+      // This prevents creating deals before cash actually existed
+      const cashAccountForDateCheck = await tx.account.findFirst({
+        where: { type: 'CASH', isActive: true },
+      })
+
+      let cashBalanceAtStartDate = 0
+      if (cashAccountForDateCheck) {
+        // Sum all cash transactions UP TO and INCLUDING the deal start date
+        const txAgg = await tx.transaction.aggregate({
+          where: {
+            accountId: cashAccountForDateCheck.id,
+            date: { lte: startDate }, // only transactions ON OR BEFORE deal start date
+          },
+          _sum: { amount: true },
+        })
+        const txSum = txAgg._sum.amount || 0
+        cashBalanceAtStartDate = Number.isFinite(txSum) ? Number(txSum) : 0
+      }
+
+      // Also check cash buckets as of the start date
+      const bucketAgg = await tx.cashBucket.aggregate({
+        where: {
+          ...(user.role === 'OWNER'
+            ? { personId: null }
+            : { personId: user.personId }),
+          haulStartDate: { lte: startDate }, // only buckets created ON OR BEFORE deal start date
+        } as any,
+        _sum: { balance: true },
+      })
+      const bucketSum = Number.isFinite(bucketAgg._sum.balance as any) ? Number(bucketAgg._sum.balance) : 0
+
+      // Use whichever is higher (transaction sum or bucket sum)
+      const cashAtStartDate = Math.max(cashBalanceAtStartDate, bucketSum)
+
+      if (cashAtStartDate < data.principalAmount) {
+        throw new Error(`INSUFFICIENT_CASH_AT_DATE:${startDate.toISOString().split('T')[0]}:${cashAtStartDate.toFixed(2)}:${data.principalAmount.toFixed(2)}`)
+      }
+
+      // Now check current cash for the deduction
       const cashSetting = await tx.systemSetting.findUnique({
         where: { key: cashBalanceKey },
       })
@@ -83,16 +123,16 @@ export async function POST(req: NextRequest) {
       let nextCash = currentCash - data.principalAmount
 
       if (nextCash < 0) {
-        const bucketAgg = await tx.cashBucket.aggregate({
+        const currentBucketAgg = await tx.cashBucket.aggregate({
           where: (user.role === 'OWNER'
             ? { personId: null }
             : { personId: user.personId }) as any,
           _sum: { balance: true },
         })
-        const bucketSumRaw = bucketAgg?._sum?.balance
-        const bucketSum = Number.isFinite(bucketSumRaw as any) ? Number(bucketSumRaw) : 0
-        if (bucketSum > currentCash + 0.0001) {
-          currentCash = bucketSum
+        const currentBucketSumRaw = currentBucketAgg?._sum?.balance
+        const currentBucketSum = Number.isFinite(currentBucketSumRaw as any) ? Number(currentBucketSumRaw) : 0
+        if (currentBucketSum > currentCash + 0.0001) {
+          currentCash = currentBucketSum
           nextCash = currentCash - data.principalAmount
         }
       }
@@ -236,6 +276,8 @@ export async function POST(req: NextRequest) {
     console.error('Sukuk create error:', error)
     
     let statusCode = 500
+    let errorMessage = 'Failed to create Sukuk'
+    
     if (error instanceof Error) {
       if (error.message === 'Unauthorized') {
         statusCode = 401
@@ -243,18 +285,26 @@ export async function POST(req: NextRequest) {
         statusCode = 403
       } else if (error.message === 'INSUFFICIENT_CASH') {
         statusCode = 400
+        errorMessage = 'Insufficient cash balance'
+      } else if (error.message.startsWith('INSUFFICIENT_CASH_AT_DATE:')) {
+        // Parse the date-aware error: INSUFFICIENT_CASH_AT_DATE:YYYY-MM-DD:available:required
+        statusCode = 400
+        const parts = error.message.split(':')
+        if (parts.length >= 4) {
+          const date = parts[1]
+          const available = parts[2]
+          const required = parts[3]
+          errorMessage = `Insufficient cash balance on ${date}. Available: SAR ${available}, Required: SAR ${required}`
+        } else {
+          errorMessage = error.message
+        }
+      } else {
+        errorMessage = error.message
       }
     }
     
     return NextResponse.json(
-      {
-        error:
-          error instanceof Error && error.message === 'INSUFFICIENT_CASH'
-            ? 'Insufficient cash balance'
-            : error instanceof Error
-              ? error.message
-              : 'Failed to create Sukuk',
-      },
+      { error: errorMessage },
       { status: statusCode }
     )
   }
