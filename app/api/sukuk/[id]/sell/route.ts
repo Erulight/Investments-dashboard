@@ -385,13 +385,66 @@ export async function POST(
         }
       }
 
-      if (paymentMode === 'SETTLE_DEBT' && commissionAmount > 0) {
+      // Commission always goes to owner cash regardless of payment mode
+      if (commissionAmount > 0 && !isReturnToOwner) {
+        const cashSetting = await tx.systemSetting.findUnique({
+          where: { key: 'CASH_BALANCE' },
+        })
+        const currentCash = cashSetting ? Number(cashSetting.value) : 0
+        const nextCash = currentCash + commissionAmount
+
+        if (cashSetting) {
+          await tx.systemSetting.update({
+            where: { key: 'CASH_BALANCE' },
+            data: { value: nextCash.toString() },
+          })
+        } else {
+          await tx.systemSetting.create({
+            data: {
+              key: 'CASH_BALANCE',
+              value: nextCash.toString(),
+              description: 'Available cash balance for investments',
+            },
+          })
+        }
+
+        const cashAccount = await tx.account.findFirst({
+          where: { type: 'CASH', isActive: true },
+        })
+
+        if (cashAccount) {
+          await tx.transaction.create({
+            data: {
+              accountId: cashAccount.id,
+              investmentId: investment.id,
+              personId: sellerPersonId,
+              type: 'PARTNER_COMMISSION',
+              amount: commissionAmount,
+              date,
+              description: `Commission from selling ${investment.name}`,
+              metadata: JSON.stringify({
+                buyerPersonId,
+                principalTransferred: amount,
+                commissionType,
+                commissionValueRaw,
+              }),
+            },
+          })
+        }
       }
 
       const sellerRemaining = seller.investedAmount - amount
       if (sellerRemaining <= 0.000001) {
-        await tx.dealParticipant.delete({
+        // Update seller's profit to investorProfit before deleting
+        await tx.dealParticipant.update({
           where: { id: seller.id },
+          data: {
+            investedAmount: 0,
+            currentValue: 0,
+            profit: investorProfit,
+            receivable: investorProfit,
+            sharePercentage: 0,
+          },
         })
       } else {
         await tx.dealParticipant.update({
@@ -399,6 +452,8 @@ export async function POST(
           data: {
             investedAmount: sellerRemaining,
             currentValue: Math.max(0, seller.currentValue - currentValueTransfer),
+            profit: (seller.profit || 0) + investorProfit,
+            receivable: (seller.receivable || 0) + investorProfit,
             sharePercentage: investment.principalAmount > 0
               ? (sellerRemaining / investment.principalAmount) * 100
               : seller.sharePercentage,

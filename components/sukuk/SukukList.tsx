@@ -401,10 +401,40 @@ export function SukukList({ initialSukuk, userRole, ownerPersonId, viewerPersonI
     }
   }
 
-  const handleReceiveAndClose = (investment: any, metrics: any) => {
+  const handleReceiveAndClose = async (investment: any, metrics: any) => {
     if (actionLoading) return
-    // Reuse unified Close Position modal for partner close
-    openWithdrawModal(investment, metrics)
+    setActionLoading(true)
+    setActionError('')
+    try {
+      const participantList = Array.isArray(investment?.dealParticipants)
+        ? investment.dealParticipants
+        : []
+      const isSoldDealForOwner = userRole === 'OWNER' && ownerPersonId
+        ? (participantList.length > 0 && !participantList.some((p: any) => p?.personId === ownerPersonId))
+        : false
+
+      // For sold deals, call the receive route instead of withdraw
+      if (isSoldDealForOwner) {
+        const res = await fetch(`/api/sukuk/${investment.id}/receive`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+        })
+        const data = await res.json().catch(() => ({}))
+        if (!res.ok) {
+          setActionError(data.error || 'Failed to receive sold deal')
+          setActionLoading(false)
+          return
+        }
+        window.location.reload()
+        return
+      }
+
+      // For non-sold deals, open the withdraw modal
+      openWithdrawModal(investment, metrics)
+    } catch (error) {
+      setActionError('Failed to receive sold deal')
+      setActionLoading(false)
+    }
   }
 
   const getPartnerCommissionPaid = (inv: any) => {

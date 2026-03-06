@@ -250,6 +250,24 @@ export default async function InvestmentsPage() {
   }
 
   const getNetProfit = (inv: any) => {
+    // For sold deals (owner perspective), use investorProfit from sale metadata
+    if (user.role === 'OWNER' && user.personId) {
+      const transactions = Array.isArray(inv.transactions) ? inv.transactions : []
+      const sellTx = transactions.find((tx: any) => tx.type === 'SELL_TO_PARTNER' && tx.personId === user.personId)
+      if (sellTx) {
+        const saleMeta = (() => {
+          try {
+            return sellTx.metadata ? JSON.parse(sellTx.metadata) : null
+          } catch {
+            return null
+          }
+        })()
+        if (saleMeta && Number.isFinite(saleMeta.investorProfit)) {
+          return round2(Math.max(0, Number(saleMeta.investorProfit)))
+        }
+      }
+    }
+
     const principal = inv.myParticipation?.investedAmount ?? inv.principalAmount
     const investment = Number.isFinite(principal) ? principal : 0
     const apr = Number.isFinite(inv.interestRate) ? inv.interestRate : 0
