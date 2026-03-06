@@ -391,6 +391,8 @@ export default async function DashboardPage({
     const owned = investments.filter((inv: any) => {
       // Exclude CASH accounts from owned investments
       if (inv.account?.type === 'CASH') return false
+      // Exclude CIRCLYS (savings) accounts from owned investments
+      if (inv.account?.type === 'CIRCLYS') return false
       const dps = Array.isArray(inv.dealParticipants) ? inv.dealParticipants : []
       if (dps.length === 0) return true
       return Boolean(getOwnerPosition(inv))
@@ -447,17 +449,9 @@ export default async function DashboardPage({
       .filter((inv) => inv.account.type === 'SIP')
       .reduce((sum, inv) => sum + inv.currentValue, 0)
 
-    circlysOngoingSaved = owned
-      .filter((inv) => inv.account.type === 'CIRCLYS')
-      .filter((inv) => {
-        try {
-          const meta = inv.metadata ? JSON.parse(inv.metadata as string) : {}
-          return !meta?.received?.date
-        } catch {
-          return true
-        }
-      })
-      .reduce((sum, inv) => sum + inv.principalAmount, 0)
+    // Note: circlysOngoingSaved is no longer tracked here since CIRCLYS accounts
+    // are excluded from owned investments. Savings are not investments.
+    circlysOngoingSaved = 0
 
     // Build per-type breakdown
     const typeMap = new Map<string, { invested: number; value: number; count: number }>()
