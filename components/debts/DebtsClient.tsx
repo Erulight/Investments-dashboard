@@ -192,7 +192,7 @@ export function DebtsClient() {
       if (!res.ok) throw new Error(json.error || 'Failed to record payment')
 
       setPayTarget(null)
-      router.refresh()
+      window.location.reload()
       await load()
     } catch (e) {
       setPayError(e instanceof Error ? e.message : 'Failed to record payment')

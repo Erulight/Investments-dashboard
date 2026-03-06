@@ -214,7 +214,7 @@ export default async function InvestmentsPage() {
         const amount = Number(tx.amount)
         return sum + (Number.isFinite(amount) ? amount : 0)
       }, 0)
-    return Math.max(0, profit)
+    return round2(Math.max(0, profit))
   }
 
   const getOwnerRealizedFromSellMeta = (inv: any) => {
@@ -241,8 +241,8 @@ export default async function InvestmentsPage() {
         const profit = Number(s.meta?.accruedProfitAtSale ?? 0)
         const commission = Number(s.meta?.commissionAmount ?? 0)
         return {
-          profit: acc.profit + (Number.isFinite(profit) ? Math.max(0, profit) : 0),
-          commission: acc.commission + (Number.isFinite(commission) ? Math.max(0, commission) : 0),
+          profit: acc.profit + (Number.isFinite(profit) ? round2(Math.max(0, profit)) : 0),
+          commission: acc.commission + (Number.isFinite(commission) ? round2(Math.max(0, commission)) : 0),
         }
       },
       { profit: 0, commission: 0 }
@@ -279,7 +279,7 @@ export default async function InvestmentsPage() {
         : (Number.isFinite(inv.myParticipation?.commissionFees)
             ? Number(inv.myParticipation.commissionFees)
             : 0)
-      return Math.max(0, manualReceivable - commissionFees)
+      return round2(Math.max(0, manualReceivable - commissionFees))
     }
     const commissionFees = user.role === 'PARTNER'
       ? (Number.isFinite(inv.myParticipation?.commissionFees)
@@ -294,7 +294,7 @@ export default async function InvestmentsPage() {
     const proratedFees = inv.myParticipation
       ? (fees * participationRatio) * timeRatio
       : fees
-    return Math.max(0, grossProfit - proratedFees - commissionFees)
+    return round2(Math.max(0, grossProfit - proratedFees - commissionFees))
   }
 
   const isActiveDeal = (inv: any) => {
@@ -354,7 +354,7 @@ export default async function InvestmentsPage() {
     }, 0)
 
     const fromSellMeta = investments.reduce((sum, inv) => sum + getOwnerRealizedFromSellMeta(inv).commission, 0)
-    return Math.max(fromCommissionTx, fromSellMeta)
+    return round2(Math.max(fromCommissionTx, fromSellMeta))
   })()
 
   const totalPendingFromSoldDeals = (() => {

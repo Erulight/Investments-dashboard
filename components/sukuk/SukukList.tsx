@@ -391,7 +391,7 @@ export function SukukList({ initialSukuk, userRole, ownerPersonId, viewerPersonI
         return
       }
 
-      router.refresh()
+      window.location.reload()
     } catch (err) {
       console.error('RETURN TO OWNER ERROR', err)
       alert(`Error: ${String(err)}`)
@@ -1089,7 +1089,7 @@ export function SukukList({ initialSukuk, userRole, ownerPersonId, viewerPersonI
           return
         }
         setWithdrawTarget(null)
-        router.refresh()
+        window.location.reload()
         return
       }
 
@@ -1152,7 +1152,7 @@ export function SukukList({ initialSukuk, userRole, ownerPersonId, viewerPersonI
         date: formatDateInput(new Date()),
         notes: '',
       })
-      router.refresh()
+      window.location.reload()
     } catch (error) {
       setActionError('Failed to withdraw')
     } finally {
@@ -1218,7 +1218,7 @@ export function SukukList({ initialSukuk, userRole, ownerPersonId, viewerPersonI
         date: formatDateInput(new Date()),
         notes: '',
       })
-      router.refresh()
+      window.location.reload()
     } catch (error) {
       setActionError('Failed to sell')
     } finally {
@@ -1241,7 +1241,7 @@ export function SukukList({ initialSukuk, userRole, ownerPersonId, viewerPersonI
         alert(data.error || 'Failed to reopen deal')
         return
       }
-      router.refresh()
+      window.location.reload()
     } catch (error) {
       alert('Failed to reopen deal')
     } finally {
@@ -1251,13 +1251,13 @@ export function SukukList({ initialSukuk, userRole, ownerPersonId, viewerPersonI
 
   const handleCreateSuccess = () => {
     setIsCreateModalOpen(false)
-    router.refresh()
+    window.location.reload()
   }
 
   const handleEditSuccess = () => {
     setIsEditModalOpen(false)
     setEditingSukuk(null)
-    router.refresh()
+    window.location.reload()
   }
 
   const handleEdit = (sukukItem: any) => {
@@ -1284,7 +1284,7 @@ export function SukukList({ initialSukuk, userRole, ownerPersonId, viewerPersonI
 
       // Remove from local state
       setSukuk(list.filter((s) => s.id !== id))
-      router.refresh()
+      window.location.reload()
     } catch (error) {
       alert('An error occurred while deleting the Sukuk')
     } finally {

@@ -46,7 +46,7 @@ export function NotificationBanner({
       })
       const data = await res.json().catch(() => ({}))
       if (!res.ok) throw new Error(data.error || 'Failed to dismiss')
-      router.refresh()
+      window.location.reload()
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to dismiss')
     } finally {

@@ -283,7 +283,7 @@ export function ZakatDashboard({
           throw new Error(data.error || 'Failed to pay zakat')
         }
       }
-      router.refresh()
+      window.location.reload()
     } catch (err) {
       setPayAllError(err instanceof Error ? err.message : 'Failed to pay all')
     } finally {

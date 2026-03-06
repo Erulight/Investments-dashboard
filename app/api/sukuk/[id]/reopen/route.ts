@@ -341,9 +341,9 @@ export async function POST(
       const receivableAmountValue =
         user.role === 'PARTNER'
           ? (partnerCanonicalProfit !== null && partnerCanonicalProfit > 0
-              ? partnerCanonicalProfit
-              : investment.receivableAmount)
-          : investment.receivableAmount
+              ? Math.round(partnerCanonicalProfit * 100) / 100
+              : Math.round((investment.receivableAmount || 0) * 100) / 100)
+          : Math.round((investment.receivableAmount || 0) * 100) / 100
 
       const interestRateValue =
         user.role === 'PARTNER'

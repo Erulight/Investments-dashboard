@@ -127,7 +127,7 @@ export function CashBalanceCard({ initialCash, role }: { initialCash: number; ro
         } else {
           await loadCash()
         }
-        router.refresh()
+        window.location.reload()
       } else {
         const res = await fetch('/api/cash', {
           method: 'POST',
@@ -145,7 +145,7 @@ export function CashBalanceCard({ initialCash, role }: { initialCash: number; ro
           throw new Error(data.error || 'Failed to update cash balance')
         }
         setCashBalance(String(data.cashBalance ?? 0))
-        router.refresh()
+        window.location.reload()
       }
       setAmount('')
       setNotes('')

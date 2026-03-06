@@ -205,7 +205,7 @@ export function Navbar({ user, activeAccountTypes, notifications }: NavbarProps)
       if (!res.ok) {
         throw new Error(data.error || 'Failed to dismiss')
       }
-      router.refresh()
+      window.location.reload()
     } catch (error) {
       setNotifError(error instanceof Error ? error.message : 'Failed to dismiss')
     } finally {
