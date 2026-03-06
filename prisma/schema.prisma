@@ -276,3 +276,16 @@ model DebtPayment {
   @@index([debtId])
   @@index([paidAt])
 }
+
+model Snapshot {
+  id         String    @id @default(cuid())
+  createdAt  DateTime  @default(now())
+  label      String    // e.g. "Before: Close Ridwan KIA 2015"
+  trigger    String    // action that triggered it
+  data       String    // full JSON of affected DB state
+  restoredAt DateTime?
+  userId     String?   // who triggered the action
+
+  @@index([createdAt])
+  @@index([trigger])
+}
