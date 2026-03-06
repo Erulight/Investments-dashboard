@@ -33,6 +33,7 @@ export function SukukForm({ mode, initialData, onSuccess, onCancel }: SukukFormP
   })
   
   const [accounts, setAccounts] = useState<any[]>([])
+  const [debts, setDebts] = useState<any[]>([])
   const [participants, setParticipants] = useState<any[]>(
     initialData?.dealParticipants?.map((p: any) => ({
       personId: p.personId,
@@ -57,26 +58,40 @@ export function SukukForm({ mode, initialData, onSuccess, onCancel }: SukukFormP
   const [receiptError, setReceiptError] = useState('')
   const [receiptMessage, setReceiptMessage] = useState('')
 
-  // Fetch accounts on mount
+  // Fetch accounts and debts on mount
   useEffect(() => {
     const fetchData = async () => {
       try {
         setLoadError('')
-        const res = await fetch('/api/accounts?type=SUKUK')
-        const data = await res.json().catch(() => ({}))
-        if (!res.ok) {
-          throw new Error(data.error || 'Failed to load accounts')
+        
+        // Fetch accounts
+        const accountsRes = await fetch('/api/accounts?type=SUKUK')
+        const accountsData = await accountsRes.json().catch(() => ({}))
+        if (!accountsRes.ok) {
+          throw new Error(accountsData.error || 'Failed to load accounts')
         }
-        const accountList = Array.isArray(data.accounts) ? data.accounts : []
+        const accountList = Array.isArray(accountsData.accounts) ? accountsData.accounts : []
         setAccounts(accountList)
         if (accountList.length === 1) {
           setFormData((prev: any) =>
             prev.accountId ? prev : { ...prev, accountId: accountList[0].id }
           )
         }
+
+        // Fetch debts
+        const debtsRes = await fetch('/api/debts')
+        const debtsData = await debtsRes.json().catch(() => ({}))
+        if (debtsRes.ok && Array.isArray(debtsData.debts)) {
+          // Filter for debts with outstanding balance
+          const availableDebts = debtsData.debts.filter((debt: any) => {
+            const paid = debt.payments?.reduce((sum: number, p: any) => sum + p.amount, 0) || 0
+            return debt.amount > paid
+          })
+          setDebts(availableDebts)
+        }
       } catch (err) {
-        console.error('Failed to fetch accounts:', err)
-        setLoadError('Failed to load accounts. Please refresh.')
+        console.error('Failed to fetch data:', err)
+        setLoadError('Failed to load data. Please refresh.')
       }
     }
     fetchData()
@@ -410,7 +425,15 @@ export function SukukForm({ mode, initialData, onSuccess, onCancel }: SukukFormP
               className="w-full px-4 py-2 border border-gray-300 rounded-lg bg-white focus:ring-2 focus:ring-blue-500 focus:border-transparent"
             >
               <option value="">Select a debt</option>
-              {/* TODO: Load debts from API */}
+              {debts.map((debt) => {
+                const paid = debt.payments?.reduce((sum: number, p: any) => sum + p.amount, 0) || 0
+                const outstanding = debt.amount - paid
+                return (
+                  <option key={debt.id} value={debt.id}>
+                    {debt.lenderName} - SAR {outstanding.toFixed(2)} outstanding
+                  </option>
+                )
+              })}
             </select>
             {errors.debtId && <p className="text-sm text-red-600 mt-1">{errors.debtId}</p>}
           </div>
