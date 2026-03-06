@@ -687,85 +687,43 @@ export async function POST(
           },
         })
 
-        // FIX 1: Reverse settlement and commission on return-to-owner
-        const settlementTx = await tx.transaction.findFirst({
-          where: { 
-            investmentId: id, 
-            type: 'SOLD_DEAL_SETTLEMENT' 
-          }
-        })
-        const commissionTx = await tx.transaction.findFirst({
-          where: { 
-            investmentId: id, 
-            type: 'PARTNER_COMMISSION' 
+        // FIX 2: Delete partner-related transactions on return-to-owner (no reversal needed)
+        // Delete the commission, settlement, and profit accrual transactions
+        await tx.transaction.deleteMany({
+          where: {
+            investmentId: id,
+            type: { in: ['PARTNER_COMMISSION', 'SOLD_DEAL_SETTLEMENT', 'SELL_PROFIT_ACCRUED'] }
           }
         })
 
-        const reversalAmount = 
-          (settlementTx?.amount || 0) + (commissionTx?.amount || 0)
+        // Delete the commission and settlement cash buckets
+        // Delete by label - commission bucket created at original sale time
+        await tx.cashBucket.deleteMany({
+          where: {
+            label: { contains: 'Partner Commission' },
+            personId: null // owner scope
+          }
+        })
 
-        if (reversalAmount > 0) {
-          // Create reversal transaction
-          await tx.transaction.create({
-            data: {
-              accountId: cashAccount.id,
-              type: 'RETURN_TO_OWNER_REVERSAL',
-              amount: -reversalAmount,
-              date: new Date(),
-              description: 'Reversal of settlement on partner return',
-              investmentId: id,
-            }
-          })
-
-          // Update SystemSetting CASH_BALANCE
-          const cashSetting = await tx.systemSetting.findUnique({
-            where: { key: 'CASH_BALANCE' }
-          })
-          const currentBalance = Number(cashSetting?.value || 0)
-          await tx.systemSetting.update({
-            where: { key: 'CASH_BALANCE' },
-            data: { value: String(currentBalance - reversalAmount) }
-          })
-
-          // Delete the commission and settlement transactions
-          await tx.transaction.deleteMany({
-            where: {
-              investmentId: id,
-              type: { in: ['PARTNER_COMMISSION', 'SOLD_DEAL_SETTLEMENT'] }
-            }
-          })
-
-          // Delete the commission and settlement cash buckets
-          // Delete by label - commission bucket created at original sale time
+        // Also delete by investment name pattern as fallback
+        const investmentForBucketCleanup = await tx.investment.findUnique({
+          where: { id },
+          select: { name: true }
+        })
+        
+        if (investmentForBucketCleanup?.name) {
           await tx.cashBucket.deleteMany({
             where: {
-              label: { contains: 'Partner Commission' },
-              personId: null // owner scope
+              label: { contains: investmentForBucketCleanup.name },
+              personId: null // owner buckets only
             }
           })
-
-          // Also delete by investment name pattern as fallback
-          const investmentForBucketCleanup = await tx.investment.findUnique({
-            where: { id },
-            select: { name: true }
-          })
-          
-          if (investmentForBucketCleanup?.name) {
-            await tx.cashBucket.deleteMany({
-              where: {
-                label: { contains: investmentForBucketCleanup.name },
-                personId: null // owner buckets only
-              }
-            })
-          }
-
-          console.log('REVERSED SETTLEMENT AND COMMISSION:', {
-            settlementAmount: settlementTx?.amount || 0,
-            commissionAmount: commissionTx?.amount || 0,
-            totalReversed: reversalAmount,
-            newCashBalance: currentBalance - reversalAmount
-          })
         }
+
+        console.log('DELETED PARTNER-RELATED TRANSACTIONS AND BUCKETS FOR RETURN-TO-OWNER:', {
+          investmentId: id,
+          investmentName: investmentForBucketCleanup?.name
+        })
 
         await tx.dealParticipant.deleteMany({
           where: {
