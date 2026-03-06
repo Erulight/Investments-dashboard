@@ -499,6 +499,8 @@ export default async function ZakatPage() {
       const isCommissionBucket = typeof bucket.label === 'string' && (bucket.label === 'Partner Commission' || bucket.label.startsWith('Partner Commission'))
       const isImmediateReceiptBucket = isProfitBucket || isCommissionBucket
       const isCirclys = typeof bucket.label === 'string' && bucket.label.startsWith('Circlys')
+      const isSavingsReceipt = typeof bucket.label === 'string' && bucket.label.startsWith('Savings Receipt \u2022')
+      const isSavingsContribution = typeof bucket.label === 'string' && bucket.label.startsWith('Circlys \u2022') && !bucket.label.includes('Receipt')
       const isSukukPrincipalBucket =
         typeof bucket.label === 'string' && bucket.label.startsWith('Sukuk Principal \u2022')
 
@@ -520,6 +522,12 @@ export default async function ZakatPage() {
       const movements = Array.isArray(bucket.movements) ? bucket.movements : []
       const receiptMovements = movements.filter((m: any) => isReceiptMovement(m, isImmediateReceiptBucket))
 
+      // RULE 1: Exclude savings contribution buckets from zakat calculation
+      // They are just temporary tracking, not actual zakat buckets
+      if (isSavingsContribution) {
+        return []
+      }
+
       // For immediate-receipt buckets (Profit •, Partner Commission):
       // If there is no receipt yet (no CASH_IN), skip all rows entirely.
       if (isImmediateReceiptBucket && receiptMovements.length === 0) {
@@ -533,7 +541,7 @@ export default async function ZakatPage() {
 
           const investmentId = typeof m?.investmentId === 'string' ? m.investmentId : null
           const inv = investmentId ? investmentMap.get(investmentId) : null
-          if (!isCommissionBucket) {
+          if (!isCommissionBucket && !isSavingsReceipt) {
             if (!inv) return null
             if (inv.isIjarah) return null
             if (hasDefaultOrWrittenOff(inv)) return null
@@ -549,12 +557,25 @@ export default async function ZakatPage() {
 
           const start = inv?.startDate instanceof Date ? inv.startDate : (inv?.startDate ? new Date(inv.startDate as any) : bucketStart)
           if (Number.isNaN(start.getTime())) return null
+          
+          // RULE 3: For savings receipts, use bucket's haulStartDate (first contribution date)
+          // For other receipts, use investment start date
           const eligibilityAnchor = (isCommissionBucket
             ? bucketStart
-            : (user.role === 'PARTNER' ? bucketStart : start))
+            : (isSavingsReceipt
+              ? bucketStart  // Hawl starts from first contribution date
+              : (user.role === 'PARTNER' ? bucketStart : start)))
           const eligibilityStart = startOfDay(eligibilityAnchor)
           const duration = diffDaysFloor(eligibilityStart, day)
-          if (duration < 354) return null
+          
+          // RULE 3: For savings receipts, zakat is due if 354 days passed since first contribution
+          // For other receipts, use standard 354-day rule
+          if (!isSavingsReceipt && duration < 354) return null
+          if (isSavingsReceipt && duration < 354) {
+            // Savings received before 354 days: no immediate zakat, just track for later
+            // This will be handled as normal cash idle zakat
+            return null
+          }
 
           const amount = movementAmount(m)
           if (amount <= 0) return null
@@ -569,6 +590,7 @@ export default async function ZakatPage() {
             receiptDay: day,
             eligibilityStart,
             amount,
+            isSavingsReceipt,
           }
         })
         .filter((x: any) => Boolean(x)) as Array<{
@@ -579,6 +601,7 @@ export default async function ZakatPage() {
           receiptDay: Date
           eligibilityStart: Date
           amount: number
+          isSavingsReceipt?: boolean
         }>
 
       const bucketRows: BucketRow[] = []

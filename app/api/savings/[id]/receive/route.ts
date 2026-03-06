@@ -6,10 +6,20 @@ import { createAuditLog } from '@/lib/audit'
 
 const CASH_BALANCE_KEY = 'CASH_BALANCE'
 
+const diffDays = (start: Date, end: Date) => {
+  const s = new Date(start)
+  const e = new Date(end)
+  s.setHours(0, 0, 0, 0)
+  e.setHours(0, 0, 0, 0)
+  return Math.max(0, Math.round((e.getTime() - s.getTime()) / (1000 * 60 * 60 * 24)))
+}
+
 /**
  * POST  — Receive the ROSCA payout for a Circlys plan.
- *         Credits the amount into an existing cash bucket (no new haul)
- *         and updates the system cash balance.
+ *         NEW RULE: Savings zakat is based on receipt date and first contribution date.
+ *         - If received >= 354 days after first contribution: zakat due immediately
+ *         - If received < 354 days: no immediate zakat, money joins cash with original haul start
+ *         Creates ONE receipt bucket (not per-month), excludes monthly contribution buckets from zakat.
  *
  * DELETE — Undo a previous receive.
  */
@@ -55,69 +65,60 @@ export async function POST(
 
     const currency = investment.account?.currency || 'SAR'
 
-    // Find the oldest existing cash bucket from this plan's payments
-    // so the received money joins an EXISTING haul (no new haul).
+    // NEW RULE 2: Get first contribution date (hawl start)
     const payments: Record<string, any> =
       meta.payments && typeof meta.payments === 'object' ? meta.payments : {}
-    const bucketIds = Object.values(payments)
-      .map((p: any) => p.bucketId)
-      .filter(Boolean) as string[]
-
-    let targetBucketId: string | null = null
-
-    if (bucketIds.length > 0) {
-      // Credit into the oldest bucket from this plan
-      // This bucket has haulStartDate = original plan start date (Jan in the example)
-      const oldest = await prisma.cashBucket.findFirst({
-        where: { id: { in: bucketIds } },
-        orderBy: { haulStartDate: 'asc' },
+    
+    let firstContributionDate = new Date(investment.startDate)
+    const paymentEntries = Object.values(payments) as any[]
+    if (paymentEntries.length > 0) {
+      const sortedPayments = paymentEntries.sort((a, b) => {
+        const dateA = new Date(a.paidDate || a.dueDate)
+        const dateB = new Date(b.paidDate || b.dueDate)
+        return dateA.getTime() - dateB.getTime()
       })
-      if (oldest) targetBucketId = oldest.id
+      firstContributionDate = new Date(sortedPayments[0].paidDate || sortedPayments[0].dueDate)
     }
 
-    const result = await prisma.$transaction(async (tx) => {
-      const receiveDate = new Date()
-      // Hawl start date for Zakat = original plan start date (not receipt date)
-      const haulStartDate = new Date(investment.startDate)
+    const receiveDate = new Date()
+    const daysHeld = diffDays(firstContributionDate, receiveDate)
+    const zakatDueImmediately = daysHeld >= 354
 
-      if (targetBucketId) {
-        // Add receipt as a movement to the existing bucket — NO new haul
-        // Bucket keeps its original haulStartDate for Zakat calculation
-        await tx.cashBucket.update({
-          where: { id: targetBucketId },
-          data: { balance: { increment: receiveAmount } },
-        })
-        await tx.cashBucketMovement.create({
-          data: {
-            cashBucketId: targetBucketId,
-            investmentId: investment.id,
-            amount: receiveAmount,
-            type: 'CASH_IN',
-            date: receiveDate,
-            notes: `Circlys receipt • ${investment.name} • Month ${meta.receiptMonth}`,
-          },
-        })
-      } else {
-        // No existing bucket — create one with the plan start date
-        // Hawl starts from original plan start date (Jan), not receipt date
-        const bucket = await tx.cashBucket.create({
-          data: {
-            label: `Circlys Receipt • ${investment.name}`,
-            currency,
-            haulStartDate,
-            balance: receiveAmount,
-            movements: {
-              create: {
-                investmentId: investment.id,
-                amount: receiveAmount,
-                type: 'CASH_IN',
-                date: receiveDate,
-                notes: `Circlys receipt • ${investment.name} • Month ${meta.receiptMonth}`,
-              },
+    const result = await prisma.$transaction(async (tx) => {
+
+      // NEW RULE 1: Create ONE receipt bucket (not per-month)
+      // Hawl starts from FIRST contribution date, not receipt date
+      const receiptBucket = await tx.cashBucket.create({
+        data: {
+          label: `Savings Receipt • ${investment.name}`,
+          currency,
+          balance: receiveAmount,
+          haulStartDate: firstContributionDate,
+          excludeFromZakat: !zakatDueImmediately, // Exclude if zakat not due yet
+          personId: null,
+          movements: {
+            create: {
+              investmentId: investment.id,
+              amount: receiveAmount,
+              type: 'CASH_IN',
+              date: receiveDate,
+              notes: `Savings receipt • ${investment.name} • Month ${meta.receiptMonth}`,
             },
           },
+        },
+      })
+
+      // Mark all monthly contribution buckets as excluded from zakat
+      // (they were just temporary tracking, not actual zakat buckets)
+      const contributionBucketIds = paymentEntries
+        .map((p: any) => p.bucketId)
+        .filter((id: any) => id && !id.startsWith('post-receipt-')) as string[]
+
+      if (contributionBucketIds.length > 0) {
+        await tx.cashBucket.updateMany({
+          where: { id: { in: contributionBucketIds } },
+          data: { excludeFromZakat: true },
         })
-        targetBucketId = bucket.id
       }
 
       // Update system cash balance
@@ -171,7 +172,9 @@ export async function POST(
             received: {
               date: receiveDate.toISOString(),
               amount: receiveAmount,
-              bucketId: targetBucketId,
+              bucketId: receiptBucket.id,
+              daysHeld,
+              zakatDueImmediately,
             },
           }),
         },
@@ -181,11 +184,13 @@ export async function POST(
       return updated
     })
 
-    await createAuditLog(user.id, 'CREATE', 'CASH_BUCKET', targetBucketId!, {
-      type: 'CIRCLYS_RECEIPT',
+    await createAuditLog(user.id, 'CREATE', 'CASH_BUCKET', result.id, {
+      type: 'SAVINGS_RECEIPT',
       investmentId: investment.id,
       amount: receiveAmount,
       receiptMonth: meta.receiptMonth,
+      daysHeld,
+      zakatDueImmediately,
     })
 
     return NextResponse.json({ investment: result, receiveAmount })
@@ -233,29 +238,27 @@ export async function DELETE(
     }
 
     const result = await prisma.$transaction(async (tx) => {
-      // Reverse the bucket credit
+      // Delete the receipt bucket entirely (NEW RULE: single receipt bucket)
       if (bucketId) {
-        const bucket = await tx.cashBucket.findUnique({ where: { id: bucketId } })
-        if (bucket) {
-          await tx.cashBucket.update({
-            where: { id: bucketId },
-            data: { balance: { decrement: receiveAmount } },
-          })
-          // Delete the receipt movement
-          const movement = await tx.cashBucketMovement.findFirst({
-            where: {
-              cashBucketId: bucketId,
-              investmentId: investment.id,
-              amount: receiveAmount,
-              type: 'CASH_IN',
-              notes: { contains: 'Circlys receipt' },
-            },
-            orderBy: { createdAt: 'desc' },
-          })
-          if (movement) {
-            await tx.cashBucketMovement.delete({ where: { id: movement.id } })
-          }
-        }
+        await tx.cashBucketMovement.deleteMany({
+          where: { cashBucketId: bucketId }
+        })
+        await tx.cashBucket.delete({ where: { id: bucketId } })
+      }
+
+      // Restore monthly contribution buckets to be zakat-eligible again
+      const payments: Record<string, any> =
+        meta.payments && typeof meta.payments === 'object' ? meta.payments : {}
+      const paymentEntries = Object.values(payments) as any[]
+      const contributionBucketIds = paymentEntries
+        .map((p: any) => p.bucketId)
+        .filter((id: any) => id && !id.startsWith('post-receipt-')) as string[]
+
+      if (contributionBucketIds.length > 0) {
+        await tx.cashBucket.updateMany({
+          where: { id: { in: contributionBucketIds } },
+          data: { excludeFromZakat: false },
+        })
       }
 
       // Reverse system cash balance
@@ -278,7 +281,7 @@ export async function DELETE(
             accountId: cashAccount.id,
             investmentId: investment.id,
             type: 'CASH_IN',
-            description: { contains: 'Circlys receipt' },
+            description: { contains: 'Savings receipt' },
           },
           orderBy: { date: 'desc' },
         })
@@ -302,7 +305,7 @@ export async function DELETE(
     })
 
     await createAuditLog(user.id, 'DELETE', 'CASH_BUCKET', bucketId || id, {
-      type: 'CIRCLYS_RECEIPT_UNDO',
+      type: 'SAVINGS_RECEIPT_UNDO',
       investmentId: investment.id,
       amount: receiveAmount,
     })
