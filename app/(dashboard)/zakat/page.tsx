@@ -528,6 +528,66 @@ export default async function ZakatPage() {
         return []
       }
 
+      // RULE 2: For savings receipt buckets, calculate zakat based on 354-day rule
+      // Savings receipt buckets are excluded from normal zakat flow, so handle separately
+      if (isSavingsReceipt) {
+        const bucketRows: BucketRow[] = []
+        const movements = Array.isArray(bucket.movements) ? bucket.movements : []
+        const receiptMovement = movements.find((m: any) => m?.type === 'CASH_IN')
+        
+        if (receiptMovement) {
+          const receiptDate = new Date(receiptMovement.date)
+          const haulStartDate = new Date(bucket.haulStartDate)
+          const daysHeld = diffDaysFloor(haulStartDate, receiptDate)
+          
+          // Only show zakat if 354 days have passed since first contribution
+          if (daysHeld >= 354) {
+            const zakatBase = Number(bucket.balance) || 0
+            const rowKey = buildRowKey(['SAVINGS_RECEIPT', bucket.id])
+            const isPaid = movementHasRowPaid(
+              movements.filter((m: any) => m?.type === 'ZAKAT_PAID'),
+              rowKey
+            )
+            const zakatDue = !isPaid && zakatBase > 0 ? zakatBase * 0.025 : 0
+            
+            bucketRows.push({
+              id: rowKey,
+              bucketId: bucket.id,
+              periodIndex: 0,
+              label: `Savings Receipt • ${source}`,
+              currency: bucket.currency,
+              balance: zakatBase,
+              haulStartDate: isoDay(haulStartDate),
+              lastZakatPaidDate: bucket.lastZakatPaidDate
+                ? bucket.lastZakatPaidDate.toISOString().split('T')[0]
+                : null,
+              haulCompleteDate: isoDay(receiptDate),
+              idleBase: 0,
+              receiptsTotal: zakatBase,
+              zakatDue,
+              isPaid,
+              haulCompleted: true,
+              source,
+              sourceGroup: source,
+              sourceType,
+              rowKind: 'PROFIT' as const,
+              why: `Savings received on ${isoDay(receiptDate)}, held ${daysHeld} days (≥354)`,
+              lastPayment: null,
+              dueReceipts: [
+                {
+                  date: isoDay(receiptDate),
+                  amount: Number(receiptMovement.amount || 0),
+                  type: receiptMovement.type,
+                  investmentName: source,
+                },
+              ],
+            })
+          }
+        }
+        
+        return bucketRows
+      }
+
       // For immediate-receipt buckets (Profit •, Partner Commission):
       // If there is no receipt yet (no CASH_IN), skip all rows entirely.
       if (isImmediateReceiptBucket && receiptMovements.length === 0) {
