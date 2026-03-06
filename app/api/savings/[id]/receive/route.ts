@@ -67,6 +67,7 @@ export async function POST(
 
     if (bucketIds.length > 0) {
       // Credit into the oldest bucket from this plan
+      // This bucket has haulStartDate = original plan start date (Jan in the example)
       const oldest = await prisma.cashBucket.findFirst({
         where: { id: { in: bucketIds } },
         orderBy: { haulStartDate: 'asc' },
@@ -76,9 +77,12 @@ export async function POST(
 
     const result = await prisma.$transaction(async (tx) => {
       const receiveDate = new Date()
+      // Hawl start date for Zakat = original plan start date (not receipt date)
+      const haulStartDate = new Date(investment.startDate)
 
       if (targetBucketId) {
         // Add receipt as a movement to the existing bucket — NO new haul
+        // Bucket keeps its original haulStartDate for Zakat calculation
         await tx.cashBucket.update({
           where: { id: targetBucketId },
           data: { balance: { increment: receiveAmount } },
@@ -94,13 +98,13 @@ export async function POST(
           },
         })
       } else {
-        // No existing bucket — create one with the plan start date so it
-        // doesn't start a brand-new haul from today.
+        // No existing bucket — create one with the plan start date
+        // Hawl starts from original plan start date (Jan), not receipt date
         const bucket = await tx.cashBucket.create({
           data: {
             label: `Circlys Receipt • ${investment.name}`,
             currency,
-            haulStartDate: new Date(investment.startDate),
+            haulStartDate,
             balance: receiveAmount,
             movements: {
               create: {
