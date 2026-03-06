@@ -112,126 +112,182 @@ export async function restoreSnapshot(
   tx: PrismaClient | any,
   snapshotId: string
 ): Promise<{ restored: boolean; changes: string[] }> {
-  const snapshot = await tx.snapshot.findUnique({
-    where: { id: snapshotId },
-  })
+  try {
+    const snapshot = await tx.snapshot.findUnique({
+      where: { id: snapshotId },
+    })
 
-  if (!snapshot) {
-    throw new Error('Snapshot not found')
-  }
-
-  if (snapshot.restoredAt) {
-    throw new Error('Snapshot already restored')
-  }
-
-  const data: SnapshotData = JSON.parse(snapshot.data)
-  const changes: string[] = []
-
-  // Restore investments
-  if (data.investments) {
-    for (const inv of data.investments) {
-      await tx.investment.upsert({
-        where: { id: inv.id },
-        update: {
-          name: inv.name,
-          category: inv.category,
-          principalAmount: inv.principalAmount,
-          currentValue: inv.currentValue,
-          realizedProfit: inv.realizedProfit,
-          unrealizedProfit: inv.unrealizedProfit,
-          startDate: inv.startDate,
-          maturityDate: inv.maturityDate,
-          interestRate: inv.interestRate,
-          notes: inv.notes,
-          metadata: inv.metadata,
-          fees: inv.fees,
-          totalReceived: inv.totalReceived,
-          receivableAmount: inv.receivableAmount,
-          isIjarah: inv.isIjarah,
-        },
-        create: inv,
-      })
-      changes.push(`Investment ${inv.name}: restored`)
+    if (!snapshot) {
+      throw new Error('Snapshot not found')
     }
-  }
 
-  // Restore deal participants
-  if (data.dealParticipants) {
-    for (const dp of data.dealParticipants) {
-      await tx.dealParticipant.upsert({
-        where: { id: dp.id },
-        update: {
-          investedAmount: dp.investedAmount,
-          currentValue: dp.currentValue,
-          profit: dp.profit,
-          receivable: dp.receivable,
-          sharePercentage: dp.sharePercentage,
-          acquiredAt: dp.acquiredAt,
-          commissionFees: dp.commissionFees,
-        },
-        create: dp,
-      })
-      changes.push(`DealParticipant ${dp.id}: restored`)
+    if (snapshot.restoredAt) {
+      throw new Error('Snapshot already restored')
     }
-  }
 
-  // Restore system settings
-  if (data.systemSettings) {
-    for (const setting of data.systemSettings) {
-      await tx.systemSetting.upsert({
-        where: { key: setting.key },
-        update: { value: setting.value },
-        create: setting,
-      })
-      changes.push(`SystemSetting ${setting.key}: ${setting.value}`)
+    // Parse snapshot data safely
+    let data: SnapshotData
+    try {
+      data = typeof snapshot.data === 'string'
+        ? JSON.parse(snapshot.data)
+        : snapshot.data
+    } catch (parseErr) {
+      console.error('SNAPSHOT PARSE ERROR:', parseErr)
+      throw new Error(`Failed to parse snapshot data: ${String(parseErr)}`)
     }
-  }
 
-  // Restore cash buckets
-  if (data.cashBuckets) {
-    for (const bucket of data.cashBuckets) {
-      await tx.cashBucket.upsert({
-        where: { id: bucket.id },
-        update: {
-          amount: bucket.amount,
-          currency: bucket.currency,
-          label: bucket.label,
-          haulStartDate: bucket.haulStartDate,
-          lastZakatPaidDate: bucket.lastZakatPaidDate,
-          excludeFromZakat: bucket.excludeFromZakat,
-          notes: bucket.notes,
-        },
-        create: bucket,
-      })
-      changes.push(`CashBucket ${bucket.label}: restored`)
+    const changes: string[] = []
+
+    // Restore investments
+    if (data.investments && Array.isArray(data.investments)) {
+      for (const inv of data.investments) {
+        try {
+          await tx.investment.upsert({
+            where: { id: inv.id },
+            update: {
+              name: inv.name,
+              category: inv.category,
+              principalAmount: inv.principalAmount,
+              realizedProfit: inv.realizedProfit,
+              unrealizedProfit: inv.unrealizedProfit,
+              startDate: inv.startDate,
+              maturityDate: inv.maturityDate,
+              interestRate: inv.interestRate,
+              notes: inv.notes,
+              metadata: inv.metadata,
+              fees: inv.fees,
+              totalReceived: inv.totalReceived,
+              receivableAmount: inv.receivableAmount,
+              isIjarah: inv.isIjarah,
+            },
+            create: inv,
+          })
+          changes.push(`Investment ${inv.name}: restored`)
+        } catch (invErr) {
+          console.error(`INVESTMENT RESTORE ERROR for ${inv.id}:`, invErr)
+          changes.push(`Investment ${inv.name}: FAILED - ${String(invErr)}`)
+        }
+      }
     }
-  }
 
-  // Restore debts
-  if (data.debts) {
-    for (const debt of data.debts) {
-      await tx.debt.upsert({
-        where: { id: debt.id },
-        update: {
-          amount: debt.amount,
-          description: debt.description,
-          dueDate: debt.dueDate,
-          notes: debt.notes,
-          cashBucketId: debt.cashBucketId,
-        },
-        create: debt,
-      })
-      changes.push(`Debt ${debt.description}: restored`)
+    // Restore deal participants (only if investment exists)
+    if (data.dealParticipants && Array.isArray(data.dealParticipants)) {
+      for (const dp of data.dealParticipants) {
+        try {
+          const investmentExists = await tx.investment.findUnique({
+            where: { id: dp.investmentId },
+          })
+          if (!investmentExists) {
+            console.warn(`SKIP DealParticipant ${dp.id}: Investment ${dp.investmentId} not found`)
+            continue
+          }
+
+          await tx.dealParticipant.upsert({
+            where: { id: dp.id },
+            update: {
+              investedAmount: dp.investedAmount,
+              profit: dp.profit,
+              receivable: dp.receivable,
+              sharePercentage: dp.sharePercentage,
+              acquiredAt: dp.acquiredAt,
+              commissionFees: dp.commissionFees,
+            },
+            create: dp,
+          })
+          changes.push(`DealParticipant ${dp.id}: restored`)
+        } catch (dpErr) {
+          console.error(`DEAL PARTICIPANT RESTORE ERROR for ${dp.id}:`, dpErr)
+          changes.push(`DealParticipant ${dp.id}: FAILED - ${String(dpErr)}`)
+        }
+      }
     }
+
+    // Restore system settings
+    if (data.systemSettings && Array.isArray(data.systemSettings)) {
+      for (const setting of data.systemSettings) {
+        try {
+          await tx.systemSetting.upsert({
+            where: { key: setting.key },
+            update: { value: setting.value },
+            create: setting,
+          })
+          changes.push(`SystemSetting ${setting.key}: ${setting.value}`)
+        } catch (settingErr) {
+          console.error(`SYSTEM SETTING RESTORE ERROR for ${setting.key}:`, settingErr)
+          changes.push(`SystemSetting ${setting.key}: FAILED - ${String(settingErr)}`)
+        }
+      }
+    }
+
+    // Restore cash buckets
+    if (data.cashBuckets && Array.isArray(data.cashBuckets)) {
+      for (const bucket of data.cashBuckets) {
+        try {
+          await tx.cashBucket.upsert({
+            where: { id: bucket.id },
+            update: {
+              amount: bucket.amount,
+              currency: bucket.currency,
+              label: bucket.label,
+              haulStartDate: bucket.haulStartDate,
+              lastZakatPaidDate: bucket.lastZakatPaidDate,
+              excludeFromZakat: bucket.excludeFromZakat,
+              notes: bucket.notes,
+            },
+            create: bucket,
+          })
+          changes.push(`CashBucket ${bucket.label}: restored`)
+        } catch (bucketErr) {
+          console.error(`CASH BUCKET RESTORE ERROR for ${bucket.id}:`, bucketErr)
+          changes.push(`CashBucket ${bucket.label}: FAILED - ${String(bucketErr)}`)
+        }
+      }
+    }
+
+    // Restore debts (only if cash bucket exists if referenced)
+    if (data.debts && Array.isArray(data.debts)) {
+      for (const debt of data.debts) {
+        try {
+          if (debt.cashBucketId) {
+            const bucketExists = await tx.cashBucket.findUnique({
+              where: { id: debt.cashBucketId },
+            })
+            if (!bucketExists) {
+              console.warn(`SKIP Debt ${debt.id}: CashBucket ${debt.cashBucketId} not found`)
+              continue
+            }
+          }
+
+          await tx.debt.upsert({
+            where: { id: debt.id },
+            update: {
+              amount: debt.amount,
+              description: debt.description,
+              dueDate: debt.dueDate,
+              notes: debt.notes,
+              cashBucketId: debt.cashBucketId,
+            },
+            create: debt,
+          })
+          changes.push(`Debt ${debt.description}: restored`)
+        } catch (debtErr) {
+          console.error(`DEBT RESTORE ERROR for ${debt.id}:`, debtErr)
+          changes.push(`Debt ${debt.description}: FAILED - ${String(debtErr)}`)
+        }
+      }
+    }
+
+    // Mark snapshot as restored
+    await tx.snapshot.update({
+      where: { id: snapshotId },
+      data: { restoredAt: new Date() },
+    })
+
+    return { restored: true, changes }
+  } catch (err) {
+    console.error('RESTORE SNAPSHOT ERROR:', err)
+    throw err
   }
-
-  // Mark snapshot as restored
-  await tx.snapshot.update({
-    where: { id: snapshotId },
-    data: { restoredAt: new Date() },
-  })
-
-  return { restored: true, changes }
 }
 
 export async function cleanupOldSnapshots(tx: PrismaClient | any): Promise<number> {

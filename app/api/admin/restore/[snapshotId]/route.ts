@@ -15,9 +15,13 @@ export async function POST(
       return NextResponse.json({ error: 'Snapshot ID is required' }, { status: 400 })
     }
 
+    console.log('RESTORE SNAPSHOT START:', { snapshotId })
+
     const result = await prisma.$transaction(async (tx: any) => {
       return await restoreSnapshot(tx, snapshotId)
     })
+
+    console.log('RESTORE SNAPSHOT SUCCESS:', { snapshotId, changes: result.changes.length })
 
     return NextResponse.json({
       success: true,
@@ -25,7 +29,12 @@ export async function POST(
       changes: result.changes,
     })
   } catch (error) {
-    console.error('ADMIN RESTORE ERROR:', error)
+    console.error('ADMIN RESTORE ERROR:', {
+      snapshotId: (error as any)?.snapshotId,
+      message: error instanceof Error ? error.message : String(error),
+      stack: error instanceof Error ? error.stack : undefined,
+      fullError: error,
+    })
     
     if (error instanceof Error) {
       if (error.message === 'Snapshot not found') {
@@ -34,8 +43,14 @@ export async function POST(
       if (error.message === 'Snapshot already restored') {
         return NextResponse.json({ error: 'Snapshot already restored' }, { status: 409 })
       }
+      
+      return NextResponse.json({ 
+        error: `Failed to restore snapshot: ${error.message}` 
+      }, { status: 500 })
     }
 
-    return NextResponse.json({ error: 'Failed to restore snapshot' }, { status: 500 })
+    return NextResponse.json({ 
+      error: `Failed to restore snapshot: ${String(error)}` 
+    }, { status: 500 })
   }
 }
