@@ -389,6 +389,8 @@ export default async function DashboardPage({
     }
 
     const owned = investments.filter((inv: any) => {
+      // Exclude CASH accounts from owned investments
+      if (inv.account?.type === 'CASH') return false
       const dps = Array.isArray(inv.dealParticipants) ? inv.dealParticipants : []
       if (dps.length === 0) return true
       return Boolean(getOwnerPosition(inv))
