@@ -687,6 +687,62 @@ export async function POST(
           },
         })
 
+        // FIX 1: Reverse settlement and commission on return-to-owner
+        const settlementTx = await tx.transaction.findFirst({
+          where: { 
+            investmentId: id, 
+            type: 'SOLD_DEAL_SETTLEMENT' 
+          }
+        })
+        const commissionTx = await tx.transaction.findFirst({
+          where: { 
+            investmentId: id, 
+            type: 'PARTNER_COMMISSION' 
+          }
+        })
+
+        const reversalAmount = 
+          (settlementTx?.amount || 0) + (commissionTx?.amount || 0)
+
+        if (reversalAmount > 0) {
+          // Create reversal transaction
+          await tx.transaction.create({
+            data: {
+              accountId: cashAccount.id,
+              type: 'RETURN_TO_OWNER_REVERSAL',
+              amount: -reversalAmount,
+              date: new Date(),
+              description: 'Reversal of settlement on partner return',
+              investmentId: id,
+            }
+          })
+
+          // Update SystemSetting CASH_BALANCE
+          const cashSetting = await tx.systemSetting.findUnique({
+            where: { key: 'CASH_BALANCE' }
+          })
+          const currentBalance = Number(cashSetting?.value || 0)
+          await tx.systemSetting.update({
+            where: { key: 'CASH_BALANCE' },
+            data: { value: String(currentBalance - reversalAmount) }
+          })
+
+          // Delete the commission and settlement cash buckets
+          await tx.cashBucket.deleteMany({
+            where: {
+              investmentId: id,
+              type: { in: ['SOLD_DEAL_SETTLEMENT', 'PARTNER_COMMISSION'] }
+            }
+          })
+
+          console.log('REVERSED SETTLEMENT AND COMMISSION:', {
+            settlementAmount: settlementTx?.amount || 0,
+            commissionAmount: commissionTx?.amount || 0,
+            totalReversed: reversalAmount,
+            newCashBalance: currentBalance - reversalAmount
+          })
+        }
+
         await tx.dealParticipant.deleteMany({
           where: {
             investmentId: investment.id,
