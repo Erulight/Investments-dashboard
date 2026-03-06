@@ -687,82 +687,12 @@ export async function POST(
           },
         })
 
-        // FIX 2: Delete partner-related transactions and reverse cash balance on return-to-owner
-        // Find the settlement and commission transactions to get their amounts
-        const settlementTx = await tx.transaction.findFirst({
-          where: {
-            investmentId: id,
-            type: 'SOLD_DEAL_SETTLEMENT'
-          }
-        })
-        const commissionTx = await tx.transaction.findFirst({
-          where: {
-            investmentId: id,
-            type: 'PARTNER_COMMISSION'
-          }
-        })
-
-        const settlementAmount = settlementTx?.amount || 0
-        const commissionAmount = commissionTx?.amount || 0
-        const totalToReverse = settlementAmount + commissionAmount
-
-        // Delete the commission, settlement, and profit accrual transactions
-        await tx.transaction.deleteMany({
-          where: {
-            investmentId: id,
-            type: { in: ['PARTNER_COMMISSION', 'SOLD_DEAL_SETTLEMENT', 'SELL_PROFIT_ACCRUED'] }
-          }
-        })
-
-        // Reverse the cash balance if there were settlement/commission amounts
-        if (totalToReverse > 0) {
-          const cashSetting = await tx.systemSetting.findUnique({
-            where: { key: 'CASH_BALANCE' }
-          })
-          const currentBalance = Number(cashSetting?.value || 0)
-          const reversedBalance = currentBalance - totalToReverse
-          
-          await tx.systemSetting.update({
-            where: { key: 'CASH_BALANCE' },
-            data: { value: String(reversedBalance) }
-          })
-
-          console.log('REVERSED CASH BALANCE ON RETURN-TO-OWNER:', {
-            settlementAmount,
-            commissionAmount,
-            totalReversed: totalToReverse,
-            oldBalance: currentBalance,
-            newBalance: reversedBalance
-          })
-        }
-
-        // Delete the commission and settlement cash buckets
-        // Delete by label - commission bucket created at original sale time
-        await tx.cashBucket.deleteMany({
-          where: {
-            label: { contains: 'Partner Commission' },
-            personId: null // owner scope
-          }
-        })
-
-        // Also delete by investment name pattern as fallback
-        const investmentForBucketCleanup = await tx.investment.findUnique({
-          where: { id },
-          select: { name: true }
-        })
-        
-        if (investmentForBucketCleanup?.name) {
-          await tx.cashBucket.deleteMany({
-            where: {
-              label: { contains: investmentForBucketCleanup.name },
-              personId: null // owner buckets only
-            }
-          })
-        }
-
-        console.log('DELETED PARTNER-RELATED TRANSACTIONS AND BUCKETS FOR RETURN-TO-OWNER:', {
+        // When partner returns deal: just restore investment and delete partner participant
+        // No cash transactions needed since SOLD_DEAL_SETTLEMENT and PARTNER_COMMISSION
+        // are never created when selling to partner (only when owner withdraws)
+        console.log('PARTNER RETURNED DEAL TO OWNER:', {
           investmentId: id,
-          investmentName: investmentForBucketCleanup?.name
+          investmentName: investment.name
         })
 
         await tx.dealParticipant.deleteMany({
