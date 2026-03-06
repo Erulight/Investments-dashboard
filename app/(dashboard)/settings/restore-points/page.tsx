@@ -1,0 +1,245 @@
+'use client'
+
+import { useState, useEffect } from 'react'
+import { Button } from '@/components/ui/Button'
+import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/Card'
+
+interface Snapshot {
+  id: string
+  createdAt: string
+  label: string
+  trigger: string
+  restoredAt?: string
+  userId?: string
+}
+
+export default function RestorePointsPage() {
+  const [snapshots, setSnapshots] = useState<Snapshot[]>([])
+  const [loading, setLoading] = useState(true)
+  const [filter, setFilter] = useState('all')
+  const [restoring, setRestoring] = useState(false)
+  const [cleaning, setCleaning] = useState(false)
+
+  const showMessage = (message: string, type: 'success' | 'error' = 'success') => {
+    alert(`${type.toUpperCase()}: ${message}`)
+  }
+
+  const fetchSnapshots = async () => {
+    try {
+      setLoading(true)
+      const response = await fetch(`/api/admin/snapshots?filter=${filter}`)
+      if (!response.ok) throw new Error('Failed to fetch snapshots')
+      const data = await response.json()
+      setSnapshots(data.snapshots || [])
+    } catch (error) {
+      console.error('Error fetching snapshots:', error)
+      showMessage('Failed to load restore points', 'error')
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  const handleRestore = async (snapshotId: string) => {
+    if (!confirm('Are you sure you want to restore this snapshot? This action cannot be undone.')) {
+      return
+    }
+
+    try {
+      setRestoring(true)
+      const response = await fetch(`/api/admin/restore/${snapshotId}`, {
+        method: 'POST',
+      })
+      
+      if (!response.ok) {
+        const error = await response.json()
+        throw new Error(error.error || 'Failed to restore snapshot')
+      }
+
+      const result = await response.json()
+      showMessage(`Restored successfully! ${result.changes?.length || 0} changes applied.`)
+      fetchSnapshots()
+    } catch (error) {
+      console.error('Error restoring snapshot:', error)
+      showMessage(error instanceof Error ? error.message : 'Failed to restore snapshot', 'error')
+    } finally {
+      setRestoring(false)
+    }
+  }
+
+  const handleCleanup = async () => {
+    if (!confirm('Are you sure you want to cleanup old snapshots?')) {
+      return
+    }
+
+    try {
+      setCleaning(true)
+      const response = await fetch('/api/admin/snapshots/cleanup', {
+        method: 'POST',
+      })
+      
+      if (!response.ok) throw new Error('Failed to cleanup snapshots')
+      
+      const result = await response.json()
+      showMessage(`Cleanup completed! Deleted ${result.deletedCount} old snapshots.`)
+      fetchSnapshots()
+    } catch (error) {
+      console.error('Error cleaning up snapshots:', error)
+      showMessage('Failed to cleanup snapshots', 'error')
+    } finally {
+      setCleaning(false)
+    }
+  }
+
+  const formatDate = (dateString: string) => {
+    const date = new Date(dateString)
+    const now = new Date()
+    const diffMs = now.getTime() - date.getTime()
+    const diffHours = Math.floor(diffMs / (1000 * 60 * 60))
+    const diffDays = Math.floor(diffHours / 24)
+
+    if (diffHours < 1) {
+      const diffMins = Math.floor(diffMs / (1000 * 60))
+      return `${diffMins} minutes ago`
+    } else if (diffHours < 24) {
+      return `${diffHours} hours ago`
+    } else if (diffDays === 1) {
+      return `Yesterday at ${date.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' })}`
+    } else if (diffDays < 7) {
+      return `${diffDays} days ago`
+    } else {
+      return date.toLocaleDateString('en-US', { 
+        month: 'short', 
+        day: 'numeric',
+        hour: 'numeric',
+        minute: '2-digit'
+      })
+    }
+  }
+
+  useEffect(() => {
+    fetchSnapshots()
+  }, [filter])
+
+  return (
+    <div className="container mx-auto py-6 space-y-6">
+      <div>
+        <h1 className="text-3xl font-bold">🔄 Restore Points</h1>
+        <p className="text-gray-600 mt-2">
+          Roll back to a previous state if something went wrong
+        </p>
+      </div>
+
+      <div className="space-y-4">
+        <div className="flex space-x-2">
+          <Button 
+            onClick={() => setFilter('hour')}
+            className={filter === 'hour' ? 'bg-blue-500 text-white' : 'bg-gray-200'}
+          >
+            Last Hour
+          </Button>
+          <Button 
+            onClick={() => setFilter('day')}
+            className={filter === 'day' ? 'bg-blue-500 text-white' : 'bg-gray-200'}
+          >
+            Today
+          </Button>
+          <Button 
+            onClick={() => setFilter('week')}
+            className={filter === 'week' ? 'bg-blue-500 text-white' : 'bg-gray-200'}
+          >
+            This Week
+          </Button>
+          <Button 
+            onClick={() => setFilter('all')}
+            className={filter === 'all' ? 'bg-blue-500 text-white' : 'bg-gray-200'}
+          >
+            All
+          </Button>
+        </div>
+
+        {loading ? (
+          <Card>
+            <CardContent className="flex items-center justify-center py-8">
+              <div className="flex items-center space-x-2">
+                <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-gray-900"></div>
+                <span>Loading restore points...</span>
+              </div>
+            </CardContent>
+          </Card>
+        ) : snapshots.length === 0 ? (
+          <Card>
+            <CardContent className="flex flex-col items-center justify-center py-12 text-center">
+              <div className="text-4xl mb-4">🔄</div>
+              <h3 className="text-lg font-semibold mb-2">No restore points found</h3>
+              <p className="text-gray-600">
+                Restore points are created automatically before major actions
+              </p>
+            </CardContent>
+          </Card>
+        ) : (
+          <div className="space-y-4">
+            {snapshots.map((snapshot) => (
+              <Card key={snapshot.id}>
+                <CardContent className="flex items-center justify-between p-6">
+                  <div className="flex-1">
+                    <div className="flex items-center space-x-3">
+                      <div>
+                        <h3 className="font-semibold">{snapshot.label}</h3>
+                        <div className="flex items-center space-x-2 mt-1">
+                          <span className="text-sm text-gray-600">
+                            {formatDate(snapshot.createdAt)}
+                          </span>
+                          <span className="text-xs bg-gray-100 px-2 py-1 rounded">
+                            {snapshot.trigger}
+                          </span>
+                          {snapshot.restoredAt && (
+                            <span className="text-xs bg-green-100 text-green-800 px-2 py-1 rounded">
+                              Restored
+                            </span>
+                          )}
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                  <div className="flex items-center space-x-2">
+                    <Button
+                      onClick={() => handleRestore(snapshot.id)}
+                      disabled={!!snapshot.restoredAt || restoring}
+                      className="bg-red-500 text-white hover:bg-red-600 disabled:bg-gray-300"
+                    >
+                      {restoring ? 'Restoring...' : 'Restore'}
+                    </Button>
+                  </div>
+                </CardContent>
+              </Card>
+            ))}
+          </div>
+        )}
+      </div>
+
+      <Card>
+        <CardHeader>
+          <CardTitle className="flex items-center space-x-2">
+            <span>🗑️</span>
+            <span>Maintenance</span>
+          </CardTitle>
+        </CardHeader>
+        <CardContent>
+          <p className="text-gray-600 mb-4">
+            Clean up old restore points to free up database space
+          </p>
+          <Button
+            onClick={handleCleanup}
+            disabled={cleaning}
+            className="bg-gray-500 text-white hover:bg-gray-600"
+          >
+            {cleaning ? 'Cleaning...' : 'Run Cleanup'}
+          </Button>
+          <p className="text-xs text-gray-500 mt-2">
+            Removes restore points older than 30 days and keeps only the 100 most recent ones.
+          </p>
+        </CardContent>
+      </Card>
+    </div>
+  )
+}

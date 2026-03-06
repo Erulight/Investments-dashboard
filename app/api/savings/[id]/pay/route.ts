@@ -64,15 +64,6 @@ export async function POST(
       return NextResponse.json({ error: 'Invalid monthIndex' }, { status: 400 })
     }
 
-    // Snapshot before undoing a savings payment
-    await createSnapshot(prisma as any, {
-      label: `Before: Savings Unpay ${investment.name}  Month ${monthIndex + 1}`,
-      trigger: 'SAVINGS_UNPAY',
-      userId: user.id,
-      investmentId: investment.id,
-      personId: user.personId || undefined,
-    })
-
     if (!Number.isFinite(amount) || amount <= 0) {
       return NextResponse.json({ error: 'Invalid amount' }, { status: 400 })
     }
@@ -270,6 +261,15 @@ export async function DELETE(
     if (!Number.isInteger(monthIndex) || monthIndex < 0) {
       return NextResponse.json({ error: 'Invalid monthIndex' }, { status: 400 })
     }
+
+    // Snapshot before undoing a savings payment
+    await createSnapshot(prisma as any, {
+      label: `Before: Savings Unpay ${investment.name} • Month ${monthIndex + 1}`,
+      trigger: 'SAVINGS_UNPAY',
+      userId: user.id,
+      investmentId: investment.id,
+      personId: user.personId || undefined,
+    })
 
     const meta = (() => {
       try {

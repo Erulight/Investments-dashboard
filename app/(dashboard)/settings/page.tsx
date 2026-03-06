@@ -92,6 +92,23 @@ export default async function SettingsPage() {
         <div className="space-y-4">
           <PartnerReset />
           <PortfolioReset />
+          <div className="border border-slate-200 rounded-lg p-4">
+            <div className="flex items-center space-x-3">
+              <span className="text-2xl">🔄</span>
+              <div>
+                <h3 className="text-sm font-semibold text-slate-900">Restore Points</h3>
+                <p className="text-xs text-slate-500">Roll back to a previous state if something went wrong</p>
+              </div>
+            </div>
+            <div className="mt-3">
+              <a 
+                href="/settings/restore-points"
+                className="inline-flex items-center px-3 py-1.5 text-xs font-medium text-blue-700 bg-blue-50 border border-blue-200 rounded-md hover:bg-blue-100"
+              >
+                Manage Restore Points
+              </a>
+            </div>
+          </div>
         </div>
       ),
     },
