@@ -581,31 +581,33 @@ export function SukukList({ initialSukuk, userRole, ownerPersonId, viewerPersonI
     const timeRatio = totalMonthsFull && periodMonths !== null && totalMonthsFull > 0
       ? Math.min(1, Math.max(0, periodMonths / totalMonthsFull))
       : 1
-    const fees = Math.round((participation
+    const round2 = (n: number) => Math.round((n || 0) * 100) / 100
+    
+    const fees = round2(participation
       ? (fullFees * participationRatio) * timeRatio
-      : fullFees) * 100) / 100
+      : fullFees)
 
     const totalReceived = getViewerReceived(inv)
     const periodYears = periodMonths ? periodMonths / 12 : 0
+    
     const grossProfit = totalInvestment > 0 && apr > 0 && periodYears > 0
       ? totalInvestment * (apr / 100) * periodYears
       : 0
-    const manualReceivableFull = Number.isFinite(inv.receivableAmount) ? inv.receivableAmount : null
+    const manualReceivableFull = Number.isFinite(inv.receivableAmount) ? round2(inv.receivableAmount) : null
     const manualReceivable = manualReceivableFull !== null && manualReceivableFull > 0
-      ? (participation ? (manualReceivableFull * participationRatio) * timeRatio : manualReceivableFull)
+      ? (participation ? round2((manualReceivableFull * participationRatio) * timeRatio) : manualReceivableFull)
       : null
     const commissionFees = Number.isFinite(participation?.commissionFees)
-      ? Number(participation.commissionFees)
+      ? round2(Number(participation.commissionFees))
       : 0
-    const round2 = (n: number) => Math.round((n || 0) * 100) / 100
     
-    const netProfit = Math.round((manualReceivable !== null
+    const netProfit = round2(manualReceivable !== null
       ? Math.max(0, manualReceivable - commissionFees)
-      : Math.max(0, grossProfit - fees - commissionFees)) * 100) / 100
+      : Math.max(0, grossProfit - fees - commissionFees))
     const aprAfterFees = totalInvestment > 0 && periodYears > 0
       ? ((netProfit / totalInvestment) / periodYears) * 100
       : 0
-    const receivable = Math.max(0, netProfit - totalReceived)
+    const receivable = round2(Math.max(0, netProfit - totalReceived))
     const receiptDate = getLatestReceiptDate(inv)
     const isFullyReceived = receivable <= 0.01
     const referenceDate = isFullyReceived
@@ -628,12 +630,12 @@ export function SukukList({ initialSukuk, userRole, ownerPersonId, viewerPersonI
       periodMonths,
       maturityDate: inv.maturityDate,
       daysRemaining,
-      fees: round2(fees),
-      netProfit: round2(netProfit),
+      fees,
+      netProfit,
       commissionEarned: 0,
       commissionPaid: userRole === 'OWNER' ? 0 : getPartnerCommissionPaid(inv),
       totalReceived,
-      receivable: round2(receivable),
+      receivable,
       currency,
       progress,
       paymentStatus,
