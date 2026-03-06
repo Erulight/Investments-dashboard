@@ -687,7 +687,25 @@ export async function POST(
           },
         })
 
-        // FIX 2: Delete partner-related transactions on return-to-owner (no reversal needed)
+        // FIX 2: Delete partner-related transactions and reverse cash balance on return-to-owner
+        // Find the settlement and commission transactions to get their amounts
+        const settlementTx = await tx.transaction.findFirst({
+          where: {
+            investmentId: id,
+            type: 'SOLD_DEAL_SETTLEMENT'
+          }
+        })
+        const commissionTx = await tx.transaction.findFirst({
+          where: {
+            investmentId: id,
+            type: 'PARTNER_COMMISSION'
+          }
+        })
+
+        const settlementAmount = settlementTx?.amount || 0
+        const commissionAmount = commissionTx?.amount || 0
+        const totalToReverse = settlementAmount + commissionAmount
+
         // Delete the commission, settlement, and profit accrual transactions
         await tx.transaction.deleteMany({
           where: {
@@ -695,6 +713,28 @@ export async function POST(
             type: { in: ['PARTNER_COMMISSION', 'SOLD_DEAL_SETTLEMENT', 'SELL_PROFIT_ACCRUED'] }
           }
         })
+
+        // Reverse the cash balance if there were settlement/commission amounts
+        if (totalToReverse > 0) {
+          const cashSetting = await tx.systemSetting.findUnique({
+            where: { key: 'CASH_BALANCE' }
+          })
+          const currentBalance = Number(cashSetting?.value || 0)
+          const reversedBalance = currentBalance - totalToReverse
+          
+          await tx.systemSetting.update({
+            where: { key: 'CASH_BALANCE' },
+            data: { value: String(reversedBalance) }
+          })
+
+          console.log('REVERSED CASH BALANCE ON RETURN-TO-OWNER:', {
+            settlementAmount,
+            commissionAmount,
+            totalReversed: totalToReverse,
+            oldBalance: currentBalance,
+            newBalance: reversedBalance
+          })
+        }
 
         // Delete the commission and settlement cash buckets
         // Delete by label - commission bucket created at original sale time
