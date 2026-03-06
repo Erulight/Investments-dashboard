@@ -468,10 +468,10 @@ export function SukukList({ initialSukuk, userRole, ownerPersonId, viewerPersonI
     const totalDays = Number(meta?.totalDays ?? 0)
     const monthsHeld = investorDays > 0 ? investorDays / 30 : (saleDate ? getPeriodMonths(inv.startDate, saleDate) : null)
 
-    const investorProfit = Number(meta?.investorProfit ?? 0)
-    const investorFeeShare = Number(meta?.investorFeeShare ?? 0)
-    const partnerFeeShare = Number(meta?.partnerFeeShare ?? 0)
-    const accruedProfitAtSale = Number(meta?.accruedProfitAtSale ?? 0)
+    const investorProfit = Math.round(Number(meta?.investorProfit ?? 0) * 100) / 100
+    const investorFeeShare = Math.round(Number(meta?.investorFeeShare ?? 0) * 100) / 100
+    const partnerFeeShare = Math.round(Number(meta?.partnerFeeShare ?? 0) * 100) / 100
+    const accruedProfitAtSale = Math.round(Number(meta?.accruedProfitAtSale ?? 0) * 100) / 100
 
     // This is the realized gain booked for the owner at sale time per business rules:
     // owner net profit for held days + fee share recovered from partner.
@@ -581,9 +581,9 @@ export function SukukList({ initialSukuk, userRole, ownerPersonId, viewerPersonI
     const timeRatio = totalMonthsFull && periodMonths !== null && totalMonthsFull > 0
       ? Math.min(1, Math.max(0, periodMonths / totalMonthsFull))
       : 1
-    const fees = participation
+    const fees = Math.round((participation
       ? (fullFees * participationRatio) * timeRatio
-      : fullFees
+      : fullFees) * 100) / 100
 
     const totalReceived = getViewerReceived(inv)
     const periodYears = periodMonths ? periodMonths / 12 : 0
@@ -597,9 +597,9 @@ export function SukukList({ initialSukuk, userRole, ownerPersonId, viewerPersonI
     const commissionFees = Number.isFinite(participation?.commissionFees)
       ? Number(participation.commissionFees)
       : 0
-    const netProfit = manualReceivable !== null
+    const netProfit = Math.round((manualReceivable !== null
       ? Math.max(0, manualReceivable - commissionFees)
-      : Math.max(0, grossProfit - fees - commissionFees)
+      : Math.max(0, grossProfit - fees - commissionFees)) * 100) / 100
     const aprAfterFees = totalInvestment > 0 && periodYears > 0
       ? ((netProfit / totalInvestment) / periodYears) * 100
       : 0

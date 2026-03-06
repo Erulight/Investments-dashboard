@@ -189,8 +189,8 @@ export async function POST(
     const dailyNetProfit = totalDays > 0 ? (totalNetProfitFull / totalDays) : 0
     const dailyFee = totalDays > 0 ? (totalFeesFull / totalDays) : 0
 
-    const investorProfit = dailyNetProfit * investorDays * principalRatio
-    const partnerGrossProfit = dailyNetProfit * partnerDays * principalRatio
+    const investorProfit = Math.round((dailyNetProfit * investorDays * principalRatio) * 100) / 100
+    const partnerGrossProfit = Math.round((dailyNetProfit * partnerDays * principalRatio) * 100) / 100
     const partnerFeeShare = dailyFee * partnerDays * principalRatio
     const investorFeeShare = dailyFee * investorDays * principalRatio
     const feeRecoveredFromPartner = partnerFeeShare
