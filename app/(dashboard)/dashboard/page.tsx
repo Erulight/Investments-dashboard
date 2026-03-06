@@ -353,7 +353,7 @@ export default async function DashboardPage({
   if (user.role === 'OWNER') {
     investments = await prisma.investment.findMany({
       where: {
-        account: { isActive: true },
+        account: { isActive: true, type: { not: 'CASH' } },
         name: { notIn: DEMO_INVESTMENT_NAMES },
         ...investmentDateFilter,
       },
