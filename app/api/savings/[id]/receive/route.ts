@@ -36,6 +36,11 @@ export async function POST(
     }
 
     const { id } = await params
+    
+    // FIX 2: Read receipt date and amount from request body
+    const body = await req.json()
+    const userReceiptDate = body.receiptDate ? new Date(body.receiptDate) : null
+    const userAmount = body.amount ? Number(body.amount) : null
 
     const investment = await prisma.investment.findUnique({
       where: { id },
@@ -58,7 +63,8 @@ export async function POST(
       return NextResponse.json({ error: 'Already received for this plan' }, { status: 400 })
     }
 
-    const receiveAmount = Number(meta.monthlyContribution || 0) * Number(meta.totalMonths || 0)
+    const calculatedAmount = Number(meta.monthlyContribution || 0) * Number(meta.totalMonths || 0)
+    const receiveAmount = userAmount && userAmount > 0 ? userAmount : calculatedAmount
     if (receiveAmount <= 0) {
       return NextResponse.json({ error: 'Invalid receive amount' }, { status: 400 })
     }
@@ -80,7 +86,8 @@ export async function POST(
       firstContributionDate = new Date(sortedPayments[0].paidDate || sortedPayments[0].dueDate)
     }
 
-    const receiveDate = new Date()
+    // FIX 2: Use user-entered receipt date if provided, otherwise use today
+    const receiveDate = userReceiptDate && !Number.isNaN(userReceiptDate.getTime()) ? userReceiptDate : new Date()
     const daysHeld = diffDays(firstContributionDate, receiveDate)
     const zakatDueImmediately = daysHeld >= 354
 

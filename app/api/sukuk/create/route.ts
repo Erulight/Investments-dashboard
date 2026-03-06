@@ -110,6 +110,13 @@ export async function POST(req: NextRequest) {
       // Use whichever is higher (transaction sum or bucket sum)
       const cashAtStartDate = Math.max(cashBalanceAtStartDate, bucketSum)
 
+      // Log for debugging
+      console.log('[SUKUK_CREATE] Deal start date:', startDate.toISOString().split('T')[0])
+      console.log('[SUKUK_CREATE] Cash from transactions at start date:', cashBalanceAtStartDate)
+      console.log('[SUKUK_CREATE] Cash from buckets at start date:', bucketSum)
+      console.log('[SUKUK_CREATE] Total cash at start date:', cashAtStartDate)
+      console.log('[SUKUK_CREATE] Principal required:', data.principalAmount)
+
       if (cashAtStartDate < data.principalAmount) {
         throw new Error(`INSUFFICIENT_CASH_AT_DATE:${startDate.toISOString().split('T')[0]}:${cashAtStartDate.toFixed(2)}:${data.principalAmount.toFixed(2)}`)
       }
