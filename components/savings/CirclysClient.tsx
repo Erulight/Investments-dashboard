@@ -54,6 +54,9 @@ export function CirclysClient({ initialInvestments, userRole }: CirclysClientPro
   const [payRewardByKey, setPayRewardByKey] = useState<Record<string, string>>({})
   const [receiveLoadingId, setReceiveLoadingId] = useState<string | null>(null)
   const [receiveError, setReceiveError] = useState<string>('')
+  const [showReceiveModal, setShowReceiveModal] = useState<string | null>(null)
+  const [receiveModalDate, setReceiveModalDate] = useState<string>('')
+  const [receiveModalAmount, setReceiveModalAmount] = useState<string>('')
 
   // Year filter
   const [yearFilter, setYearFilter] = useState<string>('all')
@@ -448,17 +451,36 @@ export function CirclysClient({ initialInvestments, userRole }: CirclysClientPro
                 return { monthIndex: i, due, label: fmtMonth(due), payment: payments[String(i)] || null }
               })
 
-              const handleReceive = async () => {
+              const handleReceive = () => {
+                // FIX 2: Open modal to ask for receipt date and amount
+                setShowReceiveModal(expandedInvestment.id)
+                setReceiveError('')
+                // Pre-fill with today's date and calculated amount
+                const today = new Date().toISOString().split('T')[0]
+                setReceiveModalDate(today)
+                const calculatedAmount = Number(meta.monthlyContribution || 0) * Number(meta.totalMonths || 0)
+                setReceiveModalAmount(calculatedAmount.toString())
+              }
+
+              const handleConfirmReceive = async () => {
                 setReceiveError('')
                 setReceiveLoadingId(expandedInvestment.id)
                 try {
-                  const res = await fetch(`/api/savings/${expandedInvestment.id}/receive`, { method: 'POST' })
+                  const res = await fetch(`/api/savings/${expandedInvestment.id}/receive`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                      receiptDate: receiveModalDate,
+                      amount: Number(receiveModalAmount),
+                    }),
+                  })
                   if (!res.ok) {
                     const d = await res.json().catch(() => ({}))
                     throw new Error(d.error || 'Failed to receive')
                   }
                   const d = await res.json()
                   setInvestments((prev: any[]) => prev.map((inv: any) => inv.id === expandedInvestment.id ? d.investment : inv))
+                  setShowReceiveModal(null)
                 } catch (e) {
                   setReceiveError(e instanceof Error ? e.message : 'Failed to receive')
                 } finally { setReceiveLoadingId(null) }
@@ -762,6 +784,87 @@ export function CirclysClient({ initialInvestments, userRole }: CirclysClientPro
               onCancel={() => setEditingInvestment(null)}
               isLoading={isLoading}
             />
+          </div>
+        </div>
+      )}
+
+      {/* Receive Savings Modal */}
+      {showReceiveModal && (
+        <div className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center p-4 z-50">
+          <div className="bg-white rounded-xl shadow-2xl max-w-md w-full">
+            <div className="border-b border-gray-200 px-6 py-4">
+              <h2 className="text-xl font-bold text-gray-900">Receive Savings</h2>
+            </div>
+            <div className="p-6 space-y-4">
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">Receipt Date</label>
+                <input
+                  type="date"
+                  value={receiveModalDate}
+                  onChange={(e) => setReceiveModalDate(e.target.value)}
+                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                />
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">Total Amount Received (SAR)</label>
+                <input
+                  type="number"
+                  value={receiveModalAmount}
+                  onChange={(e) => setReceiveModalAmount(e.target.value)}
+                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                  step="0.01"
+                  min="0"
+                />
+              </div>
+              {receiveError && (
+                <div className="text-sm text-red-600 bg-red-50 p-3 rounded-lg">{receiveError}</div>
+              )}
+            </div>
+            <div className="border-t border-gray-200 px-6 py-4 flex gap-3 justify-end">
+              <button
+                onClick={() => setShowReceiveModal(null)}
+                disabled={receiveLoadingId !== null}
+                className="px-4 py-2 text-sm font-medium text-gray-700 bg-gray-100 hover:bg-gray-200 rounded-lg transition-colors disabled:opacity-50"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={() => {
+                  const investmentId = showReceiveModal
+                  const meta = investments.find((inv: any) => inv.id === investmentId)
+                  if (meta) {
+                    const handleConfirmReceive = async () => {
+                      setReceiveError('')
+                      setReceiveLoadingId(investmentId)
+                      try {
+                        const res = await fetch(`/api/savings/${investmentId}/receive`, {
+                          method: 'POST',
+                          headers: { 'Content-Type': 'application/json' },
+                          body: JSON.stringify({
+                            receiptDate: receiveModalDate,
+                            amount: Number(receiveModalAmount),
+                          }),
+                        })
+                        if (!res.ok) {
+                          const d = await res.json().catch(() => ({}))
+                          throw new Error(d.error || 'Failed to receive')
+                        }
+                        const d = await res.json()
+                        setInvestments((prev: any[]) => prev.map((inv: any) => inv.id === investmentId ? d.investment : inv))
+                        setShowReceiveModal(null)
+                      } catch (e) {
+                        setReceiveError(e instanceof Error ? e.message : 'Failed to receive')
+                      } finally { setReceiveLoadingId(null) }
+                    }
+                    handleConfirmReceive()
+                  }
+                }}
+                disabled={receiveLoadingId !== null}
+                className="px-4 py-2 text-sm font-medium text-white bg-blue-600 hover:bg-blue-700 rounded-lg transition-colors disabled:opacity-50"
+              >
+                {receiveLoadingId ? '...' : 'Confirm'}
+              </button>
+            </div>
           </div>
         </div>
       )}
