@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { prisma } from '@/lib/db'
 import { requireAuth } from '@/lib/rbac'
 import { logAudit } from '@/lib/audit'
+import { createSnapshot } from '@/lib/snapshot'
 
 // Trivial change to trigger redeploy: added explicit logging below
 
@@ -51,6 +52,14 @@ export async function POST(
     }
 
     const result = await prisma.$transaction(async (tx: any) => {
+      // Create snapshot before reopen
+      await createSnapshot(tx, {
+        label: `Before: Reopen ${investment.name}`,
+        trigger: 'REOPEN',
+        userId: user.id,
+        investmentId: investment.id,
+        personId: user.personId || undefined,
+      })
       const scopeFilter = user.role === 'PARTNER'
         ? { personId: user.personId }
         : { OR: [{ personId: null }, { personId: user.personId || null }] }

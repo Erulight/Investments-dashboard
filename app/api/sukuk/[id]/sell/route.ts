@@ -5,6 +5,7 @@ import { logAudit } from '@/lib/audit'
 import { creditBucketsForReceipt } from '@/lib/cashBuckets'
 import { createCashBucket } from '@/lib/cashBuckets'
 import { withdrawFromBuckets } from '@/lib/cashBuckets'
+import { createSnapshot } from '@/lib/snapshot'
 
 const parseMetadata = (value: unknown) => {
   if (!value) return null
@@ -219,6 +220,15 @@ export async function POST(
       : null
 
     const updated = await prisma.$transaction(async (tx: any) => {
+      // Create snapshot before sell/transfer
+      await createSnapshot(tx, {
+        label: `Before: Sell ${investment.name} to ${buyerPersonId}`,
+        trigger: 'SELL',
+        userId: user.id,
+        investmentId: investment.id,
+        personId: user.personId || undefined,
+      })
+
       const dayStart = new Date(date.getFullYear(), date.getMonth(), date.getDate())
 
       const firstSellTx = await tx.transaction.findFirst({

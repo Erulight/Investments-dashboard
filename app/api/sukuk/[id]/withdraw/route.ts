@@ -4,6 +4,7 @@ import { requireAuth } from '@/lib/rbac'
 import { logAudit } from '@/lib/audit'
 import { creditBucketsForReceipt } from '@/lib/cashBuckets'
 import { createCashBucket } from '@/lib/cashBuckets'
+import { createSnapshot } from '@/lib/snapshot'
 
 const CASH_BALANCE_KEY = 'CASH_BALANCE'
 
@@ -151,6 +152,14 @@ export async function POST(
     }
 
     const updated = await prisma.$transaction(async (tx: any) => {
+      // Create snapshot before withdrawal
+      await createSnapshot(tx, {
+        label: `Before: Withdraw ${source.toLowerCase()} from ${investment.name}`,
+        trigger: 'WITHDRAW',
+        userId: user.id,
+        investmentId: investment.id,
+        personId: user.personId || undefined,
+      })
       const settleOwnerOnPartnerWithdraw = async () => {
         if (user.role !== 'PARTNER' || !user.personId) return
 
