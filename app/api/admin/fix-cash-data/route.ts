@@ -73,31 +73,32 @@ export async function POST(req: NextRequest) {
       })
 
       // Delete any cashBuckets for settlement/commission on this deal
-      // Find buckets through allocations since CashBucket doesn't have investmentId directly
-      const bucketsToDelete = await tx.cashBucket.findMany({
+      // Get investment name to match buckets by label
+      const investmentForBucketCleanup = await tx.investment.findUnique({
+        where: { id: investmentId },
+        select: { name: true }
+      })
+
+      let deletedBuckets = { count: 0 }
+      let deletedByLabel = { count: 0 }
+
+      if (investmentForBucketCleanup?.name) {
+        // Delete buckets matching investment name with owner-only filter
+        deletedBuckets = await tx.cashBucket.deleteMany({
+          where: {
+            label: { contains: investmentForBucketCleanup.name },
+            personId: null // owner buckets only
+          }
+        })
+      }
+
+      // Also delete buckets by label pattern (fallback for generic commission labels)
+      deletedByLabel = await tx.cashBucket.deleteMany({
         where: {
-          allocations: {
-            some: {
-              investmentId: investmentId
-            }
+          label: { 
+            in: ['Partner Commission', 'Sold Deal Settlement']
           },
-          OR: [
-            { label: { contains: 'Settlement' } },
-            { label: { contains: 'Commission' } }
-          ]
-        }
-      })
-
-      const deletedBuckets = await tx.cashBucket.deleteMany({
-        where: {
-          id: { in: bucketsToDelete.map(b => b.id) }
-        }
-      })
-
-      // Also delete buckets by label pattern (fallback)
-      const deletedByLabel = await tx.cashBucket.deleteMany({
-        where: {
-          label: { contains: 'Commission' }
+          personId: null
         }
       })
 

@@ -728,12 +728,20 @@ export async function POST(
           })
 
           // Delete the commission and settlement cash buckets
-          await tx.cashBucket.deleteMany({
-            where: {
-              investmentId: id,
-              type: { in: ['SOLD_DEAL_SETTLEMENT', 'PARTNER_COMMISSION'] }
-            }
+          // Find investment name to match buckets by label
+          const investmentForBucketCleanup = await tx.investment.findUnique({
+            where: { id },
+            select: { name: true }
           })
+          
+          if (investmentForBucketCleanup?.name) {
+            await tx.cashBucket.deleteMany({
+              where: {
+                label: { contains: investmentForBucketCleanup.name },
+                personId: null // owner buckets only
+              }
+            })
+          }
 
           console.log('REVERSED SETTLEMENT AND COMMISSION:', {
             settlementAmount: settlementTx?.amount || 0,
