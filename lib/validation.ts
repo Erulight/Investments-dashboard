@@ -21,6 +21,8 @@ export const createSukukSchema = z.object({
   isIjarah: z.boolean().optional(),
   notes: z.string().optional(),
   metadata: z.string().optional(),
+  paymentMode: z.enum(['CASH', 'SETTLE_DEBT']).optional(),
+  debtId: z.string().optional(),
   participants: z.array(z.object({
     personId: z.string().min(1, 'Person ID is required'),
     investedAmount: z.number().positive('Invested amount must be positive'),

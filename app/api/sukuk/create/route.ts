@@ -32,6 +32,9 @@ export async function POST(req: NextRequest) {
     const receivableAmount = data.receivableAmount ?? 0
     const isIjarah = data.isIjarah ?? false
     const fees = data.fees ?? 0
+    const paymentMode = data.paymentMode === 'SETTLE_DEBT' ? 'SETTLE_DEBT' : 'CASH'
+    const debtId = data.debtId
+    const isCashFunded = paymentMode === 'CASH'
     const startDate = typeof data.startDate === 'string'
       ? (parseDateInput(data.startDate) ?? new Date(data.startDate))
       : new Date(data.startDate)
@@ -75,30 +78,49 @@ export async function POST(req: NextRequest) {
         ? 'CASH_BALANCE'
         : `CASH_BALANCE:${user.personId!}`
 
-      const cashSetting = await tx.systemSetting.findUnique({
-        where: { key: cashBalanceKey },
-      })
-      const currentCashRaw = cashSetting ? Number(cashSetting.value) : 0
-      let currentCash = Number.isFinite(currentCashRaw) ? currentCashRaw : 0
-      let nextCash = currentCash - data.principalAmount
-
-      if (nextCash < 0) {
-        const bucketAgg = await tx.cashBucket.aggregate({
-          where: (user.role === 'OWNER'
-            ? { personId: null }
-            : { personId: user.personId }) as any,
-          _sum: { balance: true },
+      // Only check and deduct cash balance if deal is cash-funded
+      if (isCashFunded) {
+        const cashSetting = await tx.systemSetting.findUnique({
+          where: { key: cashBalanceKey },
         })
-        const bucketSumRaw = bucketAgg?._sum?.balance
-        const bucketSum = Number.isFinite(bucketSumRaw as any) ? Number(bucketSumRaw) : 0
-        if (bucketSum > currentCash + 0.0001) {
-          currentCash = bucketSum
-          nextCash = currentCash - data.principalAmount
-        }
-      }
+        const currentCashRaw = cashSetting ? Number(cashSetting.value) : 0
+        let currentCash = Number.isFinite(currentCashRaw) ? currentCashRaw : 0
+        let nextCash = currentCash - data.principalAmount
 
-      if (nextCash < 0) {
-        throw new Error('INSUFFICIENT_CASH')
+        if (nextCash < 0) {
+          const bucketAgg = await tx.cashBucket.aggregate({
+            where: (user.role === 'OWNER'
+              ? { personId: null }
+              : { personId: user.personId }) as any,
+            _sum: { balance: true },
+          })
+          const bucketSumRaw = bucketAgg?._sum?.balance
+          const bucketSum = Number.isFinite(bucketSumRaw as any) ? Number(bucketSumRaw) : 0
+          if (bucketSum > currentCash + 0.0001) {
+            currentCash = bucketSum
+            nextCash = currentCash - data.principalAmount
+          }
+        }
+
+        if (nextCash < 0) {
+          throw new Error('INSUFFICIENT_CASH')
+        }
+
+        // Update cash balance for cash-funded deals
+        if (cashSetting) {
+          await tx.systemSetting.update({
+            where: { key: cashBalanceKey },
+            data: { value: nextCash.toString() },
+          })
+        } else {
+          await tx.systemSetting.create({
+            data: {
+              key: cashBalanceKey,
+              value: nextCash.toString(),
+              description: 'Available cash balance for investments',
+            },
+          })
+        }
       }
 
       const cashAccount = await tx.account.findFirst({
@@ -131,45 +153,33 @@ export async function POST(req: NextRequest) {
           metadata: data.metadata,
         },
       })
-      
-      if (cashSetting) {
-        await tx.systemSetting.update({
-          where: { key: cashBalanceKey },
-          data: { value: nextCash.toString() },
+
+      // Only deduct from cash and create CASH_INVEST transaction for cash-funded deals
+      if (isCashFunded) {
+        await withdrawFromBuckets(tx, {
+          amount: data.principalAmount,
+          currency: account.currency || 'SAR',
+          date: startDate,
+          type: 'INVEST_OUT',
+          investmentId: newSukuk.id,
+          notes: 'Investment principal',
+          allocateToInvestment: true,
+          availableOnOrBefore: startDate,
+          personId: user.role === 'OWNER' ? null : user.personId,
         })
-      } else {
-        await tx.systemSetting.create({
+
+        await tx.transaction.create({
           data: {
-            key: cashBalanceKey,
-            value: nextCash.toString(),
-            description: 'Available cash balance for investments',
+            accountId: cashAccount.id,
+            investmentId: newSukuk.id,
+            personId: user.role === 'OWNER' ? (user.personId || null) : user.personId,
+            type: 'CASH_INVEST',
+            amount: -Math.abs(data.principalAmount),
+            date: startDate,
+            description: 'Cash used to create Sukuk',
           },
         })
       }
-
-      await withdrawFromBuckets(tx, {
-        amount: data.principalAmount,
-        currency: account.currency || 'SAR',
-        date: startDate,
-        type: 'INVEST_OUT',
-        investmentId: newSukuk.id,
-        notes: 'Investment principal',
-        allocateToInvestment: true,
-        availableOnOrBefore: startDate,
-        personId: user.role === 'OWNER' ? null : user.personId,
-      })
-
-      await tx.transaction.create({
-        data: {
-          accountId: cashAccount.id,
-          investmentId: newSukuk.id,
-          personId: user.role === 'OWNER' ? (user.personId || null) : user.personId,
-          type: 'CASH_INVEST',
-          amount: -Math.abs(data.principalAmount),
-          date: startDate,
-          description: 'Cash used to create Sukuk',
-        },
-      })
 
       // Create participants
       if (user.role === 'PARTNER') {
