@@ -28,12 +28,9 @@ export function SukukForm({ mode, initialData, onSuccess, onCancel }: SukukFormP
     totalReceived: initialData?.totalReceived ?? '',
     receivableAmount: initialData?.receivableAmount ?? '',
     notes: initialData?.notes || '',
-    paymentMode: 'CASH',
-    debtId: '',
   })
   
   const [accounts, setAccounts] = useState<any[]>([])
-  const [debts, setDebts] = useState<any[]>([])
   const [participants, setParticipants] = useState<any[]>(
     initialData?.dealParticipants?.map((p: any) => ({
       personId: p.personId,
@@ -58,40 +55,26 @@ export function SukukForm({ mode, initialData, onSuccess, onCancel }: SukukFormP
   const [receiptError, setReceiptError] = useState('')
   const [receiptMessage, setReceiptMessage] = useState('')
 
-  // Fetch accounts and debts on mount
+  // Fetch accounts on mount
   useEffect(() => {
     const fetchData = async () => {
       try {
         setLoadError('')
-        
-        // Fetch accounts
-        const accountsRes = await fetch('/api/accounts?type=SUKUK')
-        const accountsData = await accountsRes.json().catch(() => ({}))
-        if (!accountsRes.ok) {
-          throw new Error(accountsData.error || 'Failed to load accounts')
+        const res = await fetch('/api/accounts?type=SUKUK')
+        const data = await res.json().catch(() => ({}))
+        if (!res.ok) {
+          throw new Error(data.error || 'Failed to load accounts')
         }
-        const accountList = Array.isArray(accountsData.accounts) ? accountsData.accounts : []
+        const accountList = Array.isArray(data.accounts) ? data.accounts : []
         setAccounts(accountList)
         if (accountList.length === 1) {
           setFormData((prev: any) =>
             prev.accountId ? prev : { ...prev, accountId: accountList[0].id }
           )
         }
-
-        // Fetch debts
-        const debtsRes = await fetch('/api/debts')
-        const debtsData = await debtsRes.json().catch(() => ({}))
-        if (debtsRes.ok && Array.isArray(debtsData.debts)) {
-          // Filter for debts with outstanding balance
-          const availableDebts = debtsData.debts.filter((debt: any) => {
-            const paid = debt.payments?.reduce((sum: number, p: any) => sum + p.amount, 0) || 0
-            return debt.amount > paid
-          })
-          setDebts(availableDebts)
-        }
       } catch (err) {
-        console.error('Failed to fetch data:', err)
-        setLoadError('Failed to load data. Please refresh.')
+        console.error('Failed to fetch accounts:', err)
+        setLoadError('Failed to load accounts. Please refresh.')
       }
     }
     fetchData()
@@ -378,66 +361,20 @@ export function SukukForm({ mode, initialData, onSuccess, onCancel }: SukukFormP
           )}
         </div>
 
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-          <div>
-            <label htmlFor="category" className="block text-sm font-medium text-gray-700 mb-1">
-              Category
-            </label>
-            <input
-              type="text"
-              id="category"
-              name="category"
-              value={formData.category}
-              onChange={handleChange}
-              className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-              placeholder="e.g., Corporate, Sovereign"
-            />
-          </div>
-
-          <div>
-            <label htmlFor="paymentMode" className="block text-sm font-medium text-gray-700 mb-1">
-              Payment Mode
-            </label>
-            <select
-              id="paymentMode"
-              name="paymentMode"
-              value={formData.paymentMode}
-              onChange={handleChange}
-              className="w-full px-4 py-2 border border-gray-300 rounded-lg bg-white focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-            >
-              <option value="CASH">Cash</option>
-              <option value="SETTLE_DEBT">Settle Debt</option>
-            </select>
-          </div>
+        <div>
+          <label htmlFor="category" className="block text-sm font-medium text-gray-700 mb-1">
+            Category
+          </label>
+          <input
+            type="text"
+            id="category"
+            name="category"
+            value={formData.category}
+            onChange={handleChange}
+            className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+            placeholder="e.g., Corporate, Sovereign"
+          />
         </div>
-
-        {formData.paymentMode === 'SETTLE_DEBT' && (
-          <div>
-            <label htmlFor="debtId" className="block text-sm font-medium text-gray-700 mb-1">
-              Debt to Settle *
-            </label>
-            <select
-              id="debtId"
-              name="debtId"
-              value={formData.debtId}
-              onChange={handleChange}
-              required={formData.paymentMode === 'SETTLE_DEBT'}
-              className="w-full px-4 py-2 border border-gray-300 rounded-lg bg-white focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-            >
-              <option value="">Select a debt</option>
-              {debts.map((debt) => {
-                const paid = debt.payments?.reduce((sum: number, p: any) => sum + p.amount, 0) || 0
-                const outstanding = debt.amount - paid
-                return (
-                  <option key={debt.id} value={debt.id}>
-                    {debt.lenderName} - SAR {outstanding.toFixed(2)} outstanding
-                  </option>
-                )
-              })}
-            </select>
-            {errors.debtId && <p className="text-sm text-red-600 mt-1">{errors.debtId}</p>}
-          </div>
-        )}
         <div>
           <label htmlFor="isIjarah" className="block text-sm font-medium text-gray-700 mb-1">
             Sukuk Type
