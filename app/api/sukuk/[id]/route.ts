@@ -6,6 +6,7 @@ import { logAudit } from '@/lib/audit'
 import type { Prisma } from '@prisma/client'
 import { creditBucketsForReceipt, withdrawFromBuckets } from '@/lib/cashBuckets'
 import { parseDateInput } from '@/lib/date'
+import { createSnapshot } from '@/lib/snapshot'
 
 const parseMetadata = (value: unknown) => {
   if (!value) return null
@@ -409,6 +410,14 @@ export async function DELETE(
     
     // Delete the sukuk and reverse cash/bucket effects
     await prisma.$transaction(async (tx) => {
+      // Create snapshot before delete
+      await createSnapshot(tx, {
+        label: `Before: Delete ${existingSukuk.name}`,
+        trigger: 'DELETE_SUKUK',
+        userId: user.id,
+        investmentId: existingSukuk.id,
+        personId: user.personId || undefined,
+      })
       // Capture any profit buckets that were created for this Sukuk so we can
       // remove them after reversing movements.
       const profitBuckets = await tx.cashBucket.findMany({

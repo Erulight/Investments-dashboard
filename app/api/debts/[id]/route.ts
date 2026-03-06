@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { prisma } from '@/lib/db'
 import { requireAuth } from '@/lib/rbac'
+import { createSnapshot } from '@/lib/snapshot'
 
 const CASH_BALANCE_KEY = 'CASH_BALANCE'
 
@@ -115,6 +116,13 @@ export async function DELETE(
     }
 
     await prisma.$transaction(async (tx) => {
+      // Snapshot before destructive delete
+      await createSnapshot(tx as any, {
+        label: `Before: Delete debt ${debt.lenderName}`,
+        trigger: 'DELETE_DEBT',
+        userId: (await requireAuth(['OWNER'])).id,
+        debtId: id,
+      })
       const setting = await tx.systemSetting.findUnique({ where: { key: CASH_BALANCE_KEY } })
       const currentCash = setting ? Number(setting.value) : 0
       const nextCash = currentCash - amount

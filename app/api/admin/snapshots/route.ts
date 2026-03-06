@@ -19,7 +19,7 @@ export async function GET(req: NextRequest) {
       whereClause.createdAt = { gte: new Date(Date.now() - 7 * 24 * 60 * 60 * 1000) }
     }
 
-    const snapshots = await prisma.snapshot.findMany({
+    const snapshots = await (prisma as any).snapshot.findMany({
       where: whereClause,
       orderBy: { createdAt: 'desc' },
       take: 50,

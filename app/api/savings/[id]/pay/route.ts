@@ -4,6 +4,7 @@ import { prisma } from '@/lib/db'
 import { requireModuleAccess } from '@/lib/rbac'
 import { createAuditLog } from '@/lib/audit'
 import { withdrawFromBuckets } from '@/lib/cashBuckets'
+import { createSnapshot } from '@/lib/snapshot'
 
 const CASH_BALANCE_KEY = 'CASH_BALANCE'
 
@@ -63,6 +64,15 @@ export async function POST(
       return NextResponse.json({ error: 'Invalid monthIndex' }, { status: 400 })
     }
 
+    // Snapshot before undoing a savings payment
+    await createSnapshot(prisma as any, {
+      label: `Before: Savings Unpay ${investment.name}  Month ${monthIndex + 1}`,
+      trigger: 'SAVINGS_UNPAY',
+      userId: user.id,
+      investmentId: investment.id,
+      personId: user.personId || undefined,
+    })
+
     if (!Number.isFinite(amount) || amount <= 0) {
       return NextResponse.json({ error: 'Invalid amount' }, { status: 400 })
     }
@@ -98,6 +108,15 @@ export async function POST(
       meta.received?.date &&
       meta.receiptMonth &&
       (monthIndex + 1) > Number(meta.receiptMonth)
+
+    // Snapshot before making changes to savings plan
+    await createSnapshot(prisma as any, {
+      label: `Before: Savings Pay ${investment.name}  Month ${monthIndex + 1}`,
+      trigger: 'SAVINGS_PAY',
+      userId: user.id,
+      investmentId: investment.id,
+      personId: user.personId || undefined,
+    })
 
     let bucketId: string
 
