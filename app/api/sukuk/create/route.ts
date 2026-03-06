@@ -96,12 +96,14 @@ export async function POST(req: NextRequest) {
       }
 
       // Also check cash buckets as of the start date
+      // IMPORTANT: For savings receipt buckets, check createdAt (receipt date) not haulStartDate
+      // haulStartDate is the first contribution date, not when money was actually received
       const bucketAgg = await tx.cashBucket.aggregate({
         where: {
           ...(user.role === 'OWNER'
             ? { personId: null }
             : { personId: user.personId }),
-          haulStartDate: { lte: startDate }, // only buckets created ON OR BEFORE deal start date
+          createdAt: { lte: startDate }, // only buckets created ON OR BEFORE deal start date
         } as any,
         _sum: { balance: true },
       })
