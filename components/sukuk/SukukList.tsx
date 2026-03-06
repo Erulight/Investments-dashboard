@@ -1174,6 +1174,7 @@ export function SukukList({ initialSukuk, userRole, ownerPersonId, viewerPersonI
         const data = await res.json()
         if (!res.ok) {
           setActionError(data.error || 'Failed to withdraw')
+          setActionLoading(false)
           return
         }
       }

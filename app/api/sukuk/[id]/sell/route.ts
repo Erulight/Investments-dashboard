@@ -193,7 +193,8 @@ export async function POST(
     const partnerGrossProfit = Math.round((dailyNetProfit * partnerDays * principalRatio) * 100) / 100
     const partnerFeeShare = dailyFee * partnerDays * principalRatio
     const investorFeeShare = dailyFee * investorDays * principalRatio
-    const feeRecoveredFromPartner = partnerFeeShare
+    // For same-day sales (investorDays = 0), no fee recovery since owner held for 0 days
+    const feeRecoveredFromPartner = investorDays > 0 ? partnerFeeShare : 0
     const sellerProfitAtSale = investorProfit + feeRecoveredFromPartner
     const accruedProfitAtSale = Math.max(0, sellerProfitAtSale)
 
