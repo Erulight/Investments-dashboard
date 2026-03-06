@@ -1,6 +1,7 @@
 'use client'
 
 import { useCallback, useEffect, useMemo, useState, Fragment } from 'react'
+import { useRouter } from 'next/navigation'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/Card'
 import { Button } from '@/components/ui/Button'
 import { DateInput } from '@/components/ui/DateInput'
@@ -40,6 +41,7 @@ const fmt = (n: number) => n.toLocaleString(undefined, { minimumFractionDigits: 
 const fmtDate = (d: string) => new Date(d).toLocaleDateString('en-CA')
 
 export function DebtsClient() {
+  const router = useRouter()
   const [debts, setDebts] = useState<Debt[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
@@ -190,6 +192,7 @@ export function DebtsClient() {
       if (!res.ok) throw new Error(json.error || 'Failed to record payment')
 
       setPayTarget(null)
+      router.refresh()
       await load()
     } catch (e) {
       setPayError(e instanceof Error ? e.message : 'Failed to record payment')

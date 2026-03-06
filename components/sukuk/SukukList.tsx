@@ -1145,6 +1145,13 @@ export function SukukList({ initialSukuk, userRole, ownerPersonId, viewerPersonI
       }
 
       setWithdrawTarget(null)
+      setWithdrawForm({
+        type: 'BOTH',
+        principalAmount: '',
+        profitAmount: '',
+        date: formatDateInput(new Date()),
+        notes: '',
+      })
       router.refresh()
     } catch (error) {
       setActionError('Failed to withdraw')
@@ -1200,6 +1207,17 @@ export function SukukList({ initialSukuk, userRole, ownerPersonId, viewerPersonI
         return
       }
       setSellTarget(null)
+      setSellForm({
+        buyerPersonId: '',
+        amount: '',
+        salePrice: '',
+        paymentMode: 'CASH',
+        debtId: '',
+        commissionType: 'FIXED',
+        commissionValue: '',
+        date: formatDateInput(new Date()),
+        notes: '',
+      })
       router.refresh()
     } catch (error) {
       setActionError('Failed to sell')

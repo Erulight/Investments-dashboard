@@ -1,7 +1,7 @@
 'use client'
 
 import { useEffect, useState } from 'react'
-import { useSearchParams } from 'next/navigation'
+import { useRouter, useSearchParams } from 'next/navigation'
 import Link from 'next/link'
 import { Card, CardContent } from '@/components/ui/Card'
 import { Button } from '@/components/ui/Button'
@@ -22,6 +22,7 @@ interface PartnerOption {
 }
 
 export function CashBalanceCard({ initialCash, role }: { initialCash: number; role: string }) {
+  const router = useRouter()
   const searchParams = useSearchParams()
   const selectedYear = searchParams?.get('year') || new Date().getFullYear().toString()
   const [cashBalance, setCashBalance] = useState(String(initialCash ?? 0))
@@ -126,6 +127,7 @@ export function CashBalanceCard({ initialCash, role }: { initialCash: number; ro
         } else {
           await loadCash()
         }
+        router.refresh()
       } else {
         const res = await fetch('/api/cash', {
           method: 'POST',
@@ -143,6 +145,7 @@ export function CashBalanceCard({ initialCash, role }: { initialCash: number; ro
           throw new Error(data.error || 'Failed to update cash balance')
         }
         setCashBalance(String(data.cashBalance ?? 0))
+        router.refresh()
       }
       setAmount('')
       setNotes('')
