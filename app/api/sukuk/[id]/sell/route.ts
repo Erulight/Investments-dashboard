@@ -727,8 +727,24 @@ export async function POST(
             data: { value: String(currentBalance - reversalAmount) }
           })
 
+          // Delete the commission and settlement transactions
+          await tx.transaction.deleteMany({
+            where: {
+              investmentId: id,
+              type: { in: ['PARTNER_COMMISSION', 'SOLD_DEAL_SETTLEMENT'] }
+            }
+          })
+
           // Delete the commission and settlement cash buckets
-          // Find investment name to match buckets by label
+          // Delete by label - commission bucket created at original sale time
+          await tx.cashBucket.deleteMany({
+            where: {
+              label: { contains: 'Partner Commission' },
+              personId: null // owner scope
+            }
+          })
+
+          // Also delete by investment name pattern as fallback
           const investmentForBucketCleanup = await tx.investment.findUnique({
             where: { id },
             select: { name: true }
