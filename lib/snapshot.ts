@@ -66,7 +66,7 @@ export async function createSnapshot(
   const cashBucketWhere = personId ? { personId } : {}
   snapshotData.cashBuckets = await tx.cashBucket.findMany({
     where: cashBucketWhere,
-    include: { movements: true, investmentAllocations: true },
+    include: { movements: true, allocations: true },
   })
 
   // System settings (cash balances)
