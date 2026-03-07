@@ -516,44 +516,19 @@ export const creditBucketsForReceipt = async (
     if (explicitHaulStart) {
       haulStartDate = explicitHaulStart
     } else {
-      // Find earliest INVEST_OUT movement for this investment
-      const allInvestMovements = await tx.cashBucketMovement.findMany({
-        where: {
-          investmentId,
-          type: 'INVEST_OUT',
-        },
-        select: {
-          cashBucketId: true,
-          date: true,
-        },
-        orderBy: { date: 'asc' },
+      // For profit, use the investment start date (when profit started being generated)
+      const investment = await tx.investment.findUnique({
+        where: { id: investmentId },
+        select: { startDate: true, account: { select: { type: true } } },
       })
 
-      if (allInvestMovements.length > 0) {
-        const earliestBucketId = allInvestMovements[0].cashBucketId
+      if (investment?.startDate) {
+        const startDate = investment.startDate instanceof Date 
+          ? investment.startDate 
+          : new Date(investment.startDate as any)
         
-        // Try to find the bucket
-        const originalBucket = await tx.cashBucket.findUnique({
-          where: { id: earliestBucketId },
-          select: { haulStartDate: true },
-        })
-
-        if (originalBucket) {
-          haulStartDate = originalBucket.haulStartDate
-        } else {
-          // Bucket deleted - find earliest CASH_IN for this bucket
-          const cashInMovement = await tx.cashBucketMovement.findFirst({
-            where: {
-              cashBucketId: earliestBucketId,
-              type: 'CASH_IN',
-            },
-            select: { date: true },
-            orderBy: { date: 'asc' },
-          })
-
-          if (cashInMovement) {
-            haulStartDate = cashInMovement.date
-          }
+        if (!Number.isNaN(startDate.getTime())) {
+          haulStartDate = new Date(startDate.getFullYear(), startDate.getMonth(), startDate.getDate())
         }
       }
       // Otherwise use receipt date (already set above)
