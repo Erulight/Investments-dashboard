@@ -100,9 +100,16 @@ export const withdrawFromBuckets = async (
       ...(cutoff ? { haulStartDate: { lte: cutoff } } : {}),
       ...(Array.isArray(excludeLabelPrefixes) && excludeLabelPrefixes.length > 0
         ? {
-            NOT: excludeLabelPrefixes.map((prefix) => ({
-              label: { startsWith: prefix },
-            })),
+            OR: [
+              { label: null },
+              {
+                NOT: {
+                  OR: excludeLabelPrefixes.map((prefix) => ({
+                    label: { startsWith: prefix },
+                  })),
+                },
+              },
+            ],
           }
         : {}),
     },

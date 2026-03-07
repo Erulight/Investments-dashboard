@@ -93,6 +93,7 @@ export async function POST(
     const dueDate = addMonths(new Date(investment.startDate), monthIndex)
     const monthLabel = `${dueDate.getFullYear()}-${String(dueDate.getMonth() + 1).padStart(2, '0')}`
     const contributionDate = dueDate
+    const fundingCutoff = new Date()
     const startAnchorRaw = new Date(investment.startDate)
     const contributionHaulStart = Number.isNaN(startAnchorRaw.getTime()) ? contributionDate : startAnchorRaw
 
@@ -126,7 +127,8 @@ export async function POST(
           type: 'CASH_OUT',
           investmentId: investment.id,
           notes: `Circlys payback • ${investment.name} • Month ${monthIndex + 1}`,
-          availableOnOrBefore: contributionDate,
+          // Allow funding from currently available cash even when recording past-due months.
+          availableOnOrBefore: fundingCutoff,
           excludeLabelPrefixes: ['Circlys •'],
         })
 
@@ -159,7 +161,8 @@ export async function POST(
           type: 'CASH_OUT',
           investmentId: investment.id,
           notes: `Circlys contribution • ${investment.name} • Month ${monthIndex + 1}`,
-          availableOnOrBefore: contributionDate,
+          // Allow funding from currently available cash even when recording past-due months.
+          availableOnOrBefore: fundingCutoff,
           excludeLabelPrefixes: ['Circlys •'],
         })
 
@@ -255,6 +258,9 @@ export async function POST(
     return NextResponse.json({ investment: updated, bucketId })
   } catch (error) {
     console.error('Error paying savings month:', error)
+    if (error instanceof Error && error.message === 'INSUFFICIENT_CASH') {
+      return NextResponse.json({ error: 'INSUFFICIENT_CASH' }, { status: 400 })
+    }
     return NextResponse.json({ error: 'Failed to record payment' }, { status: 500 })
   }
 }
