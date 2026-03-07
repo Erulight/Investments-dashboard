@@ -210,6 +210,8 @@ export default async function ZakatPage() {
   const scopeKey = user.role === 'OWNER' ? 'OWNER' : user.personId!
   const nisabMetKey = `NISAB_MET_SINCE:${scopeKey}`
 
+  const fullyInvestedSavingsReceiptBucketIds = new Set<string>()
+
   if (user.role === 'OWNER') {
     const savingsInvestments = await prisma.investment.findMany({
       where: { account: { type: 'CIRCLYS' } },
@@ -353,6 +355,7 @@ export default async function ZakatPage() {
         label: { startsWith: 'Savings Receipt •' },
       },
       select: {
+        id: true,
         haulStartDate: true,
         movements: {
           where: { type: 'CASH_IN' },
@@ -394,6 +397,7 @@ export default async function ZakatPage() {
       if (!matchingTx || !matchedInvestmentId) continue
 
       usedCashInvestTxIds.add(matchingTx.id)
+      fullyInvestedSavingsReceiptBucketIds.add(bucket.id)
       const existing = inheritedSavingsHaulByInvestment.get(matchedInvestmentId)
       if (!existing || anchorDay.getTime() < existing.getTime()) {
         inheritedSavingsHaulByInvestment.set(matchedInvestmentId, anchorDay)
@@ -798,6 +802,12 @@ export default async function ZakatPage() {
       // - First hawl is special receipt row from first contribution date
       // - Subsequent completed hawls follow normal idle-cash behavior
       if (isSavingsReceiptBucket) {
+        // Skip this bucket entirely if it was fully invested into Sukuk
+        // (detected during reconciliation phase by matching CASH_INVEST transactions)
+        if (fullyInvestedSavingsReceiptBucketIds.has(bucket.id)) {
+          return []
+        }
+
         const cashInMovement = movements.find((m: any) => m?.type === 'CASH_IN')
         if (!cashInMovement) return []
 
@@ -806,63 +816,6 @@ export default async function ZakatPage() {
 
         const totalReceived = Math.abs(Number(cashInMovement.amount) || 0)
         if (totalReceived <= 0) return []
-
-        const receiptDay = startOfDay(receiptDate)
-        const investedSukukInvestmentIds = new Set<string>()
-        const netSukukInvestedAfterReceipt = movements.reduce((sum: number, m: any) => {
-          const movementType = typeof m?.type === 'string' ? m.type : ''
-          if (
-            movementType !== 'INVEST_OUT' &&
-            movementType !== 'WITHDRAW_PRINCIPAL' &&
-            movementType !== 'ROLLBACK_PRINCIPAL'
-          ) {
-            return sum
-          }
-
-          const movementDate = movementDay(m)
-          if (!movementDate || movementDate.getTime() < receiptDay.getTime()) return sum
-
-          const invId = typeof m?.investmentId === 'string' ? m.investmentId : null
-          const inv = invId ? investmentMap.get(invId) : null
-          const invType = inv?.account?.type
-          if (!invId || invType !== 'SUKUK') return sum
-
-          const amt = Math.abs(Number(m?.amount) || 0)
-          if (amt <= 0) return sum
-
-          if (movementType === 'INVEST_OUT') {
-            investedSukukInvestmentIds.add(invId)
-            return sum + amt
-          }
-          return sum - amt
-        }, 0)
-
-        const hasMatchingCashInvestByLinkedInvestment = Array.from(investedSukukInvestmentIds).some((invId) => {
-          const txs = cashInvestByInvestmentId.get(invId) || []
-          return txs.some((tx) => {
-            const txDate = tx.date instanceof Date ? tx.date : new Date(tx.date as any)
-            if (Number.isNaN(txDate.getTime())) return false
-            if (txDate.getTime() < receiptDay.getTime()) return false
-            return Math.abs(tx.amount - totalReceived) < 0.01
-          })
-        })
-
-        const hasMatchingCashInvestByAmount = cashInvestTransactions.some((tx: any) => {
-          const txDate = tx?.date instanceof Date ? tx.date : new Date(tx?.date)
-          if (Number.isNaN(txDate.getTime())) return false
-          if (txDate.getTime() < receiptDay.getTime()) return false
-          return Math.abs(Math.abs(Number(tx?.amount) || 0) - totalReceived) < 0.01
-        })
-
-        const hasMatchingCashInvest =
-          hasMatchingCashInvestByLinkedInvestment || hasMatchingCashInvestByAmount
-
-        const fullyInvestedIntoSukuk =
-          hasMatchingCashInvest &&
-          (netSukukInvestedAfterReceipt >= totalReceived - 0.01 || investedSukukInvestmentIds.size === 0)
-        if (fullyInvestedIntoSukuk) {
-          return []
-        }
 
         const haulStart = startOfDay(bucketStart)
         const currentBalance = Math.max(0, Number(bucket.balance) || 0)
