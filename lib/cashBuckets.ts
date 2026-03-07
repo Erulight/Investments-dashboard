@@ -75,6 +75,7 @@ export const withdrawFromBuckets = async (
     allocateToInvestment,
     availableOnOrBefore,
     personId,
+    excludeLabelPrefixes,
   }: {
     amount: number
     currency?: string
@@ -85,6 +86,7 @@ export const withdrawFromBuckets = async (
     allocateToInvestment?: boolean
     availableOnOrBefore?: Date
     personId?: string | null
+    excludeLabelPrefixes?: string[]
   }
 ) => {
   let remaining = amount
@@ -96,6 +98,13 @@ export const withdrawFromBuckets = async (
       balance: { gt: 0 },
       ...(personId === undefined ? {} : { personId: personId || null }),
       ...(cutoff ? { haulStartDate: { lte: cutoff } } : {}),
+      ...(Array.isArray(excludeLabelPrefixes) && excludeLabelPrefixes.length > 0
+        ? {
+            NOT: excludeLabelPrefixes.map((prefix) => ({
+              label: { startsWith: prefix },
+            })),
+          }
+        : {}),
     },
     orderBy: [{ haulStartDate: 'asc' }, { createdAt: 'asc' }],
   })

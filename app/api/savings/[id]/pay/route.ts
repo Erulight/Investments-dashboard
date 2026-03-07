@@ -127,6 +127,7 @@ export async function POST(
           investmentId: investment.id,
           notes: `Circlys payback • ${investment.name} • Month ${monthIndex + 1}`,
           availableOnOrBefore: contributionDate,
+          excludeLabelPrefixes: ['Circlys •'],
         })
 
         // Update system cash balance
@@ -159,6 +160,7 @@ export async function POST(
           investmentId: investment.id,
           notes: `Circlys contribution • ${investment.name} • Month ${monthIndex + 1}`,
           availableOnOrBefore: contributionDate,
+          excludeLabelPrefixes: ['Circlys •'],
         })
 
         const bucket = await tx.cashBucket.create({
