@@ -677,10 +677,31 @@ export default async function ZakatPage() {
           }],
         })
 
-        // After first hawl, treat the savings receipt as one idle pool.
-        // Use full receipt base for subsequent hawls in ROSCA display.
-        const savingsIdleBase = Math.max(0, Math.max(totalReceived, currentBalance))
-        if (firstHaulCompleted && savingsIdleBase > 0) {
+        // After first hawl, continue the same hawl timeline.
+        // If part of savings was moved into Sukuk principal, continue that portion under Sukuk.
+        const baseForSecondAndLater = Math.max(totalReceived, currentBalance)
+        const sukukAllocations = (Array.isArray(bucket.allocations) ? bucket.allocations : [])
+          .map((alloc: any) => {
+            const principalRemaining = Math.max(0, Number(alloc?.principalRemaining) || 0)
+            const invId = typeof alloc?.investment?.id === 'string' ? alloc.investment.id : null
+            const invName = typeof alloc?.investment?.name === 'string' ? alloc.investment.name : 'Sukuk'
+            const invType = alloc?.investment?.account?.type
+            if (!invId || invType !== 'SUKUK' || principalRemaining <= 0) return null
+            return {
+              investmentId: invId,
+              investmentName: invName,
+              principalRemaining,
+            }
+          })
+          .filter((x: any): x is { investmentId: string; investmentName: string; principalRemaining: number } => Boolean(x))
+
+        const sukukInvestedBase = sukukAllocations.reduce(
+          (sum: number, a: { principalRemaining: number }) => sum + a.principalRemaining,
+          0,
+        )
+        const savingsIdleBase = Math.max(0, baseForSecondAndLater - sukukInvestedBase)
+
+        if (firstHaulCompleted && (savingsIdleBase > 0 || sukukInvestedBase > 0)) {
           const idleStart = firstHaulEnd
           const elapsedSinceFirstHawl = diffDaysFloor(idleStart, now)
           const completedIdleHawls = Math.floor(elapsedSinceFirstHawl / 354)
@@ -688,42 +709,89 @@ export default async function ZakatPage() {
           for (let i = 0; i < completedIdleHawls; i++) {
             const periodStart = addDays(idleStart, i * 354)
             const periodEnd = addDays(idleStart, (i + 1) * 354)
-            const rowKey = buildRowKey(['SAVINGS_IDLE', bucket.id, isoDay(periodStart), isoDay(periodEnd)])
-            const isPaid = movementHasRowPaid(payments, rowKey)
-            const zakatDue = !isPaid ? savingsIdleBase * 0.025 : 0
             const idleDays = diffDaysFloor(periodStart, periodEnd)
 
-            savingsRows.push({
-              id: rowKey,
-              bucketId: bucket.id,
-              periodIndex: i + 1,
-              label: `Idle • Savings Receipt • ${investmentName} • ${isoDay(periodStart)} → ${isoDay(periodEnd)}`,
-              currency: bucket.currency,
-              balance: savingsIdleBase,
-              haulStartDate: isoDay(periodStart),
-              lastZakatPaidDate: bucket.lastZakatPaidDate
-                ? bucket.lastZakatPaidDate.toISOString().split('T')[0]
-                : null,
-              haulCompleteDate: isoDay(periodEnd),
-              idleBase: savingsIdleBase,
-              receiptsTotal: 0,
-              zakatDue,
-              isPaid,
-              haulCompleted: now.getTime() >= periodEnd.getTime(),
-              source: investmentName,
-              sourceGroup: `Savings Receipt • ${investmentName}`,
-              sourceType: 'CIRCLYS',
-              rowKind: 'IDLE',
-              why: `Cash idle from ${isoDay(periodStart)} to ${isoDay(periodEnd)} (${idleDays} days)`,
-              lastPayment: lastPayment
-                ? {
-                    id: lastPayment.id,
-                    date: new Date(lastPayment.date).toISOString().split('T')[0],
-                    amount: Math.abs(Number(lastPayment.amount || 0)),
-                  }
-                : null,
-              dueReceipts: [],
-            })
+            if (savingsIdleBase > 0) {
+              const rowKey = buildRowKey(['SAVINGS_IDLE', bucket.id, isoDay(periodStart), isoDay(periodEnd)])
+              const isPaid = movementHasRowPaid(payments, rowKey)
+              const zakatDue = !isPaid ? savingsIdleBase * 0.025 : 0
+
+              savingsRows.push({
+                id: rowKey,
+                bucketId: bucket.id,
+                periodIndex: i + 1,
+                label: `Idle • Savings Receipt • ${investmentName} • ${isoDay(periodStart)} → ${isoDay(periodEnd)}`,
+                currency: bucket.currency,
+                balance: savingsIdleBase,
+                haulStartDate: isoDay(periodStart),
+                lastZakatPaidDate: bucket.lastZakatPaidDate
+                  ? bucket.lastZakatPaidDate.toISOString().split('T')[0]
+                  : null,
+                haulCompleteDate: isoDay(periodEnd),
+                idleBase: savingsIdleBase,
+                receiptsTotal: 0,
+                zakatDue,
+                isPaid,
+                haulCompleted: now.getTime() >= periodEnd.getTime(),
+                source: investmentName,
+                sourceGroup: `Savings Receipt • ${investmentName}`,
+                sourceType: 'CIRCLYS',
+                rowKind: 'IDLE',
+                why: `Cash idle from ${isoDay(periodStart)} to ${isoDay(periodEnd)} (${idleDays} days)`,
+                lastPayment: lastPayment
+                  ? {
+                      id: lastPayment.id,
+                      date: new Date(lastPayment.date).toISOString().split('T')[0],
+                      amount: Math.abs(Number(lastPayment.amount || 0)),
+                    }
+                  : null,
+                dueReceipts: [],
+              })
+            }
+
+            for (const alloc of sukukAllocations) {
+              const rowKey = buildRowKey([
+                'SAVINGS_SUKUK_IDLE',
+                bucket.id,
+                alloc.investmentId,
+                isoDay(periodStart),
+                isoDay(periodEnd),
+              ])
+              const isPaid = movementHasRowPaid(payments, rowKey)
+              const zakatDue = !isPaid ? alloc.principalRemaining * 0.025 : 0
+
+              savingsRows.push({
+                id: rowKey,
+                bucketId: bucket.id,
+                periodIndex: i + 1,
+                label: `Idle • Sukuk Principal • ${alloc.investmentName} • ${isoDay(periodStart)} → ${isoDay(periodEnd)}`,
+                currency: bucket.currency,
+                balance: alloc.principalRemaining,
+                haulStartDate: isoDay(periodStart),
+                lastZakatPaidDate: bucket.lastZakatPaidDate
+                  ? bucket.lastZakatPaidDate.toISOString().split('T')[0]
+                  : null,
+                haulCompleteDate: isoDay(periodEnd),
+                idleBase: alloc.principalRemaining,
+                receiptsTotal: 0,
+                zakatDue,
+                isPaid,
+                haulCompleted: now.getTime() >= periodEnd.getTime(),
+                source: alloc.investmentName,
+                sourceGroup: `Sukuk Principal • ${alloc.investmentName}`,
+                sourceType: 'SUKUK',
+                rowKind: 'PRINCIPAL',
+                why: `Sukuk principal carrying forward hawl from ${isoDay(haulStart)}`,
+                lastPayment: lastPayment
+                  ? {
+                      id: lastPayment.id,
+                      date: new Date(lastPayment.date).toISOString().split('T')[0],
+                      amount: Math.abs(Number(lastPayment.amount || 0)),
+                    }
+                  : null,
+                dueReceipts: [],
+              })
+            }
           }
         }
 
