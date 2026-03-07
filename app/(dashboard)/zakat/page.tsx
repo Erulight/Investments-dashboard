@@ -220,13 +220,32 @@ export default async function ZakatPage() {
       const metadata = parseMetadata(inv.metadata) || {}
       const payments = metadata?.payments && typeof metadata.payments === 'object' ? metadata.payments : {}
       const paymentEntries = Object.values(payments) as any[]
-      const firstContributionDate = paymentEntries
+      const firstContributionFromPayments = paymentEntries
         .map((p: any) => {
           const d = new Date(p?.paidDate || p?.dueDate)
           return Number.isNaN(d.getTime()) ? null : d
         })
         .filter((d: Date | null): d is Date => Boolean(d))
-        .sort((a: Date, b: Date) => a.getTime() - b.getTime())[0] || toDate(inv.startDate)
+        .sort((a: Date, b: Date) => a.getTime() - b.getTime())[0] || null
+
+      const firstContributionFromBuckets = await prisma.cashBucket.findFirst({
+        where: {
+          label: { startsWith: `Circlys • ${inv.name} •` },
+        },
+        select: { haulStartDate: true },
+        orderBy: { haulStartDate: 'asc' },
+      })
+
+      const firstContributionDateCandidates = [
+        firstContributionFromPayments,
+        toDate(firstContributionFromBuckets?.haulStartDate),
+        toDate(inv.startDate),
+      ]
+        .filter((d: Date | null): d is Date => Boolean(d))
+        .map((d: Date) => new Date(d.getFullYear(), d.getMonth(), d.getDate()))
+        .sort((a: Date, b: Date) => a.getTime() - b.getTime())
+
+      const firstContributionDate = firstContributionDateCandidates[0] || null
 
       const receivedBucketId = typeof metadata?.received?.bucketId === 'string' ? metadata.received.bucketId : null
       if (receivedBucketId && firstContributionDate) {
@@ -315,6 +334,69 @@ export default async function ZakatPage() {
         if (!existing || anchorDay.getTime() < existing.getTime()) {
           inheritedSavingsHaulByInvestment.set(investmentId, anchorDay)
         }
+      }
+    }
+
+    const ownerCashInvestTxs = await prisma.transaction.findMany({
+      where: {
+        type: 'CASH_INVEST',
+        personId: null,
+        investmentId: { not: null },
+      },
+      select: { id: true, investmentId: true, amount: true, date: true },
+      orderBy: { date: 'asc' },
+    })
+
+    const ownerSavingsReceiptBuckets = await prisma.cashBucket.findMany({
+      where: {
+        personId: null,
+        label: { startsWith: 'Savings Receipt •' },
+      },
+      select: {
+        haulStartDate: true,
+        movements: {
+          where: { type: 'CASH_IN' },
+          select: { amount: true, date: true },
+          orderBy: { date: 'asc' },
+        },
+      },
+    })
+
+    const usedCashInvestTxIds = new Set<string>()
+    for (const bucket of ownerSavingsReceiptBuckets) {
+      const anchor = toDate(bucket.haulStartDate)
+      if (!anchor) continue
+      const anchorDay = new Date(anchor.getFullYear(), anchor.getMonth(), anchor.getDate())
+
+      const cashIn = bucket.movements[0]
+      if (!cashIn) continue
+      const receiptAmount = Math.abs(Number(cashIn.amount) || 0)
+      if (receiptAmount <= 0) continue
+
+      const receiptDate = toDate(cashIn.date)
+      if (!receiptDate) continue
+      const receiptDay = new Date(receiptDate.getFullYear(), receiptDate.getMonth(), receiptDate.getDate())
+
+      const matchingTx = ownerCashInvestTxs.find((tx: any) => {
+        if (usedCashInvestTxIds.has(tx.id)) return false
+        const txInvestmentId = typeof tx?.investmentId === 'string' ? tx.investmentId : null
+        if (!txInvestmentId) return false
+
+        const txDate = tx.date instanceof Date ? tx.date : new Date(tx.date as any)
+        if (Number.isNaN(txDate.getTime())) return false
+        const txDay = new Date(txDate.getFullYear(), txDate.getMonth(), txDate.getDate())
+        if (txDay.getTime() < receiptDay.getTime()) return false
+
+        return Math.abs(Math.abs(Number(tx.amount) || 0) - receiptAmount) < 0.01
+      })
+
+      const matchedInvestmentId = typeof matchingTx?.investmentId === 'string' ? matchingTx.investmentId : null
+      if (!matchingTx || !matchedInvestmentId) continue
+
+      usedCashInvestTxIds.add(matchingTx.id)
+      const existing = inheritedSavingsHaulByInvestment.get(matchedInvestmentId)
+      if (!existing || anchorDay.getTime() < existing.getTime()) {
+        inheritedSavingsHaulByInvestment.set(matchedInvestmentId, anchorDay)
       }
     }
 
@@ -755,7 +837,7 @@ export default async function ZakatPage() {
           return sum - amt
         }, 0)
 
-        const hasMatchingCashInvest = Array.from(investedSukukInvestmentIds).some((invId) => {
+        const hasMatchingCashInvestByLinkedInvestment = Array.from(investedSukukInvestmentIds).some((invId) => {
           const txs = cashInvestByInvestmentId.get(invId) || []
           return txs.some((tx) => {
             const txDate = tx.date instanceof Date ? tx.date : new Date(tx.date as any)
@@ -765,8 +847,19 @@ export default async function ZakatPage() {
           })
         })
 
+        const hasMatchingCashInvestByAmount = cashInvestTransactions.some((tx: any) => {
+          const txDate = tx?.date instanceof Date ? tx.date : new Date(tx?.date)
+          if (Number.isNaN(txDate.getTime())) return false
+          if (txDate.getTime() < receiptDay.getTime()) return false
+          return Math.abs(Math.abs(Number(tx?.amount) || 0) - totalReceived) < 0.01
+        })
+
+        const hasMatchingCashInvest =
+          hasMatchingCashInvestByLinkedInvestment || hasMatchingCashInvestByAmount
+
         const fullyInvestedIntoSukuk =
-          hasMatchingCashInvest && netSukukInvestedAfterReceipt >= totalReceived - 0.01
+          hasMatchingCashInvest &&
+          (netSukukInvestedAfterReceipt >= totalReceived - 0.01 || investedSukukInvestmentIds.size === 0)
         if (fullyInvestedIntoSukuk) {
           return []
         }
