@@ -105,31 +105,8 @@ export async function POST(
         )
       }
 
-      if (source === 'PROFIT') {
-        const receivableRaw = Number(investment.receivableAmount || 0)
-        const receivedRaw = Number(investment.totalReceived || 0)
-
-        const receivable = Number.isFinite(receivableRaw) ? receivableRaw : 0
-        const received = Number.isFinite(receivedRaw) ? receivedRaw : 0
-
-        // Work in cents to avoid floating-point rounding issues
-        const receivableCents = Math.round(receivable * 100)
-        const receivedCents = Math.round(received * 100)
-        const remainingProfitCents = Math.max(0, receivableCents - receivedCents)
-        const amountCents = Math.round(amount * 100)
-
-        // If receivableAmount is missing (0) because the deal was reopened with no APR,
-        // allow profit withdrawal up to "amount" without blocking.
-        if (receivableCents > 0) {
-          // Allow a 1-cent rounding tolerance
-          if (amountCents - remainingProfitCents > 1) {
-            return NextResponse.json(
-              { error: 'Amount exceeds remaining profit receivable' },
-              { status: 400 },
-            )
-          }
-        }
-      }
+      // OWNER can withdraw any profit amount – no cap validation.
+      // The receivableAmount field is informational; owner decides actual profit.
     }
 
     const dayStart = new Date(date.getFullYear(), date.getMonth(), date.getDate())
