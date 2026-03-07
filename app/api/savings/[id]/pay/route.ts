@@ -93,6 +93,8 @@ export async function POST(
     const dueDate = addMonths(new Date(investment.startDate), monthIndex)
     const monthLabel = `${dueDate.getFullYear()}-${String(dueDate.getMonth() + 1).padStart(2, '0')}`
     const contributionDate = dueDate
+    const startAnchorRaw = new Date(investment.startDate)
+    const contributionHaulStart = Number.isNaN(startAnchorRaw.getTime()) ? contributionDate : startAnchorRaw
 
     // Determine if this is a post-receipt month (deducts from cash instead of creating a new bucket)
     const isPostReceipt =
@@ -152,7 +154,8 @@ export async function POST(
           data: {
             label: `Circlys • ${investment.name} • ${monthLabel}`,
             currency,
-            haulStartDate: contributionDate,
+            // All savings contributions share one hawl anchor (first contribution/start date).
+            haulStartDate: contributionHaulStart,
             balance: amount + reward,
             movements: {
               create: [

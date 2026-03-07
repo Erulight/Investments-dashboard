@@ -534,57 +534,118 @@ export default async function ZakatPage() {
         const bucketRows: BucketRow[] = []
         const movements = Array.isArray(bucket.movements) ? bucket.movements : []
         const receiptMovement = movements.find((m: any) => m?.type === 'CASH_IN')
-        
-        if (receiptMovement) {
-          const receiptDate = new Date(receiptMovement.date)
-          const haulStartDate = new Date(bucket.haulStartDate)
-          const daysHeld = diffDaysFloor(haulStartDate, receiptDate)
-          
-          // Only show zakat if 354 days have passed since first contribution
-          if (daysHeld >= 354) {
-            const zakatBase = Number(bucket.balance) || 0
-            const rowKey = buildRowKey(['SAVINGS_RECEIPT', bucket.id])
-            const isPaid = movementHasRowPaid(
-              movements.filter((m: any) => m?.type === 'ZAKAT_PAID'),
-              rowKey
-            )
-            const zakatDue = !isPaid && zakatBase > 0 ? zakatBase * 0.025 : 0
-            
-            bucketRows.push({
-              id: rowKey,
-              bucketId: bucket.id,
-              periodIndex: 0,
-              label: `Savings Receipt • ${source}`,
-              currency: bucket.currency,
-              balance: zakatBase,
-              haulStartDate: isoDay(haulStartDate),
-              lastZakatPaidDate: bucket.lastZakatPaidDate
-                ? bucket.lastZakatPaidDate.toISOString().split('T')[0]
-                : null,
-              haulCompleteDate: isoDay(receiptDate),
-              idleBase: 0,
-              receiptsTotal: zakatBase,
-              zakatDue,
-              isPaid,
-              haulCompleted: true,
-              source,
-              sourceGroup: source,
-              sourceType,
-              rowKind: 'PROFIT' as const,
-              why: `Savings received on ${isoDay(receiptDate)}, held ${daysHeld} days (≥354)`,
-              lastPayment: null,
-              dueReceipts: [
-                {
-                  date: isoDay(receiptDate),
-                  amount: Number(receiptMovement.amount || 0),
-                  type: receiptMovement.type,
-                  investmentName: source,
-                },
-              ],
-            })
-          }
+        if (!receiptMovement) return []
+
+        const receiptDate = new Date(receiptMovement.date)
+        const haulStartDate = new Date(bucket.haulStartDate)
+        if (Number.isNaN(receiptDate.getTime()) || Number.isNaN(haulStartDate.getTime())) {
+          return []
         }
-        
+
+        const receiptAmount = Math.max(0, Number(receiptMovement.amount || 0))
+        const daysHeld = diffDaysFloor(haulStartDate, receiptDate)
+        const zakatPayments = movements.filter((m: any) => m?.type === 'ZAKAT_PAID')
+
+        // Immediate receipt row: first savings cycle from first contribution -> receipt.
+        if (daysHeld >= 354) {
+          const zakatBase = Math.max(0, Number(bucket.balance) || 0)
+          const rowKey = buildRowKey(['SAVINGS_RECEIPT', bucket.id])
+          const isPaid = movementHasRowPaid(zakatPayments, rowKey)
+          const zakatDue = !isPaid && zakatBase > 0 ? zakatBase * 0.025 : 0
+
+          bucketRows.push({
+            id: rowKey,
+            bucketId: bucket.id,
+            periodIndex: 0,
+            label: `Savings Receipt • ${source}`,
+            currency: bucket.currency,
+            balance: zakatBase,
+            haulStartDate: isoDay(haulStartDate),
+            lastZakatPaidDate: bucket.lastZakatPaidDate
+              ? bucket.lastZakatPaidDate.toISOString().split('T')[0]
+              : null,
+            haulCompleteDate: isoDay(receiptDate),
+            idleBase: 0,
+            receiptsTotal: zakatBase,
+            zakatDue,
+            isPaid,
+            haulCompleted: true,
+            source,
+            sourceGroup: source,
+            sourceType,
+            rowKind: 'PROFIT' as const,
+            why: `Savings received on ${isoDay(receiptDate)}, held ${daysHeld} days (≥354)`,
+            lastPayment: null,
+            dueReceipts: [
+              {
+                date: isoDay(receiptDate),
+                amount: Number(receiptMovement.amount || 0),
+                type: receiptMovement.type,
+                investmentName: source,
+              },
+            ],
+          })
+        }
+
+        // Next cycle starts from receipt date if first cycle completed; otherwise keep continuity
+        // from first contribution anchor until first completion.
+        const idleAnchorStart = daysHeld >= 354 ? receiptDate : haulStartDate
+        const idleElapsed = diffDaysFloor(idleAnchorStart, now)
+        const completedIdleHauls = Math.floor(idleElapsed / 354)
+
+        for (let i = 0; i < completedIdleHauls; i++) {
+          const periodStart = addDays(idleAnchorStart, i * 354)
+          const periodEnd = addDays(idleAnchorStart, (i + 1) * 354)
+          const rowKey = buildRowKey(['SAVINGS_IDLE', bucket.id, isoDay(periodStart), isoDay(periodEnd)])
+          const isPaid = movementHasRowPaid(zakatPayments, rowKey)
+
+          const balanceAtEnd = Math.max(0, Number(bucket.balance) || 0)
+          const idleAmount = Math.max(0, Math.min(receiptAmount, balanceAtEnd))
+          if (idleAmount <= 0) continue
+
+          const zakatDue = !isPaid && idleAmount > 0 ? idleAmount * 0.025 : 0
+          const idleDays = diffDaysFloor(periodStart, periodEnd)
+
+          bucketRows.push({
+            id: rowKey,
+            bucketId: bucket.id,
+            periodIndex: i + 1,
+            label: `Idle • ${source} • ${isoDay(periodStart)} → ${isoDay(periodEnd)}`,
+            currency: bucket.currency,
+            balance: Number(bucket.balance) || 0,
+            haulStartDate: isoDay(periodStart),
+            lastZakatPaidDate: bucket.lastZakatPaidDate
+              ? bucket.lastZakatPaidDate.toISOString().split('T')[0]
+              : null,
+            haulCompleteDate: isoDay(periodEnd),
+            idleBase: idleAmount,
+            receiptsTotal: 0,
+            zakatDue,
+            isPaid,
+            haulCompleted: now.getTime() >= periodEnd.getTime(),
+            source,
+            sourceGroup: source,
+            sourceType,
+            rowKind: 'IDLE',
+            why: `Cash idle from ${isoDay(periodStart)} to ${isoDay(periodEnd)} (${idleDays} days)`,
+            lastPayment: lastPayment
+              ? {
+                  id: lastPayment.id,
+                  date: new Date(lastPayment.date).toISOString().split('T')[0],
+                  amount: Math.abs(Number(lastPayment.amount || 0)),
+                }
+              : null,
+            dueReceipts: [
+              {
+                date: isoDay(receiptDate),
+                amount: Number(receiptMovement.amount || 0),
+                type: receiptMovement.type,
+                investmentName: source,
+              },
+            ],
+          })
+        }
+
         return bucketRows
       }
 
