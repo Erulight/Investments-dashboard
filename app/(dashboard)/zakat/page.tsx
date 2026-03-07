@@ -677,8 +677,10 @@ export default async function ZakatPage() {
           }],
         })
 
-        // After first hawl, treat remaining balance exactly like idle cash.
-        if (firstHaulCompleted && currentBalance > 0) {
+        // After first hawl, treat the savings receipt as one idle pool.
+        // Use full receipt base for subsequent hawls in ROSCA display.
+        const savingsIdleBase = Math.max(0, Math.max(totalReceived, currentBalance))
+        if (firstHaulCompleted && savingsIdleBase > 0) {
           const idleStart = firstHaulEnd
           const elapsedSinceFirstHawl = diffDaysFloor(idleStart, now)
           const completedIdleHawls = Math.floor(elapsedSinceFirstHawl / 354)
@@ -688,7 +690,7 @@ export default async function ZakatPage() {
             const periodEnd = addDays(idleStart, (i + 1) * 354)
             const rowKey = buildRowKey(['SAVINGS_IDLE', bucket.id, isoDay(periodStart), isoDay(periodEnd)])
             const isPaid = movementHasRowPaid(payments, rowKey)
-            const zakatDue = !isPaid ? currentBalance * 0.025 : 0
+            const zakatDue = !isPaid ? savingsIdleBase * 0.025 : 0
             const idleDays = diffDaysFloor(periodStart, periodEnd)
 
             savingsRows.push({
@@ -697,13 +699,13 @@ export default async function ZakatPage() {
               periodIndex: i + 1,
               label: `Idle • Savings Receipt • ${investmentName} • ${isoDay(periodStart)} → ${isoDay(periodEnd)}`,
               currency: bucket.currency,
-              balance: currentBalance,
+              balance: savingsIdleBase,
               haulStartDate: isoDay(periodStart),
               lastZakatPaidDate: bucket.lastZakatPaidDate
                 ? bucket.lastZakatPaidDate.toISOString().split('T')[0]
                 : null,
               haulCompleteDate: isoDay(periodEnd),
-              idleBase: currentBalance,
+              idleBase: savingsIdleBase,
               receiptsTotal: 0,
               zakatDue,
               isPaid,
