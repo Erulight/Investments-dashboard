@@ -239,31 +239,33 @@ export async function POST(
 
       const totalWithdrawn = withdrawals.reduce((sum: number, t: any) => sum + t.amount, 0)
 
+      // If any withdrawal transactions exist, delete them and related cash buckets
       if (totalWithdrawn > 0) {
-        // Delete the withdrawal transactions
         await tx.transaction.deleteMany({
           where: {
             investmentId: id,
-            type: { in: ['WITHDRAW_PROFIT', 'WITHDRAW_PRINCIPAL'] }
-          }
+            type: { in: ['WITHDRAW_PROFIT', 'WITHDRAW_PRINCIPAL'] },
+          },
         })
 
-        // Reset cash balance to 0 (deal is now pending/active again)
-        // When deal was closed, cash increased by principal + profit
-        // When reopened, cash should go back to 0 as if deal is active
-        await tx.systemSetting.update({
-          where: { key: 'CASH_BALANCE' },
-          data: { value: '0' }
-        })
-
-        // Also delete cash buckets created from this withdrawal
         await tx.cashBucket.deleteMany({
           where: {
             label: { contains: investment.name },
-            personId: null
-          }
+            personId: null,
+          },
         })
       }
+
+      // Reset owner cash balance to 0 unconditionally – the principal is now locked back in the deal
+      await tx.systemSetting.upsert({
+        where: { key: 'CASH_BALANCE' },
+        update: { value: '0' },
+        create: {
+          key: 'CASH_BALANCE',
+          value: '0',
+          description: 'Available cash balance for investments',
+        },
+      })
 
 
       // For partners, restore their deal participant and allocation from canonical SELL_TO_PARTNER metadata
