@@ -583,6 +583,7 @@ export default async function ZakatPage() {
       const isImmediateReceiptBucket = isProfitBucket || isCommissionBucket
       const isCirclys = typeof bucket.label === 'string' && bucket.label.startsWith('Circlys')
       const isSavingsContribution = typeof bucket.label === 'string' && bucket.label.startsWith('Circlys •') && !bucket.label.includes('Receipt')
+      const isSavingsReceiptBucket = typeof bucket.label === 'string' && bucket.label.startsWith('Savings Receipt •')
       const isSukukPrincipalBucket =
         typeof bucket.label === 'string' && bucket.label.startsWith('Sukuk Principal •')
 
@@ -608,6 +609,70 @@ export default async function ZakatPage() {
       // They are just temporary tracking, not actual zakat buckets
       if (isSavingsContribution) {
         return []
+      }
+
+      // RULE 2: Savings Receipt buckets get special ROSCA handling
+      // - ONE row per savings plan
+      // - haulStartDate = first contribution date (already set on bucket)
+      // - balance = total received amount (from CASH_IN movement)
+      // - NO idle sub-rows
+      // - Zakat due after 354 days from first contribution
+      if (isSavingsReceiptBucket) {
+        const cashInMovement = movements.find((m: any) => m?.type === 'CASH_IN')
+        if (!cashInMovement) return []
+
+        const receiptDate = new Date(cashInMovement.date)
+        if (Number.isNaN(receiptDate.getTime())) return []
+
+        const totalReceived = Math.abs(Number(cashInMovement.amount) || 0)
+        if (totalReceived <= 0) return []
+
+        const haulStart = startOfDay(bucketStart)
+        const daysHeld = diffDaysFloor(haulStart, now)
+        const haulCompleted = daysHeld >= 354
+        const haulEndDate = addDays(haulStart, 354)
+
+        const investmentName = bucket.label.replace('Savings Receipt • ', '')
+        const rowKey = buildRowKey(['SAVINGS_RECEIPT', bucket.id])
+        const isPaid = movementHasRowPaid(payments, rowKey)
+        const zakatDue = !isPaid && haulCompleted && totalReceived > 0 ? totalReceived * 0.025 : 0
+
+        return [{
+          id: rowKey,
+          bucketId: bucket.id,
+          periodIndex: 0,
+          label: `Savings Receipt • ${investmentName}`,
+          currency: bucket.currency,
+          balance: totalReceived,
+          haulStartDate: isoDay(haulStart),
+          lastZakatPaidDate: bucket.lastZakatPaidDate
+            ? bucket.lastZakatPaidDate.toISOString().split('T')[0]
+            : null,
+          haulCompleteDate: isoDay(haulEndDate),
+          idleBase: 0,
+          receiptsTotal: totalReceived,
+          zakatDue,
+          isPaid,
+          haulCompleted,
+          source: investmentName,
+          sourceGroup: `Savings Receipt • ${investmentName}`,
+          sourceType: 'CIRCLYS',
+          rowKind: 'PROFIT' as const,
+          why: `ROSCA receipt of SAR ${totalReceived.toLocaleString()}, hawl from ${isoDay(haulStart)} (${daysHeld} days${haulCompleted ? ', ≥354' : ''})`,
+          lastPayment: lastPayment
+            ? {
+                id: lastPayment.id,
+                date: new Date(lastPayment.date).toISOString().split('T')[0],
+                amount: Math.abs(Number(lastPayment.amount || 0)),
+              }
+            : null,
+          dueReceipts: [{
+            date: isoDay(receiptDate),
+            amount: totalReceived,
+            type: 'CASH_IN',
+            investmentName,
+          }],
+        }]
       }
 
       const qualifyingReceipts = receiptMovements
