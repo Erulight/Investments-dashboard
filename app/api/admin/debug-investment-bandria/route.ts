@@ -4,14 +4,23 @@ import { requireAuth } from '@/lib/rbac'
 
 export const dynamic = 'force-dynamic'
 
-export async function GET() {
+export async function GET(req: Request) {
   try {
     await requireAuth(['OWNER'])
 
+    const url = new URL(req.url)
+    const idParam = url.searchParams.get('id')
+    const q = url.searchParams.get('q') || 'بندرية'
+
+    const where = idParam
+      ? { id: idParam }
+      : { name: { contains: q, mode: 'insensitive' } } as any
+
     const inv = await prisma.investment.findFirst({
-      where: { name: { contains: 'بندرية' } },
+      where,
       select: {
         id: true,
+        name: true,
         principalAmount: true,
         receivableAmount: true,
         totalReceived: true,
