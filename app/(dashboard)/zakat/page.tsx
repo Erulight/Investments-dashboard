@@ -513,10 +513,19 @@ export default async function ZakatPage() {
   const investments = investmentIds.length
     ? await prisma.investment.findMany({
         where: { id: { in: investmentIds } },
-        select: { id: true, name: true, startDate: true, isIjarah: true, reopenedAt: true, category: true, metadata: true },
+        select: {
+          id: true,
+          name: true,
+          startDate: true,
+          isIjarah: true,
+          reopenedAt: true,
+          category: true,
+          metadata: true,
+          account: { select: { type: true } },
+        },
       })
     : []
-  const investmentMap = new Map(investments.map((inv) => [inv.id, inv]))
+  const investmentMap = new Map<string, any>(investments.map((inv: any) => [inv.id, inv]))
 
   const startOfDay = (d: Date) => new Date(d.getFullYear(), d.getMonth(), d.getDate())
   const isoDay = (d: Date) => startOfDay(d).toISOString().split('T')[0]
@@ -680,6 +689,28 @@ export default async function ZakatPage() {
         // After first hawl, continue the same hawl timeline.
         // If part of savings was moved into Sukuk principal, continue that portion under Sukuk.
         const baseForSecondAndLater = Math.max(totalReceived, currentBalance)
+        const movementNetSukukInvested = movements.reduce((sum: number, m: any) => {
+          const movementType = typeof m?.type === 'string' ? m.type : ''
+          if (
+            movementType !== 'INVEST_OUT' &&
+            movementType !== 'WITHDRAW_PRINCIPAL' &&
+            movementType !== 'ROLLBACK_PRINCIPAL'
+          ) {
+            return sum
+          }
+
+          const invId = typeof m?.investmentId === 'string' ? m.investmentId : null
+          const inv = invId ? investmentMap.get(invId) : null
+          const invType = inv?.account?.type
+          if (invType !== 'SUKUK') return sum
+
+          const amt = Math.abs(Number(m?.amount) || 0)
+          if (amt <= 0) return sum
+
+          if (movementType === 'INVEST_OUT') return sum + amt
+          return sum - amt
+        }, 0)
+
         const sukukAllocations = (Array.isArray(bucket.allocations) ? bucket.allocations : [])
           .map((alloc: any) => {
             const principalRemaining = Math.max(0, Number(alloc?.principalRemaining) || 0)
@@ -695,10 +726,11 @@ export default async function ZakatPage() {
           })
           .filter((x: any): x is { investmentId: string; investmentName: string; principalRemaining: number } => Boolean(x))
 
-        const sukukInvestedBase = sukukAllocations.reduce(
+        const sukukInvestedByAllocations = sukukAllocations.reduce(
           (sum: number, a: { principalRemaining: number }) => sum + a.principalRemaining,
           0,
         )
+        const sukukInvestedBase = Math.max(0, Math.max(sukukInvestedByAllocations, movementNetSukukInvested))
         const savingsIdleBase = Math.max(0, baseForSecondAndLater - sukukInvestedBase)
 
         if (firstHaulCompleted && (savingsIdleBase > 0 || sukukInvestedBase > 0)) {
