@@ -126,16 +126,15 @@ model CashBucketMovement {
 }
 
 model InvestmentBucketAllocation {
-  id                    String     @id @default(cuid())
-  investmentId          String
-  cashBucketId          String
-  principalAllocated    Float
-  principalRemaining    Float
-  originalHaulStartDate DateTime?
-  createdAt             DateTime   @default(now())
-  updatedAt             DateTime   @updatedAt
-  cashBucket            CashBucket @relation(fields: [cashBucketId], references: [id], onDelete: Cascade)
-  investment            Investment @relation(fields: [investmentId], references: [id], onDelete: Cascade)
+  id                 String     @id @default(cuid())
+  investmentId       String
+  cashBucketId       String
+  principalAllocated Float
+  principalRemaining Float
+  createdAt          DateTime   @default(now())
+  updatedAt          DateTime   @updatedAt
+  cashBucket         CashBucket @relation(fields: [cashBucketId], references: [id], onDelete: Cascade)
+  investment         Investment @relation(fields: [investmentId], references: [id], onDelete: Cascade)
 
   @@unique([investmentId, cashBucketId])
   @@index([investmentId])

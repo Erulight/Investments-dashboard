@@ -202,7 +202,6 @@ export const withdrawFromBuckets = async (
             cashBucketId: bucket.id,
             principalAllocated: used,
             principalRemaining: used,
-            originalHaulStartDate: bucket.haulStartDate,
           },
         })
       }
@@ -257,9 +256,50 @@ export const creditBucketsForReceipt = async (
   const creditToAllocatedBuckets = async (creditAmount: number, reductionAmount: number) => {
     if (creditAmount <= 0) return
 
-    // Look up original haul date from allocations first (most reliable - stored at creation time)
-    // Then fall back to INVEST_OUT movements if allocations don't have the date
+    // Get original haul date by looking at ALL cash bucket movements for this investment
+    // Find the earliest INVEST_OUT movement to trace back to original cash
     let originalHaulDate: Date | null = null
+    
+    const allInvestMovements = await tx.cashBucketMovement.findMany({
+      where: {
+        investmentId,
+        type: 'INVEST_OUT',
+      },
+      select: {
+        cashBucketId: true,
+        date: true,
+      },
+      orderBy: { date: 'asc' },
+    })
+
+    if (allInvestMovements.length > 0) {
+      // Get the bucket ID from the earliest movement
+      const earliestBucketId = allInvestMovements[0].cashBucketId
+      
+      // Try to find the bucket (might still exist)
+      const originalBucket = await tx.cashBucket.findUnique({
+        where: { id: earliestBucketId },
+        select: { haulStartDate: true },
+      })
+
+      if (originalBucket) {
+        originalHaulDate = originalBucket.haulStartDate
+      } else {
+        // Bucket was deleted - find the earliest CASH_IN movement for this bucket
+        const cashInMovement = await tx.cashBucketMovement.findFirst({
+          where: {
+            cashBucketId: earliestBucketId,
+            type: 'CASH_IN',
+          },
+          select: { date: true },
+          orderBy: { date: 'asc' },
+        })
+
+        if (cashInMovement) {
+          originalHaulDate = cashInMovement.date
+        }
+      }
+    }
 
     const allocations = await tx.investmentBucketAllocation.findMany({
       where: {
@@ -281,37 +321,6 @@ export const creditBucketsForReceipt = async (
         },
       },
     })
-
-    // Get original haul date from allocation (stored when investment was created)
-    if (allocations.length > 0) {
-      const firstAlloc = allocations[0] as any
-      if (firstAlloc.originalHaulStartDate) {
-        originalHaulDate = firstAlloc.originalHaulStartDate
-      } else if (firstAlloc.cashBucket?.haulStartDate) {
-        originalHaulDate = firstAlloc.cashBucket.haulStartDate
-      }
-    }
-
-    // Fallback: try INVEST_OUT movements if no allocation haul date found
-    if (!originalHaulDate) {
-      const investmentMovements = await tx.cashBucketMovement.findMany({
-        where: {
-          investmentId,
-          type: 'INVEST_OUT',
-        },
-        include: {
-          cashBucket: {
-            select: { haulStartDate: true },
-          },
-        },
-        orderBy: { date: 'asc' },
-        take: 1,
-      })
-
-      if (investmentMovements.length > 0 && investmentMovements[0].cashBucket) {
-        originalHaulDate = investmentMovements[0].cashBucket.haulStartDate
-      }
-    }
 
     const principalFocused = reductionAmount > 0
     const usableAllocations = principalFocused
@@ -507,44 +516,44 @@ export const creditBucketsForReceipt = async (
     if (explicitHaulStart) {
       haulStartDate = explicitHaulStart
     } else {
-      // Try to find original haul date from allocations first (stored at investment creation)
-      const allocations = await tx.investmentBucketAllocation.findMany({
-        where: { investmentId },
-        include: {
-          cashBucket: {
-            select: { haulStartDate: true },
-          },
+      // Find earliest INVEST_OUT movement for this investment
+      const allInvestMovements = await tx.cashBucketMovement.findMany({
+        where: {
+          investmentId,
+          type: 'INVEST_OUT',
         },
-        take: 1,
+        select: {
+          cashBucketId: true,
+          date: true,
+        },
+        orderBy: { date: 'asc' },
       })
 
-      if (allocations.length > 0) {
-        const firstAlloc = allocations[0] as any
-        if (firstAlloc.originalHaulStartDate) {
-          haulStartDate = firstAlloc.originalHaulStartDate
-        } else if (firstAlloc.cashBucket?.haulStartDate) {
-          haulStartDate = firstAlloc.cashBucket.haulStartDate
-        }
-      }
-
-      // Fallback: try INVEST_OUT movements
-      if (haulStartDate === date) {
-        const investmentMovements = await tx.cashBucketMovement.findMany({
-          where: {
-            investmentId,
-            type: 'INVEST_OUT',
-          },
-          include: {
-            cashBucket: {
-              select: { haulStartDate: true },
-            },
-          },
-          orderBy: { date: 'asc' },
-          take: 1,
+      if (allInvestMovements.length > 0) {
+        const earliestBucketId = allInvestMovements[0].cashBucketId
+        
+        // Try to find the bucket
+        const originalBucket = await tx.cashBucket.findUnique({
+          where: { id: earliestBucketId },
+          select: { haulStartDate: true },
         })
 
-        if (investmentMovements.length > 0 && investmentMovements[0].cashBucket) {
-          haulStartDate = investmentMovements[0].cashBucket.haulStartDate
+        if (originalBucket) {
+          haulStartDate = originalBucket.haulStartDate
+        } else {
+          // Bucket deleted - find earliest CASH_IN for this bucket
+          const cashInMovement = await tx.cashBucketMovement.findFirst({
+            where: {
+              cashBucketId: earliestBucketId,
+              type: 'CASH_IN',
+            },
+            select: { date: true },
+            orderBy: { date: 'asc' },
+          })
+
+          if (cashInMovement) {
+            haulStartDate = cashInMovement.date
+          }
         }
       }
       // Otherwise use receipt date (already set above)
