@@ -338,10 +338,10 @@ export async function POST(
           ? principalAmountValue
           : ownerCanonicalCurrent
 
-      const interestRateValue =
+      const interestRateValue: number =
         user.role === 'PARTNER'
-          ? (typeof canonicalApr !== 'undefined' ? canonicalApr : 0)
-          : investment.interestRate
+          ? (typeof canonicalApr === 'number' && !Number.isNaN(canonicalApr) ? canonicalApr : 0)
+          : (typeof investment.interestRate === 'number' && !Number.isNaN(investment.interestRate as any) ? (investment.interestRate as number) : 0)
 
       const feesValue =
         user.role === 'PARTNER'
