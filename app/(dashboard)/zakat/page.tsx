@@ -732,15 +732,16 @@ export default async function ZakatPage() {
 
       const completedIdleRows: BucketRow[] = []
       qualifyingReceipts.forEach((r) => {
-        // Continue hawl from the original eligibility anchor (cash entry for principal,
-        // investment start for profit), even if receipt happened before 354 days.
-        const idleElapsed = diffDaysFloor(r.eligibilityStart, now)
+        // If receipt itself completed the first hawl (>=354), next hawl starts from receipt day.
+        // If receipt happened before first hawl completion, keep continuity from eligibilityStart.
+        const idleAnchorStart = r.eligibilityDuration >= 354 ? r.receiptDay : r.eligibilityStart
+        const idleElapsed = diffDaysFloor(idleAnchorStart, now)
         const completedIdleHauls = Math.floor(idleElapsed / 354)
         if (completedIdleHauls <= 0) return
 
         for (let i = 0; i < completedIdleHauls; i++) {
-          const periodStart = addDays(r.eligibilityStart, i * 354)
-          const periodEnd = addDays(r.eligibilityStart, (i + 1) * 354)
+          const periodStart = addDays(idleAnchorStart, i * 354)
+          const periodEnd = addDays(idleAnchorStart, (i + 1) * 354)
           const periodEndTime = periodEnd.getTime()
 
           const poolOutstanding = qualifyingReceipts
