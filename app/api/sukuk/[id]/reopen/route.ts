@@ -338,13 +338,6 @@ export async function POST(
           ? principalAmountValue
           : ownerCanonicalCurrent
 
-      const receivableAmountValue =
-        user.role === 'PARTNER'
-          ? (partnerCanonicalProfit !== null && partnerCanonicalProfit > 0
-              ? Math.round(partnerCanonicalProfit * 100) / 100
-              : Math.round((investment.receivableAmount || 0) * 100) / 100)
-          : Math.round((investment.receivableAmount || 0) * 100) / 100
-
       const interestRateValue =
         user.role === 'PARTNER'
           ? (typeof canonicalApr !== 'undefined' ? canonicalApr : 0)
@@ -354,6 +347,45 @@ export async function POST(
         user.role === 'PARTNER'
           ? (typeof canonicalFees !== 'undefined' ? canonicalFees : 0)
           : investment.fees
+
+      // Compute a fallback profit based on principal, rate, and period if snapshot/receivable are missing.
+      let fallbackProfit = 0
+      const startRaw: any = (investment as any).startDate
+      const maturityRaw: any = (investment as any).maturityDate
+      const startDate = startRaw ? new Date(startRaw) : null
+      const maturityDate = maturityRaw ? new Date(maturityRaw) : null
+
+      if (
+        startDate &&
+        maturityDate &&
+        !Number.isNaN(startDate.getTime()) &&
+        !Number.isNaN(maturityDate.getTime()) &&
+        principalAmountValue > 0 &&
+        Number.isFinite(interestRateValue) &&
+        interestRateValue > 0
+      ) {
+        const periodMonths =
+          (maturityDate.getFullYear() - startDate.getFullYear()) * 12 +
+          (maturityDate.getMonth() - startDate.getMonth()) +
+          (maturityDate.getDate() - startDate.getDate()) / 30
+        const periodYears = periodMonths > 0 ? periodMonths / 12 : 0
+        if (periodYears > 0) {
+          fallbackProfit = principalAmountValue * (interestRateValue / 100) * periodYears
+        }
+      }
+
+      const existingReceivable = Number(investment.receivableAmount || 0)
+
+      const receivableAmountValue =
+        user.role === 'PARTNER'
+          ? (partnerCanonicalProfit !== null && partnerCanonicalProfit > 0
+              ? Math.round(partnerCanonicalProfit * 100) / 100
+              : existingReceivable > 0
+                ? Math.round(existingReceivable * 100) / 100
+                : Math.round(fallbackProfit * 100) / 100)
+          : existingReceivable > 0
+            ? Math.round(existingReceivable * 100) / 100
+            : Math.round(fallbackProfit * 100) / 100
 
       console.log('REOPEN INVESTMENT UPDATE DATA:', {
         principalAmount: principalAmountValue,
