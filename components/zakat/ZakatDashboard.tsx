@@ -49,6 +49,20 @@ type SortDir = 'asc' | 'desc'
 type StatusFilter = 'all' | 'completed' | 'pending'
 type DueFilter = 'all' | 'due' | 'none'
 
+const sumUniqueBucketBalances = (rows: BucketRow[]) => {
+  const byBucket = new Map<string, number>()
+  for (const row of rows) {
+    const value = Number(row.balance) || 0
+    const prev = byBucket.get(row.bucketId) ?? 0
+    if (value > prev) byBucket.set(row.bucketId, value)
+  }
+  let total = 0
+  for (const value of byBucket.values()) {
+    total += value
+  }
+  return total
+}
+
 function SortArrow({ active, dir }: { active: boolean; dir: SortDir }) {
   return (
     <span className="inline-flex flex-col ml-1 -space-y-1 text-[10px] leading-none">
@@ -227,7 +241,7 @@ export function ZakatDashboard({
   }, [buckets, activeTab, statusFilter, dueFilter, sortKey, sortDir])
 
   const totalDue = filteredBuckets.reduce((sum, b) => sum + b.zakatDue, 0)
-  const totalBalance = filteredBuckets.reduce((sum, b) => sum + b.balance, 0)
+  const totalBalance = sumUniqueBucketBalances(filteredBuckets)
 
   const hijriSummaries = useMemo(() => {
     const map = new Map<number, { year: number; start: Date; endExclusive: Date; endInclusive: Date; due: number; total: number; rows: BucketRow[] }>()
@@ -607,7 +621,7 @@ export function ZakatDashboard({
                     const rows: React.ReactNode[] = []
                     for (const [groupName, groupRows] of entries) {
                       const isExpanded = expandedGroups.has(groupName)
-                      const gBalance = groupRows.reduce((s, r) => s + (Number(r.balance) || 0), 0)
+                      const gBalance = sumUniqueBucketBalances(groupRows)
                       const gIdle = groupRows.reduce((s, r) => s + (Number(r.idleBase) || 0), 0)
                       const gReceipts = groupRows.reduce((s, r) => s + (Number(r.receiptsTotal) || 0), 0)
                       const gZakat = groupRows.reduce((s, r) => s + (Number(r.zakatDue) || 0), 0)

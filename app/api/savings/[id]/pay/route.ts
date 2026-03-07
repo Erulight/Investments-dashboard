@@ -215,6 +215,7 @@ export async function POST(
             currency,
             // All savings contributions share one hawl anchor (first contribution/start date).
             haulStartDate: contributionHaulStart,
+            excludeFromZakat: true,
             balance: amount + reward,
             movements: {
               create: [
