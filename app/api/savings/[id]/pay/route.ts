@@ -311,11 +311,10 @@ export async function DELETE(
     }
 
     const isPostReceipt = existing?.postReceipt === true
+    const refundAmount = (Number(existing?.amount) || 0) + (Number(existing?.reward) || 0)
 
     if (isPostReceipt) {
       // Reverse: re-credit the cash that was withdrawn
-      const refundAmount = (Number(existing.amount) || 0) + (Number(existing.reward) || 0)
-      const currency = investment.account?.currency || 'SAR'
       const dueDate = addMonths(new Date(investment.startDate), monthIndex)
 
       await prisma.$transaction(async (tx: any) => {
@@ -349,11 +348,40 @@ export async function DELETE(
             where: { key: CASH_BALANCE_KEY },
             data: { value: (currentCash + refundAmount).toString() },
           })
+        } else {
+          await tx.systemSetting.create({
+            data: {
+              key: CASH_BALANCE_KEY,
+              value: Math.max(0, refundAmount).toString(),
+              description: 'Available cash balance for investments',
+            },
+          })
         }
       })
     } else {
-      // Normal: delete the cash bucket that was created
-      await prisma.cashBucket.delete({ where: { id: bucketId } })
+      // Normal: delete the contribution bucket and restore available cash
+      await prisma.$transaction(async (tx: any) => {
+        await tx.cashBucket.delete({ where: { id: bucketId } })
+
+        const setting = await tx.systemSetting.findUnique({ where: { key: CASH_BALANCE_KEY } })
+        const currentCash = setting ? Number(setting.value) : 0
+        const nextCash = currentCash + refundAmount
+
+        if (setting) {
+          await tx.systemSetting.update({
+            where: { key: CASH_BALANCE_KEY },
+            data: { value: nextCash.toString() },
+          })
+        } else {
+          await tx.systemSetting.create({
+            data: {
+              key: CASH_BALANCE_KEY,
+              value: Math.max(0, refundAmount).toString(),
+              description: 'Available cash balance for investments',
+            },
+          })
+        }
+      })
     }
 
     const nextPayments = { ...payments }
