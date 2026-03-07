@@ -617,14 +617,22 @@ export default async function ZakatPage() {
 
           const start = inv?.startDate instanceof Date ? inv.startDate : (inv?.startDate ? new Date(inv.startDate as any) : bucketStart)
           if (Number.isNaN(start.getTime())) return null
+          const movementType = typeof m?.type === 'string' ? m.type : ''
+          const isPrincipalReceiptMovement = movementType === 'WITHDRAW_PRINCIPAL' || movementType === 'ROLLBACK_PRINCIPAL'
+          const isProfitReceiptMovement = movementType === 'WITHDRAW_PROFIT'
           
           // RULE 3: For savings receipts, use bucket's haulStartDate (first contribution date)
-          // For other receipts, use investment start date
+          // For principal receipts, use bucketStart (original cash entry haul)
+          // For profit receipts, use investment start date for OWNER (Sukuk start)
           const eligibilityAnchor = (isCommissionBucket
             ? bucketStart
             : (isSavingsReceipt
               ? bucketStart  // Hawl starts from first contribution date
-              : (user.role === 'PARTNER' ? bucketStart : start)))
+              : (isPrincipalReceiptMovement
+                ? bucketStart
+                : (isProfitReceiptMovement
+                  ? (user.role === 'PARTNER' ? bucketStart : start)
+                  : (user.role === 'PARTNER' ? bucketStart : start)))))
           const eligibilityStart = startOfDay(eligibilityAnchor)
           const duration = diffDaysFloor(eligibilityStart, day)
           
