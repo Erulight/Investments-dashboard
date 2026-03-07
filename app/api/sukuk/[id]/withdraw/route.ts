@@ -106,18 +106,26 @@ export async function POST(
       }
 
       if (source === 'PROFIT') {
-        const receivable = Number(investment.receivableAmount || 0)
-        const received = Number(investment.totalReceived || 0)
-        const remainingProfit = Math.max(0, (Number.isFinite(receivable) ? receivable : 0) - (Number.isFinite(received) ? received : 0))
+        const receivableRaw = Number(investment.receivableAmount || 0)
+        const receivedRaw = Number(investment.totalReceived || 0)
 
-        if (receivable <= 0.000001) {
+        const receivable = Number.isFinite(receivableRaw) ? receivableRaw : 0
+        const received = Number.isFinite(receivedRaw) ? receivedRaw : 0
+
+        // Work in cents to avoid floating-point rounding issues
+        const receivableCents = Math.round(receivable * 100)
+        const receivedCents = Math.round(received * 100)
+        const remainingProfitCents = Math.max(0, receivableCents - receivedCents)
+        const amountCents = Math.round(amount * 100)
+
+        if (receivableCents <= 0) {
           return NextResponse.json(
             { error: 'Profit receivable is not set for this deal' },
             { status: 400 },
           )
         }
 
-        if (amount > remainingProfit + 0.000001) {
+        if (amountCents > remainingProfitCents) {
           return NextResponse.json(
             { error: 'Amount exceeds remaining profit receivable' },
             { status: 400 },
