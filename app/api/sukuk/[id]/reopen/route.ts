@@ -248,14 +248,12 @@ export async function POST(
           }
         })
 
-        // Reverse the cash balance
-        const cashSetting = await tx.systemSetting.findUnique({
-          where: { key: 'CASH_BALANCE' }
-        })
-        const currentCash = Number(cashSetting?.value || 0)
+        // Reset cash balance to 0 (deal is now pending/active again)
+        // When deal was closed, cash increased by principal + profit
+        // When reopened, cash should go back to 0 as if deal is active
         await tx.systemSetting.update({
           where: { key: 'CASH_BALANCE' },
-          data: { value: String(currentCash - totalWithdrawn) }
+          data: { value: '0' }
         })
 
         // Also delete cash buckets created from this withdrawal
