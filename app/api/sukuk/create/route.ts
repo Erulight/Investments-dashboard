@@ -16,6 +16,11 @@ export async function POST(req: NextRequest) {
     
     const body = await req.json()
     
+    // DEBUG: Log incoming request body
+    console.log('[SUKUK_CREATE] Received body:', JSON.stringify(body, null, 2))
+    console.log('[SUKUK_CREATE] principalAmount type:', typeof body.principalAmount)
+    console.log('[SUKUK_CREATE] principalAmount value:', body.principalAmount)
+    
     // Validate input
     const validationResult = createSukukSchema.safeParse(body)
     if (!validationResult.success) {
@@ -177,6 +182,7 @@ export async function POST(req: NextRequest) {
       })
 
       // Create the investment
+      console.log('[SUKUK_CREATE] Creating investment with principalAmount:', data.principalAmount)
       const newSukuk = await tx.investment.create({
         data: {
           accountId: data.accountId,
@@ -195,6 +201,7 @@ export async function POST(req: NextRequest) {
           metadata: data.metadata,
         },
       })
+      console.log('[SUKUK_CREATE] Investment created with ID:', newSukuk.id, 'principalAmount:', newSukuk.principalAmount)
 
       await withdrawFromBuckets(tx, {
         amount: data.principalAmount,
