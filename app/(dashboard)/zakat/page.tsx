@@ -280,6 +280,77 @@ export default async function ZakatPage() {
         data: { excludeFromZakat: true },
       })
     }
+
+    const savingsToSukukBuckets = await prisma.cashBucket.findMany({
+      where: {
+        label: { startsWith: 'Savings Receipt •' },
+        movements: {
+          some: {
+            type: 'INVEST_OUT',
+            investment: { account: { type: 'SUKUK' } },
+          },
+        },
+      },
+      select: {
+        haulStartDate: true,
+        movements: {
+          where: {
+            type: 'INVEST_OUT',
+            investment: { account: { type: 'SUKUK' } },
+          },
+          select: { investmentId: true },
+        },
+      },
+    })
+
+    const inheritedSavingsHaulByInvestment = new Map<string, Date>()
+    for (const bucket of savingsToSukukBuckets) {
+      const anchor = toDate(bucket.haulStartDate)
+      if (!anchor) continue
+      const anchorDay = new Date(anchor.getFullYear(), anchor.getMonth(), anchor.getDate())
+      for (const m of bucket.movements) {
+        const investmentId = typeof m?.investmentId === 'string' ? m.investmentId : null
+        if (!investmentId) continue
+        const existing = inheritedSavingsHaulByInvestment.get(investmentId)
+        if (!existing || anchorDay.getTime() < existing.getTime()) {
+          inheritedSavingsHaulByInvestment.set(investmentId, anchorDay)
+        }
+      }
+    }
+
+    for (const [investmentId, inheritedDate] of inheritedSavingsHaulByInvestment.entries()) {
+      const inheritedIso = inheritedDate.toISOString().split('T')[0]
+      const inv = await prisma.investment.findUnique({
+        where: { id: investmentId },
+        select: { metadata: true },
+      })
+      const existingMeta = parseMetadata(inv?.metadata) || {}
+      if (existingMeta?.savingsHaulStartDate !== inheritedIso) {
+        await prisma.investment.update({
+          where: { id: investmentId },
+          data: {
+            metadata: JSON.stringify({
+              ...existingMeta,
+              savingsHaulStartDate: inheritedIso,
+            }),
+          },
+        })
+      }
+
+      await prisma.cashBucket.updateMany({
+        where: {
+          personId: null,
+          label: { startsWith: 'Profit •' },
+          movements: {
+            some: {
+              investmentId,
+              type: 'CASH_IN',
+            },
+          },
+        },
+        data: { haulStartDate: inheritedDate },
+      })
+    }
   }
 
   const buckets = await prisma.cashBucket.findMany({
@@ -527,6 +598,23 @@ export default async function ZakatPage() {
     : []
   const investmentMap = new Map<string, any>(investments.map((inv: any) => [inv.id, inv]))
 
+  const cashInvestTransactions = await prisma.transaction.findMany({
+    where: {
+      type: 'CASH_INVEST',
+      ...(user.role === 'OWNER' ? { personId: null } : { personId: user.personId }),
+    },
+    select: { investmentId: true, amount: true, date: true },
+  })
+
+  const cashInvestByInvestmentId = new Map<string, Array<{ amount: number; date: Date }>>()
+  for (const tx of cashInvestTransactions) {
+    const investmentId = typeof tx?.investmentId === 'string' ? tx.investmentId : null
+    if (!investmentId) continue
+    const list = cashInvestByInvestmentId.get(investmentId) || []
+    list.push({ amount: Math.abs(Number(tx.amount) || 0), date: tx.date })
+    cashInvestByInvestmentId.set(investmentId, list)
+  }
+
   const startOfDay = (d: Date) => new Date(d.getFullYear(), d.getMonth(), d.getDate())
   const isoDay = (d: Date) => startOfDay(d).toISOString().split('T')[0]
   const movementDay = (m: any) => {
@@ -636,6 +724,52 @@ export default async function ZakatPage() {
 
         const totalReceived = Math.abs(Number(cashInMovement.amount) || 0)
         if (totalReceived <= 0) return []
+
+        const receiptDay = startOfDay(receiptDate)
+        const investedSukukInvestmentIds = new Set<string>()
+        const netSukukInvestedAfterReceipt = movements.reduce((sum: number, m: any) => {
+          const movementType = typeof m?.type === 'string' ? m.type : ''
+          if (
+            movementType !== 'INVEST_OUT' &&
+            movementType !== 'WITHDRAW_PRINCIPAL' &&
+            movementType !== 'ROLLBACK_PRINCIPAL'
+          ) {
+            return sum
+          }
+
+          const movementDate = movementDay(m)
+          if (!movementDate || movementDate.getTime() < receiptDay.getTime()) return sum
+
+          const invId = typeof m?.investmentId === 'string' ? m.investmentId : null
+          const inv = invId ? investmentMap.get(invId) : null
+          const invType = inv?.account?.type
+          if (!invId || invType !== 'SUKUK') return sum
+
+          const amt = Math.abs(Number(m?.amount) || 0)
+          if (amt <= 0) return sum
+
+          if (movementType === 'INVEST_OUT') {
+            investedSukukInvestmentIds.add(invId)
+            return sum + amt
+          }
+          return sum - amt
+        }, 0)
+
+        const hasMatchingCashInvest = Array.from(investedSukukInvestmentIds).some((invId) => {
+          const txs = cashInvestByInvestmentId.get(invId) || []
+          return txs.some((tx) => {
+            const txDate = tx.date instanceof Date ? tx.date : new Date(tx.date as any)
+            if (Number.isNaN(txDate.getTime())) return false
+            if (txDate.getTime() < receiptDay.getTime()) return false
+            return Math.abs(tx.amount - totalReceived) < 0.01
+          })
+        })
+
+        const fullyInvestedIntoSukuk =
+          hasMatchingCashInvest && netSukukInvestedAfterReceipt >= totalReceived - 0.01
+        if (fullyInvestedIntoSukuk) {
+          return []
+        }
 
         const haulStart = startOfDay(bucketStart)
         const currentBalance = Math.max(0, Number(bucket.balance) || 0)
@@ -864,6 +998,12 @@ export default async function ZakatPage() {
 
           const start = inv?.startDate instanceof Date ? inv.startDate : (inv?.startDate ? new Date(inv.startDate as any) : bucketStart)
           if (Number.isNaN(start.getTime())) return null
+          const invMetadata = parseMetadata(inv?.metadata)
+          const inheritedSavingsHaulStart = toDate(invMetadata?.savingsHaulStartDate)
+          const ownerSukukAnchor =
+            inheritedSavingsHaulStart && !Number.isNaN(inheritedSavingsHaulStart.getTime())
+              ? inheritedSavingsHaulStart
+              : start
           const movementType = typeof m?.type === 'string' ? m.type : ''
           const isPrincipalReceiptMovement = movementType === 'WITHDRAW_PRINCIPAL' || movementType === 'ROLLBACK_PRINCIPAL'
           const isProfitReceiptMovement = movementType === 'WITHDRAW_PROFIT'
@@ -875,8 +1015,8 @@ export default async function ZakatPage() {
             : (isPrincipalReceiptMovement
               ? bucketStart
               : (isProfitReceiptMovement
-                ? (user.role === 'PARTNER' ? bucketStart : start)
-                : (user.role === 'PARTNER' ? bucketStart : start))))
+                ? (user.role === 'PARTNER' ? bucketStart : ownerSukukAnchor)
+                : (user.role === 'PARTNER' ? bucketStart : ownerSukukAnchor))))
           const eligibilityStart = startOfDay(eligibilityAnchor)
           const duration = diffDaysFloor(eligibilityStart, day)
 

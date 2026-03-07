@@ -7,6 +7,18 @@ import { logAudit } from '@/lib/audit'
 import { withdrawFromBuckets } from '@/lib/cashBuckets'
 import { parseDateInput } from '@/lib/date'
 
+const parseMetadata = (value: unknown) => {
+  if (!value) return {}
+  if (typeof value === 'object') return value as Record<string, unknown>
+  if (typeof value !== 'string') return {}
+  try {
+    const parsed = JSON.parse(value)
+    return parsed && typeof parsed === 'object' ? parsed as Record<string, unknown> : {}
+  } catch {
+    return {}
+  }
+}
+
 export async function POST(req: NextRequest) {
   try {
     const user = await requireModuleAccess('sukuk')
@@ -215,6 +227,46 @@ export async function POST(req: NextRequest) {
         personId: user.role === 'OWNER' ? null : user.personId,
       })
 
+      const fundingAllocations = await tx.investmentBucketAllocation.findMany({
+        where: {
+          investmentId: newSukuk.id,
+          principalAllocated: { gt: 0 },
+        },
+        include: {
+          cashBucket: {
+            select: {
+              label: true,
+              haulStartDate: true,
+            },
+          },
+        },
+      })
+
+      const inheritedSavingsHaulStart = fundingAllocations
+        .map((alloc: any) => {
+          const label = typeof alloc?.cashBucket?.label === 'string' ? alloc.cashBucket.label : ''
+          if (!label.startsWith('Savings Receipt •')) return null
+          const d = alloc?.cashBucket?.haulStartDate ? new Date(alloc.cashBucket.haulStartDate) : null
+          if (!d || Number.isNaN(d.getTime())) return null
+          return new Date(d.getFullYear(), d.getMonth(), d.getDate())
+        })
+        .filter((d: Date | null): d is Date => Boolean(d))
+        .sort((a: Date, b: Date) => a.getTime() - b.getTime())[0] || null
+
+      if (inheritedSavingsHaulStart) {
+        const existingMeta = parseMetadata(newSukuk.metadata)
+        const inheritedIso = inheritedSavingsHaulStart.toISOString().split('T')[0]
+        await tx.investment.update({
+          where: { id: newSukuk.id },
+          data: {
+            metadata: JSON.stringify({
+              ...existingMeta,
+              savingsHaulStartDate: inheritedIso,
+            }),
+          },
+        })
+      }
+
       await tx.transaction.create({
         data: {
           accountId: cashAccount.id,
@@ -243,7 +295,7 @@ export async function POST(req: NextRequest) {
         })
       } else if (data.participants && data.participants.length > 0) {
         await tx.dealParticipant.createMany({
-          data: data.participants.map((p) => ({
+          data: data.participants.map((p: any) => ({
             investmentId: newSukuk.id,
             personId: p.personId,
             investedAmount: p.investedAmount,

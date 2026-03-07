@@ -12,6 +12,17 @@ type MovementType =
 
 const DEFAULT_CURRENCY = 'SAR'
 
+const parseMetadata = (value: unknown) => {
+  if (!value) return null
+  if (typeof value === 'object') return value as any
+  if (typeof value !== 'string') return null
+  try {
+    return JSON.parse(value)
+  } catch {
+    return null
+  }
+}
+
 export const createCashBucket = async (
   tx: Prisma.TransactionClient,
   {
@@ -487,7 +498,7 @@ export const creditBucketsForReceipt = async (
 
     const inv = await tx.investment.findUnique({
       where: { id: investmentId },
-      select: { name: true, startDate: true, account: { select: { type: true } } },
+      select: { name: true, startDate: true, metadata: true, account: { select: { type: true } } },
     })
 
     const investmentName = inv?.name || investmentId
@@ -532,22 +543,36 @@ export const creditBucketsForReceipt = async (
     if (explicitHaulStart) {
       haulStartDate = explicitHaulStart
     } else {
-      // For profit, use the investment start date (when profit started being generated)
-      const investment = await tx.investment.findUnique({
-        where: { id: investmentId },
-        select: { startDate: true, account: { select: { type: true } } },
-      })
+      const metadata = parseMetadata(inv?.metadata)
+      const inheritedSavings = metadata?.savingsHaulStartDate
+      const inheritedSavingsDate = inheritedSavings
+        ? new Date(inheritedSavings)
+        : null
 
-      if (investment?.startDate) {
-        const startDate = investment.startDate instanceof Date 
-          ? investment.startDate 
-          : new Date(investment.startDate as any)
-        
-        if (!Number.isNaN(startDate.getTime())) {
-          haulStartDate = new Date(startDate.getFullYear(), startDate.getMonth(), startDate.getDate())
+      if (inheritedSavingsDate && !Number.isNaN(inheritedSavingsDate.getTime())) {
+        haulStartDate = new Date(
+          inheritedSavingsDate.getFullYear(),
+          inheritedSavingsDate.getMonth(),
+          inheritedSavingsDate.getDate(),
+        )
+      } else {
+        // For profit, use the investment start date (when profit started being generated)
+        const investment = await tx.investment.findUnique({
+          where: { id: investmentId },
+          select: { startDate: true, account: { select: { type: true } } },
+        })
+
+        if (investment?.startDate) {
+          const startDate = investment.startDate instanceof Date
+            ? investment.startDate
+            : new Date(investment.startDate as any)
+
+          if (!Number.isNaN(startDate.getTime())) {
+            haulStartDate = new Date(startDate.getFullYear(), startDate.getMonth(), startDate.getDate())
+          }
         }
+        // Otherwise use receipt date (already set above)
       }
-      // Otherwise use receipt date (already set above)
     }
 
     await createCashBucket(tx, {
