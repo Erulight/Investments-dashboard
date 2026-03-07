@@ -229,8 +229,46 @@ export async function POST(
         await tx.transaction.deleteMany({ where: { id: { in: transactionIds } } })
       }
 
-      // Ledger note: show cash re-invested back into the deal (OWNER only)
-      if (user.role === 'OWNER' && principalReceipt > 0.000001) {
+      // CASH REVERSAL: When deal is reopened, reverse all withdrawal transactions
+      const withdrawals = await tx.transaction.findMany({
+        where: {
+          investmentId: id,
+          type: { in: ['WITHDRAW_PROFIT', 'WITHDRAW_PRINCIPAL'] }
+        }
+      })
+
+      const totalWithdrawn = withdrawals.reduce((sum: number, t: any) => sum + t.amount, 0)
+
+      if (totalWithdrawn > 0) {
+        // Delete the withdrawal transactions
+        await tx.transaction.deleteMany({
+          where: {
+            investmentId: id,
+            type: { in: ['WITHDRAW_PROFIT', 'WITHDRAW_PRINCIPAL'] }
+          }
+        })
+
+        // Reverse the cash balance
+        const cashSetting = await tx.systemSetting.findUnique({
+          where: { key: 'CASH_BALANCE' }
+        })
+        const currentCash = Number(cashSetting?.value || 0)
+        await tx.systemSetting.update({
+          where: { key: 'CASH_BALANCE' },
+          data: { value: String(currentCash - totalWithdrawn) }
+        })
+
+        // Also delete cash buckets created from this withdrawal
+        await tx.cashBucket.deleteMany({
+          where: {
+            label: { contains: investment.name },
+            personId: null
+          }
+        })
+      }
+
+      // Create CASH_INVEST transaction to show money went back into the deal
+      if (user.role === 'OWNER' && investment.principalAmount > 0) {
         const cashAccount =
           (await tx.account.findFirst({ where: { type: 'CASH', isActive: true } })) ??
           (await tx.account.create({
@@ -242,27 +280,17 @@ export async function POST(
             },
           }))
 
-        const existingInvestTx = await tx.transaction.findFirst({
-          where: {
+        await tx.transaction.create({
+          data: {
+            accountId: cashAccount.id,
             investmentId: id,
+            personId: null,
             type: 'CASH_INVEST',
-            amount: -principalReceipt,
-          },
+            amount: -Math.abs(investment.principalAmount),
+            date: new Date(),
+            description: `Deal reopened: ${investment.name}`,
+          }
         })
-
-        if (!existingInvestTx) {
-          await tx.transaction.create({
-            data: {
-              accountId: cashAccount.id,
-              investmentId: id,
-              personId: null,
-              type: 'CASH_INVEST',
-              amount: -principalReceipt,
-              date: new Date(),
-              description: `Deal reopened: ${investment.name}`,
-            },
-          })
-        }
       }
 
       // For partners, restore their deal participant and allocation from canonical SELL_TO_PARTNER metadata
