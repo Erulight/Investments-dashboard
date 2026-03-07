@@ -267,31 +267,6 @@ export async function POST(
         })
       }
 
-      // Create CASH_INVEST transaction to show money went back into the deal
-      if (user.role === 'OWNER' && investment.principalAmount > 0) {
-        const cashAccount =
-          (await tx.account.findFirst({ where: { type: 'CASH', isActive: true } })) ??
-          (await tx.account.create({
-            data: {
-              name: 'Cash Balance',
-              type: 'CASH',
-              currency: investment.account?.currency || 'SAR',
-              description: 'Cash ledger account',
-            },
-          }))
-
-        await tx.transaction.create({
-          data: {
-            accountId: cashAccount.id,
-            investmentId: id,
-            personId: null,
-            type: 'CASH_INVEST',
-            amount: -Math.abs(investment.principalAmount),
-            date: new Date(),
-            description: `Deal reopened: ${investment.name}`,
-          }
-        })
-      }
 
       // For partners, restore their deal participant and allocation from canonical SELL_TO_PARTNER metadata
       if (user.role === 'PARTNER' && user.personId) {
