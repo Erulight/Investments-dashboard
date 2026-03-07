@@ -475,16 +475,38 @@ export const creditBucketsForReceipt = async (
       return existingProfitBucket
     }
 
-    const isSukuk = inv?.account?.type === 'SUKUK'
-    const startDate = inv?.startDate instanceof Date ? inv.startDate : new Date(inv?.startDate as any)
-    const sukukHaulStart = !Number.isNaN(startDate.getTime())
-      ? new Date(startDate.getFullYear(), startDate.getMonth(), startDate.getDate())
-      : date
+    // Determine haul start date for profit bucket
+    // Priority: 1) Explicit param, 2) Original cash bucket haul date, 3) Receipt date
+    let haulStartDate = date
+
     const explicit = profitHaulStartDate instanceof Date ? profitHaulStartDate : profitHaulStartDate ? new Date(profitHaulStartDate as any) : null
     const explicitHaulStart = explicit && !Number.isNaN(explicit.getTime())
       ? new Date(explicit.getFullYear(), explicit.getMonth(), explicit.getDate())
       : null
-    const haulStartDate = explicitHaulStart ?? (isSukuk ? sukukHaulStart : date)
+
+    if (explicitHaulStart) {
+      haulStartDate = explicitHaulStart
+    } else {
+      // Try to find original haul date from the cash buckets that funded this investment
+      const investmentMovements = await tx.cashBucketMovement.findMany({
+        where: {
+          investmentId,
+          type: 'INVEST_OUT',
+        },
+        include: {
+          cashBucket: {
+            select: { haulStartDate: true },
+          },
+        },
+        orderBy: { date: 'asc' },
+        take: 1,
+      })
+
+      if (investmentMovements.length > 0 && investmentMovements[0].cashBucket) {
+        haulStartDate = investmentMovements[0].cashBucket.haulStartDate
+      }
+      // Otherwise use receipt date (already set above)
+    }
 
     await createCashBucket(tx, {
       amount: profit,
