@@ -142,7 +142,7 @@ export async function POST(req: NextRequest) {
         data: {
           accountId: cashAccount.id,
           investmentId: null,
-          personId: user.personId || null,
+          personId: user.role === 'OWNER' ? null : (user.personId || null),
           type: 'ZAKAT_PAID',
           amount: -amount,
           date,

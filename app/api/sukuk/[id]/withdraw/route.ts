@@ -351,7 +351,7 @@ export async function POST(
         data: {
           accountId: cashAccount.id,
           investmentId: investment.id,
-          personId: user.personId || null,
+          personId: user.role === 'OWNER' ? null : (user.personId || null),
           type: source === 'PROFIT' ? 'WITHDRAW_PROFIT' : 'WITHDRAW_PRINCIPAL',
           amount: Math.abs(amount),
           date,

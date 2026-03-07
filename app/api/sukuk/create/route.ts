@@ -219,7 +219,7 @@ export async function POST(req: NextRequest) {
         data: {
           accountId: cashAccount.id,
           investmentId: newSukuk.id,
-          personId: user.role === 'OWNER' ? (user.personId || null) : user.personId,
+          personId: user.role === 'OWNER' ? null : (user.personId || null),
           type: 'CASH_INVEST',
           amount: -Math.abs(data.principalAmount),
           date: startDate,

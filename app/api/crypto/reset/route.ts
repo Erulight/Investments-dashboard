@@ -127,7 +127,7 @@ export async function POST(request: Request) {
           data: {
             accountId: cashAccount.id,
             investmentId: cryptoId,
-            personId: user.personId || null,
+            personId: user.role === 'OWNER' ? null : (user.personId || null),
             type: 'ROLLBACK_PRINCIPAL',
             amount: refundTotal,
             date: new Date(),

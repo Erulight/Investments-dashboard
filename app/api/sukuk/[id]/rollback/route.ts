@@ -164,7 +164,7 @@ export async function POST(
         data: {
           accountId: cashAccount.id,
           investmentId: investment.id,
-          personId: user.personId || null,
+          personId: user.role === 'OWNER' ? null : (user.personId || null),
           type: 'ROLLBACK_PRINCIPAL',
           amount: Math.abs(remainingPrincipal),
           date,

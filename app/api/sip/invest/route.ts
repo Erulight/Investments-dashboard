@@ -108,7 +108,7 @@ export async function POST(request: Request) {
         data: {
           accountId: cashAccount.id,
           investmentId: sipId,
-          personId: user.personId || null,
+          personId: user.role === 'OWNER' ? null : (user.personId || null),
           type: 'INVEST_OUT',
           amount: -amount,
           date: investmentDate,
