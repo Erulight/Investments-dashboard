@@ -267,6 +267,14 @@ export const creditBucketsForReceipt = async (
               },
             }),
       } as any,
+      include: {
+        cashBucket: {
+          select: {
+            id: true,
+            haulStartDate: true,
+          },
+        },
+      },
     })
 
     const principalFocused = reductionAmount > 0
@@ -355,21 +363,47 @@ export const creditBucketsForReceipt = async (
       const cashShare = creditAmount * ratio
       const principalShare = cappedReduction * ratio
 
-      await tx.cashBucket.update({
+      // Check if the original bucket still exists and has the same haul date
+      const originalBucket = await tx.cashBucket.findUnique({
         where: { id: alloc.cashBucketId },
-        data: { balance: { increment: cashShare } },
+        select: { id: true, haulStartDate: true },
       })
 
-      await tx.cashBucketMovement.create({
-        data: {
-          cashBucketId: alloc.cashBucketId,
-          investmentId,
+      if (originalBucket) {
+        // Credit back to the original bucket to preserve haul date
+        await tx.cashBucket.update({
+          where: { id: alloc.cashBucketId },
+          data: { balance: { increment: cashShare } },
+        })
+
+        await tx.cashBucketMovement.create({
+          data: {
+            cashBucketId: alloc.cashBucketId,
+            investmentId,
+            amount: cashShare,
+            type,
+            date,
+            notes: notes || null,
+          },
+        })
+      } else {
+        // Original bucket was deleted, create new one with preserved haul date
+        const haulStartDate = (alloc as any).cashBucket?.haulStartDate || date
+        const newBucket = await createCashBucket(tx, {
           amount: cashShare,
-          type,
+          haulStartDate,
           date,
           notes: notes || null,
-        },
-      })
+          investmentId,
+          type,
+          personId: personId === undefined ? undefined : personId,
+        })
+
+        await tx.investmentBucketAllocation.update({
+          where: { id: alloc.id },
+          data: { cashBucketId: newBucket.id },
+        })
+      }
 
       if (principalShare > 0) {
         await tx.investmentBucketAllocation.update({
