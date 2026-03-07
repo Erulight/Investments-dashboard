@@ -212,21 +212,32 @@ export default async function ZakatPage() {
 
   const buckets = await prisma.cashBucket.findMany({
     where: {
-      excludeFromZakat: false,
-      ...(user.role === 'OWNER'
-        ? { 
-            OR: [
-              { personId: null },                    // Original owner buckets
-              { personId: user.personId || null }    // Commission buckets with owner's personId
+      AND: [
+        {
+          OR: [
+            { excludeFromZakat: false },
+            { label: { startsWith: 'Savings Receipt •' } },
+          ],
+        },
+        ...(user.role === 'OWNER'
+          ? [
+              {
+                OR: [
+                  { personId: null },                    // Original owner buckets
+                  { personId: user.personId || null },   // Commission buckets with owner's personId
+                ],
+              },
             ]
-          }
-        : {
-            personId: user.personId,
-            NOT: [
-              { label: 'Partner Commission' },
-              { label: { startsWith: 'Debt •' } },
-            ],
-          }),
+          : [
+              {
+                personId: user.personId,
+                NOT: [
+                  { label: 'Partner Commission' },
+                  { label: { startsWith: 'Debt •' } },
+                ],
+              },
+            ]),
+      ],
     },
     include: {
       movements: {

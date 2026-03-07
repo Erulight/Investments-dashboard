@@ -95,14 +95,14 @@ export async function POST(
 
       // NEW RULE 1: Create ONE receipt bucket (not per-month)
       // Hawl starts from FIRST contribution date, not receipt date
-      // Always exclude from zakat - savings zakat is handled separately in zakat page
+      // Keep zakat-enabled so Zakat page can run the dedicated savings receipt logic.
       const receiptBucket = await tx.cashBucket.create({
         data: {
           label: `Savings Receipt • ${investment.name}`,
           currency,
           balance: receiveAmount,
           haulStartDate: firstContributionDate,
-          excludeFromZakat: true, // Always exclude - zakat page handles savings zakat separately
+          excludeFromZakat: false,
           personId: null,
           movements: {
             create: {
