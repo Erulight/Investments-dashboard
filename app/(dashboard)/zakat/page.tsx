@@ -404,9 +404,11 @@ export default async function ZakatPage() {
       const inheritedIso = inheritedDate.toISOString().split('T')[0]
       const inv = await prisma.investment.findUnique({
         where: { id: investmentId },
-        select: { metadata: true },
+        select: { metadata: true, startDate: true },
       })
       const existingMeta = parseMetadata(inv?.metadata) || {}
+
+      // Store savingsHaulStartDate (ROSCA first contribution date) in Sukuk metadata
       if (existingMeta?.savingsHaulStartDate !== inheritedIso) {
         await prisma.investment.update({
           where: { id: investmentId },
@@ -419,19 +421,41 @@ export default async function ZakatPage() {
         })
       }
 
+      // PRINCIPAL bucket → use ROSCA first contribution date as haul start
       await prisma.cashBucket.updateMany({
         where: {
           personId: null,
-          label: { startsWith: 'Profit •' },
+          label: { startsWith: 'Sukuk Principal •' },
           movements: {
             some: {
               investmentId,
-              type: 'CASH_IN',
             },
           },
         },
         data: { haulStartDate: inheritedDate },
       })
+
+      // PROFIT bucket → use investment start date (NOT ROSCA date)
+      const invStartDate = inv?.startDate
+        ? (inv.startDate instanceof Date ? inv.startDate : new Date(inv.startDate as any))
+        : null
+
+      if (invStartDate && !Number.isNaN(invStartDate.getTime())) {
+        const invStartDay = new Date(invStartDate.getFullYear(), invStartDate.getMonth(), invStartDate.getDate())
+        await prisma.cashBucket.updateMany({
+          where: {
+            personId: null,
+            label: { startsWith: 'Profit •' },
+            movements: {
+              some: {
+                investmentId,
+                type: 'CASH_IN',
+              },
+            },
+          },
+          data: { haulStartDate: invStartDay },
+        })
+      }
     }
   }
 
@@ -847,15 +871,18 @@ export default async function ZakatPage() {
           })
         })
 
-        const hasMatchingCashInvestByAmount = cashInvestTransactions.some((tx: any) => {
+        // Check if invested on the same day as receipt (money went straight into Sukuk)
+        const hasMatchingCashInvestSameDay = cashInvestTransactions.some((tx: any) => {
           const txDate = tx?.date instanceof Date ? tx.date : new Date(tx?.date)
           if (Number.isNaN(txDate.getTime())) return false
-          if (txDate.getTime() < receiptDay.getTime()) return false
+          const txDay = startOfDay(txDate)
+          // Must be same day as receipt (not just any future date)
+          if (txDay.getTime() !== receiptDay.getTime()) return false
           return Math.abs(Math.abs(Number(tx?.amount) || 0) - totalReceived) < 0.01
         })
 
         const hasMatchingCashInvest =
-          hasMatchingCashInvestByLinkedInvestment || hasMatchingCashInvestByAmount
+          hasMatchingCashInvestByLinkedInvestment || hasMatchingCashInvestSameDay
 
         const fullyInvestedIntoSukuk =
           hasMatchingCashInvest &&

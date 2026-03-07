@@ -283,47 +283,59 @@ export const creditBucketsForReceipt = async (
   const creditToAllocatedBuckets = async (creditAmount: number, reductionAmount: number) => {
     if (creditAmount <= 0) return
 
-    // Get original haul date by looking at ALL cash bucket movements for this investment
-    // Find the earliest INVEST_OUT movement to trace back to original cash
+    // For principal withdrawals from ROSCA-funded Sukuk, use savingsHaulStartDate
+    // For profit withdrawals, use investment startDate
+    // Otherwise trace back via INVEST_OUT movements
     let originalHaulDate: Date | null = null
-    
-    const allInvestMovements = await tx.cashBucketMovement.findMany({
-      where: {
-        investmentId,
-        type: 'INVEST_OUT',
-      },
-      select: {
-        cashBucketId: true,
-        date: true,
-      },
-      orderBy: { date: 'asc' },
+
+    const invMeta = await tx.investment.findUnique({
+      where: { id: investmentId },
+      select: { metadata: true, startDate: true },
     })
 
-    if (allInvestMovements.length > 0) {
-      // Get the bucket ID from the earliest movement
-      const earliestBucketId = allInvestMovements[0].cashBucketId
-      
-      // Try to find the bucket (might still exist)
-      const originalBucket = await tx.cashBucket.findUnique({
-        where: { id: earliestBucketId },
-        select: { haulStartDate: true },
+    const isPrincipalReceipt = type === 'WITHDRAW_PRINCIPAL' || type === 'ROLLBACK_PRINCIPAL'
+
+    if (isPrincipalReceipt) {
+      // Principal: use ROSCA first contribution date if available
+      const meta = parseMetadata(invMeta?.metadata)
+      const savingsDate = meta?.savingsHaulStartDate ? new Date(meta.savingsHaulStartDate) : null
+      if (savingsDate && !Number.isNaN(savingsDate.getTime())) {
+        originalHaulDate = new Date(savingsDate.getFullYear(), savingsDate.getMonth(), savingsDate.getDate())
+      }
+    }
+
+    if (!originalHaulDate) {
+      // Fallback: trace back via INVEST_OUT movements
+      const allInvestMovements = await tx.cashBucketMovement.findMany({
+        where: {
+          investmentId,
+          type: 'INVEST_OUT',
+        },
+        select: {
+          cashBucketId: true,
+          date: true,
+        },
+        orderBy: { date: 'asc' },
       })
 
-      if (originalBucket) {
-        originalHaulDate = originalBucket.haulStartDate
-      } else {
-        // Bucket was deleted - find the earliest CASH_IN movement for this bucket
-        const cashInMovement = await tx.cashBucketMovement.findFirst({
-          where: {
-            cashBucketId: earliestBucketId,
-            type: 'CASH_IN',
-          },
-          select: { date: true },
-          orderBy: { date: 'asc' },
+      if (allInvestMovements.length > 0) {
+        const earliestBucketId = allInvestMovements[0].cashBucketId
+        const originalBucket = await tx.cashBucket.findUnique({
+          where: { id: earliestBucketId },
+          select: { haulStartDate: true },
         })
 
-        if (cashInMovement) {
-          originalHaulDate = cashInMovement.date
+        if (originalBucket) {
+          originalHaulDate = originalBucket.haulStartDate
+        } else {
+          const cashInMovement = await tx.cashBucketMovement.findFirst({
+            where: { cashBucketId: earliestBucketId, type: 'CASH_IN' },
+            select: { date: true },
+            orderBy: { date: 'asc' },
+          })
+          if (cashInMovement) {
+            originalHaulDate = cashInMovement.date
+          }
         }
       }
     }
@@ -543,36 +555,18 @@ export const creditBucketsForReceipt = async (
     if (explicitHaulStart) {
       haulStartDate = explicitHaulStart
     } else {
-      const metadata = parseMetadata(inv?.metadata)
-      const inheritedSavings = metadata?.savingsHaulStartDate
-      const inheritedSavingsDate = inheritedSavings
-        ? new Date(inheritedSavings)
-        : null
+      // For profit bucket, always use investment start date (when profit started accruing)
+      // savingsHaulStartDate is only for the PRINCIPAL bucket, not profit
+      if (inv?.startDate) {
+        const startDate = inv.startDate instanceof Date
+          ? inv.startDate
+          : new Date(inv.startDate as any)
 
-      if (inheritedSavingsDate && !Number.isNaN(inheritedSavingsDate.getTime())) {
-        haulStartDate = new Date(
-          inheritedSavingsDate.getFullYear(),
-          inheritedSavingsDate.getMonth(),
-          inheritedSavingsDate.getDate(),
-        )
-      } else {
-        // For profit, use the investment start date (when profit started being generated)
-        const investment = await tx.investment.findUnique({
-          where: { id: investmentId },
-          select: { startDate: true, account: { select: { type: true } } },
-        })
-
-        if (investment?.startDate) {
-          const startDate = investment.startDate instanceof Date
-            ? investment.startDate
-            : new Date(investment.startDate as any)
-
-          if (!Number.isNaN(startDate.getTime())) {
-            haulStartDate = new Date(startDate.getFullYear(), startDate.getMonth(), startDate.getDate())
-          }
+        if (!Number.isNaN(startDate.getTime())) {
+          haulStartDate = new Date(startDate.getFullYear(), startDate.getMonth(), startDate.getDate())
         }
-        // Otherwise use receipt date (already set above)
       }
+      // Otherwise use receipt date (already set above)
     }
 
     await createCashBucket(tx, {
