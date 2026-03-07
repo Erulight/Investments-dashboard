@@ -184,6 +184,25 @@ export async function POST(
           await tx.systemSetting.update({ where: { key: CASH_BALANCE_KEY }, data: { value: nextCash.toString() } })
         }
 
+        // Record transaction in Cash Ledger for visibility
+        const cashAccount =
+          (await tx.account.findFirst({ where: { type: 'CASH', isActive: true } })) ??
+          (await tx.account.create({
+            data: { name: 'Cash Balance', type: 'CASH', currency, description: 'Cash ledger account' },
+          }))
+
+        await tx.transaction.create({
+          data: {
+            accountId: cashAccount.id,
+            investmentId: investment.id,
+            personId: null,
+            type: 'CASH_OUT',
+            amount: -totalDeduct,
+            date: contributionDate,
+            description: `Circlys payback • ${investment.name} • Month ${monthIndex + 1}`,
+          },
+        })
+
         return null
       })
 
@@ -207,6 +226,25 @@ export async function POST(
           // Allow funding from currently available cash even when recording past-due months.
           availableOnOrBefore: fundingCutoff,
           excludeLabelPrefixes: ['Circlys •'],
+        })
+
+        // Record transaction in Cash Ledger for visibility
+        const cashAccount =
+          (await tx.account.findFirst({ where: { type: 'CASH', isActive: true } })) ??
+          (await tx.account.create({
+            data: { name: 'Cash Balance', type: 'CASH', currency, description: 'Cash ledger account' },
+          }))
+
+        await tx.transaction.create({
+          data: {
+            accountId: cashAccount.id,
+            investmentId: investment.id,
+            personId: null,
+            type: 'CASH_OUT',
+            amount: -totalDeduct,
+            date: contributionDate,
+            description: `Circlys contribution • ${investment.name} • Month ${monthIndex + 1}`,
+          },
         })
 
         const bucket = await tx.cashBucket.create({
