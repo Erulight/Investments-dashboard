@@ -283,6 +283,46 @@ export const creditBucketsForReceipt = async (
       : allocations.filter((alloc: { principalAllocated: number }) => alloc.principalAllocated > 0)
 
     if (usableAllocations.length === 0) {
+      // No allocations found - need to determine the correct haul start date
+      // First, try to find the earliest haul date from cash bucket movements for this investment
+      let haulStartDate = date
+
+      const investmentMovements = await tx.cashBucketMovement.findMany({
+        where: {
+          investmentId,
+          type: 'INVEST_OUT',
+        },
+        include: {
+          cashBucket: {
+            select: { haulStartDate: true },
+          },
+        },
+        orderBy: { date: 'asc' },
+        take: 1,
+      })
+
+      if (investmentMovements.length > 0 && investmentMovements[0].cashBucket) {
+        haulStartDate = investmentMovements[0].cashBucket.haulStartDate
+      } else if (personId) {
+        // Fallback: check deal participant acquired date
+        const participation = await tx.dealParticipant.findFirst({
+          where: {
+            investmentId,
+            personId,
+          },
+          select: {
+            acquiredAt: true,
+            investment: { select: { startDate: true } },
+          },
+        })
+
+        const acquiredAt = participation?.acquiredAt || participation?.investment?.startDate
+        if (acquiredAt instanceof Date && !Number.isNaN(acquiredAt.getTime())) {
+          haulStartDate = new Date(acquiredAt.getFullYear(), acquiredAt.getMonth(), acquiredAt.getDate())
+        }
+      }
+
+      // Check if there's an existing bucket we can credit to
       if (type === 'WITHDRAW_PRINCIPAL' && personId) {
         const inv = await tx.investment.findUnique({
           where: { id: investmentId },
@@ -314,25 +354,6 @@ export const creditBucketsForReceipt = async (
             },
           })
           return
-        }
-      }
-
-      let haulStartDate = date
-      if (personId) {
-        const participation = await tx.dealParticipant.findFirst({
-          where: {
-            investmentId,
-            personId,
-          },
-          select: {
-            acquiredAt: true,
-            investment: { select: { startDate: true } },
-          },
-        })
-
-        const acquiredAt = participation?.acquiredAt || participation?.investment?.startDate
-        if (acquiredAt instanceof Date && !Number.isNaN(acquiredAt.getTime())) {
-          haulStartDate = new Date(acquiredAt.getFullYear(), acquiredAt.getMonth(), acquiredAt.getDate())
         }
       }
 
