@@ -3,7 +3,7 @@ import { getCurrentUser } from '@/lib/auth'
 import { prisma } from '@/lib/db'
 import { requireModuleAccess } from '@/lib/rbac'
 import { createAuditLog } from '@/lib/audit'
-import { withdrawFromBuckets } from '@/lib/cashBuckets'
+import { createCashBucket, withdrawFromBuckets } from '@/lib/cashBuckets'
 import { createSnapshot } from '@/lib/snapshot'
 
 const CASH_BALANCE_KEY = 'CASH_BALANCE'
@@ -150,6 +150,17 @@ export async function POST(
       const currency = investment.account?.currency || 'SAR'
 
       const result = await prisma.$transaction(async (tx: any) => {
+        // Move contribution out of available cash buckets first, so General Cash is reduced.
+        await withdrawFromBuckets(tx, {
+          amount: totalDeduct,
+          currency,
+          date: contributionDate,
+          type: 'CASH_OUT',
+          investmentId: investment.id,
+          notes: `Circlys contribution • ${investment.name} • Month ${monthIndex + 1}`,
+          availableOnOrBefore: contributionDate,
+        })
+
         const bucket = await tx.cashBucket.create({
           data: {
             label: `Circlys • ${investment.name} • ${monthLabel}`,
@@ -312,14 +323,16 @@ export async function DELETE(
 
     const isPostReceipt = existing?.postReceipt === true
     const refundAmount = (Number(existing?.amount) || 0) + (Number(existing?.reward) || 0)
+    const dueDate = addMonths(new Date(investment.startDate), monthIndex)
+    const startAnchorRaw = new Date(investment.startDate)
+    const contributionHaulStart = Number.isNaN(startAnchorRaw.getTime()) ? dueDate : startAnchorRaw
 
     if (isPostReceipt) {
       // Reverse: re-credit the cash that was withdrawn
-      const dueDate = addMonths(new Date(investment.startDate), monthIndex)
-
       await prisma.$transaction(async (tx: any) => {
         // Find the bucket that the receipt went into and credit it back
         const receivedBucketId = meta.received?.bucketId
+        let creditedToBucket = false
         if (receivedBucketId) {
           const bucket = await tx.cashBucket.findUnique({ where: { id: receivedBucketId } })
           if (bucket) {
@@ -337,7 +350,22 @@ export async function DELETE(
                 notes: `Undo Circlys payback • Month ${monthIndex + 1}`,
               },
             })
+            creditedToBucket = true
           }
+        }
+
+        // Fallback: if receipt bucket no longer exists, restore to a normal cash bucket.
+        if (!creditedToBucket && refundAmount > 0) {
+          await createCashBucket(tx, {
+            amount: refundAmount,
+            haulStartDate: dueDate,
+            currency: investment.account?.currency || 'SAR',
+            label: 'General Cash',
+            date: dueDate,
+            notes: `Undo Circlys payback • ${investment.name} • Month ${monthIndex + 1}`,
+            investmentId: investment.id,
+            type: 'CASH_IN',
+          })
         }
 
         // Update system cash balance
@@ -361,7 +389,25 @@ export async function DELETE(
     } else {
       // Normal: delete the contribution bucket and restore available cash
       await prisma.$transaction(async (tx: any) => {
+        const contributionBucket = await tx.cashBucket.findUnique({
+          where: { id: bucketId },
+          select: { haulStartDate: true, currency: true },
+        })
+
         await tx.cashBucket.delete({ where: { id: bucketId } })
+
+        if (refundAmount > 0) {
+          await createCashBucket(tx, {
+            amount: refundAmount,
+            haulStartDate: contributionHaulStart,
+            currency: contributionBucket?.currency || investment.account?.currency || 'SAR',
+            label: 'General Cash',
+            date: dueDate,
+            notes: `Undo Circlys contribution • ${investment.name} • Month ${monthIndex + 1}`,
+            investmentId: investment.id,
+            type: 'CASH_IN',
+          })
+        }
 
         const setting = await tx.systemSetting.findUnique({ where: { key: CASH_BALANCE_KEY } })
         const currentCash = setting ? Number(setting.value) : 0
