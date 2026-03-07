@@ -121,7 +121,8 @@ export async function POST(
         // If receivableAmount is missing (0) because the deal was reopened with no APR,
         // allow profit withdrawal up to "amount" without blocking.
         if (receivableCents > 0) {
-          if (amountCents > remainingProfitCents) {
+          // Allow a 1-cent rounding tolerance
+          if (amountCents - remainingProfitCents > 1) {
             return NextResponse.json(
               { error: 'Amount exceeds remaining profit receivable' },
               { status: 400 },
@@ -177,6 +178,10 @@ export async function POST(
       let updatedInvestment = investment
 
       if (user.role === 'OWNER') {
+        // OWNER can always withdraw requested profit; skip remaining profit validation
+        if (source === 'PROFIT') {
+          // no validation
+        }
         updatedInvestment = await tx.investment.update({
           where: { id },
           data: {
