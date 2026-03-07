@@ -615,8 +615,9 @@ export default async function ZakatPage() {
         return []
       }
 
-      // RULE 2: Savings Receipt buckets use simplified ROSCA handling:
-      // one row only (first hawl from first contribution date, no sub-rows).
+      // RULE 2: Savings Receipt buckets:
+      // - First hawl is special receipt row from first contribution date
+      // - Subsequent completed hawls follow normal idle-cash behavior
       if (isSavingsReceiptBucket) {
         const cashInMovement = movements.find((m: any) => m?.type === 'CASH_IN')
         if (!cashInMovement) return []
@@ -628,7 +629,9 @@ export default async function ZakatPage() {
         if (totalReceived <= 0) return []
 
         const haulStart = startOfDay(bucketStart)
+        const currentBalance = Math.max(0, Number(bucket.balance) || 0)
         const investmentName = bucket.label.replace('Savings Receipt • ', '')
+        const savingsRows: BucketRow[] = []
 
         // First hawl: special receipt zakat (from first contribution date)
         const firstHaulEnd = addDays(haulStart, 354)
@@ -637,7 +640,7 @@ export default async function ZakatPage() {
         const firstIsPaid = movementHasRowPaid(payments, firstRowKey)
         const firstZakatDue = !firstIsPaid && firstHaulCompleted && totalReceived > 0 ? totalReceived * 0.025 : 0
 
-        return [{
+        savingsRows.push({
           id: firstRowKey,
           bucketId: bucket.id,
           periodIndex: 0,
@@ -672,7 +675,57 @@ export default async function ZakatPage() {
             type: 'CASH_IN',
             investmentName,
           }],
-        }]
+        })
+
+        // After first hawl, treat remaining balance exactly like idle cash.
+        if (firstHaulCompleted && currentBalance > 0) {
+          const idleStart = firstHaulEnd
+          const elapsedSinceFirstHawl = diffDaysFloor(idleStart, now)
+          const completedIdleHawls = Math.floor(elapsedSinceFirstHawl / 354)
+
+          for (let i = 0; i < completedIdleHawls; i++) {
+            const periodStart = addDays(idleStart, i * 354)
+            const periodEnd = addDays(idleStart, (i + 1) * 354)
+            const rowKey = buildRowKey(['SAVINGS_IDLE', bucket.id, isoDay(periodStart), isoDay(periodEnd)])
+            const isPaid = movementHasRowPaid(payments, rowKey)
+            const zakatDue = !isPaid ? currentBalance * 0.025 : 0
+            const idleDays = diffDaysFloor(periodStart, periodEnd)
+
+            savingsRows.push({
+              id: rowKey,
+              bucketId: bucket.id,
+              periodIndex: i + 1,
+              label: `Idle • Savings Receipt • ${investmentName} • ${isoDay(periodStart)} → ${isoDay(periodEnd)}`,
+              currency: bucket.currency,
+              balance: currentBalance,
+              haulStartDate: isoDay(periodStart),
+              lastZakatPaidDate: bucket.lastZakatPaidDate
+                ? bucket.lastZakatPaidDate.toISOString().split('T')[0]
+                : null,
+              haulCompleteDate: isoDay(periodEnd),
+              idleBase: currentBalance,
+              receiptsTotal: 0,
+              zakatDue,
+              isPaid,
+              haulCompleted: now.getTime() >= periodEnd.getTime(),
+              source: investmentName,
+              sourceGroup: `Savings Receipt • ${investmentName}`,
+              sourceType: 'CIRCLYS',
+              rowKind: 'IDLE',
+              why: `Cash idle from ${isoDay(periodStart)} to ${isoDay(periodEnd)} (${idleDays} days)`,
+              lastPayment: lastPayment
+                ? {
+                    id: lastPayment.id,
+                    date: new Date(lastPayment.date).toISOString().split('T')[0],
+                    amount: Math.abs(Number(lastPayment.amount || 0)),
+                  }
+                : null,
+              dueReceipts: [],
+            })
+          }
+        }
+
+        return savingsRows
       }
 
       // In ROSCA scenarios, manual funding cash-ins can create standalone
