@@ -256,7 +256,26 @@ export const creditBucketsForReceipt = async (
   const creditToAllocatedBuckets = async (creditAmount: number, reductionAmount: number) => {
     if (creditAmount <= 0) return
 
-    console.log('[HAUL_DATE_DEBUG] creditToAllocatedBuckets called for investment:', investmentId, 'personId:', personId)
+    // ALWAYS look up original haul date from INVEST_OUT movements first
+    // This is the most reliable way to track back to when cash entered the system
+    let originalHaulDate: Date | null = null
+    const investmentMovements = await tx.cashBucketMovement.findMany({
+      where: {
+        investmentId,
+        type: 'INVEST_OUT',
+      },
+      include: {
+        cashBucket: {
+          select: { haulStartDate: true },
+        },
+      },
+      orderBy: { date: 'asc' },
+      take: 1,
+    })
+
+    if (investmentMovements.length > 0 && investmentMovements[0].cashBucket) {
+      originalHaulDate = investmentMovements[0].cashBucket.haulStartDate
+    }
 
     const allocations = await tx.investmentBucketAllocation.findMany({
       where: {
@@ -279,49 +298,16 @@ export const creditBucketsForReceipt = async (
       },
     })
 
-    console.log('[HAUL_DATE_DEBUG] Found allocations:', allocations.length)
-    if (allocations.length > 0) {
-      console.log('[HAUL_DATE_DEBUG] First allocation bucket haul date:', allocations[0].cashBucket?.haulStartDate)
-    }
-
     const principalFocused = reductionAmount > 0
     const usableAllocations = principalFocused
       ? allocations.filter((alloc: { principalRemaining: number }) => alloc.principalRemaining > 0)
       : allocations.filter((alloc: { principalAllocated: number }) => alloc.principalAllocated > 0)
 
-    console.log('[HAUL_DATE_DEBUG] Usable allocations:', usableAllocations.length)
-
     if (usableAllocations.length === 0) {
-      // No allocations found - need to determine the correct haul start date
-      // First, try to find the earliest haul date from cash bucket movements for this investment
-      let haulStartDate = date
+      // No allocations found - create new bucket with original haul date
+      let haulStartDate = originalHaulDate || date
 
-      console.log('[HAUL_DATE_DEBUG] No usable allocations found for investment:', investmentId)
-      console.log('[HAUL_DATE_DEBUG] Looking up INVEST_OUT movements...')
-
-      const investmentMovements = await tx.cashBucketMovement.findMany({
-        where: {
-          investmentId,
-          type: 'INVEST_OUT',
-        },
-        include: {
-          cashBucket: {
-            select: { haulStartDate: true },
-          },
-        },
-        orderBy: { date: 'asc' },
-        take: 1,
-      })
-
-      console.log('[HAUL_DATE_DEBUG] Found movements:', investmentMovements.length)
-      if (investmentMovements.length > 0) {
-        console.log('[HAUL_DATE_DEBUG] First movement bucket haul date:', investmentMovements[0].cashBucket?.haulStartDate)
-      }
-
-      if (investmentMovements.length > 0 && investmentMovements[0].cashBucket) {
-        haulStartDate = investmentMovements[0].cashBucket.haulStartDate
-        console.log('[HAUL_DATE_DEBUG] Using haul date from movement:', haulStartDate)
-      } else if (personId) {
+      if (!originalHaulDate && personId) {
         // Fallback: check deal participant acquired date
         const participation = await tx.dealParticipant.findFirst({
           where: {
@@ -402,7 +388,7 @@ export const creditBucketsForReceipt = async (
       const cashShare = creditAmount * ratio
       const principalShare = cappedReduction * ratio
 
-      // Check if the original bucket still exists and has the same haul date
+      // Check if the original bucket still exists
       const originalBucket = await tx.cashBucket.findUnique({
         where: { id: alloc.cashBucketId },
         select: { id: true, haulStartDate: true },
@@ -427,7 +413,8 @@ export const creditBucketsForReceipt = async (
         })
       } else {
         // Original bucket was deleted, create new one with preserved haul date
-        const haulStartDate = (alloc as any).cashBucket?.haulStartDate || date
+        // Use originalHaulDate from INVEST_OUT movements if available
+        const haulStartDate = originalHaulDate || (alloc as any).cashBucket?.haulStartDate || date
         const newBucket = await createCashBucket(tx, {
           amount: cashShare,
           haulStartDate,
@@ -502,14 +489,10 @@ export const creditBucketsForReceipt = async (
       ? new Date(explicit.getFullYear(), explicit.getMonth(), explicit.getDate())
       : null
 
-    console.log('[HAUL_DATE_DEBUG] Profit bucket creation - explicit haul start:', explicitHaulStart)
-
     if (explicitHaulStart) {
       haulStartDate = explicitHaulStart
-      console.log('[HAUL_DATE_DEBUG] Using explicit haul start for profit:', haulStartDate)
     } else {
       // Try to find original haul date from the cash buckets that funded this investment
-      console.log('[HAUL_DATE_DEBUG] Looking up INVEST_OUT movements for profit bucket...')
       const investmentMovements = await tx.cashBucketMovement.findMany({
         where: {
           investmentId,
@@ -524,16 +507,8 @@ export const creditBucketsForReceipt = async (
         take: 1,
       })
 
-      console.log('[HAUL_DATE_DEBUG] Found movements for profit:', investmentMovements.length)
-      if (investmentMovements.length > 0) {
-        console.log('[HAUL_DATE_DEBUG] Movement bucket haul date:', investmentMovements[0].cashBucket?.haulStartDate)
-      }
-
       if (investmentMovements.length > 0 && investmentMovements[0].cashBucket) {
         haulStartDate = investmentMovements[0].cashBucket.haulStartDate
-        console.log('[HAUL_DATE_DEBUG] Using haul date from movement for profit:', haulStartDate)
-      } else {
-        console.log('[HAUL_DATE_DEBUG] No movements found, using receipt date for profit:', haulStartDate)
       }
       // Otherwise use receipt date (already set above)
     }
