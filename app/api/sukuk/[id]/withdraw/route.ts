@@ -105,8 +105,24 @@ export async function POST(
         )
       }
 
-      // OWNER can withdraw any profit amount – no cap validation.
-      // The receivableAmount field is informational; owner decides actual profit.
+      if (source === 'PROFIT') {
+        const receivable = Number(investment.receivableAmount || 0)
+        const received = Number(investment.totalReceived || 0)
+
+        // Work in cents to avoid floating-point rounding issues
+        const receivableCents = Math.round(receivable * 100)
+        const receivedCents = Math.round(received * 100)
+        const remainingProfitCents = Math.max(0, receivableCents - receivedCents)
+        const amountCents = Math.round(amount * 100)
+
+        // Allow 1-cent tolerance for rounding
+        if (amountCents - remainingProfitCents > 1) {
+          return NextResponse.json(
+            { error: 'Amount exceeds remaining profit receivable' },
+            { status: 400 },
+          )
+        }
+      }
     }
 
     const dayStart = new Date(date.getFullYear(), date.getMonth(), date.getDate())

@@ -450,13 +450,13 @@ export async function POST(
         receivableAmount: receivableAmountValue,
         interestRate: interestRateValue,
         fees: feesValue,
-        totalReceived: user.role === 'PARTNER' ? 0 : Math.max(0, investment.totalReceived - profitReceipt),
+        totalReceived: 0, // Reset to 0 on reopen
       })
 
       const updatedInvestment = await tx.investment.update({
         where: { id },
         data: {
-          totalReceived: user.role === 'PARTNER' ? 0 : Math.max(0, investment.totalReceived - profitReceipt),
+          totalReceived: 0, // Reset to 0 on reopen since withdrawal transactions are deleted
           principalAmount: principalAmountValue,
           currentValue: currentValueValue,
           receivableAmount: receivableAmountValue,
