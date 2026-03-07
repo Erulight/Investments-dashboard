@@ -638,7 +638,6 @@ export default async function ZakatPage() {
           
           // RULE 3: For savings receipts, zakat is due if 354 days passed since first contribution
           // For other receipts, use standard 354-day rule
-          if (!isSavingsReceipt && duration < 354) return null
           if (isSavingsReceipt && duration < 354) {
             // Savings received before 354 days: no immediate zakat, just track for later
             // This will be handled as normal cash idle zakat
@@ -657,6 +656,7 @@ export default async function ZakatPage() {
             investmentName,
             receiptDay: day,
             eligibilityStart,
+            eligibilityDuration: duration,
             amount,
             isSavingsReceipt,
           }
@@ -668,6 +668,7 @@ export default async function ZakatPage() {
           investmentName: string
           receiptDay: Date
           eligibilityStart: Date
+          eligibilityDuration: number
           amount: number
           isSavingsReceipt?: boolean
         }>
@@ -675,6 +676,8 @@ export default async function ZakatPage() {
       const bucketRows: BucketRow[] = []
 
       qualifyingReceipts.forEach((r) => {
+        if (r.eligibilityDuration < 354) return
+
         const rowKey = buildRowKey(['RECEIPT', bucket.id, r.movementId])
         const isPaid = movementHasRowPaid(payments, rowKey)
         const zakatBase = r.amount
@@ -729,13 +732,15 @@ export default async function ZakatPage() {
 
       const completedIdleRows: BucketRow[] = []
       qualifyingReceipts.forEach((r) => {
-        const idleElapsed = diffDaysFloor(r.receiptDay, now)
+        // Continue hawl from the original eligibility anchor (cash entry for principal,
+        // investment start for profit), even if receipt happened before 354 days.
+        const idleElapsed = diffDaysFloor(r.eligibilityStart, now)
         const completedIdleHauls = Math.floor(idleElapsed / 354)
         if (completedIdleHauls <= 0) return
 
         for (let i = 0; i < completedIdleHauls; i++) {
-          const periodStart = addDays(r.receiptDay, i * 354)
-          const periodEnd = addDays(r.receiptDay, (i + 1) * 354)
+          const periodStart = addDays(r.eligibilityStart, i * 354)
+          const periodEnd = addDays(r.eligibilityStart, (i + 1) * 354)
           const periodEndTime = periodEnd.getTime()
 
           const poolOutstanding = qualifyingReceipts
