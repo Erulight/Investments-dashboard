@@ -642,7 +642,9 @@ export default async function ZakatPage() {
           periodIndex: 0,
           label: `Savings Receipt • ${investmentName}`,
           currency: bucket.currency,
-          balance: totalReceived,
+          // Keep displayed balance aligned with current cash in this bucket.
+          // First-hawl zakat base still uses receiptsTotal (totalReceived).
+          balance: currentBalance,
           haulStartDate: isoDay(haulStart),
           lastZakatPaidDate: bucket.lastZakatPaidDate
             ? bucket.lastZakatPaidDate.toISOString().split('T')[0]
