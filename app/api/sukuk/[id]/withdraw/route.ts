@@ -118,18 +118,15 @@ export async function POST(
         const remainingProfitCents = Math.max(0, receivableCents - receivedCents)
         const amountCents = Math.round(amount * 100)
 
-        if (receivableCents <= 0) {
-          return NextResponse.json(
-            { error: 'Profit receivable is not set for this deal' },
-            { status: 400 },
-          )
-        }
-
-        if (amountCents > remainingProfitCents) {
-          return NextResponse.json(
-            { error: 'Amount exceeds remaining profit receivable' },
-            { status: 400 },
-          )
+        // If receivableAmount is missing (0) because the deal was reopened with no APR,
+        // allow profit withdrawal up to "amount" without blocking.
+        if (receivableCents > 0) {
+          if (amountCents > remainingProfitCents) {
+            return NextResponse.json(
+              { error: 'Amount exceeds remaining profit receivable' },
+              { status: 400 },
+            )
+          }
         }
       }
     }

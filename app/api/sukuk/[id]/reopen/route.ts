@@ -415,16 +415,35 @@ export async function POST(
 
       const existingReceivable = Number(investment.receivableAmount || 0)
 
-      const receivableAmountValue =
-        user.role === 'PARTNER'
-          ? (partnerCanonicalProfit !== null && partnerCanonicalProfit > 0
-              ? Math.round(partnerCanonicalProfit * 100) / 100
-              : existingReceivable > 0
-                ? Math.round(existingReceivable * 100) / 100
-                : Math.round(fallbackProfit * 100) / 100)
-          : existingReceivable > 0
-            ? Math.round(existingReceivable * 100) / 100
-            : Math.round(fallbackProfit * 100) / 100
+      const receivableAmountValue = (() => {
+        if (user.role === 'PARTNER') {
+          if (partnerCanonicalProfit !== null && partnerCanonicalProfit > 0) {
+            return Math.round(partnerCanonicalProfit * 100) / 100
+          }
+          if (existingReceivable > 0) {
+            return Math.round(existingReceivable * 100) / 100
+          }
+          if (fallbackProfit > 0) {
+            return Math.round(fallbackProfit * 100) / 100
+          }
+          if (profitReceipt > 0) {
+            // Last known profit that had been withdrawn before reopen
+            return Math.round(profitReceipt * 100) / 100
+          }
+          return 0
+        }
+        // OWNER branch
+        if (existingReceivable > 0) {
+          return Math.round(existingReceivable * 100) / 100
+        }
+        if (fallbackProfit > 0) {
+          return Math.round(fallbackProfit * 100) / 100
+        }
+        if (profitReceipt > 0) {
+          return Math.round(profitReceipt * 100) / 100
+        }
+        return 0
+      })()
 
       console.log('REOPEN INVESTMENT UPDATE DATA:', {
         principalAmount: principalAmountValue,
