@@ -260,7 +260,7 @@ export function ZakatDashboard({
       return 0
     })
     return sorted
-  }, [buckets, activeTab, statusFilter, dueFilter, sortKey, sortDir])
+  }, [buckets, yearTab, activeTab, statusFilter, dueFilter, sortKey, sortDir])
 
   const totalDue = filteredBuckets.reduce((sum, b) => sum + b.zakatDue, 0)
   const totalBalance = sumUniqueBucketBalances(filteredBuckets)
