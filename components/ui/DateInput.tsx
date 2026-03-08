@@ -14,6 +14,9 @@ type DateInputProps = {
   placeholder?: string
   className?: string
   ariaLabel?: string
+  id?: string
+  name?: string
+  required?: boolean
   disabled?: boolean
 }
 
@@ -23,6 +26,9 @@ export function DateInput({
   placeholder = 'DD/MM/YYYY',
   className = '',
   ariaLabel,
+  id,
+  name,
+  required,
   disabled,
 }: DateInputProps) {
   const pickerRef = useRef<HTMLInputElement>(null)
@@ -43,12 +49,15 @@ export function DateInput({
   return (
     <div className={`relative flex items-center ${className}`}>
       <input
+        id={id}
+        name={name}
         type="text"
         value={value}
         onChange={(e) => onChange(normalizeDateInput(e.target.value))}
         className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:border-blue-500 focus:ring-2 focus:ring-blue-500"
         placeholder={placeholder}
         aria-label={ariaLabel}
+        required={required}
         disabled={disabled}
       />
       <button

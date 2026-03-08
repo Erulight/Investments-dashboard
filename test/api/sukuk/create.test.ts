@@ -5,6 +5,7 @@ import { createMockRequest, getResponseJson } from '@/test/utils'
 // Mock dependencies
 vi.mock('@/lib/rbac', () => ({
   requireAuth: vi.fn(),
+  requireModuleAccess: vi.fn(),
 }))
 
 vi.mock('@/lib/db', () => ({
@@ -26,6 +27,9 @@ vi.mock('@/lib/db', () => ({
       update: vi.fn(),
       create: vi.fn(),
     },
+    cashBucket: {
+      aggregate: vi.fn(),
+    },
     $transaction: vi.fn(),
   },
 }))
@@ -38,7 +42,7 @@ vi.mock('@/lib/cashBuckets', () => ({
   withdrawFromBuckets: vi.fn(),
 }))
 
-import { requireAuth } from '@/lib/rbac'
+import { requireModuleAccess } from '@/lib/rbac'
 import { prisma } from '@/lib/db'
 
 describe('POST /api/sukuk/create', () => {
@@ -82,11 +86,14 @@ describe('POST /api/sukuk/create', () => {
       currency: 'SAR',
       type: 'CASH',
     } as any)
+    vi.mocked(prisma.cashBucket.aggregate).mockResolvedValue({
+      _sum: { balance: 0 },
+    } as any)
   })
 
   it('should successfully create a sukuk with valid data', async () => {
     // Mock auth to return owner user
-    vi.mocked(requireAuth).mockResolvedValue(mockUser as any)
+    vi.mocked(requireModuleAccess).mockResolvedValue(mockUser as any)
 
     // Mock account exists
     vi.mocked(prisma.account.findUnique).mockResolvedValue(mockAccount as any)
@@ -132,6 +139,11 @@ describe('POST /api/sukuk/create', () => {
           update: vi.fn(),
           create: vi.fn(),
         },
+        cashBucket: {
+          aggregate: vi.fn().mockResolvedValue({
+            _sum: { balance: 0 },
+          }),
+        },
         transaction: {
           create: vi.fn(),
         },
@@ -153,11 +165,11 @@ describe('POST /api/sukuk/create', () => {
     expect(data.success).toBe(true)
     expect(data.sukuk).toBeDefined()
     expect(data.sukuk.name).toBe('Test Sukuk')
-    expect(requireAuth).toHaveBeenCalledWith(['OWNER'])
+    expect(requireModuleAccess).toHaveBeenCalledWith('sukuk')
   })
 
   it('should return 400 for invalid data', async () => {
-    vi.mocked(requireAuth).mockResolvedValue(mockUser as any)
+    vi.mocked(requireModuleAccess).mockResolvedValue(mockUser as any)
 
     const invalidData = {
       accountId: 'account-1',
@@ -180,7 +192,7 @@ describe('POST /api/sukuk/create', () => {
   })
 
   it('should return 404 if account not found', async () => {
-    vi.mocked(requireAuth).mockResolvedValue(mockUser as any)
+    vi.mocked(requireModuleAccess).mockResolvedValue(mockUser as any)
     vi.mocked(prisma.account.findUnique).mockResolvedValue(null)
 
     const request = createMockRequest({
@@ -196,7 +208,7 @@ describe('POST /api/sukuk/create', () => {
   })
 
   it('should return 401 for unauthorized users', async () => {
-    vi.mocked(requireAuth).mockRejectedValue(new Error('Unauthorized'))
+    vi.mocked(requireModuleAccess).mockRejectedValue(new Error('Unauthorized'))
 
     const request = createMockRequest({
       method: 'POST',
@@ -211,7 +223,7 @@ describe('POST /api/sukuk/create', () => {
   })
 
   it('should return 403 for non-owner users', async () => {
-    vi.mocked(requireAuth).mockRejectedValue(new Error('Forbidden'))
+    vi.mocked(requireModuleAccess).mockRejectedValue(new Error('Forbidden'))
 
     const request = createMockRequest({
       method: 'POST',
@@ -226,7 +238,7 @@ describe('POST /api/sukuk/create', () => {
   })
 
   it('should create sukuk with participants', async () => {
-    vi.mocked(requireAuth).mockResolvedValue(mockUser as any)
+    vi.mocked(requireModuleAccess).mockResolvedValue(mockUser as any)
     vi.mocked(prisma.account.findUnique).mockResolvedValue(mockAccount as any)
 
     const dataWithParticipants = {
@@ -294,6 +306,11 @@ describe('POST /api/sukuk/create', () => {
           update: vi.fn(),
           create: vi.fn(),
         },
+        cashBucket: {
+          aggregate: vi.fn().mockResolvedValue({
+            _sum: { balance: 0 },
+          }),
+        },
         transaction: {
           create: vi.fn(),
         },
@@ -316,7 +333,7 @@ describe('POST /api/sukuk/create', () => {
   })
 
   it('should validate principalAmount is positive', async () => {
-    vi.mocked(requireAuth).mockResolvedValue(mockUser as any)
+    vi.mocked(requireModuleAccess).mockResolvedValue(mockUser as any)
 
     const invalidData = {
       ...validSukukData,
@@ -336,7 +353,7 @@ describe('POST /api/sukuk/create', () => {
   })
 
   it('should validate startDate is a valid date', async () => {
-    vi.mocked(requireAuth).mockResolvedValue(mockUser as any)
+    vi.mocked(requireModuleAccess).mockResolvedValue(mockUser as any)
 
     const invalidData = {
       ...validSukukData,

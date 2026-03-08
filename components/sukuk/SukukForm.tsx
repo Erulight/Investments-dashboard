@@ -192,11 +192,12 @@ export function SukukForm({ mode, initialData, onSuccess, onCancel }: SukukFormP
       }
 
       // Submit to API
-      const url = mode === 'create' 
-        ? '/api/sukuk/create' 
-        : `/api/sukuk/${initialData?.id}`
-      
-      const method = mode === 'create' ? 'POST' : 'PUT'
+      const isEditMode = Boolean(initialData?.id)
+      const url = isEditMode
+        ? `/api/sukuk/${initialData.id}`
+        : '/api/sukuk/create'
+
+      const method = isEditMode ? 'PUT' : 'POST'
 
       const res = await fetch(url, {
         method,
@@ -605,11 +606,14 @@ export function SukukForm({ mode, initialData, onSuccess, onCancel }: SukukFormP
             <label htmlFor="startDate" className="block text-sm font-medium text-gray-700 mb-1">
               Start Date *
             </label>
-          <DateInput
-            value={formData.startDate}
-            onChange={(value) => setFormData((prev: any) => ({ ...prev, startDate: value }))}
-            ariaLabel="Start Date"
-          />
+            <DateInput
+              id="startDate"
+              name="startDate"
+              value={formData.startDate}
+              onChange={(value) => setFormData((prev: any) => ({ ...prev, startDate: value }))}
+              ariaLabel="Start Date"
+              required
+            />
             {errors.startDate && <p className="text-sm text-red-600 mt-1">{errors.startDate}</p>}
           </div>
 
@@ -617,11 +621,13 @@ export function SukukForm({ mode, initialData, onSuccess, onCancel }: SukukFormP
             <label htmlFor="maturityDate" className="block text-sm font-medium text-gray-700 mb-1">
               Maturity Date
             </label>
-          <DateInput
-            value={formData.maturityDate}
-            onChange={(value) => setFormData((prev: any) => ({ ...prev, maturityDate: value }))}
-            ariaLabel="Maturity Date"
-          />
+            <DateInput
+              id="maturityDate"
+              name="maturityDate"
+              value={formData.maturityDate}
+              onChange={(value) => setFormData((prev: any) => ({ ...prev, maturityDate: value }))}
+              ariaLabel="Maturity Date"
+            />
             {errors.maturityDate && <p className="text-sm text-red-600 mt-1">{errors.maturityDate}</p>}
           </div>
         </div>
