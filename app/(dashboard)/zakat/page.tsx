@@ -982,10 +982,10 @@ export default async function ZakatPage() {
                 id: rowKey,
                 bucketId: bucket.id,
                 periodIndex: i + 1,
-                label: `Idle • Sukuk Principal • ${alloc.investmentName} • ${isoDay(periodStart)} → ${isoDay(effectiveHaulComplete)}`,
+                label: `Idle • Sukuk Principal • ${alloc.investmentName} • ${isoDay(haulStart)} → ${isoDay(effectiveHaulComplete)}`,
                 currency: bucket.currency,
                 balance: alloc.principalRemaining,
-                haulStartDate: isoDay(periodStart),
+                haulStartDate: isoDay(haulStart),
                 lastZakatPaidDate: bucket.lastZakatPaidDate
                   ? bucket.lastZakatPaidDate.toISOString().split('T')[0]
                   : null,

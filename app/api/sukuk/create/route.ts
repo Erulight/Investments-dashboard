@@ -233,37 +233,43 @@ export async function POST(req: NextRequest) {
 
       let inheritedSavingsHaulStart: Date | null = null
       try {
-        if ((tx as any).investmentBucketAllocation?.findMany) {
-          const fundingAllocations = await (tx as any).investmentBucketAllocation.findMany({
-            where: {
-              investmentId: newSukuk.id,
-              principalAllocated: { gt: 0 },
-            },
-            include: {
-              cashBucket: {
-                select: {
-                  label: true,
-                  haulStartDate: true,
-                },
+        const fundingAllocations = await tx.investmentBucketAllocation.findMany({
+          where: {
+            investmentId: newSukuk.id,
+            principalAllocated: { gt: 0 },
+          },
+          include: {
+            cashBucket: {
+              select: {
+                label: true,
+                haulStartDate: true,
               },
             },
-          })
+          },
+        })
 
-          inheritedSavingsHaulStart = fundingAllocations
-            .map((alloc: any) => {
-              const label = typeof alloc?.cashBucket?.label === 'string' ? alloc.cashBucket.label : ''
-              // Accept both ROSCA receipts and Sukuk receipt buckets
-              const isRoscaReceipt = label.startsWith('Savings Receipt •')
-              const isSukukReceipt = label.includes('Receipt') && !label.startsWith('Savings Receipt •')
-              if (!isRoscaReceipt && !isSukukReceipt) return null
-              const d = alloc?.cashBucket?.haulStartDate ? new Date(alloc.cashBucket.haulStartDate) : null
-              if (!d || Number.isNaN(d.getTime())) return null
-              return new Date(d.getFullYear(), d.getMonth(), d.getDate())
-            })
-            .filter((d: Date | null): d is Date => Boolean(d))
-            .sort((a: Date, b: Date) => a.getTime() - b.getTime())[0] || null
-        }
-      } catch {
+        console.log('[SUKUK_CREATE] Found allocations:', fundingAllocations.length)
+        fundingAllocations.forEach((alloc: any) => {
+          console.log('[SUKUK_CREATE] Allocation bucket:', alloc.cashBucket?.label, 'haulStart:', alloc.cashBucket?.haulStartDate)
+        })
+
+        inheritedSavingsHaulStart = fundingAllocations
+          .map((alloc: any) => {
+            const label = typeof alloc?.cashBucket?.label === 'string' ? alloc.cashBucket.label : ''
+            // Accept both ROSCA receipts and Sukuk receipt buckets
+            const isRoscaReceipt = label.startsWith('Savings Receipt •')
+            const isSukukReceipt = label.includes('Receipt') && !label.startsWith('Savings Receipt •')
+            if (!isRoscaReceipt && !isSukukReceipt) return null
+            const d = alloc?.cashBucket?.haulStartDate ? new Date(alloc.cashBucket.haulStartDate) : null
+            if (!d || Number.isNaN(d.getTime())) return null
+            return new Date(d.getFullYear(), d.getMonth(), d.getDate())
+          })
+          .filter((d: Date | null): d is Date => Boolean(d))
+          .sort((a: Date, b: Date) => a.getTime() - b.getTime())[0] || null
+
+        console.log('[SUKUK_CREATE] Inherited hawl start:', inheritedSavingsHaulStart?.toISOString().split('T')[0] || 'none')
+      } catch (err) {
+        console.error('[SUKUK_CREATE] Error finding allocations:', err)
         inheritedSavingsHaulStart = null
       }
 
