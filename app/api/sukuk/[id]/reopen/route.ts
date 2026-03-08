@@ -248,21 +248,29 @@ export async function POST(
           },
         })
 
+        // Only delete the specific principal receipt bucket created during withdrawal
+        // Do NOT delete ROSCA receipt buckets or other cash buckets
         await tx.cashBucket.deleteMany({
           where: {
-            label: { contains: investment.name },
+            label: `${investment.name} Principal Receipt`,
             personId: null,
           },
         })
       }
 
-      // Reset owner cash balance to 0 unconditionally – the principal is now locked back in the deal
+      // Recalculate cash balance from all buckets instead of setting to 0
+      const allBuckets = await tx.cashBucket.findMany({
+        where: { personId: null },
+        select: { balance: true },
+      })
+      const totalCashFromBuckets = allBuckets.reduce((sum: number, b: any) => sum + Number(b.balance || 0), 0)
+
       await tx.systemSetting.upsert({
         where: { key: 'CASH_BALANCE' },
-        update: { value: '0' },
+        update: { value: totalCashFromBuckets.toString() },
         create: {
           key: 'CASH_BALANCE',
-          value: '0',
+          value: totalCashFromBuckets.toString(),
           description: 'Available cash balance for investments',
         },
       })
