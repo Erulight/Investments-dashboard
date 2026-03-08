@@ -348,12 +348,12 @@ export default async function ZakatPage() {
       const txTimestamp = txDay.getTime()
       const txAmount = Math.abs(Number(cashInvestTx.amount) || 0)
 
-      // Look for a Savings Receipt bucket whose CASH_IN is same day and at least the invested amount
+      // Look for a Savings Receipt bucket whose CASH_IN is same day + same amount
       const matchedReceiptBucket = allSavingsReceiptBuckets.find((rb: any) => {
         const cashIn = rb.movements?.[0]
         if (!cashIn) return false
         const ciAmt = Math.abs(Number(cashIn.amount) || 0)
-        if (ciAmt + 0.01 < txAmount) return false
+        if (Math.abs(ciAmt - txAmount) > 0.01) return false
         const ciRaw = cashIn.date instanceof Date ? cashIn.date : new Date(cashIn.date as any)
         if (Number.isNaN(ciRaw.getTime())) return false
         const ciDay = new Date(ciRaw.getFullYear(), ciRaw.getMonth(), ciRaw.getDate())
