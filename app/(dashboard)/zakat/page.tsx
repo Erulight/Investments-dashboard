@@ -636,6 +636,8 @@ export default async function ZakatPage() {
           id: true,
           name: true,
           startDate: true,
+          maturityDate: true,
+          principalAmount: true,
           isIjarah: true,
           reopenedAt: true,
           category: true,
@@ -858,13 +860,20 @@ export default async function ZakatPage() {
             // Skip if not a Sukuk, or if principal remaining is 0, or if investment is closed (principalAmount = 0)
             if (!invId || invType !== 'SUKUK' || principalRemaining <= 0 || invPrincipal <= 0) return null
             
+            // Get investment details from investmentMap
+            const inv = investmentMap.get(invId)
+            const maturityDate = inv?.maturityDate ? new Date(inv.maturityDate) : null
+            const isActive = maturityDate && !Number.isNaN(maturityDate.getTime()) && maturityDate.getTime() > now.getTime()
+            
             return {
               investmentId: invId,
               investmentName: invName,
               principalRemaining,
+              maturityDate,
+              isActive,
             }
           })
-          .filter((x: any): x is { investmentId: string; investmentName: string; principalRemaining: number } => Boolean(x))
+          .filter((x: any): x is { investmentId: string; investmentName: string; principalRemaining: number; maturityDate: Date | null; isActive: boolean } => Boolean(x))
 
         const sukukInvestedByAllocations = sukukAllocations.reduce(
           (sum: number, a: { principalRemaining: number }) => sum + a.principalRemaining,
@@ -922,12 +931,27 @@ export default async function ZakatPage() {
             }
 
             for (const alloc of sukukAllocations) {
+              // For active Sukuk investments, defer Zakat to maturity date, not hawl completion
+              // Only create a row if the investment has matured OR if this period ends on/after maturity
+              const maturityTime = alloc.maturityDate?.getTime() || 0
+              const periodEndTime = periodEnd.getTime()
+              
+              // Skip this hawl period if investment is still active and hasn't matured yet
+              if (alloc.isActive && maturityTime > periodEndTime) {
+                continue
+              }
+              
+              // For matured investments or periods that include maturity, use maturity date as hawl complete
+              const effectiveHaulComplete = alloc.maturityDate && maturityTime <= periodEndTime && maturityTime >= periodStart.getTime()
+                ? alloc.maturityDate
+                : periodEnd
+              
               const rowKey = buildRowKey([
                 'SAVINGS_SUKUK_IDLE',
                 bucket.id,
                 alloc.investmentId,
                 isoDay(periodStart),
-                isoDay(periodEnd),
+                isoDay(effectiveHaulComplete),
               ])
               const isPaid = movementHasRowPaid(payments, rowKey)
               const zakatDue = !isPaid ? alloc.principalRemaining * 0.025 : 0
@@ -936,24 +960,26 @@ export default async function ZakatPage() {
                 id: rowKey,
                 bucketId: bucket.id,
                 periodIndex: i + 1,
-                label: `Idle • Sukuk Principal • ${alloc.investmentName} • ${isoDay(periodStart)} → ${isoDay(periodEnd)}`,
+                label: `Idle • Sukuk Principal • ${alloc.investmentName} • ${isoDay(periodStart)} → ${isoDay(effectiveHaulComplete)}`,
                 currency: bucket.currency,
                 balance: alloc.principalRemaining,
                 haulStartDate: isoDay(periodStart),
                 lastZakatPaidDate: bucket.lastZakatPaidDate
                   ? bucket.lastZakatPaidDate.toISOString().split('T')[0]
                   : null,
-                haulCompleteDate: isoDay(periodEnd),
+                haulCompleteDate: isoDay(effectiveHaulComplete),
                 idleBase: alloc.principalRemaining,
                 receiptsTotal: 0,
                 zakatDue,
                 isPaid,
-                haulCompleted: now.getTime() >= periodEnd.getTime(),
+                haulCompleted: now.getTime() >= effectiveHaulComplete.getTime(),
                 source: alloc.investmentName,
                 sourceGroup: `Sukuk Principal • ${alloc.investmentName}`,
                 sourceType: 'SUKUK',
                 rowKind: 'PRINCIPAL',
-                why: `Sukuk principal carrying forward hawl from ${isoDay(haulStart)}`,
+                why: alloc.maturityDate && maturityTime <= periodEndTime 
+                  ? `Sukuk principal Zakat deferred to maturity (${isoDay(alloc.maturityDate)})`
+                  : `Sukuk principal carrying forward hawl from ${isoDay(haulStart)}`,
                 lastPayment: lastPayment
                   ? {
                       id: lastPayment.id,
