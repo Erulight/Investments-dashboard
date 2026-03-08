@@ -154,26 +154,8 @@ export async function POST(
         currentCash = Number.isFinite(sum) ? sum : 0
       }
 
-      const nextCash = currentCash - totalReceipt
-      if (nextCash < -0.000001) {
-        throw new Error('INSUFFICIENT_CASH')
-      }
-
-      if (cashSetting) {
-        await tx.systemSetting.update({
-          where: { key: cashBalanceKey },
-          data: { value: Math.max(0, nextCash).toString() },
-        })
-      } else {
-        await tx.systemSetting.create({
-          data: {
-            key: cashBalanceKey,
-            value: Math.max(0, nextCash).toString(),
-            description: 'Available cash balance for investments',
-          },
-        })
-      }
-
+      // Don't manually adjust cash balance here - we'll recalculate from buckets after deletion
+      
       // Restore allocations for principal withdrawals (don't touch bucket balances yet)
       for (const movement of receiptMovements) {
         if (movement.type !== 'WITHDRAW_PROFIT') {

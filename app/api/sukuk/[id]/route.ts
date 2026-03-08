@@ -540,32 +540,25 @@ export async function DELETE(
         }
       }
 
-      const cashSetting = await tx.systemSetting.findUnique({
-        where: { key: 'CASH_BALANCE' },
-      })
-      const currentCash = cashSetting ? Number(cashSetting.value) : 0
-      const nextCash = currentCash - netMovement
-      if (nextCash < -0.0001) {
-        throw new Error('INSUFFICIENT_CASH')
-      }
-
-      if (cashSetting) {
-        await tx.systemSetting.update({
-          where: { key: 'CASH_BALANCE' },
-          data: { value: Math.max(0, nextCash).toString() },
-        })
-      } else {
-        await tx.systemSetting.create({
-          data: {
-            key: 'CASH_BALANCE',
-            value: Math.max(0, nextCash).toString(),
-            description: 'Available cash balance for investments',
-          },
-        })
-      }
-
       await tx.cashBucketMovement.deleteMany({
         where: { investmentId: id },
+      })
+
+      // Recalculate cash balance from all buckets after deletion
+      const allBuckets = await tx.cashBucket.findMany({
+        where: { personId: null },
+        select: { balance: true },
+      })
+      const totalCashFromBuckets = allBuckets.reduce((sum: number, b: any) => sum + Number(b.balance || 0), 0)
+
+      await tx.systemSetting.upsert({
+        where: { key: 'CASH_BALANCE' },
+        update: { value: totalCashFromBuckets.toString() },
+        create: {
+          key: 'CASH_BALANCE',
+          value: totalCashFromBuckets.toString(),
+          description: 'Available cash balance for investments',
+        },
       })
 
       if (commissionMovements.length > 0) {
