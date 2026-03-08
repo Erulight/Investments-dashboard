@@ -204,7 +204,24 @@ export async function POST(
     return NextResponse.json({ investment: result, receiveAmount })
   } catch (error) {
     console.error('Error receiving Circlys payout:', error)
-    return NextResponse.json({ error: 'Failed to receive payout' }, { status: 500 })
+    
+    let statusCode = 500
+    let errorMessage = 'Failed to receive payout'
+    
+    if (error instanceof Error) {
+      if (error.message === 'Unauthorized') {
+        statusCode = 401
+      } else if (error.message === 'Forbidden') {
+        statusCode = 403
+      } else if (error.message.includes('not found')) {
+        statusCode = 404
+        errorMessage = 'Savings plan not found'
+      } else {
+        errorMessage = error.message
+      }
+    }
+    
+    return NextResponse.json({ error: errorMessage }, { status: statusCode })
   }
 }
 
@@ -321,6 +338,23 @@ export async function DELETE(
     return NextResponse.json({ investment: result })
   } catch (error) {
     console.error('Error undoing Circlys receipt:', error)
-    return NextResponse.json({ error: 'Failed to undo receipt' }, { status: 500 })
+    
+    let statusCode = 500
+    let errorMessage = 'Failed to undo receipt'
+    
+    if (error instanceof Error) {
+      if (error.message === 'Unauthorized') {
+        statusCode = 401
+      } else if (error.message === 'Forbidden') {
+        statusCode = 403
+      } else if (error.message.includes('not found')) {
+        statusCode = 404
+        errorMessage = 'Savings plan not found'
+      } else {
+        errorMessage = error.message
+      }
+    }
+    
+    return NextResponse.json({ error: errorMessage }, { status: statusCode })
   }
 }

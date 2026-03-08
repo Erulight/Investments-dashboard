@@ -493,6 +493,23 @@ export async function POST(
     return NextResponse.json(result)
   } catch (err) {
     console.error('REOPEN ERROR:', err)
-    return NextResponse.json({ error: String(err) }, { status: 500 })
+    
+    let statusCode = 500
+    let errorMessage = 'Failed to reopen investment'
+    
+    if (err instanceof Error) {
+      if (err.message === 'Unauthorized') {
+        statusCode = 401
+      } else if (err.message === 'Forbidden') {
+        statusCode = 403
+      } else if (err.message.includes('not found')) {
+        statusCode = 404
+        errorMessage = 'Investment not found'
+      } else {
+        errorMessage = err.message
+      }
+    }
+    
+    return NextResponse.json({ error: errorMessage }, { status: statusCode })
   }
 }

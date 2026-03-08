@@ -340,10 +340,27 @@ export async function POST(
     return NextResponse.json({ investment: updated, bucketId })
   } catch (error) {
     console.error('Error paying savings month:', error)
-    if (error instanceof Error && error.message === 'INSUFFICIENT_CASH') {
-      return NextResponse.json({ error: 'INSUFFICIENT_CASH' }, { status: 400 })
+    
+    let statusCode = 500
+    let errorMessage = 'Failed to record payment'
+    
+    if (error instanceof Error) {
+      if (error.message === 'Unauthorized') {
+        statusCode = 401
+      } else if (error.message === 'Forbidden') {
+        statusCode = 403
+      } else if (error.message === 'INSUFFICIENT_CASH') {
+        statusCode = 400
+        errorMessage = 'Insufficient cash balance'
+      } else if (error.message.includes('not found')) {
+        statusCode = 404
+        errorMessage = 'Savings plan not found'
+      } else {
+        errorMessage = error.message
+      }
     }
-    return NextResponse.json({ error: 'Failed to record payment' }, { status: 500 })
+    
+    return NextResponse.json({ error: errorMessage }, { status: statusCode })
   }
 }
 
@@ -558,6 +575,23 @@ export async function DELETE(
     return NextResponse.json({ investment: updated })
   } catch (error) {
     console.error('Error undoing savings month payment:', error)
-    return NextResponse.json({ error: 'Failed to undo payment' }, { status: 500 })
+    
+    let statusCode = 500
+    let errorMessage = 'Failed to undo payment'
+    
+    if (error instanceof Error) {
+      if (error.message === 'Unauthorized') {
+        statusCode = 401
+      } else if (error.message === 'Forbidden') {
+        statusCode = 403
+      } else if (error.message.includes('not found')) {
+        statusCode = 404
+        errorMessage = 'Savings plan not found'
+      } else {
+        errorMessage = error.message
+      }
+    }
+    
+    return NextResponse.json({ error: errorMessage }, { status: statusCode })
   }
 }
