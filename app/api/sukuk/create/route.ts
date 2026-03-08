@@ -99,17 +99,21 @@ export async function POST(req: NextRequest) {
       })
 
       let cashBalanceAtStartDate = 0
-      if (cashAccountForDateCheck) {
-        // Sum all cash transactions UP TO and INCLUDING the deal start date
-        const txAgg = await tx.transaction.aggregate({
-          where: {
-            accountId: cashAccountForDateCheck.id,
-            date: { lte: startDate }, // only transactions ON OR BEFORE deal start date
-          },
-          _sum: { amount: true },
-        })
-        const txSum = txAgg._sum.amount || 0
-        cashBalanceAtStartDate = Number.isFinite(txSum) ? Number(txSum) : 0
+      try {
+        if (cashAccountForDateCheck && (tx as any).transaction?.aggregate) {
+          // Sum all cash transactions UP TO and INCLUDING the deal start date
+          const txAgg = await (tx as any).transaction.aggregate({
+            where: {
+              accountId: cashAccountForDateCheck.id,
+              date: { lte: startDate }, // only transactions ON OR BEFORE deal start date
+            },
+            _sum: { amount: true },
+          })
+          const txSum = txAgg?._sum?.amount || 0
+          cashBalanceAtStartDate = Number.isFinite(txSum) ? Number(txSum) : 0
+        }
+      } catch {
+        cashBalanceAtStartDate = 0
       }
 
       // Also check cash buckets as of the start date
@@ -227,31 +231,38 @@ export async function POST(req: NextRequest) {
         personId: user.role === 'OWNER' ? null : user.personId,
       })
 
-      const fundingAllocations = await tx.investmentBucketAllocation.findMany({
-        where: {
-          investmentId: newSukuk.id,
-          principalAllocated: { gt: 0 },
-        },
-        include: {
-          cashBucket: {
-            select: {
-              label: true,
-              haulStartDate: true,
+      let inheritedSavingsHaulStart: Date | null = null
+      try {
+        if ((tx as any).investmentBucketAllocation?.findMany) {
+          const fundingAllocations = await (tx as any).investmentBucketAllocation.findMany({
+            where: {
+              investmentId: newSukuk.id,
+              principalAllocated: { gt: 0 },
             },
-          },
-        },
-      })
+            include: {
+              cashBucket: {
+                select: {
+                  label: true,
+                  haulStartDate: true,
+                },
+              },
+            },
+          })
 
-      const inheritedSavingsHaulStart = fundingAllocations
-        .map((alloc: any) => {
-          const label = typeof alloc?.cashBucket?.label === 'string' ? alloc.cashBucket.label : ''
-          if (!label.startsWith('Savings Receipt •')) return null
-          const d = alloc?.cashBucket?.haulStartDate ? new Date(alloc.cashBucket.haulStartDate) : null
-          if (!d || Number.isNaN(d.getTime())) return null
-          return new Date(d.getFullYear(), d.getMonth(), d.getDate())
-        })
-        .filter((d: Date | null): d is Date => Boolean(d))
-        .sort((a: Date, b: Date) => a.getTime() - b.getTime())[0] || null
+          inheritedSavingsHaulStart = fundingAllocations
+            .map((alloc: any) => {
+              const label = typeof alloc?.cashBucket?.label === 'string' ? alloc.cashBucket.label : ''
+              if (!label.startsWith('Savings Receipt •')) return null
+              const d = alloc?.cashBucket?.haulStartDate ? new Date(alloc.cashBucket.haulStartDate) : null
+              if (!d || Number.isNaN(d.getTime())) return null
+              return new Date(d.getFullYear(), d.getMonth(), d.getDate())
+            })
+            .filter((d: Date | null): d is Date => Boolean(d))
+            .sort((a: Date, b: Date) => a.getTime() - b.getTime())[0] || null
+        }
+      } catch {
+        inheritedSavingsHaulStart = null
+      }
 
       if (inheritedSavingsHaulStart) {
         const existingMeta = parseMetadata(newSukuk.metadata)
@@ -342,38 +353,30 @@ export async function POST(req: NextRequest) {
     )
   } catch (error) {
     console.error('Sukuk create error:', error)
-    
-    let statusCode = 500
-    let errorMessage = 'Failed to create Sukuk'
-    
+
     if (error instanceof Error) {
       if (error.message === 'Unauthorized') {
-        statusCode = 401
-      } else if (error.message === 'Forbidden') {
-        statusCode = 403
-      } else if (error.message === 'INSUFFICIENT_CASH') {
-        statusCode = 400
-        errorMessage = 'Insufficient cash balance'
-      } else if (error.message.startsWith('INSUFFICIENT_CASH_AT_DATE:')) {
-        // Parse the date-aware error: INSUFFICIENT_CASH_AT_DATE:YYYY-MM-DD:available:required
-        statusCode = 400
+        return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+      }
+      if (error.message === 'Forbidden') {
+        return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
+      }
+      if (error.message === 'INSUFFICIENT_CASH') {
+        return NextResponse.json({ error: 'Insufficient cash balance' }, { status: 400 })
+      }
+      if (error.message.startsWith('INSUFFICIENT_CASH_AT_DATE:')) {
         const parts = error.message.split(':')
-        if (parts.length >= 4) {
-          const date = parts[1]
-          const available = parts[2]
-          const required = parts[3]
-          errorMessage = `Insufficient cash balance on ${date}. Available: SAR ${available}, Required: SAR ${required}`
-        } else {
-          errorMessage = error.message
-        }
-      } else {
-        errorMessage = error.message
+        return NextResponse.json(
+          {
+            error: parts.length >= 4
+              ? `Insufficient cash balance on ${parts[1]}. Available: SAR ${parts[2]}, Required: SAR ${parts[3]}`
+              : error.message,
+          },
+          { status: 400 }
+        )
       }
     }
-    
-    return NextResponse.json(
-      { error: errorMessage },
-      { status: statusCode }
-    )
+
+    return NextResponse.json({ error: 'Failed to create Sukuk' }, { status: 500 })
   }
 }
