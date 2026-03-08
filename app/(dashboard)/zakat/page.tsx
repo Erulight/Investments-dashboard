@@ -853,7 +853,11 @@ export default async function ZakatPage() {
             const invId = typeof alloc?.investment?.id === 'string' ? alloc.investment.id : null
             const invName = typeof alloc?.investment?.name === 'string' ? alloc.investment.name : 'Sukuk'
             const invType = alloc?.investment?.account?.type
-            if (!invId || invType !== 'SUKUK' || principalRemaining <= 0) return null
+            const invPrincipal = Math.max(0, Number(alloc?.investment?.principalAmount) || 0)
+            
+            // Skip if not a Sukuk, or if principal remaining is 0, or if investment is closed (principalAmount = 0)
+            if (!invId || invType !== 'SUKUK' || principalRemaining <= 0 || invPrincipal <= 0) return null
+            
             return {
               investmentId: invId,
               investmentName: invName,
