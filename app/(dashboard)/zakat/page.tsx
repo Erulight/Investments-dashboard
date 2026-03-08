@@ -1191,8 +1191,9 @@ export default async function ZakatPage() {
       bucketRows.push(...completedIdleRows)
 
       const hasAnyInvestOut = movements.some((m: any) => m?.type === 'INVEST_OUT')
+      const hasPrincipalWithdrawal = movements.some((m: any) => m?.type === 'WITHDRAW_PRINCIPAL' || m?.type === 'ROLLBACK_PRINCIPAL')
       const disableDepositIdle = user.role === 'PARTNER' && isSukukPrincipalBucket
-      if (!hasAnyInvestOut && !isImmediateReceiptBucket && !disableDepositIdle) {
+      if (!hasAnyInvestOut && !hasPrincipalWithdrawal && !isImmediateReceiptBucket && !disableDepositIdle) {
         const start = startOfDay(bucketStart)
         const elapsed = diffDaysFloor(start, now)
         const completed = Math.floor(elapsed / 354)
