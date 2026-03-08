@@ -64,7 +64,7 @@ export async function POST() {
           id: roscaBucket.id,
           label: roscaBucket.label,
           oldBalance: roscaBucket.balance,
-          newBalance: newRoscaBalance,
+          newBalance: correctRoscaBalance,
         },
         sukukReceiptBucket: {
           id: sukukReceiptBucket.id,
