@@ -1108,6 +1108,16 @@ export default async function ZakatPage() {
 
       const completedIdleRows: BucketRow[] = []
       qualifyingReceipts.forEach((r) => {
+        // For principal receipts from active investments (Sukuk), don't create idle hauls
+        // The principal was actively invested, so only one Zakat is due at completion
+        const movementType = typeof r.movement?.type === 'string' ? r.movement.type : ''
+        const isPrincipalReceipt = movementType === 'WITHDRAW_PRINCIPAL' || movementType === 'ROLLBACK_PRINCIPAL'
+        
+        if (isPrincipalReceipt) {
+          // Principal receipts don't generate idle hauls - they already paid Zakat at completion
+          return
+        }
+
         // If receipt itself completed the first hawl (>=354), next hawl starts from receipt day.
         // If receipt happened before first hawl completion, keep continuity from eligibilityStart.
         const idleAnchorStart = r.eligibilityDuration >= 354 ? r.receiptDay : r.eligibilityStart
