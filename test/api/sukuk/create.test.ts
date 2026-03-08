@@ -87,7 +87,7 @@ describe('POST /api/sukuk/create', () => {
       type: 'CASH',
     } as any)
     vi.mocked(prisma.cashBucket.aggregate).mockResolvedValue({
-      _sum: { balance: 0 },
+      _sum: { balance: 200000 },
     } as any)
   })
 
@@ -118,6 +118,7 @@ describe('POST /api/sukuk/create', () => {
       return callback({
         investment: {
           create: vi.fn().mockResolvedValue(createdSukuk),
+          update: vi.fn().mockResolvedValue(createdSukuk),
         },
         dealParticipant: {
           createMany: vi.fn(),
@@ -141,11 +142,17 @@ describe('POST /api/sukuk/create', () => {
         },
         cashBucket: {
           aggregate: vi.fn().mockResolvedValue({
-            _sum: { balance: 0 },
+            _sum: { balance: 200000 },
           }),
         },
         transaction: {
           create: vi.fn(),
+          aggregate: vi.fn().mockResolvedValue({
+            _sum: { amount: 200000 },
+          }),
+        },
+        investmentBucketAllocation: {
+          findMany: vi.fn().mockResolvedValue([]),
         },
       })
     })
@@ -285,6 +292,7 @@ describe('POST /api/sukuk/create', () => {
       return callback({
         investment: {
           create: vi.fn().mockResolvedValue(createdSukuk),
+          update: vi.fn().mockResolvedValue(createdSukuk),
         },
         dealParticipant: {
           createMany: vi.fn(),
@@ -308,11 +316,17 @@ describe('POST /api/sukuk/create', () => {
         },
         cashBucket: {
           aggregate: vi.fn().mockResolvedValue({
-            _sum: { balance: 0 },
+            _sum: { balance: 200000 },
           }),
         },
         transaction: {
           create: vi.fn(),
+          aggregate: vi.fn().mockResolvedValue({
+            _sum: { amount: 200000 },
+          }),
+        },
+        investmentBucketAllocation: {
+          findMany: vi.fn().mockResolvedValue([]),
         },
       })
     })
