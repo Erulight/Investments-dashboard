@@ -454,26 +454,53 @@ export const creditBucketsForReceipt = async (
       // Check if the original bucket still exists
       const originalBucket = await tx.cashBucket.findUnique({
         where: { id: alloc.cashBucketId },
-        select: { id: true, haulStartDate: true },
+        select: { id: true, haulStartDate: true, excludeFromZakat: true },
       })
 
       if (originalBucket) {
-        // Credit back to the original bucket to preserve haul date
-        await tx.cashBucket.update({
-          where: { id: alloc.cashBucketId },
-          data: { balance: { increment: cashShare } },
-        })
+        // If original bucket is excluded from Zakat (e.g., Savings Receipt bucket),
+        // don't credit back to it for principal withdrawals - create a new bucket instead
+        // so the withdrawn principal is subject to Zakat
+        const shouldCreateNewBucket = 
+          originalBucket.excludeFromZakat && 
+          (type === 'WITHDRAW_PRINCIPAL' || type === 'ROLLBACK_PRINCIPAL')
 
-        await tx.cashBucketMovement.create({
-          data: {
-            cashBucketId: alloc.cashBucketId,
-            investmentId,
+        if (shouldCreateNewBucket) {
+          // Create new bucket for principal withdrawal (not excluded from Zakat)
+          const haulStartDate = originalHaulDate || originalBucket.haulStartDate || date
+          const newBucket = await createCashBucket(tx, {
             amount: cashShare,
-            type,
+            haulStartDate,
             date,
             notes: notes || null,
-          },
-        })
+            investmentId,
+            type,
+            personId: personId === undefined ? undefined : personId,
+            excludeFromZakat: false, // Principal withdrawals should be subject to Zakat
+          })
+
+          await tx.investmentBucketAllocation.update({
+            where: { id: alloc.id },
+            data: { cashBucketId: newBucket.id },
+          })
+        } else {
+          // Credit back to the original bucket to preserve haul date
+          await tx.cashBucket.update({
+            where: { id: alloc.cashBucketId },
+            data: { balance: { increment: cashShare } },
+          })
+
+          await tx.cashBucketMovement.create({
+            data: {
+              cashBucketId: alloc.cashBucketId,
+              investmentId,
+              amount: cashShare,
+              type,
+              date,
+              notes: notes || null,
+            },
+          })
+        }
       } else {
         // Original bucket was deleted, create new one with preserved haul date
         // Use originalHaulDate from INVEST_OUT movements if available
