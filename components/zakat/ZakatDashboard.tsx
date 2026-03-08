@@ -118,6 +118,7 @@ export function ZakatDashboard({
 
   // --- Tab state ---
   const [activeTab, setActiveTab] = useState('all')
+  const [yearTab, setYearTab] = useState<number | 'all'>('all')
 
   // --- Sort state ---
   const [sortKey, setSortKey] = useState<SortKey>('zakatDue')
@@ -204,8 +205,29 @@ export function ZakatDashboard({
     return Array.from(set).sort()
   }, [buckets])
 
+  // Extract unique years from haulCompleteDate
+  const availableYears = useMemo(() => {
+    const yearSet = new Set<number>()
+    buckets.forEach(b => {
+      const d = toDay(b.haulCompleteDate)
+      if (!Number.isNaN(d.getTime())) {
+        yearSet.add(d.getFullYear())
+      }
+    })
+    return Array.from(yearSet).sort((a, b) => b - a) // Descending order
+  }, [buckets])
+
   const filteredBuckets = useMemo(() => {
     let list = buckets
+    
+    // Filter by year tab
+    if (yearTab !== 'all') {
+      list = list.filter(b => {
+        const d = toDay(b.haulCompleteDate)
+        return !Number.isNaN(d.getTime()) && d.getFullYear() === yearTab
+      })
+    }
+    
     if (activeTab !== 'all') {
       list = list.filter(b => b.sourceGroup === activeTab)
     }
@@ -501,6 +523,45 @@ export function ZakatDashboard({
             <div className="text-lg font-bold text-gray-900">{sourceGroups.length}</div>
           </CardContent>
         </Card>
+      </div>
+
+      {/* Year Tabs */}
+      <div className="flex items-center gap-2 border-b border-gray-200 pb-2">
+        <button
+          onClick={() => setYearTab('all')}
+          className={`px-4 py-2 text-sm font-medium rounded-t-lg transition-colors ${
+            yearTab === 'all'
+              ? 'bg-emerald-50 text-emerald-700 border-b-2 border-emerald-600'
+              : 'text-gray-600 hover:text-gray-900 hover:bg-gray-50'
+          }`}
+        >
+          All Years
+        </button>
+        {availableYears.map((year) => {
+          const yearBuckets = buckets.filter(b => {
+            const d = toDay(b.haulCompleteDate)
+            return !Number.isNaN(d.getTime()) && d.getFullYear() === year
+          })
+          const yearDue = yearBuckets.reduce((sum, b) => sum + b.zakatDue, 0)
+          return (
+            <button
+              key={year}
+              onClick={() => setYearTab(year)}
+              className={`px-4 py-2 text-sm font-medium rounded-t-lg transition-colors ${
+                yearTab === year
+                  ? 'bg-emerald-50 text-emerald-700 border-b-2 border-emerald-600'
+                  : 'text-gray-600 hover:text-gray-900 hover:bg-gray-50'
+              }`}
+            >
+              {year}
+              {yearDue > 0 && (
+                <span className="ml-2 inline-flex items-center rounded-full bg-amber-100 px-2 py-0.5 text-xs font-semibold text-amber-800">
+                  SAR {fmt(yearDue)}
+                </span>
+              )}
+            </button>
+          )
+        })}
       </div>
 
       {/* Source Filter */}
