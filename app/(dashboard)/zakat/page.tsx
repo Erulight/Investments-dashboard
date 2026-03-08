@@ -816,7 +816,7 @@ export default async function ZakatPage() {
           periodIndex: 0,
           label: `Savings Receipt • ${investmentName}`,
           currency: bucket.currency,
-          balance: totalReceived,
+          balance: firstHawlZakatBase,
           haulStartDate: isoDay(haulStart),
           lastZakatPaidDate: bucket.lastZakatPaidDate
             ? bucket.lastZakatPaidDate.toISOString().split('T')[0]
@@ -831,7 +831,9 @@ export default async function ZakatPage() {
           sourceGroup: `Savings Receipt • ${investmentName}`,
           sourceType: 'CIRCLYS',
           rowKind: 'PROFIT' as const,
-          why: `ROSCA receipt of SAR ${totalReceived.toLocaleString()}, hawl from ${isoDay(haulStart)}`,
+          why: sukukInvestedDuringFirstHawl > 0
+            ? `ROSCA receipt of SAR ${totalReceived.toLocaleString()}, ${sukukInvestedDuringFirstHawl.toLocaleString()} invested in Sukuk, hawl from ${isoDay(haulStart)}`
+            : `ROSCA receipt of SAR ${totalReceived.toLocaleString()}, hawl from ${isoDay(haulStart)}`,
           lastPayment: lastPayment
             ? {
                 id: lastPayment.id,
