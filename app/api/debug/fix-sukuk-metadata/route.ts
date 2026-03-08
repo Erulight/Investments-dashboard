@@ -14,52 +14,73 @@ export async function POST() {
       return NextResponse.json({ error: 'Sukuk2024 not found' }, { status: 404 })
     }
 
-    // Find allocation to get the correct hawl start date
-    const allocation = await prisma.investmentBucketAllocation.findFirst({
-      where: {
-        investmentId: sukuk.id,
-      },
-      include: {
-        cashBucket: {
-          select: {
-            label: true,
-            haulStartDate: true,
-          },
-        },
-      },
-    })
+    // The correct hawl start is the ROSCA first contribution date: 2024-01-01
+    const correctHaulStartDate = '2024-01-01'
 
-    if (!allocation) {
-      return NextResponse.json({ error: 'No allocation found for Sukuk2024' }, { status: 404 })
-    }
-
-    const haulStartDate = allocation.cashBucket.haulStartDate
-    const haulStartIso = new Date(haulStartDate).toISOString().split('T')[0]
-
-    // Update metadata
+    // 1. Update Sukuk metadata with correct savingsHaulStartDate
     await prisma.investment.update({
       where: { id: sukuk.id },
       data: {
         metadata: JSON.stringify({
-          savingsHaulStartDate: haulStartIso,
+          savingsHaulStartDate: correctHaulStartDate,
         }),
       },
     })
 
+    // 2. Update the Profit bucket's haulStartDate to match ROSCA first contribution
+    const profitBucket = await prisma.cashBucket.findFirst({
+      where: {
+        label: 'Profit • Sukuk2024',
+      },
+    })
+
+    let profitBucketUpdate = null
+    if (profitBucket) {
+      await prisma.cashBucket.update({
+        where: { id: profitBucket.id },
+        data: {
+          haulStartDate: new Date(correctHaulStartDate),
+        },
+      })
+      profitBucketUpdate = {
+        id: profitBucket.id,
+        oldHaulStartDate: profitBucket.haulStartDate,
+        newHaulStartDate: correctHaulStartDate,
+      }
+    }
+
+    // 3. Update any Sukuk Principal Receipt bucket
+    const principalReceiptBucket = await prisma.cashBucket.findFirst({
+      where: {
+        label: { contains: 'Sukuk2024' },
+        NOT: { label: 'Profit • Sukuk2024' },
+      },
+    })
+
+    let principalBucketUpdate = null
+    if (principalReceiptBucket) {
+      // Principal receipt keeps maturity date as hawl start (new cycle)
+      // But if user wants ROSCA date, uncomment below:
+      // await prisma.cashBucket.update({
+      //   where: { id: principalReceiptBucket.id },
+      //   data: { haulStartDate: new Date(correctHaulStartDate) },
+      // })
+      principalBucketUpdate = {
+        id: principalReceiptBucket.id,
+        label: principalReceiptBucket.label,
+        haulStartDate: principalReceiptBucket.haulStartDate,
+        note: 'Kept maturity date as hawl start for principal receipt (new cycle)',
+      }
+    }
+
     return NextResponse.json({
       success: true,
-      message: 'Sukuk metadata updated',
+      message: 'All Sukuk hawl dates fixed to ROSCA first contribution date',
       details: {
-        sukukId: sukuk.id,
-        sukukName: sukuk.name,
-        oldMetadata: sukuk.metadata,
-        newMetadata: {
-          savingsHaulStartDate: haulStartIso,
-        },
-        sourceBucket: {
-          label: allocation.cashBucket.label,
-          haulStartDate: allocation.cashBucket.haulStartDate,
-        },
+        correctHaulStartDate,
+        sukukMetadataUpdated: true,
+        profitBucketUpdate,
+        principalBucketUpdate,
       },
     })
   } catch (error) {
