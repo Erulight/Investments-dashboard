@@ -107,11 +107,19 @@ describe('SukukForm Component', () => {
   it('submits form with valid data', async () => {
     const user = userEvent.setup()
 
-    ;(global.fetch as any)
-      .mockResolvedValueOnce(mockAccountsResponse)
-      .mockResolvedValueOnce({
-      ok: true,
-      json: async () => ({ success: true, sukuk: { id: 'sukuk-1' } }),
+    ;(global.fetch as any).mockImplementation((url: string) => {
+      if (url.includes('/api/accounts')) {
+        return Promise.resolve({
+          ok: true,
+          json: async () => ({
+            accounts: [{ id: 'account-1', name: 'Sukuk Investments', currency: 'SAR' }],
+          }),
+        })
+      }
+      return Promise.resolve({
+        ok: true,
+        json: async () => ({ success: true, sukuk: { id: 'sukuk-1' } }),
+      })
     })
 
     render(
@@ -129,7 +137,7 @@ describe('SukukForm Component', () => {
     await user.type(screen.getByLabelText(/Principal Amount/i), '100000')
     
     const startDateInput = screen.getByLabelText(/Start Date/i)
-    await user.type(startDateInput, '2024-01-01')
+    await user.type(startDateInput, '01/01/2024')
 
     // Submit the form
     const submitButton = screen.getByRole('button', { name: /Create Sukuk/i })
@@ -153,11 +161,19 @@ describe('SukukForm Component', () => {
   it('displays error message on API failure', async () => {
     const user = userEvent.setup()
 
-    ;(global.fetch as any)
-      .mockResolvedValueOnce(mockAccountsResponse)
-      .mockResolvedValueOnce({
-      ok: false,
-      json: async () => ({ error: 'Failed to create Sukuk' }),
+    ;(global.fetch as any).mockImplementation((url: string) => {
+      if (url.includes('/api/accounts')) {
+        return Promise.resolve({
+          ok: true,
+          json: async () => ({
+            accounts: [{ id: 'account-1', name: 'Sukuk Investments', currency: 'SAR' }],
+          }),
+        })
+      }
+      return Promise.resolve({
+        ok: false,
+        json: async () => ({ error: 'Failed to create Sukuk' }),
+      })
     })
 
     render(
@@ -175,7 +191,7 @@ describe('SukukForm Component', () => {
     await user.type(screen.getByLabelText(/Principal Amount/i), '100000')
     
     const startDateInput = screen.getByLabelText(/Start Date/i)
-    await user.type(startDateInput, '2024-01-01')
+    await user.type(startDateInput, '01/01/2024')
 
     // Submit the form
     const submitButton = screen.getByRole('button', { name: /Create Sukuk/i })
@@ -262,11 +278,19 @@ describe('SukukForm Component', () => {
       startDate: '2024-01-01T00:00:00.000Z',
     }
 
-    ;(global.fetch as any)
-      .mockResolvedValueOnce(mockAccountsResponse)
-      .mockResolvedValueOnce({
-      ok: true,
-      json: async () => ({ success: true, sukuk: { id: 'sukuk-1' } }),
+    ;(global.fetch as any).mockImplementation((url: string) => {
+      if (url.includes('/api/accounts')) {
+        return Promise.resolve({
+          ok: true,
+          json: async () => ({
+            accounts: [{ id: 'account-1', name: 'Sukuk Investments', currency: 'SAR' }],
+          }),
+        })
+      }
+      return Promise.resolve({
+        ok: true,
+        json: async () => ({ success: true, sukuk: { id: 'sukuk-1' } }),
+      })
     })
 
     render(
