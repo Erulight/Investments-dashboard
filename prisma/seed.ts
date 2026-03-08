@@ -4,6 +4,11 @@ import bcrypt from 'bcryptjs'
 const prisma = new PrismaClient()
 
 async function main() {
+  if (process.env.NODE_ENV === 'production') {
+    console.log('Skipping seed in production')
+    process.exit(0)
+  }
+
   console.log('Starting seed...')
   console.warn('⚠️  WARNING: This seed script creates demo accounts with hardcoded passwords.')
   console.warn('⚠️  These should NEVER be used in production. Change passwords immediately after deployment.')
@@ -63,14 +68,18 @@ async function main() {
   const ownerPerson = await getOrCreatePerson('owner@example.local', 'Demo Owner')
   const partnerPerson = await getOrCreatePerson('partner@example.local', 'Demo Partner')
 
-  const owner = await prisma.user.upsert({
-    where: { email: 'owner@example.local' },
-    update: {
-      name: 'Demo Owner',
-      role: 'OWNER',
-      personId: ownerPerson.id,
-    },
-    create: {
+  // Check if user with this email or personId already exists to avoid unique constraint errors
+  const existingOwner = await prisma.user.findFirst({
+    where: {
+      OR: [
+        { email: 'owner@example.local' },
+        { personId: ownerPerson.id }
+      ]
+    }
+  })
+
+  const owner = existingOwner || await prisma.user.create({
+    data: {
       email: 'owner@example.local',
       password: ownerPassword,
       name: 'Demo Owner',
@@ -79,15 +88,17 @@ async function main() {
     },
   })
 
-  const partner = await prisma.user.upsert({
-    where: { email: 'partner@example.local' },
-    update: {
-      name: 'Demo Partner',
-      role: 'PARTNER',
-      personId: partnerPerson.id,
-      canEditAsPartner: true,
-    },
-    create: {
+  const existingPartner = await prisma.user.findFirst({
+    where: {
+      OR: [
+        { email: 'partner@example.local' },
+        { personId: partnerPerson.id }
+      ]
+    }
+  })
+
+  const partner = existingPartner || await prisma.user.create({
+    data: {
       email: 'partner@example.local',
       password: partnerPassword,
       name: 'Demo Partner',
