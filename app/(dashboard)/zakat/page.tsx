@@ -823,7 +823,7 @@ export default async function ZakatPage() {
             : null,
           haulCompleteDate: isoDay(firstHaulEnd),
           idleBase: 0,
-          receiptsTotal: totalReceived,
+          receiptsTotal: firstHawlZakatBase,
           zakatDue: firstZakatDue,
           isPaid: firstIsPaid,
           haulCompleted: firstHaulCompleted,
