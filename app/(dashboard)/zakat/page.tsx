@@ -1002,6 +1002,18 @@ export default async function ZakatPage() {
           if (Number.isNaN(start.getTime())) return null
           const invMetadata = parseMetadata(inv?.metadata)
           const inheritedSavingsHaulStart = toDate(invMetadata?.savingsHaulStartDate)
+          
+          // DEBUG: Log metadata parsing for Sukuk2024
+          if (inv?.name?.includes('Sukuk2024')) {
+            console.log('[ZAKAT DEBUG] Sukuk2024 metadata:', {
+              rawMetadata: inv?.metadata,
+              parsedMetadata: invMetadata,
+              savingsHaulStartDate: invMetadata?.savingsHaulStartDate,
+              inheritedSavingsHaulStart,
+              investmentStartDate: start,
+            })
+          }
+          
           const ownerSukukAnchor =
             inheritedSavingsHaulStart && !Number.isNaN(inheritedSavingsHaulStart.getTime())
               ? inheritedSavingsHaulStart
