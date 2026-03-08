@@ -252,7 +252,10 @@ export async function POST(req: NextRequest) {
           inheritedSavingsHaulStart = fundingAllocations
             .map((alloc: any) => {
               const label = typeof alloc?.cashBucket?.label === 'string' ? alloc.cashBucket.label : ''
-              if (!label.startsWith('Savings Receipt •')) return null
+              // Accept both ROSCA receipts and Sukuk receipt buckets
+              const isRoscaReceipt = label.startsWith('Savings Receipt •')
+              const isSukukReceipt = label.includes('Receipt') && !label.startsWith('Savings Receipt •')
+              if (!isRoscaReceipt && !isSukukReceipt) return null
               const d = alloc?.cashBucket?.haulStartDate ? new Date(alloc.cashBucket.haulStartDate) : null
               if (!d || Number.isNaN(d.getTime())) return null
               return new Date(d.getFullYear(), d.getMonth(), d.getDate())
