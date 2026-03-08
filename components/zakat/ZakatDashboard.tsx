@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useMemo } from 'react'
+import { useState, useMemo, useEffect } from 'react'
 import type { ChangeEvent, FormEvent } from 'react'
 import { useRouter } from 'next/navigation'
 import { Card, CardHeader, CardTitle, CardContent } from '@/components/ui/Card'
@@ -127,6 +127,15 @@ export function ZakatDashboard({
   // --- Filter state ---
   const [statusFilter, setStatusFilter] = useState<StatusFilter>('all')
   const [dueFilter, setDueFilter] = useState<DueFilter>('all')
+  const [searchQuery, setSearchQuery] = useState('')
+  const [dateRangeStart, setDateRangeStart] = useState('')
+  const [dateRangeEnd, setDateRangeEnd] = useState('')
+  const [showActiveOnly, setShowActiveOnly] = useState(false)
+  const [summaryView, setSummaryView] = useState(false)
+  
+  // --- Pagination state ---
+  const [currentPage, setCurrentPage] = useState(1)
+  const rowsPerPage = 50
 
   // --- Pay modal state ---
   const [payTarget, setPayTarget] = useState<BucketRow | null>(null)
@@ -228,6 +237,41 @@ export function ZakatDashboard({
       })
     }
     
+    // Search filter
+    if (searchQuery.trim()) {
+      const query = searchQuery.toLowerCase()
+      list = list.filter(b => 
+        (b.label || '').toLowerCase().includes(query) ||
+        (b.source || '').toLowerCase().includes(query) ||
+        (b.sourceGroup || '').toLowerCase().includes(query)
+      )
+    }
+    
+    // Date range filter
+    if (dateRangeStart) {
+      const startDate = toDay(dateRangeStart)
+      if (!Number.isNaN(startDate.getTime())) {
+        list = list.filter(b => {
+          const d = toDay(b.haulCompleteDate)
+          return !Number.isNaN(d.getTime()) && d >= startDate
+        })
+      }
+    }
+    if (dateRangeEnd) {
+      const endDate = toDay(dateRangeEnd)
+      if (!Number.isNaN(endDate.getTime())) {
+        list = list.filter(b => {
+          const d = toDay(b.haulCompleteDate)
+          return !Number.isNaN(d.getTime()) && d <= endDate
+        })
+      }
+    }
+    
+    // Active only filter (hide paid/completed items)
+    if (showActiveOnly) {
+      list = list.filter(b => !b.isPaid && b.zakatDue > 0)
+    }
+    
     if (activeTab !== 'all') {
       list = list.filter(b => b.sourceGroup === activeTab)
     }
@@ -241,6 +285,7 @@ export function ZakatDashboard({
     } else if (dueFilter === 'none') {
       list = list.filter(b => b.zakatDue <= 0)
     }
+    
     // Sort
     const sorted = [...list].sort((a, b) => {
       let va: number | string = 0
@@ -260,8 +305,44 @@ export function ZakatDashboard({
       return 0
     })
     return sorted
-  }, [buckets, yearTab, activeTab, statusFilter, dueFilter, sortKey, sortDir])
+  }, [buckets, yearTab, activeTab, statusFilter, dueFilter, sortKey, sortDir, searchQuery, dateRangeStart, dateRangeEnd, showActiveOnly])
 
+  // Summary view grouping
+  const summaryGroups = useMemo(() => {
+    if (!summaryView) return null
+    
+    const groups = new Map<string, BucketRow[]>()
+    filteredBuckets.forEach(row => {
+      const key = row.sourceGroup
+      if (!groups.has(key)) {
+        groups.set(key, [])
+      }
+      groups.get(key)!.push(row)
+    })
+    
+    return Array.from(groups.entries()).map(([sourceGroup, rows]) => ({
+      sourceGroup,
+      rows,
+      totalBalance: sumUniqueBucketBalances(rows),
+      totalDue: rows.reduce((sum, r) => sum + r.zakatDue, 0),
+      count: rows.length,
+    }))
+  }, [filteredBuckets, summaryView])
+  
+  // Pagination
+  const totalFilteredRows = filteredBuckets.length
+  const totalPages = Math.ceil(totalFilteredRows / rowsPerPage)
+  const paginatedBuckets = useMemo(() => {
+    const startIndex = (currentPage - 1) * rowsPerPage
+    const endIndex = startIndex + rowsPerPage
+    return filteredBuckets.slice(startIndex, endIndex)
+  }, [filteredBuckets, currentPage, rowsPerPage])
+  
+  // Reset to page 1 when filters change
+  useEffect(() => {
+    setCurrentPage(1)
+  }, [yearTab, activeTab, statusFilter, dueFilter, searchQuery, dateRangeStart, dateRangeEnd, showActiveOnly])
+  
   const totalDue = filteredBuckets.reduce((sum, b) => sum + b.zakatDue, 0)
   const totalBalance = sumUniqueBucketBalances(filteredBuckets)
 
@@ -628,6 +709,118 @@ export function ZakatDashboard({
         </div>
       </div>
 
+      {/* Advanced Filters */}
+      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-3">
+        {/* Search */}
+        <div>
+          <label className="block text-xs font-medium text-gray-500 mb-1">Search</label>
+          <input
+            type="text"
+            value={searchQuery}
+            onChange={(e) => setSearchQuery(e.target.value)}
+            placeholder="Investment name..."
+            className="w-full rounded-md border border-gray-200 px-3 py-1.5 text-sm text-gray-700 focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500 outline-none"
+          />
+        </div>
+
+        {/* Date Range Start */}
+        <div>
+          <label className="block text-xs font-medium text-gray-500 mb-1">From Date</label>
+          <input
+            type="date"
+            value={dateRangeStart}
+            onChange={(e) => setDateRangeStart(e.target.value)}
+            className="w-full rounded-md border border-gray-200 px-3 py-1.5 text-sm text-gray-700 focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500 outline-none"
+          />
+        </div>
+
+        {/* Date Range End */}
+        <div>
+          <label className="block text-xs font-medium text-gray-500 mb-1">To Date</label>
+          <input
+            type="date"
+            value={dateRangeEnd}
+            onChange={(e) => setDateRangeEnd(e.target.value)}
+            className="w-full rounded-md border border-gray-200 px-3 py-1.5 text-sm text-gray-700 focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500 outline-none"
+          />
+        </div>
+
+        {/* View Options */}
+        <div className="flex flex-col gap-2">
+          <label className="flex items-center gap-2 text-xs font-medium text-gray-700 cursor-pointer">
+            <input
+              type="checkbox"
+              checked={showActiveOnly}
+              onChange={(e) => setShowActiveOnly(e.target.checked)}
+              className="rounded border-gray-300 text-emerald-600 focus:ring-emerald-500"
+            />
+            Active Only
+          </label>
+          <label className="flex items-center gap-2 text-xs font-medium text-gray-700 cursor-pointer">
+            <input
+              type="checkbox"
+              checked={summaryView}
+              onChange={(e) => setSummaryView(e.target.checked)}
+              className="rounded border-gray-300 text-emerald-600 focus:ring-emerald-500"
+            />
+            Summary View
+          </label>
+        </div>
+      </div>
+
+      {/* Clear Filters */}
+      {(searchQuery || dateRangeStart || dateRangeEnd || showActiveOnly) && (
+        <div className="flex items-center gap-2">
+          <button
+            onClick={() => {
+              setSearchQuery('')
+              setDateRangeStart('')
+              setDateRangeEnd('')
+              setShowActiveOnly(false)
+            }}
+            className="text-xs text-emerald-600 hover:text-emerald-700 font-medium"
+          >
+            Clear Advanced Filters
+          </button>
+        </div>
+      )}
+
+      {/* Summary View */}
+      {summaryView && summaryGroups && summaryGroups.length > 0 ? (
+        <Card>
+          <CardContent className="p-4">
+            <div className="space-y-3">
+              <div className="text-sm font-semibold text-gray-700">Summary by Investment</div>
+              {summaryGroups.map((group) => (
+                <div key={group.sourceGroup} className="flex items-center justify-between p-3 bg-gray-50 rounded-lg">
+                  <div className="flex-1">
+                    <div className="text-sm font-medium text-gray-900">{group.sourceGroup}</div>
+                    <div className="text-xs text-gray-500 mt-0.5">{group.count} hawl{group.count !== 1 ? 's' : ''}</div>
+                  </div>
+                  <div className="text-right">
+                    <div className="text-xs text-gray-500">Balance</div>
+                    <div className="text-sm font-semibold text-gray-900">SAR {fmt(group.totalBalance)}</div>
+                  </div>
+                  <div className="text-right ml-4">
+                    <div className="text-xs text-gray-500">Zakat Due</div>
+                    <div className="text-sm font-semibold text-emerald-700">SAR {fmt(group.totalDue)}</div>
+                  </div>
+                  <button
+                    onClick={() => {
+                      setSummaryView(false)
+                      setActiveTab(group.sourceGroup)
+                    }}
+                    className="ml-4 text-xs text-emerald-600 hover:text-emerald-700 font-medium"
+                  >
+                    View Details
+                  </button>
+                </div>
+              ))}
+            </div>
+          </CardContent>
+        </Card>
+      ) : null}
+
       {/* Table */}
       <Card>
         <CardContent className="p-0">
@@ -666,7 +859,7 @@ export function ZakatDashboard({
                 <tbody className="divide-y divide-gray-100">
                   {(() => {
                     const groupMap = new Map<string, BucketRow[]>()
-                    filteredBuckets.forEach(r => {
+                    paginatedBuckets.forEach(r => {
                       const key = r.source && r.source !== 'General' ? r.source : 'General Cash'
                       const existing = groupMap.get(key) || []
                       existing.push(r)
@@ -825,6 +1018,74 @@ export function ZakatDashboard({
           )}
         </CardContent>
       </Card>
+
+      {/* Pagination Controls */}
+      {!summaryView && totalPages > 1 && (
+        <div className="flex items-center justify-between px-4 py-3 bg-white border border-gray-200 rounded-lg">
+          <div className="flex items-center gap-2 text-sm text-gray-600">
+            <span>
+              Showing {((currentPage - 1) * rowsPerPage) + 1} to {Math.min(currentPage * rowsPerPage, totalFilteredRows)} of {totalFilteredRows} rows
+            </span>
+          </div>
+          <div className="flex items-center gap-2">
+            <button
+              onClick={() => setCurrentPage(1)}
+              disabled={currentPage === 1}
+              className="px-3 py-1.5 text-sm font-medium text-gray-700 bg-white border border-gray-300 rounded-md hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed"
+            >
+              First
+            </button>
+            <button
+              onClick={() => setCurrentPage(prev => Math.max(1, prev - 1))}
+              disabled={currentPage === 1}
+              className="px-3 py-1.5 text-sm font-medium text-gray-700 bg-white border border-gray-300 rounded-md hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed"
+            >
+              Previous
+            </button>
+            <div className="flex items-center gap-1">
+              {Array.from({ length: Math.min(5, totalPages) }, (_, i) => {
+                let pageNum: number
+                if (totalPages <= 5) {
+                  pageNum = i + 1
+                } else if (currentPage <= 3) {
+                  pageNum = i + 1
+                } else if (currentPage >= totalPages - 2) {
+                  pageNum = totalPages - 4 + i
+                } else {
+                  pageNum = currentPage - 2 + i
+                }
+                return (
+                  <button
+                    key={pageNum}
+                    onClick={() => setCurrentPage(pageNum)}
+                    className={`px-3 py-1.5 text-sm font-medium rounded-md ${
+                      currentPage === pageNum
+                        ? 'bg-emerald-600 text-white'
+                        : 'text-gray-700 bg-white border border-gray-300 hover:bg-gray-50'
+                    }`}
+                  >
+                    {pageNum}
+                  </button>
+                )
+              })}
+            </div>
+            <button
+              onClick={() => setCurrentPage(prev => Math.min(totalPages, prev + 1))}
+              disabled={currentPage === totalPages}
+              className="px-3 py-1.5 text-sm font-medium text-gray-700 bg-white border border-gray-300 rounded-md hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed"
+            >
+              Next
+            </button>
+            <button
+              onClick={() => setCurrentPage(totalPages)}
+              disabled={currentPage === totalPages}
+              className="px-3 py-1.5 text-sm font-medium text-gray-700 bg-white border border-gray-300 rounded-md hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed"
+            >
+              Last
+            </button>
+          </div>
+        </div>
+      )}
 
       {rollbackError && (
         <div className="text-xs text-red-600 px-1">{rollbackError}</div>
