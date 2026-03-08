@@ -31,3 +31,7 @@ export async function POST() {
     bucketsUpdated: updated.count
   })
 }
+
+export async function GET() {
+  return POST()
+}
