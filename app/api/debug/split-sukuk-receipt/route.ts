@@ -47,11 +47,13 @@ export async function POST() {
       data: { cashBucketId: sukukReceiptBucket.id },
     })
 
-    // Update ROSCA bucket balance (remove the 5k that was moved)
-    const newRoscaBalance = Number(roscaBucket.balance) - withdrawAmount
+    // Update ROSCA bucket balance
+    // The bucket should be 25k (30k receipt - 5k invested in Sukuk)
+    // The monthly payments were from separate cash, not from this bucket
+    const correctRoscaBalance = 25000
     await prisma.cashBucket.update({
       where: { id: roscaBucket.id },
-      data: { balance: newRoscaBalance },
+      data: { balance: correctRoscaBalance },
     })
 
     return NextResponse.json({
