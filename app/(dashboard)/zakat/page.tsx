@@ -300,162 +300,109 @@ export default async function ZakatPage() {
       })
     }
 
-    const savingsToSukukBuckets = await prisma.cashBucket.findMany({
-      where: {
-        label: { startsWith: 'Savings Receipt •' },
-        movements: {
-          some: {
-            type: 'INVEST_OUT',
-            investment: { account: { type: 'SUKUK' } },
-          },
-        },
-      },
-      select: {
-        haulStartDate: true,
-        movements: {
-          where: {
-            type: 'INVEST_OUT',
-            investment: { account: { type: 'SUKUK' } },
-          },
-          select: { investmentId: true },
-        },
-      },
+    // For every Sukuk investment owned by the owner, determine correct hawl start:
+    // - ROSCA-funded: Savings Receipt CASH_IN same day + same amount as CASH_INVEST
+    //   → hawlStart = ROSCA first contribution date (haulStartDate of Savings Receipt bucket)
+    //   → mark that Savings Receipt bucket excludeFromZakat = true
+    // - Manual cash: hawlStart = CASH_INVEST transaction date
+    // Apply hawlStart to both Principal and Profit buckets for that Sukuk.
+
+    const allSukukInvestments = await prisma.investment.findMany({
+      where: { account: { type: 'SUKUK' } },
+      select: { id: true, metadata: true },
     })
 
-    const inheritedSavingsHaulByInvestment = new Map<string, Date>()
-    for (const bucket of savingsToSukukBuckets) {
-      const anchor = toDate(bucket.haulStartDate)
-      if (!anchor) continue
-      const anchorDay = new Date(anchor.getFullYear(), anchor.getMonth(), anchor.getDate())
-      for (const m of bucket.movements) {
-        const investmentId = typeof m?.investmentId === 'string' ? m.investmentId : null
-        if (!investmentId) continue
-        const existing = inheritedSavingsHaulByInvestment.get(investmentId)
-        if (!existing || anchorDay.getTime() < existing.getTime()) {
-          inheritedSavingsHaulByInvestment.set(investmentId, anchorDay)
-        }
-      }
-    }
-
-    const ownerCashInvestTxs = await prisma.transaction.findMany({
+    const allSukukCashInvestTxs = await prisma.transaction.findMany({
       where: {
         type: 'CASH_INVEST',
         personId: null,
         investmentId: { not: null },
+        investment: { account: { type: 'SUKUK' } },
       },
       select: { id: true, investmentId: true, amount: true, date: true },
-      orderBy: { date: 'asc' },
     })
 
-    const ownerSavingsReceiptBuckets = await prisma.cashBucket.findMany({
-      where: {
-        personId: null,
-        label: { startsWith: 'Savings Receipt •' },
-      },
+    const allSavingsReceiptBuckets = await prisma.cashBucket.findMany({
+      where: { personId: null, label: { startsWith: 'Savings Receipt •' } },
       select: {
+        id: true,
         haulStartDate: true,
         movements: {
           where: { type: 'CASH_IN' },
           select: { amount: true, date: true },
           orderBy: { date: 'asc' },
+          take: 1,
         },
       },
     })
 
-    const usedCashInvestTxIds = new Set<string>()
-    for (const bucket of ownerSavingsReceiptBuckets) {
-      const anchor = toDate(bucket.haulStartDate)
-      if (!anchor) continue
-      const anchorDay = new Date(anchor.getFullYear(), anchor.getMonth(), anchor.getDate())
+    const sukukInvestedReceiptIds = new Set<string>()
 
-      const cashIn = bucket.movements[0]
-      if (!cashIn) continue
-      const receiptAmount = Math.abs(Number(cashIn.amount) || 0)
-      if (receiptAmount <= 0) continue
+    for (const sukukInv of allSukukInvestments) {
+      const cashInvestTx = allSukukCashInvestTxs.find((tx: any) => tx.investmentId === sukukInv.id)
+      if (!cashInvestTx) continue
 
-      const receiptDate = toDate(cashIn.date)
-      if (!receiptDate) continue
-      const receiptDay = new Date(receiptDate.getFullYear(), receiptDate.getMonth(), receiptDate.getDate())
+      const txRaw = cashInvestTx.date instanceof Date ? cashInvestTx.date : new Date(cashInvestTx.date as any)
+      if (Number.isNaN(txRaw.getTime())) continue
+      const txDay = new Date(txRaw.getFullYear(), txRaw.getMonth(), txRaw.getDate())
+      const txTimestamp = txDay.getTime()
+      const txAmount = Math.abs(Number(cashInvestTx.amount) || 0)
 
-      const matchingTx = ownerCashInvestTxs.find((tx: any) => {
-        if (usedCashInvestTxIds.has(tx.id)) return false
-        const txInvestmentId = typeof tx?.investmentId === 'string' ? tx.investmentId : null
-        if (!txInvestmentId) return false
-
-        const txDate = tx.date instanceof Date ? tx.date : new Date(tx.date as any)
-        if (Number.isNaN(txDate.getTime())) return false
-        const txDay = new Date(txDate.getFullYear(), txDate.getMonth(), txDate.getDate())
-        if (txDay.getTime() < receiptDay.getTime()) return false
-
-        return Math.abs(Math.abs(Number(tx.amount) || 0) - receiptAmount) < 0.01
+      // Look for a Savings Receipt bucket whose CASH_IN is same day + same amount
+      const matchedReceiptBucket = allSavingsReceiptBuckets.find((rb: any) => {
+        const cashIn = rb.movements?.[0]
+        if (!cashIn) return false
+        const ciAmt = Math.abs(Number(cashIn.amount) || 0)
+        if (Math.abs(ciAmt - txAmount) > 0.01) return false
+        const ciRaw = cashIn.date instanceof Date ? cashIn.date : new Date(cashIn.date as any)
+        if (Number.isNaN(ciRaw.getTime())) return false
+        const ciDay = new Date(ciRaw.getFullYear(), ciRaw.getMonth(), ciRaw.getDate())
+        return ciDay.getTime() === txTimestamp
       })
 
-      const matchedInvestmentId = typeof matchingTx?.investmentId === 'string' ? matchingTx.investmentId : null
-      if (!matchingTx || !matchedInvestmentId) continue
-
-      usedCashInvestTxIds.add(matchingTx.id)
-      const existing = inheritedSavingsHaulByInvestment.get(matchedInvestmentId)
-      if (!existing || anchorDay.getTime() < existing.getTime()) {
-        inheritedSavingsHaulByInvestment.set(matchedInvestmentId, anchorDay)
+      let hawlStart: Date
+      if (matchedReceiptBucket) {
+        // ROSCA-funded: use ROSCA first contribution date
+        const anchor = toDate(matchedReceiptBucket.haulStartDate)
+        hawlStart = anchor
+          ? new Date(anchor.getFullYear(), anchor.getMonth(), anchor.getDate())
+          : txDay
+        sukukInvestedReceiptIds.add(matchedReceiptBucket.id)
+      } else {
+        // Manual cash: use the CASH_INVEST date
+        hawlStart = txDay
       }
-    }
 
-    for (const [investmentId, inheritedDate] of inheritedSavingsHaulByInvestment.entries()) {
-      const inheritedIso = inheritedDate.toISOString().split('T')[0]
-      const inv = await prisma.investment.findUnique({
-        where: { id: investmentId },
-        select: { metadata: true, startDate: true },
-      })
-      const existingMeta = parseMetadata(inv?.metadata) || {}
-
-      // Store savingsHaulStartDate (ROSCA first contribution date) in Sukuk metadata
-      if (existingMeta?.savingsHaulStartDate !== inheritedIso) {
+      // Persist hawl start in investment metadata
+      const hawlIso = hawlStart.toISOString().split('T')[0]
+      const existingMeta = parseMetadata(sukukInv.metadata) || {}
+      if (existingMeta?.savingsHaulStartDate !== hawlIso) {
         await prisma.investment.update({
-          where: { id: investmentId },
-          data: {
-            metadata: JSON.stringify({
-              ...existingMeta,
-              savingsHaulStartDate: inheritedIso,
-            }),
-          },
+          where: { id: sukukInv.id },
+          data: { metadata: JSON.stringify({ ...existingMeta, savingsHaulStartDate: hawlIso }) },
         })
       }
 
-      // PRINCIPAL bucket → use ROSCA first contribution date as haul start
+      // Update Principal and Profit bucket haul start dates
       await prisma.cashBucket.updateMany({
         where: {
           personId: null,
-          label: { startsWith: 'Sukuk Principal •' },
-          movements: {
-            some: {
-              investmentId,
-            },
-          },
+          OR: [
+            { label: { startsWith: 'Sukuk Principal •' } },
+            { label: { startsWith: 'Profit •' } },
+          ],
+          movements: { some: { investmentId: sukukInv.id } },
         },
-        data: { haulStartDate: inheritedDate },
+        data: { haulStartDate: hawlStart },
       })
+    }
 
-      // PROFIT bucket → use investment start date (NOT ROSCA date)
-      const invStartDate = inv?.startDate
-        ? (inv.startDate instanceof Date ? inv.startDate : new Date(inv.startDate as any))
-        : null
-
-      if (invStartDate && !Number.isNaN(invStartDate.getTime())) {
-        const invStartDay = new Date(invStartDate.getFullYear(), invStartDate.getMonth(), invStartDate.getDate())
-        await prisma.cashBucket.updateMany({
-          where: {
-            personId: null,
-            label: { startsWith: 'Profit •' },
-            movements: {
-              some: {
-                investmentId,
-                type: 'CASH_IN',
-              },
-            },
-          },
-          data: { haulStartDate: invStartDay },
-        })
-      }
+    // Exclude fully-invested Savings Receipt buckets from Zakat
+    if (sukukInvestedReceiptIds.size > 0) {
+      await prisma.cashBucket.updateMany({
+        where: { id: { in: Array.from(sukukInvestedReceiptIds) } },
+        data: { excludeFromZakat: true },
+      })
     }
   }
 
