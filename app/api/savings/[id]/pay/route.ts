@@ -492,6 +492,25 @@ export async function DELETE(
             },
           })
         }
+
+        // Record transaction in Cash Ledger for visibility
+        const cashAccount =
+          (await tx.account.findFirst({ where: { type: 'CASH', isActive: true } })) ??
+          (await tx.account.create({
+            data: { name: 'Cash Balance', type: 'CASH', currency: investment.account?.currency || 'SAR', description: 'Cash ledger account' },
+          }))
+
+        await tx.transaction.create({
+          data: {
+            accountId: cashAccount.id,
+            investmentId: investment.id,
+            personId: null,
+            type: 'CASH_IN',
+            amount: refundAmount,
+            date: dueDate,
+            description: `Undo Circlys payback • ${investment.name} • Month ${monthIndex + 1}`,
+          },
+        })
       })
     } else {
       // Normal: delete the contribution bucket and restore available cash
@@ -534,6 +553,25 @@ export async function DELETE(
             },
           })
         }
+
+        // Record transaction in Cash Ledger for visibility
+        const cashAccount =
+          (await tx.account.findFirst({ where: { type: 'CASH', isActive: true } })) ??
+          (await tx.account.create({
+            data: { name: 'Cash Balance', type: 'CASH', currency: contributionBucket?.currency || investment.account?.currency || 'SAR', description: 'Cash ledger account' },
+          }))
+
+        await tx.transaction.create({
+          data: {
+            accountId: cashAccount.id,
+            investmentId: investment.id,
+            personId: null,
+            type: 'CASH_IN',
+            amount: refundAmount,
+            date: dueDate,
+            description: `Undo Circlys contribution • ${investment.name} • Month ${monthIndex + 1}`,
+          },
+        })
       })
     }
 
