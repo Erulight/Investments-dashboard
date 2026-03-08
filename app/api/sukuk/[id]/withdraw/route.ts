@@ -325,15 +325,43 @@ export async function POST(
           throw err
         }
       } else {
-        await creditBucketsForReceipt(tx, {
-          investmentId: investment.id,
-          amount,
-          principalReduction: source === 'PRINCIPAL' ? amount : 0,
-          date,
-          type: source === 'PROFIT' ? 'WITHDRAW_PROFIT' : 'WITHDRAW_PRINCIPAL',
-          notes: notes || null,
-          personId: null,
-        })
+        // For PRINCIPAL withdrawals from Sukuk, create a new independent cash bucket
+        // with haulStartDate = withdrawal date (not inherited from ROSCA)
+        if (source === 'PRINCIPAL') {
+          await createCashBucket(tx, {
+            amount: amount,
+            haulStartDate: date,
+            label: `${investment.name} Receipt`,
+            date: date,
+            notes: notes || null,
+            investmentId: investment.id,
+            type: 'WITHDRAW_PRINCIPAL',
+            excludeFromZakat: false,
+            personId: null,
+          })
+
+          // Remove allocation tracking since this is now independent
+          const allocations = await tx.investmentBucketAllocation.findMany({
+            where: { investmentId: investment.id },
+          })
+
+          for (const alloc of allocations) {
+            await tx.investmentBucketAllocation.delete({
+              where: { id: alloc.id },
+            })
+          }
+        } else {
+          // For PROFIT withdrawals, use existing logic
+          await creditBucketsForReceipt(tx, {
+            investmentId: investment.id,
+            amount,
+            principalReduction: 0,
+            date,
+            type: 'WITHDRAW_PROFIT',
+            notes: notes || null,
+            personId: null,
+          })
+        }
       }
 
       const cashAccount = await tx.account.findFirst({
