@@ -19,16 +19,20 @@ export async function POST() {
     }
   })
 
-  // Update all buckets for this investment
+  // Update all buckets linked to this investment via movements
   const updated = await prisma.cashBucket.updateMany({
-    where: { label: { contains: 'Sukuk2024' } },
+    where: {
+      personId: null,
+      movements: { some: { investmentId: inv.id } }
+    },
     data: { haulStartDate: new Date('2024-01-01') }
   })
 
   return NextResponse.json({
     success: true,
     investmentId: inv.id,
-    bucketsUpdated: updated.count
+    bucketsUpdated: updated.count,
+    message: 'Updated all buckets with movements linked to this investment'
   })
 }
 
