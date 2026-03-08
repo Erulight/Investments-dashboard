@@ -1071,7 +1071,7 @@ export default async function ZakatPage() {
             : (isPrincipalReceiptMovement
               ? (user.role === 'PARTNER' ? bucketStart : ownerSukukAnchor)
               : (isProfitReceiptMovement
-                ? (user.role === 'PARTNER' ? bucketStart : ownerSukukAnchor)
+                ? (user.role === 'PARTNER' ? bucketStart : start)
                 : (user.role === 'PARTNER' ? bucketStart : ownerSukukAnchor))))
           const eligibilityStart = startOfDay(eligibilityAnchor)
           const duration = diffDaysFloor(eligibilityStart, day)
@@ -1205,7 +1205,7 @@ export default async function ZakatPage() {
             label: `Idle \u2022 ${r.investmentName} \u2022 ${isoDay(periodStart)} \u2192 ${isoDay(periodEnd)}`,
             currency: bucket.currency,
             balance: displayBalance,
-            haulStartDate: isoDay(periodStart),
+            haulStartDate: isoDay(r.eligibilityStart),
             lastZakatPaidDate: bucket.lastZakatPaidDate
               ? bucket.lastZakatPaidDate.toISOString().split('T')[0]
               : null,
