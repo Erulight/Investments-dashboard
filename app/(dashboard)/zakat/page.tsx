@@ -780,12 +780,35 @@ export default async function ZakatPage() {
         const investmentName = bucket.label.replace('Savings Receipt • ', '')
         const savingsRows: BucketRow[] = []
 
-        // First hawl: special receipt zakat (from first contribution date)
+        // Calculate Sukuk investments made during first hawl period
         const firstHaulEnd = addDays(haulStart, 354)
+        const sukukInvestedDuringFirstHawl = movements.reduce((sum: number, m: any) => {
+          const movementType = typeof m?.type === 'string' ? m.type : ''
+          if (movementType !== 'INVEST_OUT') return sum
+          
+          const invId = typeof m?.investmentId === 'string' ? m.investmentId : null
+          const inv = invId ? investmentMap.get(invId) : null
+          const invType = inv?.account?.type
+          if (invType !== 'SUKUK') return sum
+          
+          const movementDate = m?.date instanceof Date ? m.date : new Date(m?.date)
+          if (Number.isNaN(movementDate.getTime())) return sum
+          
+          // Only count investments made before first hawl completes
+          if (movementDate.getTime() < firstHaulEnd.getTime()) {
+            const amt = Math.abs(Number(m?.amount) || 0)
+            return sum + amt
+          }
+          return sum
+        }, 0)
+
+        // First hawl: special receipt zakat (from first contribution date)
         const firstHaulCompleted = now.getTime() >= firstHaulEnd.getTime()
         const firstRowKey = buildRowKey(['SAVINGS_RECEIPT', bucket.id])
         const firstIsPaid = movementHasRowPaid(payments, firstRowKey)
-        const firstZakatDue = !firstIsPaid && firstHaulCompleted && totalReceived > 0 ? totalReceived * 0.025 : 0
+        // Reduce Zakat base by amount invested in Sukuk during first hawl
+        const firstHawlZakatBase = Math.max(0, totalReceived - sukukInvestedDuringFirstHawl)
+        const firstZakatDue = !firstIsPaid && firstHaulCompleted && firstHawlZakatBase > 0 ? firstHawlZakatBase * 0.025 : 0
 
         savingsRows.push({
           id: firstRowKey,
