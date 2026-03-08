@@ -555,12 +555,16 @@ export const creditBucketsForReceipt = async (
     if (explicitHaulStart) {
       haulStartDate = explicitHaulStart
     } else {
-      // For profit bucket, always use investment start date (when profit started accruing)
-      // savingsHaulStartDate is only for the PRINCIPAL bucket, not profit
-      if (inv?.startDate) {
-        const startDate = inv.startDate instanceof Date
-          ? inv.startDate
-          : new Date(inv.startDate as any)
+      // Check if investment was funded from ROSCA savings
+      const meta = inv?.metadata ? JSON.parse(inv.metadata as string) : null
+      const haulStart = meta?.savingsHaulStartDate
+        ? new Date(meta.savingsHaulStartDate)
+        : inv?.startDate
+
+      if (haulStart) {
+        const startDate = haulStart instanceof Date
+          ? haulStart
+          : new Date(haulStart as any)
 
         if (!Number.isNaN(startDate.getTime())) {
           haulStartDate = new Date(startDate.getFullYear(), startDate.getMonth(), startDate.getDate())
