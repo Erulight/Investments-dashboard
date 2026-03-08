@@ -302,6 +302,9 @@ describe('SukukForm Component', () => {
       />
     )
 
+    // Wait for accounts to load
+    await screen.findByRole('option', { name: /Sukuk Investments/i })
+
     // Change the name
     const nameInput = screen.getByDisplayValue('Test Sukuk')
     await user.clear(nameInput)
