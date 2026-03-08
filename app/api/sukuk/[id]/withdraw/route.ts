@@ -325,39 +325,12 @@ export async function POST(
           throw err
         }
       } else {
-        // Get the ROSCA first contribution date from investment metadata or allocation
-        const invMeta = parseMetadata(investment.metadata)
-        let roscaHaulStart: Date | null = null
-        
-        if (invMeta?.savingsHaulStartDate) {
-          const d = new Date(invMeta.savingsHaulStartDate)
-          if (!Number.isNaN(d.getTime())) {
-            roscaHaulStart = d
-          }
-        }
-
-        // Fallback: get from allocation's source bucket
-        if (!roscaHaulStart) {
-          const alloc = await tx.investmentBucketAllocation.findFirst({
-            where: { investmentId: investment.id },
-            include: {
-              cashBucket: { select: { haulStartDate: true } },
-            },
-          })
-          if (alloc?.cashBucket?.haulStartDate) {
-            roscaHaulStart = alloc.cashBucket.haulStartDate
-          }
-        }
-
-        // Default to receipt date if no ROSCA date found
-        const bucketHaulStart = roscaHaulStart || date
-
         if (source === 'PRINCIPAL') {
           // For principal withdrawals, create a new independent bucket
-          // Use receipt date as hawl start (new cycle after maturity)
+          // Use maturity date as hawl start (new cycle)
           await createCashBucket(tx, {
             amount: amount,
-            haulStartDate: date, // Receipt date for new cycle
+            haulStartDate: date,
             label: `${investment.name} Principal Receipt`,
             date: date,
             notes: notes || null,
@@ -380,7 +353,7 @@ export async function POST(
             })
           }
         } else {
-          // For profit withdrawals, pass the ROSCA hawl start date
+          // For profit withdrawals, use default logic (Sukuk start date)
           await creditBucketsForReceipt(tx, {
             investmentId: investment.id,
             amount,
@@ -389,7 +362,6 @@ export async function POST(
             type: 'WITHDRAW_PROFIT',
             notes: notes || null,
             personId: null,
-            profitHaulStartDate: roscaHaulStart || undefined,
           })
         }
       }

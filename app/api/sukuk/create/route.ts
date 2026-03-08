@@ -253,10 +253,16 @@ export async function POST(req: NextRequest) {
           console.log('[SUKUK_CREATE] Allocation bucket:', alloc.cashBucket?.label, 'haulStart:', alloc.cashBucket?.haulStartDate)
         })
 
-        // Get the earliest hawl start date from ALL funding buckets
-        // This ensures we inherit the ROSCA first contribution date
+        // Only inherit from Savings Receipt buckets (ROSCA funds)
+        // Manual cash entries should NOT pass their hawl date to Sukuk
         inheritedSavingsHaulStart = fundingAllocations
           .map((alloc: any) => {
+            const label = typeof alloc?.cashBucket?.label === 'string' ? alloc.cashBucket.label : ''
+            const isRoscaReceipt = label.startsWith('Savings Receipt •')
+            if (!isRoscaReceipt) {
+              console.log('[SUKUK_CREATE] Skipping non-ROSCA bucket:', label)
+              return null
+            }
             const d = alloc?.cashBucket?.haulStartDate ? new Date(alloc.cashBucket.haulStartDate) : null
             if (!d || Number.isNaN(d.getTime())) return null
             return new Date(d.getFullYear(), d.getMonth(), d.getDate())
