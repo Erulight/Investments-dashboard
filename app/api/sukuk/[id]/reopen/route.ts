@@ -174,31 +174,8 @@ export async function POST(
         })
       }
 
-      if (receiptMovements.length > 0) {
-        const bucketIds = Array.from(new Set(receiptMovements.map((m: any) => m.cashBucketId)))
-        const buckets = await tx.cashBucket.findMany({
-          where: { id: { in: bucketIds } },
-          select: { id: true, balance: true },
-        })
-        const bucketMap = new Map<string, number>(
-          buckets.map((b: any) => [String(b.id), Number(b.balance) || 0])
-        )
-        for (const movement of receiptMovements) {
-          const movementAmount = Number(movement.amount) || 0
-          const bal = bucketMap.get(String(movement.cashBucketId)) ?? 0
-          if (bal + 0.000001 < movementAmount) {
-            throw new Error('INSUFFICIENT_CASH')
-          }
-          bucketMap.set(String(movement.cashBucketId), bal - movementAmount)
-        }
-      }
-
+      // Restore allocations for principal withdrawals (don't touch bucket balances yet)
       for (const movement of receiptMovements) {
-        await tx.cashBucket.update({
-          where: { id: movement.cashBucketId },
-          data: { balance: { decrement: movement.amount } },
-        })
-
         if (movement.type !== 'WITHDRAW_PROFIT') {
           const allocation = await tx.investmentBucketAllocation.findUnique({
             where: {

@@ -241,6 +241,7 @@ export async function POST(req: NextRequest) {
           include: {
             cashBucket: {
               select: {
+                id: true,
                 label: true,
                 haulStartDate: true,
               },
@@ -248,9 +249,15 @@ export async function POST(req: NextRequest) {
           },
         })
 
+        console.log('[SUKUK_CREATE] Investment ID:', newSukuk.id)
         console.log('[SUKUK_CREATE] Found allocations:', fundingAllocations.length)
         fundingAllocations.forEach((alloc: any) => {
-          console.log('[SUKUK_CREATE] Allocation bucket:', alloc.cashBucket?.label, 'haulStart:', alloc.cashBucket?.haulStartDate)
+          console.log('[SUKUK_CREATE] Allocation:', {
+            bucketId: alloc.cashBucket?.id,
+            label: alloc.cashBucket?.label,
+            haulStart: alloc.cashBucket?.haulStartDate,
+            principalAllocated: alloc.principalAllocated,
+          })
         })
 
         // Only inherit from Savings Receipt buckets (ROSCA funds)
@@ -259,18 +266,23 @@ export async function POST(req: NextRequest) {
           .map((alloc: any) => {
             const label = typeof alloc?.cashBucket?.label === 'string' ? alloc.cashBucket.label : ''
             const isRoscaReceipt = label.startsWith('Savings Receipt •')
+            console.log('[SUKUK_CREATE] Checking bucket:', label, 'isROSCA:', isRoscaReceipt)
             if (!isRoscaReceipt) {
-              console.log('[SUKUK_CREATE] Skipping non-ROSCA bucket:', label)
               return null
             }
             const d = alloc?.cashBucket?.haulStartDate ? new Date(alloc.cashBucket.haulStartDate) : null
-            if (!d || Number.isNaN(d.getTime())) return null
-            return new Date(d.getFullYear(), d.getMonth(), d.getDate())
+            if (!d || Number.isNaN(d.getTime())) {
+              console.log('[SUKUK_CREATE] Invalid date for ROSCA bucket:', d)
+              return null
+            }
+            const normalized = new Date(d.getFullYear(), d.getMonth(), d.getDate())
+            console.log('[SUKUK_CREATE] Found valid ROSCA date:', normalized.toISOString().split('T')[0])
+            return normalized
           })
           .filter((d: Date | null): d is Date => Boolean(d))
           .sort((a: Date, b: Date) => a.getTime() - b.getTime())[0] || null
 
-        console.log('[SUKUK_CREATE] Inherited hawl start:', inheritedSavingsHaulStart?.toISOString().split('T')[0] || 'none')
+        console.log('[SUKUK_CREATE] Final inherited hawl start:', inheritedSavingsHaulStart?.toISOString().split('T')[0] || 'NONE')
       } catch (err) {
         console.error('[SUKUK_CREATE] Error finding allocations:', err)
         inheritedSavingsHaulStart = null
@@ -279,7 +291,8 @@ export async function POST(req: NextRequest) {
       if (inheritedSavingsHaulStart) {
         const existingMeta = parseMetadata(newSukuk.metadata)
         const inheritedIso = inheritedSavingsHaulStart.toISOString().split('T')[0]
-        await tx.investment.update({
+        console.log('[SUKUK_CREATE] Updating metadata with savingsHaulStartDate:', inheritedIso)
+        const updatedInvestment = await tx.investment.update({
           where: { id: newSukuk.id },
           data: {
             metadata: JSON.stringify({
@@ -288,6 +301,9 @@ export async function POST(req: NextRequest) {
             }),
           },
         })
+        console.log('[SUKUK_CREATE] Metadata after update:', updatedInvestment.metadata)
+      } else {
+        console.log('[SUKUK_CREATE] No ROSCA hawl start found - metadata NOT updated')
       }
 
       await tx.transaction.create({
