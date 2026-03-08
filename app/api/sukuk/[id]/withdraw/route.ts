@@ -325,15 +325,45 @@ export async function POST(
           throw err
         }
       } else {
-        await creditBucketsForReceipt(tx, {
-          investmentId: investment.id,
-          amount,
-          principalReduction: source === 'PRINCIPAL' ? amount : 0,
-          date,
-          type: source === 'PROFIT' ? 'WITHDRAW_PROFIT' : 'WITHDRAW_PRINCIPAL',
-          notes: notes || null,
-          personId: null,
-        })
+        if (source === 'PRINCIPAL') {
+          // For principal withdrawals, create a new independent bucket with maturity date as hawl start
+          // This starts a fresh hawl cycle instead of continuing the ROSCA hawl
+          await createCashBucket(tx, {
+            amount: amount,
+            haulStartDate: date,
+            label: `${investment.name} Principal Receipt`,
+            date: date,
+            notes: notes || null,
+            investmentId: investment.id,
+            type: 'WITHDRAW_PRINCIPAL',
+            excludeFromZakat: false,
+            personId: null,
+          })
+
+          // Reduce the allocation principal remaining (but don't delete the allocation)
+          const allocations = await tx.investmentBucketAllocation.findMany({
+            where: { investmentId: investment.id },
+          })
+
+          for (const alloc of allocations) {
+            const newRemaining = Math.max(0, alloc.principalRemaining - amount)
+            await tx.investmentBucketAllocation.update({
+              where: { id: alloc.id },
+              data: { principalRemaining: newRemaining },
+            })
+          }
+        } else {
+          // For profit withdrawals, use existing logic to credit back to source bucket
+          await creditBucketsForReceipt(tx, {
+            investmentId: investment.id,
+            amount,
+            principalReduction: 0,
+            date,
+            type: 'WITHDRAW_PROFIT',
+            notes: notes || null,
+            personId: null,
+          })
+        }
       }
 
       const cashAccount = await tx.account.findFirst({
