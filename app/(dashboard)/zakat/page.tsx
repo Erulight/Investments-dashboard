@@ -851,7 +851,8 @@ export default async function ZakatPage() {
 
         // After first hawl, continue the same hawl timeline.
         // If part of savings was moved into Sukuk principal, continue that portion under Sukuk.
-        const baseForSecondAndLater = Math.max(totalReceived, currentBalance)
+        // Use totalReceived as the base, not currentBalance (which would double-count)
+        const baseForSecondAndLater = totalReceived
         const movementNetSukukInvested = movements.reduce((sum: number, m: any) => {
           const movementType = typeof m?.type === 'string' ? m.type : ''
           if (
