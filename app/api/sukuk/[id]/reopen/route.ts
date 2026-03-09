@@ -96,6 +96,58 @@ export async function POST(
         },
       })
 
+      const receiptBucketIds = Array.from(
+        new Set(
+          receiptMovements
+            .map((m: any) => (typeof m?.cashBucketId === 'string' ? m.cashBucketId : null))
+            .filter((bucketId: string | null): bucketId is string => Boolean(bucketId)),
+        ),
+      )
+
+      // If receipt cash has already funded another deal, reopening this deal would duplicate principal.
+      // Example: close A -> invest receipt into B -> reopen A (should be blocked).
+      if (receiptBucketIds.length > 0) {
+        const downstreamAllocations = await tx.investmentBucketAllocation.findMany({
+          where: {
+            cashBucketId: { in: receiptBucketIds },
+            investmentId: { not: id },
+            principalAllocated: { gt: 0 },
+          },
+          select: {
+            investmentId: true,
+            investment: { select: { name: true } },
+          },
+        })
+
+        const downstreamInvestOut = await tx.cashBucketMovement.findMany({
+          where: {
+            cashBucketId: { in: receiptBucketIds },
+            type: 'INVEST_OUT',
+            NOT: { investmentId: id },
+          },
+          select: {
+            investmentId: true,
+            investment: { select: { name: true } },
+          },
+        })
+
+        const blockedTargetNames = new Set<string>()
+        for (const entry of [...downstreamAllocations, ...downstreamInvestOut]) {
+          const invName = typeof entry?.investment?.name === 'string' ? entry.investment.name : null
+          const invId = typeof entry?.investmentId === 'string' ? entry.investmentId : null
+          if (invName) {
+            blockedTargetNames.add(invName)
+          } else if (invId) {
+            blockedTargetNames.add(invId)
+          }
+        }
+
+        if (blockedTargetNames.size > 0) {
+          const targets = Array.from(blockedTargetNames).slice(0, 5).join(', ')
+          throw new Error(`REOPEN_BLOCKED_REINVESTED_RECEIPT:${targets}`)
+        }
+      }
+
       const movementTotal = receiptMovements.reduce((sum: number, m: any) => sum + m.amount, 0)
       const movementProfit = receiptMovements
         .filter((m: any) => m.type === 'WITHDRAW_PROFIT')
@@ -447,6 +499,12 @@ export async function POST(
         statusCode = 401
       } else if (err.message === 'Forbidden') {
         statusCode = 403
+      } else if (err.message.startsWith('REOPEN_BLOCKED_REINVESTED_RECEIPT')) {
+        statusCode = 409
+        const rawTargets = err.message.split(':').slice(1).join(':')
+        errorMessage = rawTargets
+          ? `Cannot reopen this Sukuk because its receipt cash is already reinvested in: ${rawTargets}`
+          : 'Cannot reopen this Sukuk because its receipt cash is already reinvested in another deal'
       } else if (err.message.includes('not found')) {
         statusCode = 404
         errorMessage = 'Investment not found'
