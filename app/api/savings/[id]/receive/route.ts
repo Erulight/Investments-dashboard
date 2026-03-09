@@ -129,27 +129,23 @@ export async function POST(
         })
       }
 
-      // Update system cash balance
-      const setting = await tx.systemSetting.findUnique({
-        where: { key: CASH_BALANCE_KEY },
+      // Recalculate system cash balance from buckets to avoid double counting
+      const cashBucketAgg = await tx.cashBucket.aggregate({
+        where: { personId: null },
+        _sum: { balance: true },
       })
-      const currentCash = setting ? Number(setting.value) : 0
-      const nextCash = currentCash + receiveAmount
+      const cashBucketSumRaw = cashBucketAgg?._sum?.balance
+      const cashBucketSum = Number.isFinite(cashBucketSumRaw as any) ? Number(cashBucketSumRaw) : 0
 
-      if (setting) {
-        await tx.systemSetting.update({
-          where: { key: CASH_BALANCE_KEY },
-          data: { value: nextCash.toString() },
-        })
-      } else {
-        await tx.systemSetting.create({
-          data: {
-            key: CASH_BALANCE_KEY,
-            value: nextCash.toString(),
-            description: 'Available cash balance for investments',
-          },
-        })
-      }
+      await tx.systemSetting.upsert({
+        where: { key: CASH_BALANCE_KEY },
+        update: { value: cashBucketSum.toString() },
+        create: {
+          key: CASH_BALANCE_KEY,
+          value: cashBucketSum.toString(),
+          description: 'Available cash balance for investments',
+        },
+      })
 
       // Record a transaction in the cash ledger
       const cashAccount =
@@ -286,17 +282,23 @@ export async function DELETE(
         })
       }
 
-      // Reverse system cash balance
-      const setting = await tx.systemSetting.findUnique({ where: { key: CASH_BALANCE_KEY } })
-      const currentCash = setting ? Number(setting.value) : 0
-      const nextCash = Math.max(0, currentCash - receiveAmount)
+      // Recalculate system cash balance from buckets after undo
+      const cashBucketAgg = await tx.cashBucket.aggregate({
+        where: { personId: null },
+        _sum: { balance: true },
+      })
+      const cashBucketSumRaw = cashBucketAgg?._sum?.balance
+      const cashBucketSum = Number.isFinite(cashBucketSumRaw as any) ? Number(cashBucketSumRaw) : 0
 
-      if (setting) {
-        await tx.systemSetting.update({
-          where: { key: CASH_BALANCE_KEY },
-          data: { value: nextCash.toString() },
-        })
-      }
+      await tx.systemSetting.upsert({
+        where: { key: CASH_BALANCE_KEY },
+        update: { value: cashBucketSum.toString() },
+        create: {
+          key: CASH_BALANCE_KEY,
+          value: cashBucketSum.toString(),
+          description: 'Available cash balance for investments',
+        },
+      })
 
       // Delete the ledger transaction
       const cashAccount = await tx.account.findFirst({ where: { type: 'CASH', isActive: true } })
@@ -306,7 +308,7 @@ export async function DELETE(
             accountId: cashAccount.id,
             investmentId: investment.id,
             type: 'CASH_IN',
-            description: { contains: 'Savings receipt' },
+            description: { contains: 'Circlys receipt' },
           },
           orderBy: { date: 'desc' },
         })
