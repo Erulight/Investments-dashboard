@@ -151,14 +151,18 @@ export async function POST(
     }
 
     const updated = await prisma.$transaction(async (tx: any) => {
-      // Create snapshot before withdrawal
-      await createSnapshot(tx, {
-        label: `Before: Withdraw ${source.toLowerCase()} from ${investment.name}`,
-        trigger: 'WITHDRAW',
-        userId: user.id,
-        investmentId: investment.id,
-        personId: user.personId || undefined,
-      })
+      // Creating a full snapshot is expensive; for partner close-position flow
+      // it can make the modal appear stuck on "Processing".
+      // Keep snapshots for owner withdrawals where full rollback is most critical.
+      if (user.role === 'OWNER') {
+        await createSnapshot(tx, {
+          label: `Before: Withdraw ${source.toLowerCase()} from ${investment.name}`,
+          trigger: 'WITHDRAW',
+          userId: user.id,
+          investmentId: investment.id,
+          personId: user.personId || undefined,
+        })
+      }
       // NOTE: SOLD_DEAL_SETTLEMENT and PARTNER_COMMISSION should NOT be created here
       // They should only be created when the OWNER withdraws from their own deal
       // When a PARTNER closes their position, no settlement/commission transactions should be created

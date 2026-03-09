@@ -139,7 +139,7 @@ export function SukukList({ initialSukuk, userRole, ownerPersonId, viewerPersonI
   })
   const [filtersOpen, setFiltersOpen] = useState(false)
   const [filterTab, setFilterTab] = useState<'platforms' | 'terms' | 'statuses' | 'dates'>('platforms')
-  const [ownerView, setOwnerView] = useState<'active' | 'sold'>('active')
+  const [ownerView, setOwnerView] = useState<'all' | 'active' | 'closed' | 'sold'>('all')
   const list = Array.isArray(sukuk) ? sukuk : []
   const isEmpty = list.length === 0
 
@@ -752,11 +752,17 @@ export function SukukList({ initialSukuk, userRole, ownerPersonId, viewerPersonI
       
       // For sold deals: owner participant exists but has 0 invested amount
       // For active deals: no participants OR owner participant has > 0 invested amount
-      const isSoldDeal = ownerParticipant && Number(ownerParticipant.investedAmount || 0) <= 0
-      const isActiveDeal = !isSoldDeal
-      
+      const isSoldDeal = Boolean(ownerParticipant && Number(ownerParticipant.investedAmount || 0) <= 0)
+      const metrics = isSoldDeal ? getSoldDealMetrics(inv) : getMetrics(inv)
+      const isClosedDeal = !isSoldDeal && Number(metrics.receivable || 0) <= 0.01
+      const isActiveDeal = !isSoldDeal && !isClosedDeal
+
       if (ownerView === 'active' && !isActiveDeal) return false
+      if (ownerView === 'closed' && !isClosedDeal) return false
       if (ownerView === 'sold' && !isSoldDeal) return false
+      if (ownerView === 'all') {
+        // show all
+      }
     }
     const metrics = getMetrics(inv)
     const platform = inv.account?.name || ''
@@ -813,13 +819,14 @@ export function SukukList({ initialSukuk, userRole, ownerPersonId, viewerPersonI
   const rows = useMemo(() => {
     return filteredSukuk.map((inv: any) => {
       const participantList = Array.isArray(inv.dealParticipants) ? inv.dealParticipants : []
-      const isSoldForOwner = userRole === 'OWNER' && participantList.length > 0 && ownerPersonId
-        ? !participantList.some((p: any) => p.personId === ownerPersonId)
+      const ownerParticipant = ownerPersonId
+        ? participantList.find((p: any) => p.personId === ownerPersonId)
+        : null
+      const isSoldForOwner = userRole === 'OWNER' && ownerPersonId
+        ? Boolean(ownerParticipant && Number(ownerParticipant.investedAmount || 0) <= 0)
         : false
 
-      const metrics = userRole === 'OWNER' && ownerView === 'sold' && isSoldForOwner
-        ? getSoldDealMetrics(inv)
-        : getMetrics(inv)
+      const metrics = isSoldForOwner ? getSoldDealMetrics(inv) : getMetrics(inv)
 
       return { inv, metrics }
     })
@@ -1181,17 +1188,26 @@ export function SukukList({ initialSukuk, userRole, ownerPersonId, viewerPersonI
       }
 
       for (const req of requests) {
-        const res = await fetch(`/api/sukuk/${withdrawTarget.inv.id}/withdraw`, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            source: req.source,
-            amount: req.amount,
-            date: isoDate,
-            notes: withdrawForm.notes,
-          }),
-        })
-        const data = await res.json()
+        const controller = new AbortController()
+        const timeout = setTimeout(() => controller.abort(), 20000)
+        let res: Response
+        try {
+          res = await fetch(`/api/sukuk/${withdrawTarget.inv.id}/withdraw`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              source: req.source,
+              amount: req.amount,
+              date: isoDate,
+              notes: withdrawForm.notes,
+            }),
+            signal: controller.signal,
+          })
+        } finally {
+          clearTimeout(timeout)
+        }
+
+        const data = await res.json().catch(() => ({}))
         if (!res.ok) {
           setActionError(data.error || 'Failed to withdraw')
           setActionLoading(false)
@@ -1208,8 +1224,12 @@ export function SukukList({ initialSukuk, userRole, ownerPersonId, viewerPersonI
         notes: '',
       })
       window.location.reload()
-    } catch (error) {
-      setActionError('Failed to withdraw')
+    } catch (error: any) {
+      if (error?.name === 'AbortError') {
+        setActionError('Request timed out. Please try again.')
+      } else {
+        setActionError('Failed to withdraw')
+      }
     } finally {
       setActionLoading(false)
     }
@@ -1362,6 +1382,17 @@ export function SukukList({ initialSukuk, userRole, ownerPersonId, viewerPersonI
             <div className="flex items-center gap-2">
               <button
                 type="button"
+                onClick={() => setOwnerView('all')}
+                className={`rounded-full border px-3 py-1.5 text-xs font-semibold transition-colors ${
+                  ownerView === 'all'
+                    ? 'border-blue-600 bg-blue-600 text-white dark:bg-blue-500 dark:text-blue-100'
+                    : 'border-slate-200 bg-white text-slate-700 hover:border-slate-300 dark:border-white/10 dark:bg-slate-900/60 dark:text-slate-200 dark:hover:border-white/20'
+                }`}
+              >
+                All
+              </button>
+              <button
+                type="button"
                 onClick={() => setOwnerView('active')}
                 className={`rounded-full border px-3 py-1.5 text-xs font-semibold transition-colors ${
                   ownerView === 'active'
@@ -1370,6 +1401,17 @@ export function SukukList({ initialSukuk, userRole, ownerPersonId, viewerPersonI
                 }`}
               >
                 Active
+              </button>
+              <button
+                type="button"
+                onClick={() => setOwnerView('closed')}
+                className={`rounded-full border px-3 py-1.5 text-xs font-semibold transition-colors ${
+                  ownerView === 'closed'
+                    ? 'border-blue-600 bg-blue-600 text-white dark:bg-blue-500 dark:text-blue-100'
+                    : 'border-slate-200 bg-white text-slate-700 hover:border-slate-300 dark:border-white/10 dark:bg-slate-900/60 dark:text-slate-200 dark:hover:border-white/20'
+                }`}
+              >
+                Closed
               </button>
               <button
                 type="button"
