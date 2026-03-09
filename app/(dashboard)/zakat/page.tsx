@@ -1267,6 +1267,14 @@ export default async function ZakatPage() {
           const isPaid = movementHasRowPaid(payments, rowKey)
           const zakatDue = !isPaid && idleAmount > 0 ? idleAmount * 0.025 : 0
           const idleDays = diffDaysFloor(periodStart, periodEnd)
+          const movementType = typeof r.movement?.type === 'string' ? r.movement.type : ''
+          const idleRowKind: BucketRow['rowKind'] = movementType === 'WITHDRAW_PRINCIPAL' || movementType === 'ROLLBACK_PRINCIPAL'
+            ? 'PRINCIPAL'
+            : movementType === 'WITHDRAW_PROFIT' || (isProfitBucket && movementType === 'CASH_IN')
+              ? 'PROFIT'
+              : isCommissionBucket
+                ? 'COMMISSION'
+                : 'IDLE'
 
           completedIdleRows.push({
             id: rowKey,
@@ -1288,7 +1296,7 @@ export default async function ZakatPage() {
             source: r.investmentName,
             sourceGroup,
             sourceType,
-            rowKind: 'IDLE',
+            rowKind: idleRowKind,
             why: `Cash idle from ${isoDay(periodStart)} to ${isoDay(periodEnd)} (${idleDays} days)`,
             lastPayment: lastPayment
               ? {
