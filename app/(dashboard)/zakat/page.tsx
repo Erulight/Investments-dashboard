@@ -301,15 +301,13 @@ export default async function ZakatPage() {
     }
 
     // For every Sukuk investment owned by the owner, determine correct hawl start:
-    // - ROSCA-funded: Savings Receipt CASH_IN same day + same amount as CASH_INVEST
-    //   → hawlStart = ROSCA first contribution date (haulStartDate of Savings Receipt bucket)
-    //   → mark that Savings Receipt bucket excludeFromZakat = true
-    // - Manual cash: hawlStart = CASH_INVEST transaction date
-    // Apply hawlStart to both Principal and Profit buckets for that Sukuk.
+    // - Prefer real funding allocations from Savings Receipt buckets (ROSCA-funded)
+    // - Fallback to CASH_INVEST/start date for manual cash funding
+    // Persist anchor in metadata and keep receipt suppression only for fully depleted receipts.
 
     const allSukukInvestments = await prisma.investment.findMany({
       where: { account: { type: 'SUKUK' } },
-      select: { id: true, metadata: true },
+      select: { id: true, metadata: true, startDate: true },
     })
 
     const allSukukCashInvestTxs = await prisma.transaction.findMany({
@@ -322,55 +320,67 @@ export default async function ZakatPage() {
       select: { id: true, investmentId: true, amount: true, date: true },
     })
 
-    const allSavingsReceiptBuckets = await prisma.cashBucket.findMany({
-      where: { personId: null, label: { startsWith: 'Savings Receipt •' } },
-      select: {
-        id: true,
-        haulStartDate: true,
-        movements: {
-          where: { type: 'CASH_IN' },
-          select: { amount: true, date: true },
-          orderBy: { date: 'asc' },
-          take: 1,
-        },
-      },
-    })
+    const allSukukRoscaAllocations = allSukukInvestments.length
+      ? await prisma.investmentBucketAllocation.findMany({
+          where: {
+            investmentId: { in: allSukukInvestments.map((inv: any) => inv.id) },
+            principalAllocated: { gt: 0 },
+            cashBucket: {
+              personId: null,
+              label: { startsWith: 'Savings Receipt •' },
+            },
+          } as any,
+          select: {
+            investmentId: true,
+            cashBucketId: true,
+            cashBucket: {
+              select: {
+                id: true,
+                haulStartDate: true,
+                balance: true,
+              },
+            },
+          },
+        })
+      : []
+
+    const roscaAllocationsByInvestmentId = new Map<string, any[]>()
+    for (const alloc of allSukukRoscaAllocations) {
+      const investmentId = typeof alloc?.investmentId === 'string' ? alloc.investmentId : null
+      if (!investmentId) continue
+      const list = roscaAllocationsByInvestmentId.get(investmentId) || []
+      list.push(alloc)
+      roscaAllocationsByInvestmentId.set(investmentId, list)
+    }
 
     const sukukInvestedReceiptIds = new Set<string>()
 
     for (const sukukInv of allSukukInvestments) {
       const cashInvestTx = allSukukCashInvestTxs.find((tx: any) => tx.investmentId === sukukInv.id)
-      if (!cashInvestTx) continue
+      const fallbackRaw = cashInvestTx?.date ?? sukukInv.startDate
+      if (!fallbackRaw) continue
+      const fallbackDate = fallbackRaw instanceof Date ? fallbackRaw : new Date(fallbackRaw as any)
+      if (Number.isNaN(fallbackDate.getTime())) continue
+      const fallbackDay = new Date(fallbackDate.getFullYear(), fallbackDate.getMonth(), fallbackDate.getDate())
 
-      const txRaw = cashInvestTx.date instanceof Date ? cashInvestTx.date : new Date(cashInvestTx.date as any)
-      if (Number.isNaN(txRaw.getTime())) continue
-      const txDay = new Date(txRaw.getFullYear(), txRaw.getMonth(), txRaw.getDate())
-      const txTimestamp = txDay.getTime()
-      const txAmount = Math.abs(Number(cashInvestTx.amount) || 0)
+      const roscaAllocations = roscaAllocationsByInvestmentId.get(sukukInv.id) || []
+      const roscaAnchors = roscaAllocations
+        .map((alloc: any) => toDate(alloc?.cashBucket?.haulStartDate))
+        .filter((d: Date | null): d is Date => Boolean(d && !Number.isNaN(d.getTime())))
+        .map((d: Date) => new Date(d.getFullYear(), d.getMonth(), d.getDate()))
+        .sort((a: Date, b: Date) => a.getTime() - b.getTime())
 
-      // Look for a Savings Receipt bucket whose CASH_IN is same day + same amount
-      const matchedReceiptBucket = allSavingsReceiptBuckets.find((rb: any) => {
-        const cashIn = rb.movements?.[0]
-        if (!cashIn) return false
-        const ciAmt = Math.abs(Number(cashIn.amount) || 0)
-        if (Math.abs(ciAmt - txAmount) > 0.01) return false
-        const ciRaw = cashIn.date instanceof Date ? cashIn.date : new Date(cashIn.date as any)
-        if (Number.isNaN(ciRaw.getTime())) return false
-        const ciDay = new Date(ciRaw.getFullYear(), ciRaw.getMonth(), ciRaw.getDate())
-        return ciDay.getTime() === txTimestamp
-      })
+      // Prefer actual ROSCA funding allocations; fallback to Sukuk cash-invest/start date.
+      const hawlStart = roscaAnchors[0] || fallbackDay
 
-      let hawlStart: Date
-      if (matchedReceiptBucket) {
-        // ROSCA-funded: use ROSCA first contribution date
-        const anchor = toDate(matchedReceiptBucket.haulStartDate)
-        hawlStart = anchor
-          ? new Date(anchor.getFullYear(), anchor.getMonth(), anchor.getDate())
-          : txDay
-        sukukInvestedReceiptIds.add(matchedReceiptBucket.id)
-      } else {
-        // Manual cash: use the CASH_INVEST date
-        hawlStart = txDay
+      for (const alloc of roscaAllocations) {
+        const bucketId = typeof alloc?.cashBucketId === 'string' ? alloc.cashBucketId : null
+        if (!bucketId) continue
+        const balance = Math.max(0, Number(alloc?.cashBucket?.balance) || 0)
+        // Suppress only receipts that were fully moved out (avoid hiding partial receipts).
+        if (balance <= 0.01) {
+          sukukInvestedReceiptIds.add(bucketId)
+        }
       }
 
       // Persist hawl start in investment metadata
@@ -383,14 +393,11 @@ export default async function ZakatPage() {
         })
       }
 
-      // Update Principal and Profit bucket haul start dates
+      // Keep profit bucket anchors in sync with resolved Sukuk hawl start.
       await prisma.cashBucket.updateMany({
         where: {
           personId: null,
-          OR: [
-            { label: { startsWith: 'Sukuk Principal •' } },
-            { label: { startsWith: 'Profit •' } },
-          ],
+          label: { startsWith: 'Profit •' },
           movements: { some: { investmentId: sukukInv.id } },
         },
         data: { haulStartDate: hawlStart },
@@ -763,7 +770,7 @@ export default async function ZakatPage() {
       }
 
       // RULE 2: Savings Receipt buckets:
-      // - If invested into Sukuk same day, bucket is marked excludeFromZakat=true in DB → won't reach here
+      // - If fully moved into Sukuk, bucket may be marked excludeFromZakat=true in DB → won't reach here
       // - Otherwise: first hawl is special receipt row from first contribution date
       if (isSavingsReceiptBucket) {
         const cashInMovement = movements.find((m: any) => m?.type === 'CASH_IN')
@@ -804,13 +811,22 @@ export default async function ZakatPage() {
 
         const sukukInvestedByMetadata = investments.reduce((sum: number, inv: any) => {
           if (inv?.account?.type !== 'SUKUK') return sum
+
           const meta = parseMetadata(inv?.metadata)
           const savingsStart = toDate(meta?.savingsHaulStartDate)
           if (!savingsStart || Number.isNaN(savingsStart.getTime())) return sum
           if (isoDay(startOfDay(savingsStart)) !== isoDay(haulStart)) return sum
-          const principalAmount = Number(inv?.principalAmount || 0)
-          if (!Number.isFinite(principalAmount) || principalAmount <= 0) return sum
-          return sum + principalAmount
+
+          const investTxs = cashInvestByInvestmentId.get(inv.id) || []
+          const investedInFirstHawl = investTxs.reduce((txSum: number, tx: { amount: number; date: Date }) => {
+            const d = tx.date instanceof Date ? tx.date : new Date(tx.date as any)
+            if (Number.isNaN(d.getTime())) return txSum
+            if (d.getTime() >= firstHaulEnd.getTime()) return txSum
+            const amt = Math.abs(Number(tx.amount) || 0)
+            return txSum + (Number.isFinite(amt) ? amt : 0)
+          }, 0)
+
+          return sum + investedInFirstHawl
         }, 0)
 
         const effectiveSukukInvested = Math.max(sukukInvestedDuringFirstHawl, sukukInvestedByMetadata)
@@ -844,8 +860,8 @@ export default async function ZakatPage() {
           sourceGroup: `Savings Receipt • ${investmentName}`,
           sourceType: 'CIRCLYS',
           rowKind: 'PROFIT' as const,
-          why: sukukInvestedDuringFirstHawl > 0
-            ? `ROSCA receipt of SAR ${totalReceived.toLocaleString()}, ${sukukInvestedDuringFirstHawl.toLocaleString()} invested in Sukuk, hawl from ${isoDay(haulStart)}`
+          why: effectiveSukukInvested > 0
+            ? `ROSCA receipt of SAR ${totalReceived.toLocaleString()}, ${effectiveSukukInvested.toLocaleString()} invested in Sukuk, hawl from ${isoDay(haulStart)}`
             : `ROSCA receipt of SAR ${totalReceived.toLocaleString()}, hawl from ${isoDay(haulStart)}`,
           lastPayment: lastPayment
             ? {
@@ -1179,17 +1195,6 @@ export default async function ZakatPage() {
 
       const completedIdleRows: BucketRow[] = []
       qualifyingReceipts.forEach((r) => {
-        // For principal receipts that already completed a hawl (>=354 days), don't create idle hauls
-        // because Zakat was already due at completion. But if hawl wasn't completed, the principal
-        // becomes idle cash and should generate idle hauls.
-        const movementType = typeof r.movement?.type === 'string' ? r.movement.type : ''
-        const isPrincipalReceipt = movementType === 'WITHDRAW_PRINCIPAL' || movementType === 'ROLLBACK_PRINCIPAL'
-        
-        if (isPrincipalReceipt && r.eligibilityDuration >= 354) {
-          // Principal receipt already paid Zakat at completion - no idle hauls needed
-          return
-        }
-
         // If receipt itself completed the first hawl (>=354), next hawl starts from receipt day.
         // If receipt happened before first hawl completion, keep continuity from eligibilityStart.
         const idleAnchorStart = r.eligibilityDuration >= 354 ? r.receiptDay : r.eligibilityStart

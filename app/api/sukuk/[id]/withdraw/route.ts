@@ -192,26 +192,6 @@ export async function POST(
       const scopeKey = user.role === 'OWNER' ? 'OWNER' : user.personId!
       const cashBalanceKey = user.role === 'OWNER' ? CASH_BALANCE_KEY : `${CASH_BALANCE_KEY}:${scopeKey}`
 
-      // Recalculate cash balance from buckets to avoid inflation on reopen/close cycles
-      const cashBucketAgg = await tx.cashBucket.aggregate({
-        where: (user.role === 'OWNER'
-          ? { personId: null }
-          : { personId: user.personId }) as any,
-        _sum: { balance: true },
-      })
-      const cashBucketSumRaw = cashBucketAgg?._sum?.balance
-      const cashBucketSum = Number.isFinite(cashBucketSumRaw as any) ? Number(cashBucketSumRaw) : 0
-
-      await tx.systemSetting.upsert({
-        where: { key: cashBalanceKey },
-        update: { value: cashBucketSum.toString() },
-        create: {
-          key: cashBalanceKey,
-          value: cashBucketSum.toString(),
-          description: 'Available cash balance for investments',
-        },
-      })
-
       if (user.role === 'PARTNER') {
         try {
           const partnerPersonId = user.personId!
@@ -364,6 +344,26 @@ export async function POST(
           })
         }
       }
+
+      // Recalculate cash balance from buckets AFTER receipt buckets are credited.
+      const cashBucketAgg = await tx.cashBucket.aggregate({
+        where: (user.role === 'OWNER'
+          ? { personId: null }
+          : { personId: user.personId }) as any,
+        _sum: { balance: true },
+      })
+      const cashBucketSumRaw = cashBucketAgg?._sum?.balance
+      const cashBucketSum = Number.isFinite(cashBucketSumRaw as any) ? Number(cashBucketSumRaw) : 0
+
+      await tx.systemSetting.upsert({
+        where: { key: cashBalanceKey },
+        update: { value: cashBucketSum.toString() },
+        create: {
+          key: cashBalanceKey,
+          value: cashBucketSum.toString(),
+          description: 'Available cash balance for investments',
+        },
+      })
 
       const cashAccount = await tx.account.findFirst({
         where: { type: 'CASH', isActive: true },
