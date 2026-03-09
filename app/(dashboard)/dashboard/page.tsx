@@ -135,6 +135,7 @@ export default async function DashboardPage({
   let sukukReceivable = 0
   let sipValue = 0
   let circlysOngoingSaved = 0
+  let cryptoValue = 0
 
   const toDate = (value?: string | Date | null) => {
     if (!value) return null
@@ -476,9 +477,30 @@ export default async function DashboardPage({
       .filter((inv) => inv.account.type === 'SIP')
       .reduce((sum, inv) => sum + inv.currentValue, 0)
 
-    // Note: circlysOngoingSaved is no longer tracked here since CIRCLYS accounts
-    // are excluded from owned investments. Savings are not investments.
-    circlysOngoingSaved = 0
+    cryptoValue = owned
+      .filter((inv) => inv.account.type === 'CRYPTO')
+      .reduce((sum, inv) => sum + inv.currentValue, 0)
+
+    // Calculate Circles ongoing: total contributed in active ongoing Circles
+    circlysOngoingSaved = investments
+      .filter((inv: any) => inv.account?.type === 'CIRCLYS')
+      .reduce((sum, inv) => {
+        try {
+          const meta = inv.metadata ? JSON.parse(inv.metadata as string) : {}
+          const totalPaid = Number(meta.totalPaid) || 0
+          const monthlyAmount = Number(meta.monthlyAmount) || 0
+          const durationMonths = Number(meta.durationMonths) || 0
+          const totalRequired = monthlyAmount * durationMonths
+          
+          // Only count active ongoing Circles (not fully paid)
+          if (totalRequired > totalPaid) {
+            return sum + totalPaid
+          }
+          return sum
+        } catch {
+          return sum
+        }
+      }, 0)
 
     // Build per-type breakdown
     const typeMap = new Map<string, { invested: number; value: number; count: number }>()
@@ -939,16 +961,14 @@ export default async function DashboardPage({
 
       {/* Third Row: Key Totals */}
       {user.role === 'OWNER' && (
-        <div className="grid grid-cols-2 gap-3 lg:grid-cols-3 items-start auto-rows-min">
+        <div className="grid grid-cols-2 gap-3 lg:grid-cols-4 items-start auto-rows-min">
           <AnimatedCard index={7}>
             <div className="p-6">
               <p className="text-xs font-medium text-slate-400 uppercase tracking-wider">Sukuk Total</p>
               <div className="text-2xl font-bold text-indigo-400 mt-2 tabular-nums">
-                SAR {sukukValue.toLocaleString()}
+                SAR {sukukInvested.toLocaleString()}
               </div>
-              <p className="text-xs text-slate-500 mt-1 tabular-nums">
-                Invested SAR {sukukInvested.toLocaleString()}
-              </p>
+              <p className="text-xs text-slate-500 mt-1">Invested SAR {sukukInvested.toLocaleString()}</p>
             </div>
           </AnimatedCard>
 
@@ -967,6 +987,16 @@ export default async function DashboardPage({
               <p className="text-xs font-medium text-slate-400 uppercase tracking-wider">SIP Total</p>
               <div className="text-2xl font-bold text-teal-400 mt-2 tabular-nums">
                 SAR {sipValue.toLocaleString()}
+              </div>
+              <p className="text-xs text-slate-500 mt-1">Current value</p>
+            </div>
+          </AnimatedCard>
+
+          <AnimatedCard index={10}>
+            <div className="p-6">
+              <p className="text-xs font-medium text-slate-400 uppercase tracking-wider">Crypto Total</p>
+              <div className="text-2xl font-bold text-orange-400 mt-2 tabular-nums">
+                SAR {cryptoValue.toLocaleString()}
               </div>
               <p className="text-xs text-slate-500 mt-1">Current value</p>
             </div>
