@@ -162,25 +162,52 @@ export function SukukList({ initialSukuk, userRole, ownerPersonId, viewerPersonI
     return date
   }
 
+  const getOwnerParticipant = (participantList: any[]) => {
+    if (!ownerPersonId) return null
+    return participantList.find((p: any) => p?.personId === ownerPersonId) || null
+  }
+
+  const isSoldDealForOwnerView = (investment: any) => {
+    if (userRole !== 'OWNER' || !ownerPersonId) return false
+    const participantList = Array.isArray(investment?.dealParticipants) ? investment.dealParticipants : []
+    if (participantList.length === 0) return false
+    const ownerParticipant = getOwnerParticipant(participantList)
+    if (!ownerParticipant) return true
+    return Number(ownerParticipant.investedAmount || 0) <= 0
+  }
+
+  const isViewerTransaction = (tx: any) => {
+    if (userRole === 'OWNER') {
+      if (tx?.personId == null) return true
+      return ownerPersonId ? tx.personId === ownerPersonId : false
+    }
+    if (viewerPersonId) return tx?.personId === viewerPersonId
+    return true
+  }
+
   const getViewerReceived = (inv: any) => {
     const transactions = Array.isArray(inv.transactions) ? inv.transactions : []
     const profitWithdrawals = transactions.filter((tx: any) => tx.type === 'WITHDRAW_PROFIT')
 
+    const scopedSum = profitWithdrawals.reduce((sum: number, tx: any) => {
+      if (!isViewerTransaction(tx)) return sum
+      const amount = Number(tx.amount)
+      return sum + (Number.isFinite(amount) ? amount : 0)
+    }, 0)
+
+    if (userRole === 'OWNER') {
+      const totalReceived = Number(inv.totalReceived)
+      return Number.isFinite(totalReceived) ? totalReceived : scopedSum
+    }
+
     if (viewerPersonId) {
-      return profitWithdrawals.reduce((sum: number, tx: any) => {
-        if (tx.personId !== viewerPersonId) return sum
-        const amount = Number(tx.amount)
-        return sum + (Number.isFinite(amount) ? amount : 0)
-      }, 0)
+      return scopedSum
     }
 
     const totalReceived = Number(inv.totalReceived)
     return Number.isFinite(totalReceived)
       ? totalReceived
-      : profitWithdrawals.reduce((sum: number, tx: any) => {
-          const amount = Number(tx.amount)
-          return sum + (Number.isFinite(amount) ? amount : 0)
-        }, 0)
+      : scopedSum
   }
 
   const formatDate = (value?: string | Date | null) => {
@@ -217,7 +244,7 @@ export function SukukList({ initialSukuk, userRole, ownerPersonId, viewerPersonI
 
   const getLatestReceiptDate = (inv: any) => {
     const transactions = Array.isArray(inv.transactions) ? inv.transactions : []
-    const profitReceipts = transactions.filter((tx: any) => tx.type === 'WITHDRAW_PROFIT')
+    const profitReceipts = transactions.filter((tx: any) => tx.type === 'WITHDRAW_PROFIT' && isViewerTransaction(tx))
     if (profitReceipts.length === 0) return null
     return profitReceipts.reduce((latest: Date | null, tx: any) => {
       const txDate = toDate(tx.date)
@@ -232,9 +259,7 @@ export function SukukList({ initialSukuk, userRole, ownerPersonId, viewerPersonI
     const principalWithdrawals = transactions.filter((tx: any) => tx.type === 'WITHDRAW_PRINCIPAL')
     if (principalWithdrawals.length === 0) return null
 
-    const filtered = viewerPersonId
-      ? principalWithdrawals.filter((tx: any) => tx.personId === viewerPersonId)
-      : principalWithdrawals
+    const filtered = principalWithdrawals.filter((tx: any) => isViewerTransaction(tx))
 
     if (filtered.length === 0) return null
     return filtered.reduce((latest: Date | null, tx: any) => {
@@ -246,22 +271,20 @@ export function SukukList({ initialSukuk, userRole, ownerPersonId, viewerPersonI
   }
 
   const getHistoricalPrincipal = (inv: any, participation: any) => {
-    if (participation && Number.isFinite(participation.investedAmount)) {
-      return Number(participation.investedAmount)
-    }
-
-    const current = Number(inv.principalAmount)
-    const currentPrincipal = Number.isFinite(current) ? current : 0
+    const participationPrincipal = Number(participation?.investedAmount)
+    const investmentPrincipal = Number(inv.principalAmount)
+    const currentPrincipal = Number.isFinite(participationPrincipal)
+      ? participationPrincipal
+      : (Number.isFinite(investmentPrincipal) ? investmentPrincipal : 0)
 
     const transactions = Array.isArray(inv.transactions) ? inv.transactions : []
     const principalWithdrawals = transactions.filter((tx: any) => tx.type === 'WITHDRAW_PRINCIPAL')
-    const withdrawalSum = (viewerPersonId
-      ? principalWithdrawals.filter((tx: any) => tx.personId === viewerPersonId)
-      : principalWithdrawals
-    ).reduce((sum: number, tx: any) => {
-      const amount = Number(tx.amount)
-      return sum + (Number.isFinite(amount) ? amount : 0)
-    }, 0)
+    const withdrawalSum = principalWithdrawals
+      .filter((tx: any) => isViewerTransaction(tx))
+      .reduce((sum: number, tx: any) => {
+        const amount = Number(tx.amount)
+        return sum + (Number.isFinite(amount) ? amount : 0)
+      }, 0)
 
     return Math.max(0, currentPrincipal + withdrawalSum)
   }
@@ -406,12 +429,7 @@ export function SukukList({ initialSukuk, userRole, ownerPersonId, viewerPersonI
     setActionLoading(true)
     setActionError('')
     try {
-      const participantList = Array.isArray(investment?.dealParticipants)
-        ? investment.dealParticipants
-        : []
-      const isSoldDealForOwner = userRole === 'OWNER' && ownerPersonId
-        ? (participantList.length > 0 && !participantList.some((p: any) => p?.personId === ownerPersonId))
-        : false
+      const isSoldDealForOwner = isSoldDealForOwnerView(investment)
 
       // For sold deals, call the receive route instead of withdraw
       if (isSoldDealForOwner) {
@@ -574,13 +592,11 @@ export function SukukList({ initialSukuk, userRole, ownerPersonId, viewerPersonI
 
   const getMetrics = (inv: any) => {
     const participantList = Array.isArray(inv.dealParticipants) ? inv.dealParticipants : []
-    const isSoldForOwner = userRole === 'OWNER' && participantList.length > 0 && ownerPersonId
-      ? !participantList.some((p: any) => p.personId === ownerPersonId)
-      : false
+    const isSoldForOwner = isSoldDealForOwnerView(inv)
 
     const ownerParticipation =
-      userRole === 'OWNER' && ownerPersonId
-        ? participantList.find((p: any) => p.personId === ownerPersonId)
+      userRole === 'OWNER'
+        ? getOwnerParticipant(participantList)
         : null
 
     const participation = userRole === 'OWNER'
@@ -618,8 +634,11 @@ export function SukukList({ initialSukuk, userRole, ownerPersonId, viewerPersonI
     const totalInvestment = Number.isFinite(principal) ? principal : 0
     const apr = Number.isFinite(inv.interestRate) ? inv.interestRate : 0
     const fullFees = Number.isFinite(inv.fees) ? inv.fees : 0
-    const participationRatio = inv.principalAmount > 0 && totalInvestment > 0
-      ? Math.min(1, totalInvestment / inv.principalAmount)
+    const principalBase = Number(inv.principalAmount)
+    const participationRatio = totalInvestment > 0
+      ? (Number.isFinite(principalBase) && principalBase > 0
+          ? Math.min(1, totalInvestment / principalBase)
+          : 1)
       : 0
     const totalMonthsFull = getPeriodMonths(inv.startDate, inv.maturityDate)
     const startBasis = participation?.acquiredAt ?? inv.startDate
@@ -657,15 +676,17 @@ export function SukukList({ initialSukuk, userRole, ownerPersonId, viewerPersonI
     const receiptDate = getLatestReceiptDate(inv)
     const isFullyReceived = receivable <= 0.01
     const referenceDate = isFullyReceived
-      ? receiptDate ?? toDate(inv.maturityDate) ?? asOfDate
+      ? receiptDate ?? asOfDate
       : asOfDate
-    const daysRemaining = isFullyReceived ? 0 : getDaysRemaining(inv.maturityDate, referenceDate)
+    const daysRemaining = getDaysRemaining(inv.maturityDate, referenceDate)
 
-    const paymentStatus = isFullyReceived
-      ? 'completed'
-      : daysRemaining !== null && daysRemaining <= 0
+    const paymentStatus = daysRemaining === null
+      ? 'unknown'
+      : daysRemaining < 0
         ? 'delayed'
-        : 'on-time'
+        : daysRemaining > 0
+          ? 'early'
+          : (isFullyReceived ? 'completed' : 'ontime')
 
     const progress = getProgress(netProfit, totalReceived)
     const currency = inv.account?.currency || ''
@@ -748,11 +769,12 @@ export function SukukList({ initialSukuk, userRole, ownerPersonId, viewerPersonI
   const filteredSukuk = list.filter((inv) => {
     if (userRole === 'OWNER' && ownerPersonId) {
       const participantList = Array.isArray(inv.dealParticipants) ? inv.dealParticipants : []
-      const ownerParticipant = participantList.find((p: any) => p.personId === ownerPersonId)
+      const ownerParticipant = getOwnerParticipant(participantList)
       
-      // For sold deals: owner participant exists but has 0 invested amount
-      // For active deals: no participants OR owner participant has > 0 invested amount
-      const isSoldDeal = Boolean(ownerParticipant && Number(ownerParticipant.investedAmount || 0) <= 0)
+      // Sold for owner when participants exist and owner has no principal left
+      // (either owner row is missing, or investedAmount is 0)
+      const isSoldDeal = participantList.length > 0
+        && (!ownerParticipant || Number(ownerParticipant.investedAmount || 0) <= 0)
       const metrics = isSoldDeal ? getSoldDealMetrics(inv) : getMetrics(inv)
       const isClosedDeal = !isSoldDeal && Number(metrics.receivable || 0) <= 0.01
       const isActiveDeal = !isSoldDeal && !isClosedDeal
@@ -819,11 +841,9 @@ export function SukukList({ initialSukuk, userRole, ownerPersonId, viewerPersonI
   const rows = useMemo(() => {
     return filteredSukuk.map((inv: any) => {
       const participantList = Array.isArray(inv.dealParticipants) ? inv.dealParticipants : []
-      const ownerParticipant = ownerPersonId
-        ? participantList.find((p: any) => p.personId === ownerPersonId)
-        : null
+      const ownerParticipant = getOwnerParticipant(participantList)
       const isSoldForOwner = userRole === 'OWNER' && ownerPersonId
-        ? Boolean(ownerParticipant && Number(ownerParticipant.investedAmount || 0) <= 0)
+        ? (participantList.length > 0 && (!ownerParticipant || Number(ownerParticipant.investedAmount || 0) <= 0))
         : false
 
       const metrics = isSoldForOwner ? getSoldDealMetrics(inv) : getMetrics(inv)
@@ -1020,9 +1040,7 @@ export function SukukList({ initialSukuk, userRole, ownerPersonId, viewerPersonI
     const participantList = Array.isArray(investment?.dealParticipants)
       ? investment.dealParticipants
       : []
-    const isSoldDealForOwner = userRole === 'OWNER' && ownerPersonId
-      ? (participantList.length > 0 && !participantList.some((p: any) => p?.personId === ownerPersonId))
-      : false
+    const isSoldDealForOwner = isSoldDealForOwnerView(investment)
 
     const metrics = metricsOverride || (isSoldDealForOwner ? getSoldDealMetrics(investment) : getMetrics(investment))
 
@@ -1127,12 +1145,7 @@ export function SukukList({ initialSukuk, userRole, ownerPersonId, viewerPersonI
     setActionError('')
     setActionLoading(true)
     try {
-      const participantList = Array.isArray(withdrawTarget.inv?.dealParticipants)
-        ? withdrawTarget.inv.dealParticipants
-        : []
-      const isSoldDealForOwner = userRole === 'OWNER' && ownerPersonId
-        ? (participantList.length > 0 && !participantList.some((p: any) => p?.personId === ownerPersonId))
-        : false
+      const isSoldDealForOwner = isSoldDealForOwnerView(withdrawTarget.inv)
       const partnerClosed = Boolean(withdrawTarget.inv?.partnerClosed)
 
       // FIX 4: for sold deals, owner does not withdraw principal and does not directly withdraw profit/commission
@@ -1746,9 +1759,7 @@ export function SukukList({ initialSukuk, userRole, ownerPersonId, viewerPersonI
                       {expanded && group.rows.map(({ inv, metrics }) => {
 
                   const participantList = Array.isArray(inv.dealParticipants) ? inv.dealParticipants : []
-                  const isSoldDealForOwner = userRole === 'OWNER' && ownerPersonId
-                    ? (participantList.length > 0 && !participantList.some((p: any) => p?.personId === ownerPersonId))
-                    : false
+                  const isSoldDealForOwner = isSoldDealForOwnerView(inv)
                   const partnerClosed = Boolean(inv?.partnerClosed)
 
                   const partnerNames = userRole === 'OWNER'
@@ -2070,7 +2081,9 @@ export function SukukList({ initialSukuk, userRole, ownerPersonId, viewerPersonI
         title="Sukuk Details"
       >
         {detailTarget && (() => {
-          const metrics = getMetrics(detailTarget)
+          const metrics = isSoldDealForOwnerView(detailTarget)
+            ? getSoldDealMetrics(detailTarget)
+            : getMetrics(detailTarget)
           return (
             <div className="space-y-4">
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
@@ -2187,12 +2200,7 @@ export function SukukList({ initialSukuk, userRole, ownerPersonId, viewerPersonI
               Receipt Type
             </label>
             {withdrawTarget && (() => {
-              const participantList = Array.isArray(withdrawTarget.inv?.dealParticipants)
-                ? withdrawTarget.inv.dealParticipants
-                : []
-              const isSoldDealForOwner = userRole === 'OWNER' && ownerPersonId
-                ? (participantList.length > 0 && !participantList.some((p: any) => p?.personId === ownerPersonId))
-                : false
+              const isSoldDealForOwner = isSoldDealForOwnerView(withdrawTarget.inv)
 
               if (userRole === 'OWNER' && isSoldDealForOwner) {
                 return (
@@ -2230,12 +2238,7 @@ export function SukukList({ initialSukuk, userRole, ownerPersonId, viewerPersonI
           </div>
 
           {withdrawTarget && (() => {
-            const participantList = Array.isArray(withdrawTarget.inv?.dealParticipants)
-              ? withdrawTarget.inv.dealParticipants
-              : []
-            const isSoldDealForOwner = userRole === 'OWNER' && ownerPersonId
-              ? (participantList.length > 0 && !participantList.some((p: any) => p?.personId === ownerPersonId))
-              : false
+            const isSoldDealForOwner = isSoldDealForOwnerView(withdrawTarget.inv)
             const partnerClosed = Boolean(withdrawTarget.inv?.partnerClosed)
             if (userRole === 'OWNER' && isSoldDealForOwner && !partnerClosed) {
               return (
@@ -2315,12 +2318,7 @@ export function SukukList({ initialSukuk, userRole, ownerPersonId, viewerPersonI
             const principalAmount = Number(withdrawForm.principalAmount || 0) || 0
             const profitAmount = Number(withdrawForm.profitAmount || 0) || 0
 
-            const participantList = Array.isArray(withdrawTarget.inv?.dealParticipants)
-              ? withdrawTarget.inv.dealParticipants
-              : []
-            const isSoldDealForOwner = userRole === 'OWNER' && ownerPersonId
-              ? (participantList.length > 0 && !participantList.some((p: any) => p?.personId === ownerPersonId))
-              : false
+            const isSoldDealForOwner = isSoldDealForOwnerView(withdrawTarget.inv)
             const partnerClosed = Boolean(withdrawTarget.inv?.partnerClosed)
             const commissionAmount = isSoldDealForOwner
               ? Math.max(0, Number(withdrawTarget.metrics?.commissionEarned || 0))
@@ -2360,12 +2358,7 @@ export function SukukList({ initialSukuk, userRole, ownerPersonId, viewerPersonI
               type="submit"
               variant="primary"
               disabled={actionLoading || Boolean(withdrawTarget && (() => {
-                const participantList = Array.isArray(withdrawTarget.inv?.dealParticipants)
-                  ? withdrawTarget.inv.dealParticipants
-                  : []
-                const isSoldDealForOwner = userRole === 'OWNER' && ownerPersonId
-                  ? (participantList.length > 0 && !participantList.some((p: any) => p?.personId === ownerPersonId))
-                  : false
+                const isSoldDealForOwner = isSoldDealForOwnerView(withdrawTarget.inv)
                 const partnerClosed = Boolean(withdrawTarget.inv?.partnerClosed)
                 return userRole === 'OWNER' && isSoldDealForOwner && !partnerClosed
               })())}
