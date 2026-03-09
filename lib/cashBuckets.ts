@@ -592,7 +592,7 @@ export const creditBucketsForReceipt = async (
     }
 
     // Determine haul start date for profit bucket
-    // Priority: 1) Explicit param, 2) Original cash bucket haul date, 3) Receipt date
+    // Priority: 1) Explicit param, 2) Investment start date, 3) Receipt date
     let haulStartDate = date
 
     const explicit = profitHaulStartDate instanceof Date ? profitHaulStartDate : profitHaulStartDate ? new Date(profitHaulStartDate as any) : null
@@ -603,20 +603,13 @@ export const creditBucketsForReceipt = async (
     if (explicitHaulStart) {
       haulStartDate = explicitHaulStart
     } else {
-      // Check if investment was funded from ROSCA savings
-      const meta = inv?.metadata ? JSON.parse(inv.metadata as string) : null
-      const haulStart = meta?.savingsHaulStartDate
-        ? new Date(meta.savingsHaulStartDate)
-        : inv?.startDate
-
-      if (haulStart) {
-        const startDate = haulStart instanceof Date
-          ? haulStart
-          : new Date(haulStart as any)
-
-        if (!Number.isNaN(startDate.getTime())) {
-          haulStartDate = new Date(startDate.getFullYear(), startDate.getMonth(), startDate.getDate())
-        }
+      const investmentStart = inv?.startDate ? new Date(inv.startDate as any) : null
+      if (investmentStart && !Number.isNaN(investmentStart.getTime())) {
+        haulStartDate = new Date(
+          investmentStart.getFullYear(),
+          investmentStart.getMonth(),
+          investmentStart.getDate(),
+        )
       }
       // Otherwise use receipt date (already set above)
     }
