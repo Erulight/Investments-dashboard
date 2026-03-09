@@ -91,7 +91,7 @@ export async function POST(
     const daysHeld = diffDays(firstContributionDate, receiveDate)
     const zakatDueImmediately = daysHeld >= 354
 
-    const result = await prisma.$transaction(async (tx) => {
+    const result = await prisma.$transaction(async (tx: any) => {
 
       // NEW RULE 1: Create ONE receipt bucket (not per-month)
       // Hawl starts from FIRST contribution date, not receipt date
@@ -207,6 +207,12 @@ export async function POST(
     if (error instanceof Error) {
       if (error.message === 'Unauthorized') {
         statusCode = 401
+      } else if (error.message === 'RECEIPT_ALREADY_USED') {
+        statusCode = 409
+        errorMessage = 'Receipt already used/invested; cannot undo.'
+      } else if (error.message === 'RECEIPT_BUCKET_NOT_FOUND') {
+        statusCode = 409
+        errorMessage = 'Receipt bucket missing; cannot undo.'
       } else if (error.message === 'Forbidden') {
         statusCode = 403
       } else if (error.message.includes('not found')) {
@@ -258,7 +264,30 @@ export async function DELETE(
       return NextResponse.json({ error: 'Invalid receive amount' }, { status: 400 })
     }
 
-    const result = await prisma.$transaction(async (tx) => {
+    const result = await prisma.$transaction(async (tx: any) => {
+      if (bucketId) {
+        const receiptBucket = await tx.cashBucket.findUnique({
+          where: { id: bucketId },
+          select: { id: true, balance: true },
+        })
+
+        if (!receiptBucket) {
+          throw new Error('RECEIPT_BUCKET_NOT_FOUND')
+        }
+
+        const spentMovements = await tx.cashBucketMovement.findFirst({
+          where: {
+            cashBucketId: bucketId,
+            amount: { lt: 0 },
+          },
+          select: { id: true },
+        })
+
+        if (spentMovements || receiptBucket.balance < receiveAmount - 0.0001) {
+          throw new Error('RECEIPT_ALREADY_USED')
+        }
+      }
+
       // Delete the receipt bucket entirely (NEW RULE: single receipt bucket)
       if (bucketId) {
         await tx.cashBucketMovement.deleteMany({
