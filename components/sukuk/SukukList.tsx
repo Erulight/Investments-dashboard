@@ -464,6 +464,7 @@ export function SukukList({ initialSukuk, userRole, ownerPersonId, viewerPersonI
 
   const getPartnerCommissionPaid = (inv: any) => {
     if (!viewerPersonId) return 0
+    const round2 = (n: number) => Math.round((n || 0) * 100) / 100
     const transactions = Array.isArray(inv.transactions) ? inv.transactions : []
 
     const buys = transactions
@@ -478,12 +479,48 @@ export function SukukList({ initialSukuk, userRole, ownerPersonId, viewerPersonI
 
     const hasSellAfter = (buyDate: Date) => sells.some((sd: Date) => (sd as any).getTime() >= (buyDate as any).getTime())
 
-    return buys.reduce((sum: number, b: any) => {
+    const fromBuyTx = buys.reduce((sum: number, b: any) => {
       if (hasSellAfter(b.d as Date)) return sum
       const meta = parseMetadata(b.tx?.metadata)
       const commission = Number(meta?.commissionAmount ?? 0)
       return sum + (Number.isFinite(commission) ? Math.max(0, commission) : 0)
     }, 0)
+
+    const participationCommissionRaw = Number(inv?.myParticipation?.commissionFees)
+    const fromParticipation = Number.isFinite(participationCommissionRaw)
+      ? Math.max(0, participationCommissionRaw)
+      : 0
+
+    const invMeta = parseMetadata(inv?.metadata)
+    const planCommissionRaw = Number(invMeta?.partnerCommissionPlan?.amount ?? 0)
+    const fromPlan = Number.isFinite(planCommissionRaw)
+      ? Math.max(0, planCommissionRaw)
+      : 0
+
+    return round2(Math.max(fromBuyTx, fromParticipation, fromPlan))
+  }
+
+  const getOwnerCommissionForDeal = (inv: any) => {
+    if (userRole !== 'OWNER') return 0
+    const round2 = (n: number) => Math.round((n || 0) * 100) / 100
+    const transactions = Array.isArray(inv.transactions) ? inv.transactions : []
+    const fromCreatePayoutTx = transactions
+      .filter((tx: any) => tx.type === 'PARTNER_COMMISSION')
+      .filter((tx: any) => {
+        if (ownerPersonId && tx?.personId && tx.personId !== ownerPersonId) return false
+        const meta = parseMetadata(tx.metadata)
+        return meta?.source === 'PARTNER_CREATE_COMMISSION_PAYOUT'
+      })
+      .reduce((sum: number, tx: any) => {
+        const amount = Number(tx.amount)
+        return sum + (Number.isFinite(amount) ? Math.max(0, amount) : 0)
+      }, 0)
+
+    const invMeta = parseMetadata(inv?.metadata)
+    const plannedRaw = Number(invMeta?.partnerCommissionPlan?.amount ?? 0)
+    const planned = Number.isFinite(plannedRaw) ? Math.max(0, plannedRaw) : 0
+
+    return round2(Math.max(fromCreatePayoutTx, planned))
   }
 
   const getSoldDealMetrics = (inv: any) => {
@@ -531,6 +568,11 @@ export function SukukList({ initialSukuk, userRole, ownerPersonId, viewerPersonI
 
     const apr = Number.isFinite(inv.interestRate) ? inv.interestRate : 0
     const meta = sellTx?.meta || null
+    const commissionFromSaleMeta = Number(meta?.commissionAmount ?? 0)
+    const effectiveCommissionEarned = Math.max(
+      Math.max(0, commissionEarned),
+      Number.isFinite(commissionFromSaleMeta) ? Math.max(0, commissionFromSaleMeta) : 0,
+    )
 
     const investorDays = Number(meta?.investorDays ?? 0)
     const totalDays = Number(meta?.totalDays ?? 0)
@@ -573,7 +615,7 @@ export function SukukList({ initialSukuk, userRole, ownerPersonId, viewerPersonI
       apr,
       fees: feesHeld,
       netProfit: profitEarnedToSale,
-      commissionEarned,
+      commissionEarned: effectiveCommissionEarned,
       acquiredAt: null,
       commissionPaid: 0,
       totalReceived: receivedProfit,
@@ -735,7 +777,7 @@ export function SukukList({ initialSukuk, userRole, ownerPersonId, viewerPersonI
       daysRemaining,
       fees,
       netProfit,
-      commissionEarned: 0,
+      commissionEarned: userRole === 'OWNER' ? getOwnerCommissionForDeal(inv) : 0,
       commissionPaid: userRole === 'OWNER' ? 0 : getPartnerCommissionPaid(inv),
       totalReceived,
       receivable,
@@ -1730,7 +1772,7 @@ export function SukukList({ initialSukuk, userRole, ownerPersonId, viewerPersonI
                         Profit{sortIndicator('profit')}
                       </button>
                     </TableHead>
-                    {userRole === 'OWNER' && ownerView === 'sold' && (
+                    {userRole === 'OWNER' && (
                       <TableHead className="px-2 py-1.5 text-xs whitespace-nowrap text-right">
                         Commission
                       </TableHead>
@@ -1896,7 +1938,7 @@ export function SukukList({ initialSukuk, userRole, ownerPersonId, viewerPersonI
                       <TableCell className="px-2 py-1.5 text-gray-700 dark:text-slate-300 tabular-nums text-right whitespace-nowrap align-middle">
                         {formatCurrency(metrics.netProfit, metrics.currency)}
                       </TableCell>
-                      {userRole === 'OWNER' && ownerView === 'sold' && (
+                      {userRole === 'OWNER' && (
                         <TableCell className="px-2 py-1.5 text-gray-700 dark:text-slate-300 tabular-nums text-right whitespace-nowrap align-middle">
                           {formatCurrency(Number(metrics.commissionEarned || 0), metrics.currency)}
                         </TableCell>
@@ -2063,7 +2105,7 @@ export function SukukList({ initialSukuk, userRole, ownerPersonId, viewerPersonI
                       <TableCell className="px-2 py-2 text-right font-semibold text-gray-900 tabular-nums whitespace-nowrap">
                         {formatCurrency(totals.profit, totals.currency)}
                       </TableCell>
-                      {userRole === 'OWNER' && ownerView === 'sold' && (
+                      {userRole === 'OWNER' && (
                         <TableCell className="px-2 py-2 text-right font-semibold text-gray-900 tabular-nums whitespace-nowrap">
                           {formatCurrency(totals.commission, totals.currency)}
                         </TableCell>

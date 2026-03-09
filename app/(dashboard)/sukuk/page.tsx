@@ -203,13 +203,32 @@ export default async function InvestmentsPage() {
   const getPartnerCommissionPaid = (inv: any) => {
     if (user.role !== 'PARTNER' || !user.personId) return 0
     const transactions = Array.isArray(inv.transactions) ? inv.transactions : []
-    return transactions
+    const fromBuyTx = transactions
       .filter((tx: any) => tx.type === 'BUY_FROM_PARTNER' && tx.personId === user.personId)
       .reduce((sum: number, tx: any) => {
         const meta = parseMetadata(tx.metadata)
         const commission = Number(meta?.commissionAmount ?? 0)
         return sum + (Number.isFinite(commission) ? Math.max(0, commission) : 0)
       }, 0)
+
+    const participationCommissionRaw = Number(inv?.myParticipation?.commissionFees)
+    const fromParticipation = Number.isFinite(participationCommissionRaw)
+      ? Math.max(0, participationCommissionRaw)
+      : 0
+
+    const invMeta = parseMetadata(inv?.metadata)
+    const planCommissionRaw = Number(invMeta?.partnerCommissionPlan?.amount ?? 0)
+    const fromPlan = Number.isFinite(planCommissionRaw)
+      ? Math.max(0, planCommissionRaw)
+      : 0
+
+    return round2(Math.max(fromBuyTx, fromParticipation, fromPlan))
+  }
+
+  const getPartnerCreateCommissionPlan = (inv: any) => {
+    const meta = parseMetadata(inv?.metadata)
+    const amount = Number(meta?.partnerCommissionPlan?.amount ?? 0)
+    return Number.isFinite(amount) ? round2(Math.max(0, amount)) : 0
   }
 
   const getOwnerRealizedProfitFromSales = (inv: any) => {
@@ -413,19 +432,41 @@ export default async function InvestmentsPage() {
 
   const totalCommissionEarned = (() => {
     if (user.role !== 'OWNER' || !user.personId) return 0
-    const fromCommissionTx = investments.reduce((sum, inv) => {
+
+    const byDealCommission = investments.reduce((sum, inv) => {
       const transactions = Array.isArray(inv.transactions) ? inv.transactions : []
-      const commission = transactions
+      const txSellCommission = transactions
         .filter((tx: any) => tx.type === 'PARTNER_COMMISSION' && tx.personId === user.personId)
+        .filter((tx: any) => {
+          const meta = parseMetadata(tx.metadata)
+          return meta?.source !== 'PARTNER_CREATE_COMMISSION_PAYOUT'
+        })
         .reduce((acc: number, tx: any) => {
           const amount = Number(tx.amount)
           return acc + (Number.isFinite(amount) ? amount : 0)
         }, 0)
-      return sum + Math.max(0, commission)
+
+      const txCreateCommission = transactions
+        .filter((tx: any) => tx.type === 'PARTNER_COMMISSION' && tx.personId === user.personId)
+        .filter((tx: any) => {
+          const meta = parseMetadata(tx.metadata)
+          return meta?.source === 'PARTNER_CREATE_COMMISSION_PAYOUT'
+        })
+        .reduce((acc: number, tx: any) => {
+          const amount = Number(tx.amount)
+          return acc + (Number.isFinite(amount) ? amount : 0)
+        }, 0)
+
+      const metaSellCommission = getOwnerRealizedFromSellMeta(inv).commission
+      const metaCreateCommission = getPartnerCreateCommissionPlan(inv)
+
+      const sellEffective = Math.max(Math.max(0, txSellCommission), Math.max(0, metaSellCommission))
+      const createEffective = Math.max(Math.max(0, txCreateCommission), Math.max(0, metaCreateCommission))
+
+      return sum + sellEffective + createEffective
     }, 0)
 
-    const fromSellMeta = investments.reduce((sum, inv) => sum + getOwnerRealizedFromSellMeta(inv).commission, 0)
-    return round2(Math.max(fromCommissionTx, fromSellMeta))
+    return round2(byDealCommission)
   })()
 
   const totalCommissionPaid = (() => {
