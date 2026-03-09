@@ -8,6 +8,8 @@ export async function GET(req: NextRequest) {
     
     const url = new URL(req.url)
     const filter = url.searchParams.get('filter') || 'all'
+    const takeRaw = Number(url.searchParams.get('take') || '200')
+    const take = Number.isFinite(takeRaw) ? Math.min(500, Math.max(1, takeRaw)) : 200
     
     let whereClause: any = {}
     
@@ -22,7 +24,7 @@ export async function GET(req: NextRequest) {
     const snapshots = await (prisma as any).snapshot.findMany({
       where: whereClause,
       orderBy: { createdAt: 'desc' },
-      take: 50,
+      take,
       select: {
         id: true,
         createdAt: true,

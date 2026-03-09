@@ -40,9 +40,6 @@ export async function POST(
       if (error.message === 'Snapshot not found') {
         return NextResponse.json({ error: 'Snapshot not found' }, { status: 404 })
       }
-      if (error.message === 'Snapshot already restored') {
-        return NextResponse.json({ error: 'Snapshot already restored' }, { status: 409 })
-      }
       
       return NextResponse.json({ 
         error: `Failed to restore snapshot: ${error.message}` 

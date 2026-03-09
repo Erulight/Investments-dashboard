@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useMemo } from 'react'
 import { Button } from '@/components/ui/Button'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/Card'
 
@@ -17,7 +17,9 @@ export default function RestorePointsPage() {
   const [snapshots, setSnapshots] = useState<Snapshot[]>([])
   const [loading, setLoading] = useState(true)
   const [filter, setFilter] = useState('all')
-  const [restoring, setRestoring] = useState(false)
+  const [sortBy, setSortBy] = useState<'newest' | 'oldest' | 'trigger'>('newest')
+  const [searchQuery, setSearchQuery] = useState('')
+  const [restoringId, setRestoringId] = useState<string | null>(null)
   const [cleaning, setCleaning] = useState(false)
 
   const showMessage = (message: string, type: 'success' | 'error' = 'success') => {
@@ -45,7 +47,7 @@ export default function RestorePointsPage() {
     }
 
     try {
-      setRestoring(true)
+      setRestoringId(snapshotId)
       const response = await fetch(`/api/admin/restore/${snapshotId}`, {
         method: 'POST',
       })
@@ -56,13 +58,13 @@ export default function RestorePointsPage() {
       }
 
       const result = await response.json()
-      showMessage(`Restored successfully! ${result.changes?.length || 0} changes applied.`)
+      showMessage(`Restored successfully! ${result.changes?.length || 0} changes applied. This restore point can be used again.`)
       fetchSnapshots()
     } catch (error) {
       console.error('Error restoring snapshot:', error)
       showMessage(error instanceof Error ? error.message : 'Failed to restore snapshot', 'error')
     } finally {
-      setRestoring(false)
+      setRestoringId(null)
     }
   }
 
@@ -120,6 +122,27 @@ export default function RestorePointsPage() {
     fetchSnapshots()
   }, [filter])
 
+  const visibleSnapshots = useMemo(() => {
+    const query = searchQuery.trim().toLowerCase()
+    const filtered = query
+      ? snapshots.filter((snapshot) => {
+          const label = snapshot.label.toLowerCase()
+          const trigger = snapshot.trigger.toLowerCase()
+          return label.includes(query) || trigger.includes(query)
+        })
+      : snapshots
+
+    return [...filtered].sort((a, b) => {
+      if (sortBy === 'oldest') {
+        return new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime()
+      }
+      if (sortBy === 'trigger') {
+        return a.trigger.localeCompare(b.trigger)
+      }
+      return new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()
+    })
+  }, [snapshots, searchQuery, sortBy])
+
   return (
     <div className="container mx-auto py-6 space-y-6">
       <div>
@@ -130,6 +153,31 @@ export default function RestorePointsPage() {
       </div>
 
       <div className="space-y-4">
+        <div className="grid gap-3 md:grid-cols-4">
+          <input
+            value={searchQuery}
+            onChange={(e) => setSearchQuery(e.target.value)}
+            placeholder="Search by label or trigger"
+            className="md:col-span-2 rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm text-slate-900 transition-colors placeholder:text-slate-400 focus:border-emerald-500 focus:outline-none focus:ring-2 focus:ring-emerald-500/20 dark:border-white/10 dark:bg-slate-900/60 dark:text-slate-100 dark:placeholder:text-slate-500"
+          />
+          <select
+            value={sortBy}
+            onChange={(e) => setSortBy(e.target.value as 'newest' | 'oldest' | 'trigger')}
+            className="rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm text-slate-900 transition-colors focus:border-emerald-500 focus:outline-none focus:ring-2 focus:ring-emerald-500/20 dark:border-white/10 dark:bg-slate-900/60 dark:text-slate-100"
+          >
+            <option value="newest">Arrange: Newest first</option>
+            <option value="oldest">Arrange: Oldest first</option>
+            <option value="trigger">Arrange: Trigger (A-Z)</option>
+          </select>
+          <Button onClick={fetchSnapshots} className="bg-slate-700 text-white hover:bg-slate-800 dark:bg-white/10 dark:hover:bg-white/15">
+            Refresh
+          </Button>
+        </div>
+
+        <div className="text-sm text-slate-600 dark:text-slate-400">
+          Showing {visibleSnapshots.length} of {snapshots.length} restore points
+        </div>
+
         <div className="flex space-x-2">
           <Button 
             onClick={() => setFilter('hour')}
@@ -166,19 +214,19 @@ export default function RestorePointsPage() {
               </div>
             </CardContent>
           </Card>
-        ) : snapshots.length === 0 ? (
+        ) : visibleSnapshots.length === 0 ? (
           <Card>
             <CardContent className="flex flex-col items-center justify-center py-12 text-center">
               <div className="text-4xl mb-4">🔄</div>
               <h3 className="text-lg font-semibold mb-2">No restore points found</h3>
               <p className="text-gray-600">
-                Restore points are created automatically before major actions
+                Try changing filters or search query.
               </p>
             </CardContent>
           </Card>
         ) : (
           <div className="space-y-4">
-            {snapshots.map((snapshot) => (
+            {visibleSnapshots.map((snapshot) => (
               <Card key={snapshot.id}>
                 <CardContent className="flex items-center justify-between p-6">
                   <div className="flex-1">
@@ -194,7 +242,7 @@ export default function RestorePointsPage() {
                           </span>
                           {snapshot.restoredAt && (
                             <span className="text-xs bg-green-100 text-green-800 px-2 py-1 rounded">
-                              Restored
+                              Restored {formatDate(snapshot.restoredAt)}
                             </span>
                           )}
                         </div>
@@ -204,10 +252,10 @@ export default function RestorePointsPage() {
                   <div className="flex items-center space-x-2">
                     <Button
                       onClick={() => handleRestore(snapshot.id)}
-                      disabled={!!snapshot.restoredAt || restoring}
+                      disabled={!!restoringId}
                       className="bg-red-500 text-white hover:bg-red-600 disabled:bg-gray-300"
                     >
-                      {restoring ? 'Restoring...' : 'Restore'}
+                      {restoringId === snapshot.id ? 'Restoring...' : 'Restore Again'}
                     </Button>
                   </div>
                 </CardContent>
