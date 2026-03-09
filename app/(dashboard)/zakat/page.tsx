@@ -802,12 +802,25 @@ export default async function ZakatPage() {
           return sum
         }, 0)
 
+        const sukukInvestedByMetadata = investments.reduce((sum: number, inv: any) => {
+          if (inv?.account?.type !== 'SUKUK') return sum
+          const meta = parseMetadata(inv?.metadata)
+          const savingsStart = toDate(meta?.savingsHaulStartDate)
+          if (!savingsStart || Number.isNaN(savingsStart.getTime())) return sum
+          if (isoDay(startOfDay(savingsStart)) !== isoDay(haulStart)) return sum
+          const principalAmount = Number(inv?.principalAmount || 0)
+          if (!Number.isFinite(principalAmount) || principalAmount <= 0) return sum
+          return sum + principalAmount
+        }, 0)
+
+        const effectiveSukukInvested = Math.max(sukukInvestedDuringFirstHawl, sukukInvestedByMetadata)
+
         // First hawl: special receipt zakat (from first contribution date)
         const firstHaulCompleted = now.getTime() >= firstHaulEnd.getTime()
         const firstRowKey = buildRowKey(['SAVINGS_RECEIPT', bucket.id])
         const firstIsPaid = movementHasRowPaid(payments, firstRowKey)
         // Reduce Zakat base by amount invested in Sukuk during first hawl
-        const firstHawlZakatBase = Math.max(0, totalReceived - sukukInvestedDuringFirstHawl)
+        const firstHawlZakatBase = Math.max(0, totalReceived - effectiveSukukInvested)
         const firstZakatDue = !firstIsPaid && firstHaulCompleted && firstHawlZakatBase > 0 ? firstHawlZakatBase * 0.025 : 0
 
         savingsRows.push({
@@ -905,7 +918,10 @@ export default async function ZakatPage() {
           (sum: number, a: { principalRemaining: number }) => sum + a.principalRemaining,
           0,
         )
-        const sukukInvestedBase = Math.max(0, Math.max(sukukInvestedByAllocations, movementNetSukukInvested))
+        const sukukInvestedBase = Math.max(
+          0,
+          Math.max(sukukInvestedByAllocations, movementNetSukukInvested, sukukInvestedByMetadata)
+        )
         const savingsIdleBase = Math.max(0, baseForSecondAndLater - sukukInvestedBase)
 
         if (firstHaulCompleted && (savingsIdleBase > 0 || sukukInvestedBase > 0)) {

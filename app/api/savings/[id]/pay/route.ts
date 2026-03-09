@@ -118,62 +118,19 @@ export async function POST(
       // Post-receipt: withdraw contribution from existing cash balance
       const totalDeduct = amount + reward
       const currency = investment.account?.currency || 'SAR'
-      const receivedBucketId = typeof meta.received?.bucketId === 'string' ? meta.received.bucketId : null
-
       const result = await prisma.$transaction(async (tx: any) => {
-        let remaining = totalDeduct
-
-        // Prefer deducting from this plan's receipt bucket to preserve savings haul continuity.
-        if (receivedBucketId) {
-          const receiptBucket = await tx.cashBucket.findUnique({
-            where: { id: receivedBucketId },
-            select: { id: true, balance: true, currency: true, label: true },
-          })
-
-          const canUseReceiptBucket =
-            !!receiptBucket &&
-            receiptBucket.currency === currency &&
-            typeof receiptBucket.label === 'string' &&
-            receiptBucket.label.startsWith('Savings Receipt •')
-
-          if (canUseReceiptBucket) {
-            const availableInReceipt = Math.max(0, Number(receiptBucket.balance) || 0)
-            const useFromReceipt = Math.min(availableInReceipt, remaining)
-            if (useFromReceipt > 0) {
-              await tx.cashBucket.update({
-                where: { id: receiptBucket.id },
-                data: { balance: { decrement: useFromReceipt } },
-              })
-
-              await tx.cashBucketMovement.create({
-                data: {
-                  cashBucketId: receiptBucket.id,
-                  investmentId: investment.id,
-                  amount: -useFromReceipt,
-                  type: 'CASH_OUT',
-                  date: contributionDate,
-                  notes: `Circlys payback • ${investment.name} • Month ${monthIndex + 1}`,
-                },
-              })
-
-              remaining -= useFromReceipt
-            }
-          }
-        }
-
-        if (remaining > 0) {
-          await withdrawFromBuckets(tx, {
-            amount: remaining,
-            currency,
-            date: contributionDate,
-            type: 'CASH_OUT',
-            investmentId: investment.id,
-            notes: `Circlys payback • ${investment.name} • Month ${monthIndex + 1}`,
-            // Allow funding from currently available cash even when recording past-due months.
-            availableOnOrBefore: fundingCutoff,
-            excludeLabelPrefixes: ['Circlys •'],
-          })
-        }
+        await withdrawFromBuckets(tx, {
+          amount: totalDeduct,
+          currency,
+          date: contributionDate,
+          type: 'CASH_OUT',
+          investmentId: investment.id,
+          notes: `Circlys payback • ${investment.name} • Month ${monthIndex + 1}`,
+          // Allow funding from currently available cash even when recording past-due months.
+          availableOnOrBefore: fundingCutoff,
+          // Do not fund paybacks from the Savings Receipt bucket.
+          excludeLabelPrefixes: ['Circlys •', 'Savings Receipt •'],
+        })
 
         // Update system cash balance
         const setting = await tx.systemSetting.findUnique({ where: { key: CASH_BALANCE_KEY } })
