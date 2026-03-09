@@ -11,12 +11,19 @@ interface TradingRobotMascotProps {
 
 export function TradingRobotMascot({ emailFocused, passwordFocused, loginError }: TradingRobotMascotProps) {
   const [action, setAction] = useState<'idle' | 'analyzing' | 'celebrating' | 'error'>('idle')
-  const [position, setPosition] = useState({ x: window.innerWidth / 2 - 100, y: 100 })
+  const [position, setPosition] = useState({ x: 0, y: 100 })
   
   const rotateY = useMotionValue(0)
   const rotateX = useMotionValue(0)
   const springRotateY = useSpring(rotateY, { stiffness: 100, damping: 15 })
   const springRotateX = useSpring(rotateX, { stiffness: 100, damping: 15 })
+
+  useEffect(() => {
+    // Initialize position on client side
+    if (typeof window !== 'undefined') {
+      setPosition({ x: window.innerWidth / 2 - 100, y: 100 })
+    }
+  }, [])
 
   useEffect(() => {
     if (loginError) {
@@ -44,6 +51,8 @@ export function TradingRobotMascot({ emailFocused, passwordFocused, loginError }
   }, [rotateY, rotateX])
 
   useEffect(() => {
+    if (typeof window === 'undefined') return
+
     const floatInterval = setInterval(() => {
       setPosition(prev => ({
         x: Math.random() * (window.innerWidth - 200),
