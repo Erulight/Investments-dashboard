@@ -69,6 +69,14 @@ export async function POST(
       return NextResponse.json({ error: 'Invalid receive amount' }, { status: 400 })
     }
 
+    const rewardFromPayments = (Object.values(meta?.payments && typeof meta.payments === 'object' ? meta.payments : {}) as any[])
+      .reduce((sum: number, p: any) => sum + (Number(p?.reward) || 0), 0)
+    const rewardFromMeta = Number(meta.totalRewardPaid || 0)
+    const configuredTotalReward = Math.max(
+      Number.isFinite(rewardFromMeta) ? rewardFromMeta : 0,
+      Number.isFinite(rewardFromPayments) ? rewardFromPayments : 0,
+    )
+
     const currency = investment.account?.currency || 'SAR'
 
     // NEW RULE 2: Get first contribution date (hawl start)
@@ -115,6 +123,83 @@ export async function POST(
           },
         },
       })
+
+      // Circlys rewards should be received as ONE bucket (not monthly reward buckets).
+      // Consolidate any legacy monthly reward buckets into a single reward receipt bucket,
+      // and for new plans (without legacy buckets), credit the full configured reward once.
+      const legacyRewardBuckets = await tx.cashBucket.findMany({
+        where: {
+          personId: null,
+          label: { startsWith: `Circlys Reward • ${investment.name} •` },
+        },
+        select: { id: true, balance: true },
+      })
+
+      const legacyRewardBalance = legacyRewardBuckets.reduce(
+        (sum: number, b: any) => sum + Math.max(0, Number(b?.balance) || 0),
+        0,
+      )
+
+      const rewardReceiptAmount = legacyRewardBuckets.length > 0
+        ? legacyRewardBalance
+        : Math.max(0, configuredTotalReward)
+
+      let rewardBucketId: string | null = null
+
+      if (legacyRewardBuckets.length > 0) {
+        await tx.cashBucket.updateMany({
+          where: {
+            id: { in: legacyRewardBuckets.map((b: any) => b.id) },
+          },
+          data: {
+            excludeFromZakat: true,
+          },
+        })
+
+        for (const legacy of legacyRewardBuckets) {
+          const legacyBalance = Math.max(0, Number(legacy.balance) || 0)
+          if (legacyBalance <= 0) continue
+
+          await tx.cashBucket.update({
+            where: { id: legacy.id },
+            data: { balance: { decrement: legacyBalance } },
+          })
+
+          await tx.cashBucketMovement.create({
+            data: {
+              cashBucketId: legacy.id,
+              investmentId: investment.id,
+              amount: -legacyBalance,
+              type: 'CASH_OUT',
+              date: receiveDate,
+              notes: `Consolidated into Circlys reward receipt • ${investment.name}`,
+            },
+          })
+        }
+      }
+
+      if (rewardReceiptAmount > 0) {
+        const rewardBucket = await tx.cashBucket.create({
+          data: {
+            label: `Circlys Reward Receipt • ${investment.name}`,
+            currency,
+            balance: rewardReceiptAmount,
+            haulStartDate: firstContributionDate,
+            excludeFromZakat: false,
+            personId: null,
+            movements: {
+              create: {
+                investmentId: investment.id,
+                amount: rewardReceiptAmount,
+                type: 'CASH_IN',
+                date: receiveDate,
+                notes: `Circlys reward receipt • ${investment.name}`,
+              },
+            },
+          },
+        })
+        rewardBucketId = rewardBucket.id
+      }
 
       // Mark all monthly contribution buckets as excluded from zakat
       // (they were just temporary tracking, not actual zakat buckets)
@@ -166,6 +251,20 @@ export async function POST(
         },
       })
 
+      if (rewardReceiptAmount > 0 && legacyRewardBuckets.length === 0) {
+        await tx.transaction.create({
+          data: {
+            accountId: cashAccount.id,
+            investmentId: investment.id,
+            personId: null,
+            type: 'CASH_IN',
+            amount: rewardReceiptAmount,
+            date: receiveDate,
+            description: `Circlys reward receipt • ${investment.name}`,
+          },
+        })
+      }
+
       // Save received flag in metadata
       const updated = await tx.investment.update({
         where: { id: investment.id },
@@ -177,6 +276,8 @@ export async function POST(
               date: receiveDate.toISOString(),
               amount: receiveAmount,
               bucketId: receiptBucket.id,
+              rewardAmount: rewardReceiptAmount,
+              rewardBucketId,
               daysHeld,
               zakatDueImmediately,
             },
@@ -192,6 +293,7 @@ export async function POST(
       type: 'SAVINGS_RECEIPT',
       investmentId: investment.id,
       amount: receiveAmount,
+      rewardAmount: configuredTotalReward,
       receiptMonth: meta.receiptMonth,
       daysHeld,
       zakatDueImmediately,
@@ -259,6 +361,8 @@ export async function DELETE(
 
     const receiveAmount = Number(meta.received.amount || 0)
     const bucketId = meta.received.bucketId
+    const rewardAmount = Number(meta.received.rewardAmount || 0)
+    const rewardBucketId = meta.received.rewardBucketId
 
     if (receiveAmount <= 0) {
       return NextResponse.json({ error: 'Invalid receive amount' }, { status: 400 })
@@ -288,12 +392,42 @@ export async function DELETE(
         }
       }
 
+      if (rewardBucketId) {
+        const rewardBucket = await tx.cashBucket.findUnique({
+          where: { id: rewardBucketId },
+          select: { id: true, balance: true },
+        })
+
+        if (!rewardBucket) {
+          throw new Error('RECEIPT_BUCKET_NOT_FOUND')
+        }
+
+        const rewardSpentMovements = await tx.cashBucketMovement.findFirst({
+          where: {
+            cashBucketId: rewardBucketId,
+            amount: { lt: 0 },
+          },
+          select: { id: true },
+        })
+
+        if (rewardSpentMovements || rewardBucket.balance < rewardAmount - 0.0001) {
+          throw new Error('RECEIPT_ALREADY_USED')
+        }
+      }
+
       // Delete the receipt bucket entirely (NEW RULE: single receipt bucket)
       if (bucketId) {
         await tx.cashBucketMovement.deleteMany({
           where: { cashBucketId: bucketId }
         })
         await tx.cashBucket.delete({ where: { id: bucketId } })
+      }
+
+      if (rewardBucketId) {
+        await tx.cashBucketMovement.deleteMany({
+          where: { cashBucketId: rewardBucketId },
+        })
+        await tx.cashBucket.delete({ where: { id: rewardBucketId } })
       }
 
       // Restore monthly contribution buckets to be zakat-eligible again
@@ -344,6 +478,22 @@ export async function DELETE(
         if (txn) {
           await tx.transaction.delete({ where: { id: txn.id } })
         }
+
+        if (rewardAmount > 0) {
+          const rewardTxn = await tx.transaction.findFirst({
+            where: {
+              accountId: cashAccount.id,
+              investmentId: investment.id,
+              type: 'CASH_IN',
+              description: { contains: 'Circlys reward receipt' },
+            },
+            orderBy: { date: 'desc' },
+          })
+
+          if (rewardTxn) {
+            await tx.transaction.delete({ where: { id: rewardTxn.id } })
+          }
+        }
       }
 
       // Remove received flag from metadata
@@ -364,6 +514,7 @@ export async function DELETE(
       type: 'SAVINGS_RECEIPT_UNDO',
       investmentId: investment.id,
       amount: receiveAmount,
+      rewardAmount,
     })
 
     return NextResponse.json({ investment: result })
