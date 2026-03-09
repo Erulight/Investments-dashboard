@@ -94,8 +94,11 @@ export async function POST(
     const monthLabel = `${dueDate.getFullYear()}-${String(dueDate.getMonth() + 1).padStart(2, '0')}`
     const contributionDate = dueDate
     const fundingCutoff = new Date()
+    const currency = investment.account?.currency || 'SAR'
     const startAnchorRaw = new Date(investment.startDate)
     const contributionHaulStart = Number.isNaN(startAnchorRaw.getTime()) ? contributionDate : startAnchorRaw
+    const projectedMonthsPaid = Object.keys(payments).length + 1
+    const isPlanCompleted = totalMonths > 0 && projectedMonthsPaid >= totalMonths
 
     // Determine if this is a post-receipt month (deducts from cash instead of creating a new bucket)
     const isPostReceipt =
@@ -113,14 +116,14 @@ export async function POST(
     })
 
     let bucketId: string
+    let rewardBucketId: string | null = null
 
     if (isPostReceipt) {
       // Post-receipt: withdraw contribution from existing cash balance
-      const totalDeduct = amount + reward
-      const currency = investment.account?.currency || 'SAR'
-      const result = await prisma.$transaction(async (tx: any) => {
+      const contributionDeduct = amount
+      await prisma.$transaction(async (tx: any) => {
         await withdrawFromBuckets(tx, {
-          amount: totalDeduct,
+          amount: contributionDeduct,
           currency,
           date: contributionDate,
           type: 'CASH_OUT',
@@ -131,15 +134,6 @@ export async function POST(
           // Do not fund paybacks from the Savings Receipt bucket.
           excludeLabelPrefixes: ['Circlys •', 'Savings Receipt •'],
         })
-
-        // Update system cash balance
-        const setting = await tx.systemSetting.findUnique({ where: { key: CASH_BALANCE_KEY } })
-        const currentCash = setting ? Number(setting.value) : 0
-        const nextCash = currentCash - totalDeduct
-        if (nextCash < 0) throw new Error('INSUFFICIENT_CASH')
-        if (setting) {
-          await tx.systemSetting.update({ where: { key: CASH_BALANCE_KEY }, data: { value: nextCash.toString() } })
-        }
 
         // Record transaction in Cash Ledger for visibility
         const cashAccount =
@@ -154,9 +148,67 @@ export async function POST(
             investmentId: investment.id,
             personId: null,
             type: 'CASH_OUT',
-            amount: -totalDeduct,
+            amount: -contributionDeduct,
             date: contributionDate,
             description: `Circlys payback • ${investment.name} • Month ${monthIndex + 1}`,
+          },
+        })
+
+        if (reward > 0) {
+          const rewardBucket = await createCashBucket(tx, {
+            amount: reward,
+            haulStartDate: contributionHaulStart,
+            currency,
+            label: `Circlys Reward • ${investment.name} • ${monthLabel}`,
+            date: contributionDate,
+            notes: `Month ${monthIndex + 1}`,
+            investmentId: investment.id,
+            type: 'CASH_IN',
+            excludeFromZakat: !isPlanCompleted,
+            personId: null,
+          })
+          rewardBucketId = rewardBucket.id
+
+          await tx.transaction.create({
+            data: {
+              accountId: cashAccount.id,
+              investmentId: investment.id,
+              personId: null,
+              type: 'CASH_IN',
+              amount: reward,
+              date: contributionDate,
+              description: `Circlys reward • ${investment.name} • Month ${monthIndex + 1}`,
+            },
+          })
+        }
+
+        if (isPlanCompleted) {
+          await tx.cashBucket.updateMany({
+            where: {
+              label: { startsWith: `Circlys Reward • ${investment.name} •` },
+              personId: null,
+            },
+            data: {
+              excludeFromZakat: false,
+              haulStartDate: contributionHaulStart,
+            },
+          })
+        }
+
+        const cashBucketAgg = await tx.cashBucket.aggregate({
+          where: { personId: null },
+          _sum: { balance: true },
+        })
+        const cashBucketSumRaw = cashBucketAgg?._sum?.balance
+        const cashBucketSum = Number.isFinite(cashBucketSumRaw as any) ? Number(cashBucketSumRaw) : 0
+
+        await tx.systemSetting.upsert({
+          where: { key: CASH_BALANCE_KEY },
+          update: { value: cashBucketSum.toString() },
+          create: {
+            key: CASH_BALANCE_KEY,
+            value: cashBucketSum.toString(),
+            description: 'Available cash balance for investments',
           },
         })
 
@@ -167,14 +219,12 @@ export async function POST(
       bucketId = `post-receipt-${investment.id}-${monthIndex}`
     } else {
       // Normal pre-receipt: create a new cash bucket with its own haul
-      // FIX: Also deduct from cash balance (contributions are money leaving cash)
-      const totalDeduct = amount + reward
-      const currency = investment.account?.currency || 'SAR'
+      const contributionDeduct = amount
 
       const result = await prisma.$transaction(async (tx: any) => {
         // Move contribution out of available cash buckets first, so General Cash is reduced.
         await withdrawFromBuckets(tx, {
-          amount: totalDeduct,
+          amount: contributionDeduct,
           currency,
           date: contributionDate,
           type: 'CASH_OUT',
@@ -198,7 +248,7 @@ export async function POST(
             investmentId: investment.id,
             personId: null,
             type: 'CASH_OUT',
-            amount: -totalDeduct,
+            amount: -contributionDeduct,
             date: contributionDate,
             description: `Circlys contribution • ${investment.name} • Month ${monthIndex + 1}`,
           },
@@ -238,14 +288,63 @@ export async function POST(
           select: { id: true, label: true, currency: true, haulStartDate: true, balance: true },
         })
 
-        // FIX: Deduct contribution from system cash balance
-        const setting = await tx.systemSetting.findUnique({ where: { key: CASH_BALANCE_KEY } })
-        const currentCash = setting ? Number(setting.value) : 0
-        const nextCash = currentCash - totalDeduct
-        if (nextCash < 0) throw new Error('INSUFFICIENT_CASH')
-        if (setting) {
-          await tx.systemSetting.update({ where: { key: CASH_BALANCE_KEY }, data: { value: nextCash.toString() } })
+        if (reward > 0) {
+          const rewardBucket = await createCashBucket(tx, {
+            amount: reward,
+            haulStartDate: contributionHaulStart,
+            currency,
+            label: `Circlys Reward • ${investment.name} • ${monthLabel}`,
+            date: contributionDate,
+            notes: `Month ${monthIndex + 1}`,
+            investmentId: investment.id,
+            type: 'CASH_IN',
+            excludeFromZakat: !isPlanCompleted,
+            personId: null,
+          })
+          rewardBucketId = rewardBucket.id
+
+          await tx.transaction.create({
+            data: {
+              accountId: cashAccount.id,
+              investmentId: investment.id,
+              personId: null,
+              type: 'CASH_IN',
+              amount: reward,
+              date: contributionDate,
+              description: `Circlys reward • ${investment.name} • Month ${monthIndex + 1}`,
+            },
+          })
         }
+
+        if (isPlanCompleted) {
+          await tx.cashBucket.updateMany({
+            where: {
+              label: { startsWith: `Circlys Reward • ${investment.name} •` },
+              personId: null,
+            },
+            data: {
+              excludeFromZakat: false,
+              haulStartDate: contributionHaulStart,
+            },
+          })
+        }
+
+        const cashBucketAgg = await tx.cashBucket.aggregate({
+          where: { personId: null },
+          _sum: { balance: true },
+        })
+        const cashBucketSumRaw = cashBucketAgg?._sum?.balance
+        const cashBucketSum = Number.isFinite(cashBucketSumRaw as any) ? Number(cashBucketSumRaw) : 0
+
+        await tx.systemSetting.upsert({
+          where: { key: CASH_BALANCE_KEY },
+          update: { value: cashBucketSum.toString() },
+          create: {
+            key: CASH_BALANCE_KEY,
+            value: cashBucketSum.toString(),
+            description: 'Available cash balance for investments',
+          },
+        })
 
         return bucket
       })
@@ -262,6 +361,7 @@ export async function POST(
         amount,
         reward,
         bucketId,
+        rewardBucketId,
         postReceipt: isPostReceipt || false,
       },
     }
@@ -284,6 +384,17 @@ export async function POST(
         }),
       },
       include: { account: true },
+    })
+
+    await prisma.cashBucket.updateMany({
+      where: {
+        label: { startsWith: `Circlys Reward • ${investment.name} •` },
+        personId: null,
+      },
+      data: {
+        excludeFromZakat: !isPlanCompleted,
+        haulStartDate: contributionHaulStart,
+      },
     })
 
     await createAuditLog(user.id, 'CREATE', 'CASH_BUCKET', bucketId, {
@@ -377,6 +488,7 @@ export async function DELETE(
 
     const payments: Record<string, any> =
       meta.payments && typeof meta.payments === 'object' ? meta.payments : {}
+    const totalMonths = Number(meta.totalMonths || 0)
 
     const existing = payments[String(monthIndex)]
     const bucketId = existing?.bucketId
@@ -386,7 +498,8 @@ export async function DELETE(
     }
 
     const isPostReceipt = existing?.postReceipt === true
-    const refundAmount = (Number(existing?.amount) || 0) + (Number(existing?.reward) || 0)
+    const contributionAmount = Number(existing?.amount) || 0
+    const rewardAmount = Number(existing?.reward) || 0
     const dueDate = addMonths(new Date(investment.startDate), monthIndex)
     const startAnchorRaw = new Date(investment.startDate)
     const contributionHaulStart = Number.isNaN(startAnchorRaw.getTime()) ? dueDate : startAnchorRaw
@@ -402,13 +515,13 @@ export async function DELETE(
           if (bucket) {
             await tx.cashBucket.update({
               where: { id: receivedBucketId },
-              data: { balance: { increment: refundAmount } },
+              data: { balance: { increment: contributionAmount } },
             })
             await tx.cashBucketMovement.create({
               data: {
                 cashBucketId: receivedBucketId,
                 investmentId: investment.id,
-                amount: refundAmount,
+                amount: contributionAmount,
                 type: 'CASH_IN',
                 date: dueDate,
                 notes: `Undo Circlys payback • Month ${monthIndex + 1}`,
@@ -419,9 +532,9 @@ export async function DELETE(
         }
 
         // Fallback: if receipt bucket no longer exists, restore to a normal cash bucket.
-        if (!creditedToBucket && refundAmount > 0) {
+        if (!creditedToBucket && contributionAmount > 0) {
           await createCashBucket(tx, {
-            amount: refundAmount,
+            amount: contributionAmount,
             haulStartDate: dueDate,
             currency: investment.account?.currency || 'SAR',
             label: 'General Cash',
@@ -432,23 +545,34 @@ export async function DELETE(
           })
         }
 
-        // Update system cash balance
-        const setting = await tx.systemSetting.findUnique({ where: { key: CASH_BALANCE_KEY } })
-        const currentCash = setting ? Number(setting.value) : 0
-        if (setting) {
-          await tx.systemSetting.update({
-            where: { key: CASH_BALANCE_KEY },
-            data: { value: (currentCash + refundAmount).toString() },
-          })
-        } else {
-          await tx.systemSetting.create({
-            data: {
-              key: CASH_BALANCE_KEY,
-              value: Math.max(0, refundAmount).toString(),
-              description: 'Available cash balance for investments',
-            },
+        if (rewardAmount > 0) {
+          await withdrawFromBuckets(tx, {
+            amount: rewardAmount,
+            currency: investment.account?.currency || 'SAR',
+            date: dueDate,
+            type: 'CASH_OUT',
+            investmentId: investment.id,
+            notes: `Undo Circlys reward • ${investment.name} • Month ${monthIndex + 1}`,
+            availableOnOrBefore: new Date(),
           })
         }
+
+        const cashBucketAgg = await tx.cashBucket.aggregate({
+          where: { personId: null },
+          _sum: { balance: true },
+        })
+        const cashBucketSumRaw = cashBucketAgg?._sum?.balance
+        const cashBucketSum = Number.isFinite(cashBucketSumRaw as any) ? Number(cashBucketSumRaw) : 0
+
+        await tx.systemSetting.upsert({
+          where: { key: CASH_BALANCE_KEY },
+          update: { value: cashBucketSum.toString() },
+          create: {
+            key: CASH_BALANCE_KEY,
+            value: Math.max(0, cashBucketSum).toString(),
+            description: 'Available cash balance for investments',
+          },
+        })
 
         // Record transaction in Cash Ledger for visibility
         const cashAccount =
@@ -457,17 +581,33 @@ export async function DELETE(
             data: { name: 'Cash Balance', type: 'CASH', currency: investment.account?.currency || 'SAR', description: 'Cash ledger account' },
           }))
 
-        await tx.transaction.create({
-          data: {
-            accountId: cashAccount.id,
-            investmentId: investment.id,
-            personId: null,
-            type: 'CASH_IN',
-            amount: refundAmount,
-            date: dueDate,
-            description: `Undo Circlys payback • ${investment.name} • Month ${monthIndex + 1}`,
-          },
-        })
+        if (contributionAmount > 0) {
+          await tx.transaction.create({
+            data: {
+              accountId: cashAccount.id,
+              investmentId: investment.id,
+              personId: null,
+              type: 'CASH_IN',
+              amount: contributionAmount,
+              date: dueDate,
+              description: `Undo Circlys payback • ${investment.name} • Month ${monthIndex + 1}`,
+            },
+          })
+        }
+
+        if (rewardAmount > 0) {
+          await tx.transaction.create({
+            data: {
+              accountId: cashAccount.id,
+              investmentId: investment.id,
+              personId: null,
+              type: 'CASH_OUT',
+              amount: -rewardAmount,
+              date: dueDate,
+              description: `Undo Circlys reward • ${investment.name} • Month ${monthIndex + 1}`,
+            },
+          })
+        }
       })
     } else {
       // Normal: delete the contribution bucket and restore available cash
@@ -479,9 +619,9 @@ export async function DELETE(
 
         await tx.cashBucket.delete({ where: { id: bucketId } })
 
-        if (refundAmount > 0) {
+        if (contributionAmount > 0) {
           await createCashBucket(tx, {
-            amount: refundAmount,
+            amount: contributionAmount,
             haulStartDate: contributionHaulStart,
             currency: contributionBucket?.currency || investment.account?.currency || 'SAR',
             label: 'General Cash',
@@ -492,24 +632,34 @@ export async function DELETE(
           })
         }
 
-        const setting = await tx.systemSetting.findUnique({ where: { key: CASH_BALANCE_KEY } })
-        const currentCash = setting ? Number(setting.value) : 0
-        const nextCash = currentCash + refundAmount
-
-        if (setting) {
-          await tx.systemSetting.update({
-            where: { key: CASH_BALANCE_KEY },
-            data: { value: nextCash.toString() },
-          })
-        } else {
-          await tx.systemSetting.create({
-            data: {
-              key: CASH_BALANCE_KEY,
-              value: Math.max(0, refundAmount).toString(),
-              description: 'Available cash balance for investments',
-            },
+        if (rewardAmount > 0) {
+          await withdrawFromBuckets(tx, {
+            amount: rewardAmount,
+            currency: contributionBucket?.currency || investment.account?.currency || 'SAR',
+            date: dueDate,
+            type: 'CASH_OUT',
+            investmentId: investment.id,
+            notes: `Undo Circlys reward • ${investment.name} • Month ${monthIndex + 1}`,
+            availableOnOrBefore: new Date(),
           })
         }
+
+        const cashBucketAgg = await tx.cashBucket.aggregate({
+          where: { personId: null },
+          _sum: { balance: true },
+        })
+        const cashBucketSumRaw = cashBucketAgg?._sum?.balance
+        const cashBucketSum = Number.isFinite(cashBucketSumRaw as any) ? Number(cashBucketSumRaw) : 0
+
+        await tx.systemSetting.upsert({
+          where: { key: CASH_BALANCE_KEY },
+          update: { value: cashBucketSum.toString() },
+          create: {
+            key: CASH_BALANCE_KEY,
+            value: Math.max(0, cashBucketSum).toString(),
+            description: 'Available cash balance for investments',
+          },
+        })
 
         // Record transaction in Cash Ledger for visibility
         const cashAccount =
@@ -518,17 +668,33 @@ export async function DELETE(
             data: { name: 'Cash Balance', type: 'CASH', currency: contributionBucket?.currency || investment.account?.currency || 'SAR', description: 'Cash ledger account' },
           }))
 
-        await tx.transaction.create({
-          data: {
-            accountId: cashAccount.id,
-            investmentId: investment.id,
-            personId: null,
-            type: 'CASH_IN',
-            amount: refundAmount,
-            date: dueDate,
-            description: `Undo Circlys contribution • ${investment.name} • Month ${monthIndex + 1}`,
-          },
-        })
+        if (contributionAmount > 0) {
+          await tx.transaction.create({
+            data: {
+              accountId: cashAccount.id,
+              investmentId: investment.id,
+              personId: null,
+              type: 'CASH_IN',
+              amount: contributionAmount,
+              date: dueDate,
+              description: `Undo Circlys contribution • ${investment.name} • Month ${monthIndex + 1}`,
+            },
+          })
+        }
+
+        if (rewardAmount > 0) {
+          await tx.transaction.create({
+            data: {
+              accountId: cashAccount.id,
+              investmentId: investment.id,
+              personId: null,
+              type: 'CASH_OUT',
+              amount: -rewardAmount,
+              date: dueDate,
+              description: `Undo Circlys reward • ${investment.name} • Month ${monthIndex + 1}`,
+            },
+          })
+        }
       })
     }
 
@@ -544,6 +710,7 @@ export async function DELETE(
       0
     )
     const monthsPaid = Object.keys(nextPayments).length
+    const isPlanCompletedAfterUndo = totalMonths > 0 && monthsPaid >= totalMonths
 
     const updated = await prisma.investment.update({
       where: { id: investment.id },
@@ -559,6 +726,17 @@ export async function DELETE(
         }),
       },
       include: { account: true },
+    })
+
+    await prisma.cashBucket.updateMany({
+      where: {
+        label: { startsWith: `Circlys Reward • ${investment.name} •` },
+        personId: null,
+      },
+      data: {
+        excludeFromZakat: !isPlanCompletedAfterUndo,
+        haulStartDate: contributionHaulStart,
+      },
     })
 
     await createAuditLog(user.id, 'DELETE', 'CASH_BUCKET', bucketId, {
@@ -579,6 +757,9 @@ export async function DELETE(
         statusCode = 401
       } else if (error.message === 'Forbidden') {
         statusCode = 403
+      } else if (error.message === 'INSUFFICIENT_CASH') {
+        statusCode = 400
+        errorMessage = 'Insufficient cash balance'
       } else if (error.message.includes('not found')) {
         statusCode = 404
         errorMessage = 'Savings plan not found'
