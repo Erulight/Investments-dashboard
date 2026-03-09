@@ -139,6 +139,10 @@ describe('POST /api/sukuk/create', () => {
           }),
           update: vi.fn(),
           create: vi.fn(),
+          upsert: vi.fn().mockResolvedValue({
+            key: 'CASH_BALANCE',
+            value: '900000',
+          }),
         },
         cashBucket: {
           aggregate: vi.fn().mockResolvedValue({
@@ -313,6 +317,10 @@ describe('POST /api/sukuk/create', () => {
           }),
           update: vi.fn(),
           create: vi.fn(),
+          upsert: vi.fn().mockResolvedValue({
+            key: 'CASH_BALANCE',
+            value: '900000',
+          }),
         },
         cashBucket: {
           aggregate: vi.fn().mockResolvedValue({
