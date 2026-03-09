@@ -574,28 +574,49 @@ export default async function DashboardPage({
         return sum + receivable
       }, 0)
 
-    const sukukRealizedProfit = owned
+    const sukukReceivedProfit = owned
       .filter((inv) => inv.account.type === 'SUKUK')
       .reduce((sum, inv) => {
+        if (isSoldSukukForOwner(inv)) {
+          const settlement = getOwnerSoldSettlement(inv)
+          return sum + settlement.received
+        }
+
         const txs = Array.isArray(inv.transactions) ? inv.transactions : []
-        const realized = txs
-          .filter((tx: any) => ['WITHDRAW_PROFIT', 'SELL_PROFIT_ACCRUED', 'PARTNER_COMMISSION'].includes(tx?.type))
+        const received = txs
+          .filter((tx: any) => tx?.type === 'WITHDRAW_PROFIT')
           .filter((tx: any) => {
+            if (ownerPersonId && tx?.personId !== ownerPersonId && tx?.personId != null) return false
             const d = tx?.date instanceof Date ? tx.date : new Date(tx?.date)
             return !Number.isNaN(d.getTime()) && d.getTime() <= now.getTime()
           })
           .reduce((s: number, tx: any) => s + Math.max(0, Number(tx?.amount) || 0), 0)
-        return sum + realized
+        return sum + received
+      }, 0)
+
+    const sukukCommissionEarned = owned
+      .filter((inv) => inv.account.type === 'SUKUK')
+      .reduce((sum, inv) => {
+        const txs = Array.isArray(inv.transactions) ? inv.transactions : []
+        const commission = txs
+          .filter((tx: any) => tx?.type === 'PARTNER_COMMISSION')
+          .filter((tx: any) => {
+            if (ownerPersonId && tx?.personId !== ownerPersonId && tx?.personId != null) return false
+            const d = tx?.date instanceof Date ? tx.date : new Date(tx?.date)
+            return !Number.isNaN(d.getTime()) && d.getTime() <= now.getTime()
+          })
+          .reduce((s: number, tx: any) => s + Math.max(0, Number(tx?.amount) || 0), 0)
+        return sum + commission
       }, 0)
 
     const soldPendingProfit = owned
       .filter((inv) => inv.account.type === 'SUKUK')
       .reduce((sum, inv) => sum + getOwnerSoldSettlement(inv).pending, 0)
 
-    // Total Profit = Sukuk receivable + Sukuk realized (withdrawn/commission/sale accrual)
-    //              + sold pending (for settled-at-sale but not-yet-received sold deals)
-    //              + non-Sukuk realized/unrealized profit
-    totalProfit = nonSukukOwnedProfit + circlysProfit + sukukReceivable + sukukRealizedProfit + soldPendingProfit
+    const sukukTotalReceivable = sukukReceivable + soldPendingProfit
+
+    // Total Profit = receivable + received + commission (plus non-Sukuk/Circlys profit)
+    totalProfit = nonSukukOwnedProfit + circlysProfit + sukukTotalReceivable + sukukReceivedProfit + sukukCommissionEarned
 
     sukukValue = sukukInvested + sukukReceivable
     totalValue += sukukReceivable
