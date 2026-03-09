@@ -11,6 +11,15 @@ interface Transaction {
   date: string
   description: string | null
   createdAt: string
+  investmentId?: string | null
+  investmentName?: string | null
+  investmentCategory?: string | null
+  personId?: string | null
+  personName?: string | null
+  metadataSource?: string | null
+  direction?: 'IN' | 'OUT'
+  moneyFrom?: string | null
+  moneyTo?: string | null
 }
 
 interface Bucket {
@@ -32,10 +41,32 @@ interface LedgerData {
   totalPages: number
   buckets: Bucket[]
   transactionTypes: string[]
+  availableYears: number[]
+  summary?: {
+    inflow: number
+    outflow: number
+    net: number
+    count: number
+  }
+  userRole?: 'OWNER' | 'PARTNER' | string
 }
 
 const fmt = (n: number) => n.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })
 const fmtDate = (d: string) => new Date(d).toLocaleDateString('en-CA')
+const MONTHS = [
+  { value: '1', label: 'Jan' },
+  { value: '2', label: 'Feb' },
+  { value: '3', label: 'Mar' },
+  { value: '4', label: 'Apr' },
+  { value: '5', label: 'May' },
+  { value: '6', label: 'Jun' },
+  { value: '7', label: 'Jul' },
+  { value: '8', label: 'Aug' },
+  { value: '9', label: 'Sep' },
+  { value: '10', label: 'Oct' },
+  { value: '11', label: 'Nov' },
+  { value: '12', label: 'Dec' },
+]
 
 export function CashLedgerClient() {
   const [data, setData] = useState<LedgerData | null>(null)
@@ -43,6 +74,11 @@ export function CashLedgerClient() {
   const [error, setError] = useState('')
   const [page, setPage] = useState(1)
   const [typeFilter, setTypeFilter] = useState('')
+  const [flowFilter, setFlowFilter] = useState<'ALL' | 'IN' | 'OUT'>('ALL')
+  const [yearFilter, setYearFilter] = useState('')
+  const [monthFilter, setMonthFilter] = useState('')
+  const [searchInput, setSearchInput] = useState('')
+  const [searchFilter, setSearchFilter] = useState('')
   const [activeTab, setActiveTab] = useState<'transactions' | 'buckets'>('transactions')
   const [sendAmount, setSendAmount] = useState('')
   const [sendDate, setSendDate] = useState('')
@@ -57,6 +93,10 @@ export function CashLedgerClient() {
     try {
       const params = new URLSearchParams({ page: String(page), limit: '50' })
       if (typeFilter) params.set('type', typeFilter)
+      if (flowFilter !== 'ALL') params.set('flow', flowFilter)
+      if (yearFilter) params.set('year', yearFilter)
+      if (monthFilter) params.set('month', monthFilter)
+      if (searchFilter) params.set('q', searchFilter)
       const res = await fetch(`/api/cash/ledger?${params}`)
       const json = await res.json().catch(() => ({}))
       if (!res.ok) throw new Error(json.error || 'Failed to load ledger')
@@ -66,9 +106,34 @@ export function CashLedgerClient() {
     } finally {
       setLoading(false)
     }
-  }, [page, typeFilter])
+  }, [page, typeFilter, flowFilter, yearFilter, monthFilter, searchFilter])
 
   useEffect(() => { loadData() }, [loadData])
+
+  const runSearch = () => {
+    setPage(1)
+    setSearchFilter(searchInput.trim())
+  }
+
+  const clearAllFilters = () => {
+    setTypeFilter('')
+    setFlowFilter('ALL')
+    setYearFilter('')
+    setMonthFilter('')
+    setSearchInput('')
+    setSearchFilter('')
+    setPage(1)
+  }
+
+  const exportCsv = () => {
+    const params = new URLSearchParams({ export: 'csv' })
+    if (typeFilter) params.set('type', typeFilter)
+    if (flowFilter !== 'ALL') params.set('flow', flowFilter)
+    if (yearFilter) params.set('year', yearFilter)
+    if (monthFilter) params.set('month', monthFilter)
+    if (searchFilter) params.set('q', searchFilter)
+    window.open(`/api/cash/ledger?${params.toString()}`, '_blank', 'noopener,noreferrer')
+  }
 
   // Compute running balance for transactions (most recent first)
   const transactionsWithBalance = (() => {
@@ -108,6 +173,14 @@ export function CashLedgerClient() {
   const depletedBuckets = data?.buckets.filter((b: Bucket) => b.balance <= 0) || []
   const totalBucketBalance = activeBuckets.reduce((s: number, b: Bucket) => s + b.balance, 0)
   const totalDepletedBalance = depletedBuckets.reduce((s: number, b: Bucket) => s + b.balance, 0)
+  const activeFilterCount = [
+    Boolean(typeFilter),
+    flowFilter !== 'ALL',
+    Boolean(yearFilter),
+    Boolean(monthFilter),
+    Boolean(searchFilter),
+  ].filter(Boolean).length
+  const summary = data?.summary || { inflow: 0, outflow: 0, net: 0, count: 0 }
 
   return (
     <div className="space-y-6 animate-fade-in">
@@ -212,6 +285,32 @@ export function CashLedgerClient() {
         )}
       </div>
 
+      {/* Period summary cards */}
+      <div className="grid grid-cols-1 gap-3 md:grid-cols-2 xl:grid-cols-4">
+        <div className="rounded-xl border border-emerald-100 bg-emerald-50/70 p-4 transition-transform duration-200 hover:-translate-y-0.5">
+          <div className="text-[11px] font-semibold uppercase tracking-wider text-emerald-700">Inflow</div>
+          <div className="mt-1 text-lg font-bold tabular-nums text-emerald-800">SAR {fmt(summary.inflow)}</div>
+          <div className="mt-1 text-[11px] text-emerald-700/80">Filtered period receipts</div>
+        </div>
+        <div className="rounded-xl border border-rose-100 bg-rose-50/70 p-4 transition-transform duration-200 hover:-translate-y-0.5">
+          <div className="text-[11px] font-semibold uppercase tracking-wider text-rose-700">Outflow</div>
+          <div className="mt-1 text-lg font-bold tabular-nums text-rose-800">SAR {fmt(summary.outflow)}</div>
+          <div className="mt-1 text-[11px] text-rose-700/80">Filtered period deductions</div>
+        </div>
+        <div className="rounded-xl border border-slate-200 bg-white p-4 transition-transform duration-200 hover:-translate-y-0.5">
+          <div className="text-[11px] font-semibold uppercase tracking-wider text-slate-500">Net Flow</div>
+          <div className={`mt-1 text-lg font-bold tabular-nums ${summary.net >= 0 ? 'text-emerald-700' : 'text-rose-700'}`}>
+            SAR {fmt(Math.abs(summary.net))} {summary.net >= 0 ? '↑' : '↓'}
+          </div>
+          <div className="mt-1 text-[11px] text-slate-500">Inflow - Outflow</div>
+        </div>
+        <div className="rounded-xl border border-slate-200 bg-white p-4 transition-transform duration-200 hover:-translate-y-0.5">
+          <div className="text-[11px] font-semibold uppercase tracking-wider text-slate-500">Filtered Entries</div>
+          <div className="mt-1 text-lg font-bold tabular-nums text-slate-900">{summary.count}</div>
+          <div className="mt-1 text-[11px] text-slate-500">Transactions after applied filters</div>
+        </div>
+      </div>
+
       {/* Tab Toggle */}
       <div className="flex w-fit items-center gap-1 rounded-lg bg-gray-100 p-1 dark:bg-slate-900/60">
         <button
@@ -244,21 +343,88 @@ export function CashLedgerClient() {
       {activeTab === 'transactions' && (
         <Card>
           <CardHeader>
-            <div className="flex items-center justify-between">
-              <CardTitle className="text-sm font-bold text-gray-800">Transaction History</CardTitle>
-              <div className="flex items-center gap-2">
-                {data?.transactionTypes && data.transactionTypes.length > 0 && (
+            <div className="space-y-3">
+              <div className="flex flex-col gap-2 lg:flex-row lg:items-center lg:justify-between">
+                <CardTitle className="text-sm font-bold text-gray-800">Transaction History</CardTitle>
+                <div className="flex items-center gap-2">
+                  <Button size="sm" variant="secondary" onClick={clearAllFilters}>
+                    Reset ({activeFilterCount})
+                  </Button>
+                  <Button size="sm" variant="primary" onClick={exportCsv}>
+                    Download CSV
+                  </Button>
+                </div>
+              </div>
+              <div className="grid grid-cols-1 gap-2 lg:grid-cols-12">
+                <div className="lg:col-span-4">
+                  <div className="flex gap-2">
+                    <input
+                      value={searchInput}
+                      onChange={(e) => setSearchInput(e.target.value)}
+                      onKeyDown={(e) => {
+                        if (e.key === 'Enter') {
+                          e.preventDefault()
+                          runSearch()
+                        }
+                      }}
+                      placeholder="Search type, notes, deal, person"
+                      className="w-full rounded-md border border-slate-200 bg-white px-3 py-1.5 text-xs text-slate-700 outline-none focus:border-slate-500 focus:ring-1 focus:ring-slate-500"
+                    />
+                    <Button size="sm" variant="secondary" onClick={runSearch}>Apply</Button>
+                  </div>
+                </div>
+                <div className="lg:col-span-2">
+                  <select
+                    value={flowFilter}
+                    onChange={(e) => { setFlowFilter(e.target.value as 'ALL' | 'IN' | 'OUT'); setPage(1) }}
+                    className="w-full rounded-md border border-slate-200 bg-white px-2 py-1.5 text-xs text-slate-700 outline-none focus:border-slate-500 focus:ring-1 focus:ring-slate-500"
+                  >
+                    <option value="ALL">All flows</option>
+                    <option value="IN">Inflow only</option>
+                    <option value="OUT">Outflow only</option>
+                  </select>
+                </div>
+                <div className="lg:col-span-2">
+                  <select
+                    value={yearFilter}
+                    onChange={(e) => {
+                      setYearFilter(e.target.value)
+                      setMonthFilter('')
+                      setPage(1)
+                    }}
+                    className="w-full rounded-md border border-slate-200 bg-white px-2 py-1.5 text-xs text-slate-700 outline-none focus:border-slate-500 focus:ring-1 focus:ring-slate-500"
+                  >
+                    <option value="">All years</option>
+                    {(data?.availableYears || []).map((year) => (
+                      <option key={year} value={String(year)}>{year}</option>
+                    ))}
+                  </select>
+                </div>
+                <div className="lg:col-span-2">
+                  <select
+                    value={monthFilter}
+                    onChange={(e) => { setMonthFilter(e.target.value); setPage(1) }}
+                    disabled={!yearFilter}
+                    className="w-full rounded-md border border-slate-200 bg-white px-2 py-1.5 text-xs text-slate-700 outline-none focus:border-slate-500 focus:ring-1 focus:ring-slate-500 disabled:opacity-60"
+                  >
+                    <option value="">All months</option>
+                    {MONTHS.map((month) => (
+                      <option key={month.value} value={month.value}>{month.label}</option>
+                    ))}
+                  </select>
+                </div>
+                <div className="lg:col-span-2">
                   <select
                     value={typeFilter}
                     onChange={(e) => { setTypeFilter(e.target.value); setPage(1) }}
-                    className="rounded-md border border-slate-200 bg-white px-2 py-1 text-xs text-slate-700 outline-none focus:border-slate-500 focus:ring-1 focus:ring-slate-500 dark:border-white/10 dark:bg-slate-900/60 dark:text-slate-200"
+                    className="w-full rounded-md border border-slate-200 bg-white px-2 py-1.5 text-xs text-slate-700 outline-none focus:border-slate-500 focus:ring-1 focus:ring-slate-500"
                   >
                     <option value="">All types</option>
-                    {data.transactionTypes.map(t => (
+                    {(data?.transactionTypes || []).map((t) => (
                       <option key={t} value={t}>{t}</option>
                     ))}
                   </select>
-                )}
+                </div>
               </div>
             </div>
           </CardHeader>
@@ -275,6 +441,10 @@ export function CashLedgerClient() {
                       <tr className="bg-gray-50 text-left text-xs text-gray-500 border-b border-gray-200">
                         <th className="py-2.5 px-4 font-medium">Date</th>
                         <th className="py-2.5 px-4 font-medium">Type</th>
+                        <th className="py-2.5 px-4 font-medium">Investment</th>
+                        <th className="py-2.5 px-4 font-medium">Counterparty</th>
+                        <th className="py-2.5 px-4 font-medium">Flow</th>
+                        <th className="py-2.5 px-4 font-medium">Money Trail</th>
                         <th className="py-2.5 px-4 font-medium">Description</th>
                         <th className="py-2.5 px-4 font-medium text-right">Debit</th>
                         <th className="py-2.5 px-4 font-medium text-right">Credit</th>
@@ -294,7 +464,34 @@ export function CashLedgerClient() {
                               {tx.type}
                             </span>
                           </td>
-                          <td className="py-2.5 px-4 text-gray-600 truncate max-w-[300px]">{tx.description || '—'}</td>
+                          <td className="py-2.5 px-4 text-gray-700">
+                            <div className="font-medium text-gray-700">{tx.investmentName || '—'}</div>
+                            {tx.investmentCategory && (
+                              <div className="text-[11px] text-gray-500">{tx.investmentCategory}</div>
+                            )}
+                          </td>
+                          <td className="py-2.5 px-4 text-gray-600">
+                            {tx.personName || tx.metadataSource || '—'}
+                          </td>
+                          <td className="py-2.5 px-4 text-gray-600">
+                            <span className={`inline-flex px-2 py-0.5 rounded text-[11px] font-medium ${
+                              tx.amount >= 0
+                                ? 'bg-emerald-50 text-emerald-700'
+                                : 'bg-rose-50 text-rose-700'
+                            }`}>
+                              {tx.amount >= 0 ? 'IN' : 'OUT'}
+                            </span>
+                          </td>
+                          <td className="py-2.5 px-4 text-[12px] text-gray-600 min-w-[220px]">
+                            <div><span className="font-medium">From:</span> {tx.moneyFrom || '—'}</div>
+                            <div><span className="font-medium">To:</span> {tx.moneyTo || '—'}</div>
+                          </td>
+                          <td className="py-2.5 px-4 text-gray-600 min-w-[240px]">
+                            <div className="truncate max-w-[320px]">{tx.description || '—'}</div>
+                            {tx.metadataSource && (
+                              <div className="mt-0.5 text-[11px] text-gray-500">Source: {tx.metadataSource}</div>
+                            )}
+                          </td>
                           <td className="py-2.5 px-4 text-right tabular-nums text-red-600 whitespace-nowrap">
                             {tx.amount < 0 ? fmt(Math.abs(tx.amount)) : ''}
                           </td>
@@ -314,7 +511,7 @@ export function CashLedgerClient() {
                     {txPageTotals && (
                       <tfoot>
                         <tr className="bg-gray-50 border-t border-gray-200">
-                          <td colSpan={3} className="py-2.5 px-4 text-xs font-semibold text-gray-500">Total (this page)</td>
+                          <td colSpan={7} className="py-2.5 px-4 text-xs font-semibold text-gray-500">Total (this page)</td>
                           <td className="py-2.5 px-4 text-right font-bold tabular-nums text-red-700 whitespace-nowrap">
                             {fmt(txPageTotals.debit)}
                           </td>

@@ -106,7 +106,7 @@ export function SukukList({ initialSukuk, userRole, ownerPersonId, viewerPersonI
   const [withdrawTarget, setWithdrawTarget] = useState<{ inv: any; metrics: any } | null>(null)
   const [sellTarget, setSellTarget] = useState<any>(null)
   const [withdrawForm, setWithdrawForm] = useState({
-    type: 'BOTH' as 'PRINCIPAL' | 'PROFIT' | 'BOTH',
+    type: 'BOTH' as 'PRINCIPAL' | 'PROFIT' | 'BOTH' | 'COMMISSION',
     principalAmount: '',
     profitAmount: '',
     date: formatDateInput(new Date()),
@@ -193,9 +193,16 @@ export function SukukList({ initialSukuk, userRole, ownerPersonId, viewerPersonI
     const hasOwnerSellTx = txs.some((tx: any) => tx?.type === 'SELL_TO_PARTNER' && tx.personId === ownerPersonId)
     if (hasOwnerSellTx) return false
 
+    const paidCommission = txs
+      .filter((tx: any) => tx?.type === 'PARTNER_COMMISSION')
+      .reduce((sum: number, tx: any) => {
+        if (ownerPersonId && tx?.personId && tx.personId !== ownerPersonId) return sum
+        const amount = Number(tx?.amount)
+        return sum + (Number.isFinite(amount) ? Math.max(0, amount) : 0)
+      }, 0)
+
     const commissionEarned = Math.max(0, Number(metrics?.commissionEarned || 0))
-    const receivable = Math.max(0, Number(metrics?.receivable || 0))
-    return commissionEarned > 0.01 && receivable <= 0.01
+    return paidCommission > 0.01 && commissionEarned > 0.01
   }
 
   const isViewerTransaction = (tx: any) => {
@@ -1157,8 +1164,11 @@ export function SukukList({ initialSukuk, userRole, ownerPersonId, viewerPersonI
     const partnerClosed = Boolean(investment?.partnerClosed)
 
     if (userRole === 'OWNER') {
-      const principalRaw = Number(investment?.principalAmount ?? 0)
-      principalRemaining = Number.isFinite(principalRaw) ? Math.max(0, principalRaw) : 0
+      const ownerParticipant = getOwnerParticipant(participantList)
+      const ownerPrincipalRaw = ownerParticipant
+        ? Number(ownerParticipant?.investedAmount ?? 0)
+        : (participantList.length === 0 ? Number(investment?.principalAmount ?? 0) : 0)
+      principalRemaining = Number.isFinite(ownerPrincipalRaw) ? Math.max(0, ownerPrincipalRaw) : 0
     } else {
       // PARTNER: use their participation investedAmount as canonical principal
       const myParticipation = investment.myParticipation
@@ -1177,8 +1187,10 @@ export function SukukList({ initialSukuk, userRole, ownerPersonId, viewerPersonI
           ? 'PRINCIPAL'
           : 'PROFIT'
 
-    const enforcedType: 'PRINCIPAL' | 'PROFIT' | 'BOTH' =
-      (userRole === 'OWNER' && (isSoldDealForOwner || isCommissionOnlyClose))
+    const enforcedType: 'PRINCIPAL' | 'PROFIT' | 'BOTH' | 'COMMISSION' =
+      (userRole === 'OWNER' && isCommissionOnlyClose)
+        ? 'COMMISSION'
+        : (userRole === 'OWNER' && isSoldDealForOwner)
         ? 'PROFIT'
         : defaultType
 
@@ -2375,7 +2387,7 @@ export function SukukList({ initialSukuk, userRole, ownerPersonId, viewerPersonI
                   onChange={(e) =>
                     setWithdrawForm((prev) => ({
                       ...prev,
-                      type: e.target.value as 'PRINCIPAL' | 'PROFIT' | 'BOTH',
+                      type: e.target.value as 'PRINCIPAL' | 'PROFIT' | 'BOTH' | 'COMMISSION',
                     }))
                   }
                   className="w-full rounded-lg border border-slate-200 bg-white px-4 py-2 text-sm text-slate-900 shadow-sm transition-colors focus:border-emerald-500 focus:outline-none focus:ring-2 focus:ring-emerald-500/20 dark:border-white/10 dark:bg-slate-900/60 dark:text-slate-100"
@@ -2477,7 +2489,7 @@ export function SukukList({ initialSukuk, userRole, ownerPersonId, viewerPersonI
               : Math.max(0, Number(withdrawTarget.metrics?.commissionEarned || 0))
             const showProfitLine = hasProfit && !isCommissionOnlyClose && (profitAmount > 0 || !(userRole === 'OWNER' && isSoldDealForOwner))
 
-            if (!hasPrincipal && !hasProfit) return null
+            if (!hasPrincipal && !hasProfit && !isCommissionOnlyClose) return null
 
             return (
               <div className="rounded-lg border border-slate-200 bg-slate-50 p-3 text-xs text-slate-700 dark:border-white/10 dark:bg-white/5 dark:text-slate-200">
