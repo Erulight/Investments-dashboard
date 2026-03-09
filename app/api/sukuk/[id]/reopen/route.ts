@@ -104,6 +104,27 @@ export async function POST(
         ),
       )
 
+      const receiptAnchorByBucketId = new Map<string, Date>()
+      for (const movement of receiptMovements) {
+        const bucketId = typeof movement?.cashBucketId === 'string' ? movement.cashBucketId : null
+        if (!bucketId) continue
+        const createdAtRaw = movement?.createdAt instanceof Date
+          ? movement.createdAt
+          : movement?.createdAt
+            ? new Date(movement.createdAt)
+            : movement?.date instanceof Date
+              ? movement.date
+              : movement?.date
+                ? new Date(movement.date)
+                : null
+        if (!createdAtRaw || Number.isNaN(createdAtRaw.getTime())) continue
+
+        const existingAnchor = receiptAnchorByBucketId.get(bucketId)
+        if (!existingAnchor || createdAtRaw.getTime() < existingAnchor.getTime()) {
+          receiptAnchorByBucketId.set(bucketId, createdAtRaw)
+        }
+      }
+
       // If receipt cash has already funded another deal, reopening this deal would duplicate principal.
       // Example: close A -> invest receipt into B -> reopen A (should be blocked).
       if (receiptBucketIds.length > 0) {
@@ -114,6 +135,8 @@ export async function POST(
             principalAllocated: { gt: 0 },
           },
           select: {
+            cashBucketId: true,
+            createdAt: true,
             investmentId: true,
             investment: { select: { name: true } },
           },
@@ -126,25 +149,72 @@ export async function POST(
             NOT: { investmentId: id },
           },
           select: {
+            cashBucketId: true,
+            type: true,
+            createdAt: true,
+            investmentId: true,
+            investment: { select: { name: true } },
+          },
+        })
+
+        const downstreamOutflows = await tx.cashBucketMovement.findMany({
+          where: {
+            cashBucketId: { in: receiptBucketIds },
+            amount: { lt: 0 },
+            NOT: { investmentId: id },
+          },
+          select: {
+            cashBucketId: true,
+            type: true,
+            createdAt: true,
             investmentId: true,
             investment: { select: { name: true } },
           },
         })
 
         const blockedTargetNames = new Set<string>()
-        for (const entry of [...downstreamAllocations, ...downstreamInvestOut]) {
+        const addIfAfterReceipt = (entry: any, fallbackLabel: string) => {
+          const bucketId = typeof entry?.cashBucketId === 'string' ? entry.cashBucketId : null
+          if (!bucketId) return
+          const receiptAnchor = receiptAnchorByBucketId.get(bucketId)
+          if (!receiptAnchor) return
+          const eventCreatedAt = entry?.createdAt instanceof Date
+            ? entry.createdAt
+            : entry?.createdAt
+              ? new Date(entry.createdAt)
+              : null
+          if (!eventCreatedAt || Number.isNaN(eventCreatedAt.getTime())) return
+          if (eventCreatedAt.getTime() < receiptAnchor.getTime()) return
+
           const invName = typeof entry?.investment?.name === 'string' ? entry.investment.name : null
           const invId = typeof entry?.investmentId === 'string' ? entry.investmentId : null
           if (invName) {
             blockedTargetNames.add(invName)
-          } else if (invId) {
-            blockedTargetNames.add(invId)
+            return
           }
+          if (invId) {
+            blockedTargetNames.add(invId)
+            return
+          }
+
+          blockedTargetNames.add(fallbackLabel)
+        }
+
+        for (const entry of downstreamAllocations) {
+          addIfAfterReceipt(entry, 'another allocation')
+        }
+        for (const entry of downstreamInvestOut) {
+          const movementType = typeof entry?.type === 'string' ? entry.type : 'INVEST_OUT'
+          addIfAfterReceipt(entry, `${movementType} movement`)
+        }
+        for (const entry of downstreamOutflows) {
+          const movementType = typeof entry?.type === 'string' ? entry.type : 'cash outflow'
+          addIfAfterReceipt(entry, `${movementType} movement`)
         }
 
         if (blockedTargetNames.size > 0) {
           const targets = Array.from(blockedTargetNames).slice(0, 5).join(', ')
-          throw new Error(`REOPEN_BLOCKED_REINVESTED_RECEIPT:${targets}`)
+          throw new Error(`REOPEN_BLOCKED_RECEIPT_USED:${targets}`)
         }
       }
 
@@ -499,12 +569,12 @@ export async function POST(
         statusCode = 401
       } else if (err.message === 'Forbidden') {
         statusCode = 403
-      } else if (err.message.startsWith('REOPEN_BLOCKED_REINVESTED_RECEIPT')) {
+      } else if (err.message.startsWith('REOPEN_BLOCKED_RECEIPT_USED')) {
         statusCode = 409
         const rawTargets = err.message.split(':').slice(1).join(':')
         errorMessage = rawTargets
-          ? `Cannot reopen this Sukuk because its receipt cash is already reinvested in: ${rawTargets}`
-          : 'Cannot reopen this Sukuk because its receipt cash is already reinvested in another deal'
+          ? `Cannot reopen this Sukuk because its receipt cash was already used in: ${rawTargets}`
+          : 'Cannot reopen this Sukuk because its receipt cash was already used elsewhere'
       } else if (err.message.includes('not found')) {
         statusCode = 404
         errorMessage = 'Investment not found'
