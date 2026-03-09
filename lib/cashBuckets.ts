@@ -87,6 +87,7 @@ export const withdrawFromBuckets = async (
     availableOnOrBefore,
     personId,
     excludeLabelPrefixes,
+    preferredLabelPrefixes,
   }: {
     amount: number
     currency?: string
@@ -98,6 +99,7 @@ export const withdrawFromBuckets = async (
     availableOnOrBefore?: Date
     personId?: string | null
     excludeLabelPrefixes?: string[]
+    preferredLabelPrefixes?: string[]
   }
 ) => {
   let remaining = amount
@@ -126,6 +128,25 @@ export const withdrawFromBuckets = async (
     },
     orderBy: [{ haulStartDate: 'asc' }, { createdAt: 'asc' }],
   })
+
+  if (Array.isArray(preferredLabelPrefixes) && preferredLabelPrefixes.length > 0) {
+    const prefixes = preferredLabelPrefixes.filter((p) => typeof p === 'string' && p.length > 0)
+    if (prefixes.length > 0) {
+      const priorityFor = (label?: string | null) =>
+        prefixes.some((prefix) => (label || '').startsWith(prefix)) ? 0 : 1
+      buckets.sort((a: any, b: any) => {
+        const pa = priorityFor(a.label)
+        const pb = priorityFor(b.label)
+        if (pa !== pb) return pa - pb
+        const ha = a.haulStartDate ? new Date(a.haulStartDate).getTime() : 0
+        const hb = b.haulStartDate ? new Date(b.haulStartDate).getTime() : 0
+        if (ha !== hb) return ha - hb
+        const ca = a.createdAt ? new Date(a.createdAt).getTime() : 0
+        const cb = b.createdAt ? new Date(b.createdAt).getTime() : 0
+        return ca - cb
+      })
+    }
+  }
 
   let availableByBucket: Map<string, number> | null = null
   let maxWithdrawableByBucket: Map<string, number> | null = null

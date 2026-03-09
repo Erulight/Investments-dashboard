@@ -192,26 +192,25 @@ export async function POST(
       const scopeKey = user.role === 'OWNER' ? 'OWNER' : user.personId!
       const cashBalanceKey = user.role === 'OWNER' ? CASH_BALANCE_KEY : `${CASH_BALANCE_KEY}:${scopeKey}`
 
-      const cashSetting = await tx.systemSetting.findUnique({
-        where: { key: cashBalanceKey },
+      // Recalculate cash balance from buckets to avoid inflation on reopen/close cycles
+      const cashBucketAgg = await tx.cashBucket.aggregate({
+        where: (user.role === 'OWNER'
+          ? { personId: null }
+          : { personId: user.personId }) as any,
+        _sum: { balance: true },
       })
-      const currentCash = cashSetting ? Number(cashSetting.value) : 0
-      const nextCash = currentCash + amount
+      const cashBucketSumRaw = cashBucketAgg?._sum?.balance
+      const cashBucketSum = Number.isFinite(cashBucketSumRaw as any) ? Number(cashBucketSumRaw) : 0
 
-      if (cashSetting) {
-        await tx.systemSetting.update({
-          where: { key: cashBalanceKey },
-          data: { value: nextCash.toString() },
-        })
-      } else {
-        await tx.systemSetting.create({
-          data: {
-            key: cashBalanceKey,
-            value: nextCash.toString(),
-            description: 'Available cash balance for investments',
-          },
-        })
-      }
+      await tx.systemSetting.upsert({
+        where: { key: cashBalanceKey },
+        update: { value: cashBucketSum.toString() },
+        create: {
+          key: cashBalanceKey,
+          value: cashBucketSum.toString(),
+          description: 'Available cash balance for investments',
+        },
+      })
 
       if (user.role === 'PARTNER') {
         try {

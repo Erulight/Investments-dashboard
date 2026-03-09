@@ -171,21 +171,6 @@ export async function POST(req: NextRequest) {
         throw new Error('INSUFFICIENT_CASH')
       }
 
-      if (cashSetting) {
-        await tx.systemSetting.update({
-          where: { key: cashBalanceKey },
-          data: { value: nextCash.toString() },
-        })
-      } else {
-        await tx.systemSetting.create({
-          data: {
-            key: cashBalanceKey,
-            value: nextCash.toString(),
-            description: 'Available cash balance for investments',
-          },
-        })
-      }
-
       const cashAccount = await tx.account.findFirst({
         where: { type: 'CASH', isActive: true },
       }) ?? await tx.account.create({
@@ -229,6 +214,27 @@ export async function POST(req: NextRequest) {
         allocateToInvestment: true,
         availableOnOrBefore: startDate,
         personId: user.role === 'OWNER' ? null : user.personId,
+        preferredLabelPrefixes: user.role === 'OWNER' ? ['Savings Receipt •'] : undefined,
+      })
+
+      // Recalculate cash balance from buckets (ledger-derived)
+      const cashBucketSumAgg = await tx.cashBucket.aggregate({
+        where: (user.role === 'OWNER'
+          ? { personId: null }
+          : { personId: user.personId }) as any,
+        _sum: { balance: true },
+      })
+      const cashBucketSumRaw = cashBucketSumAgg?._sum?.balance
+      const cashBucketSum = Number.isFinite(cashBucketSumRaw as any) ? Number(cashBucketSumRaw) : 0
+
+      await tx.systemSetting.upsert({
+        where: { key: cashBalanceKey },
+        update: { value: cashBucketSum.toString() },
+        create: {
+          key: cashBalanceKey,
+          value: cashBucketSum.toString(),
+          description: 'Available cash balance for investments',
+        },
       })
 
       let inheritedSavingsHaulStart: Date | null = null

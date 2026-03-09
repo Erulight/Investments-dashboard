@@ -188,31 +188,18 @@ export async function POST(
         await tx.transaction.deleteMany({ where: { id: { in: transactionIds } } })
       }
 
-      // CASH REVERSAL: When deal is reopened, reverse all withdrawal transactions
-      const withdrawals = await tx.transaction.findMany({
+      // Remove receipt buckets created by withdrawals BEFORE recalculating cash
+      await tx.cashBucket.deleteMany({
         where: {
-          investmentId: id,
-          type: { in: ['WITHDRAW_PROFIT', 'WITHDRAW_PRINCIPAL'] }
-        }
+          label: `${investment.name} Principal Receipt`,
+          ...(scopeFilter as any),
+        },
       })
 
-      const totalWithdrawn = withdrawals.reduce((sum: number, t: any) => sum + t.amount, 0)
-
-      // If any withdrawal transactions exist, delete them and related cash buckets
-      if (totalWithdrawn > 0) {
-        await tx.transaction.deleteMany({
-          where: {
-            investmentId: id,
-            type: { in: ['WITHDRAW_PROFIT', 'WITHDRAW_PRINCIPAL'] },
-          },
-        })
-
-        // Only delete the specific principal receipt bucket created during withdrawal
-        // Do NOT delete ROSCA receipt buckets or other cash buckets
+      if (profitBucketIdsForScope.length > 0) {
         await tx.cashBucket.deleteMany({
           where: {
-            label: `${investment.name} Principal Receipt`,
-            personId: null,
+            id: { in: profitBucketIdsForScope },
           },
         })
       }
@@ -432,15 +419,6 @@ export async function POST(
           reopenedAt: new Date(),
         },
       })
-
-      // Remove any profit buckets that were created for this Sukuk for this scope.
-      if (profitBucketIdsForScope.length > 0) {
-        await tx.cashBucket.deleteMany({
-          where: {
-            id: { in: profitBucketIdsForScope },
-          },
-        })
-      }
 
       await logAudit(tx, {
         userId: user.id,
