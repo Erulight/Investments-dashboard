@@ -404,13 +404,11 @@ export default async function DashboardPage({
     }
 
     const owned = investments.filter((inv: any) => {
-      // Exclude CASH accounts from owned investments
+      // Exclude CASH and CIRCLYS from the main owned bucket
       if (inv.account?.type === 'CASH') return false
-      // Exclude CIRCLYS (savings) accounts from owned investments
       if (inv.account?.type === 'CIRCLYS') return false
-      const dps = Array.isArray(inv.dealParticipants) ? inv.dealParticipants : []
-      if (dps.length === 0) return true
-      return Boolean(getOwnerPosition(inv))
+      // For owners, include all other investments regardless of participant linkage
+      return true
     })
 
     ownedInvestments = owned
