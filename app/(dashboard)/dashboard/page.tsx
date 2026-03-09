@@ -378,7 +378,7 @@ export default async function DashboardPage({
         },
         transactions: {
           where: {
-            type: { in: ['WITHDRAW_PROFIT', 'WITHDRAW_PRINCIPAL'] },
+            type: { in: ['WITHDRAW_PROFIT', 'WITHDRAW_PRINCIPAL', 'SELL_PROFIT_ACCRUED', 'PARTNER_COMMISSION'] },
           },
           select: {
             type: true,
@@ -426,6 +426,10 @@ export default async function DashboardPage({
     // Total Invested = principal in active Sukuk deals only
     totalInvested = activeSukuk.reduce((sum, inv) => sum + getActiveSukukPrincipal(inv), 0)
 
+    // Active Deals and Sukuk Total use active Sukuk principal only
+    activeInvestments = activeSukuk.length
+    sukukInvested = activeSukuk.reduce((sum, inv) => sum + getActiveSukukPrincipal(inv), 0)
+
     totalValue = owned.reduce(
       (sum, inv) => {
         const pos = getOwnerPosition(inv)
@@ -434,15 +438,14 @@ export default async function DashboardPage({
       },
       0
     )
-    // Total Profit = Sukuk yearly profit + Circles rewards + Crypto profit + Malaa profit
-    // First, get profit from owned investments (SUKUK, CRYPTO, MALAA)
-    const ownedProfit = owned.reduce(
+    // Profit from non-Sukuk owned investments (SIP currently excluded intentionally)
+    const nonSukukOwnedProfit = owned.reduce(
       (sum, inv) => {
         const accountType = inv.account.type
         const pos = getOwnerPosition(inv)
         
-        // Include profit from: SUKUK, CRYPTO, MALAA
-        if (['SUKUK', 'CRYPTO', 'MALAA'].includes(accountType)) {
+        // Include profit from: CRYPTO, MALAA
+        if (['CRYPTO', 'MALAA'].includes(accountType)) {
           if (pos) return sum + (Number(pos.profit) || 0)
           return sum + (Number(inv.realizedProfit) || 0) + (Number(inv.unrealizedProfit) || 0)
         }
@@ -461,14 +464,6 @@ export default async function DashboardPage({
         return sum + (Number(inv.realizedProfit) || 0) + (Number(inv.unrealizedProfit) || 0)
       }, 0)
     
-    totalProfit = ownedProfit + circlysProfit
-    
-    // Active Deals = active Sukuk count by principal outstanding
-    activeInvestments = activeSukuk.length
-
-    // Sukuk Total = principal in active Sukuk only
-    sukukInvested = activeSukuk.reduce((sum, inv) => sum + getActiveSukukPrincipal(inv), 0)
-
     const now = new Date()
     sukukReceivable = owned
       .filter((inv) => inv.account.type === 'SUKUK')
@@ -481,6 +476,24 @@ export default async function DashboardPage({
         const receivable = Math.max(0, v - principal)
         return sum + receivable
       }, 0)
+
+    const sukukRealizedProfit = owned
+      .filter((inv) => inv.account.type === 'SUKUK')
+      .reduce((sum, inv) => {
+        const txs = Array.isArray(inv.transactions) ? inv.transactions : []
+        const realized = txs
+          .filter((tx: any) => ['WITHDRAW_PROFIT', 'SELL_PROFIT_ACCRUED', 'PARTNER_COMMISSION'].includes(tx?.type))
+          .filter((tx: any) => {
+            const d = tx?.date instanceof Date ? tx.date : new Date(tx?.date)
+            return !Number.isNaN(d.getTime()) && d.getTime() <= now.getTime()
+          })
+          .reduce((s: number, tx: any) => s + Math.max(0, Number(tx?.amount) || 0), 0)
+        return sum + realized
+      }, 0)
+
+    // Total Profit = Sukuk receivable + Sukuk realized (withdrawn/commission/sale accrual)
+    //              + non-Sukuk realized/unrealized profit
+    totalProfit = nonSukukOwnedProfit + circlysProfit + sukukReceivable + sukukRealizedProfit
 
     sukukValue = sukukInvested + sukukReceivable
     totalValue += sukukReceivable
