@@ -750,13 +750,13 @@ export function SukukList({ initialSukuk, userRole, ownerPersonId, viewerPersonI
       const participantList = Array.isArray(inv.dealParticipants) ? inv.dealParticipants : []
       const ownerParticipant = participantList.find((p: any) => p.personId === ownerPersonId)
       
-      // Check if owner has active ownership (principal > 0)
-      const ownerHasActivePrincipal = participantList.length === 0
-        ? (Number(inv.principalAmount) > 0)
-        : (ownerParticipant && Number(ownerParticipant.investedAmount || 0) > 0)
+      // For sold deals: owner participant exists but has 0 invested amount
+      // For active deals: no participants OR owner participant has > 0 invested amount
+      const isSoldDeal = ownerParticipant && Number(ownerParticipant.investedAmount || 0) <= 0
+      const isActiveDeal = !isSoldDeal
       
-      if (ownerView === 'active' && !ownerHasActivePrincipal) return false
-      if (ownerView === 'sold' && ownerHasActivePrincipal) return false
+      if (ownerView === 'active' && !isActiveDeal) return false
+      if (ownerView === 'sold' && !isSoldDeal) return false
     }
     const metrics = getMetrics(inv)
     const platform = inv.account?.name || ''
