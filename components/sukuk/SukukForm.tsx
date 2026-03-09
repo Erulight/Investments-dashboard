@@ -3,17 +3,42 @@
 import { useState, useEffect } from 'react'
 import { Button } from '@/components/ui/Button'
 import { DateInput } from '@/components/ui/DateInput'
-import { createSukukSchema, type CreateSukukInput } from '@/lib/validation'
+import { createSukukSchema } from '@/lib/validation'
 import { formatDateInput, parseDateInput, toIsoDateInput } from '@/lib/date'
 
 interface SukukFormProps {
   mode: 'create' | 'edit'
   initialData?: any
+  userRole?: 'OWNER' | 'PARTNER' | string
   onSuccess?: () => void
   onCancel?: () => void
 }
 
-export function SukukForm({ mode, initialData, onSuccess, onCancel }: SukukFormProps) {
+const parseMetadata = (value: unknown) => {
+  if (!value) return null
+  if (typeof value === 'object') return value as any
+  if (typeof value !== 'string') return null
+  try {
+    return JSON.parse(value)
+  } catch {
+    return null
+  }
+}
+
+export function SukukForm({ mode, initialData, userRole, onSuccess, onCancel }: SukukFormProps) {
+  const initialMeta = parseMetadata(initialData?.metadata)
+  const initialCommissionPlan = initialMeta?.partnerCommissionPlan && typeof initialMeta.partnerCommissionPlan === 'object'
+    ? initialMeta.partnerCommissionPlan
+    : null
+  const initialCommissionType = initialCommissionPlan?.type === 'FIXED_CASH'
+    ? 'FIXED_CASH'
+    : 'AUTO_ABOVE_10'
+  const initialCommissionCashRaw = Number(initialCommissionPlan?.cashAmount ?? initialCommissionPlan?.amount ?? NaN)
+  const initialCommissionCash = Number.isFinite(initialCommissionCashRaw)
+    ? String(Math.max(0, initialCommissionCashRaw))
+    : ''
+  const isPartnerCreate = mode === 'create' && userRole === 'PARTNER'
+
   const [formData, setFormData] = useState<any>({
     accountId: initialData?.accountId || '',
     name: initialData?.name || '',
@@ -27,6 +52,8 @@ export function SukukForm({ mode, initialData, onSuccess, onCancel }: SukukFormP
     fees: initialData?.fees ?? '',
     totalReceived: initialData?.totalReceived ?? '',
     receivableAmount: initialData?.receivableAmount ?? '',
+    partnerCommissionType: initialCommissionType,
+    partnerCommissionCash: initialCommissionCash,
     notes: initialData?.notes || '',
   })
   
@@ -132,12 +159,27 @@ export function SukukForm({ mode, initialData, onSuccess, onCancel }: SukukFormP
     setLoading(true)
 
     try {
-      const parseOptionalNumber = (value: string) => (value === '' ? undefined : parseFloat(value))
+      const parseOptionalNumber = (value: unknown) => {
+        if (value === '' || value === null || value === undefined) return undefined
+        const parsed = Number(value)
+        return Number.isFinite(parsed) ? parsed : undefined
+      }
 
       // Prepare data for validation
       const principalAmount = parseFloat(formData.principalAmount)
       const fees = parseOptionalNumber(formData.fees) ?? 0
       const receivableAmount = parseOptionalNumber(formData.receivableAmount)
+      const partnerCommissionCash = parseOptionalNumber(formData.partnerCommissionCash)
+      const partnerCommissionType = formData.partnerCommissionType === 'FIXED_CASH'
+        ? 'FIXED_CASH'
+        : 'AUTO_ABOVE_10'
+
+      if (isPartnerCreate && partnerCommissionType === 'FIXED_CASH' && partnerCommissionCash === undefined) {
+        setErrors((prev: any) => ({ ...prev, partnerCommissionCash: 'Commission cash is required' }))
+        setError('Please fix the validation errors')
+        return
+      }
+
       const startDate = formData.startDate ? parseDateInput(formData.startDate) : null
       const maturityDate = formData.maturityDate ? parseDateInput(formData.maturityDate) : null
       if (!startDate) {
@@ -168,6 +210,8 @@ export function SukukForm({ mode, initialData, onSuccess, onCancel }: SukukFormP
         fees,
         totalReceived: parseOptionalNumber(formData.totalReceived),
         receivableAmount,
+        partnerCommissionType: isPartnerCreate ? partnerCommissionType : undefined,
+        partnerCommissionCash: isPartnerCreate ? partnerCommissionCash : undefined,
         isIjarah: Boolean(formData.isIjarah),
         startDate: toIsoDateInput(formData.startDate),
         maturityDate: formData.maturityDate ? toIsoDateInput(formData.maturityDate) : undefined,
@@ -518,6 +562,50 @@ export function SukukForm({ mode, initialData, onSuccess, onCancel }: SukukFormP
             Enter expected net profit after fees. APR will be calculated automatically.
           </p>
         </div>
+
+        {isPartnerCreate && (
+          <div className="space-y-3 rounded-xl border border-amber-200 bg-amber-50/60 p-4 dark:border-amber-900/40 dark:bg-amber-950/20">
+            <h4 className="text-sm font-semibold text-amber-900 dark:text-amber-200">Owner Commission</h4>
+            <p className="text-xs text-amber-800/90 dark:text-amber-300/90">
+              Commission is deducted from your net profit and paid to the owner when profit is received.
+            </p>
+            <div>
+              <label htmlFor="partnerCommissionType" className="mb-1 block text-sm font-medium text-slate-700 dark:text-slate-200">
+                Commission Method
+              </label>
+              <select
+                id="partnerCommissionType"
+                name="partnerCommissionType"
+                value={formData.partnerCommissionType}
+                onChange={handleChange}
+                className="w-full rounded-lg border border-slate-200 bg-white px-4 py-2 text-sm text-slate-900 shadow-sm transition-colors focus:border-emerald-500 focus:outline-none focus:ring-2 focus:ring-emerald-500/20 dark:border-white/10 dark:bg-slate-900/60 dark:text-slate-100"
+              >
+                <option value="AUTO_ABOVE_10">Auto: APR above 10% goes to owner</option>
+                <option value="FIXED_CASH">Fixed cash amount</option>
+              </select>
+            </div>
+
+            {formData.partnerCommissionType === 'FIXED_CASH' && (
+              <div>
+                <label htmlFor="partnerCommissionCash" className="mb-1 block text-sm font-medium text-slate-700 dark:text-slate-200">
+                  Commission Cash Amount
+                </label>
+                <input
+                  type="number"
+                  id="partnerCommissionCash"
+                  name="partnerCommissionCash"
+                  step="0.01"
+                  min="0"
+                  value={formData.partnerCommissionCash}
+                  onChange={handleChange}
+                  className="w-full rounded-lg border border-slate-200 bg-white px-4 py-2 text-sm text-slate-900 placeholder:text-slate-400 shadow-sm transition-colors focus:border-emerald-500 focus:outline-none focus:ring-2 focus:ring-emerald-500/20 dark:border-white/10 dark:bg-slate-900/60 dark:text-slate-100 dark:placeholder:text-slate-500"
+                  placeholder="0.00"
+                />
+                {errors.partnerCommissionCash && <p className="text-sm text-red-600 mt-1 dark:text-red-200">{errors.partnerCommissionCash}</p>}
+              </div>
+            )}
+          </div>
+        )}
       </div>
 
       {mode === 'edit' && (

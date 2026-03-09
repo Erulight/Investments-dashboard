@@ -19,6 +19,8 @@ const parseMetadata = (value: unknown) => {
   }
 }
 
+const round2 = (value: number) => Math.round((Number(value) || 0) * 100) / 100
+
 export async function POST(
   req: NextRequest,
   { params }: { params: Promise<{ id: string }> }
@@ -301,6 +303,118 @@ export async function POST(
                 : partnerParticipant.profit,
             },
           })
+
+          if (source === 'PROFIT') {
+            const invMeta = parseMetadata(investment.metadata)
+            const commissionPlan = invMeta?.partnerCommissionPlan && typeof invMeta.partnerCommissionPlan === 'object'
+              ? invMeta.partnerCommissionPlan
+              : null
+
+            const plannedCommissionRaw = Number(commissionPlan?.amount ?? 0)
+            const plannedCommission = Number.isFinite(plannedCommissionRaw)
+              ? Math.max(0, plannedCommissionRaw)
+              : 0
+
+            const partnerProfitTargetRaw = Number(commissionPlan?.partnerNetReceivable ?? 0)
+            const partnerProfitTarget = Number.isFinite(partnerProfitTargetRaw)
+              ? Math.max(0, partnerProfitTargetRaw)
+              : 0
+            const commissionMaturityRaw = typeof commissionPlan?.maturityDate === 'string'
+              ? commissionPlan.maturityDate
+              : null
+            const commissionMaturity = commissionMaturityRaw ? new Date(commissionMaturityRaw) : null
+            const canPayoutNow = !commissionMaturity || Number.isNaN(commissionMaturity.getTime())
+              ? true
+              : date.getTime() >= commissionMaturity.getTime()
+
+            if (plannedCommission > 0.01 && canPayoutNow) {
+              const ownerUser = await tx.user.findFirst({
+                where: { role: 'OWNER' },
+                select: { id: true, personId: true },
+              })
+
+              if (ownerUser?.id) {
+                const txs = Array.isArray(investment.transactions) ? investment.transactions : []
+                const alreadyPaid = txs
+                  .filter((entry: any) => entry?.type === 'PARTNER_COMMISSION')
+                  .reduce((sum: number, entry: any) => {
+                    const meta = parseMetadata(entry?.metadata)
+                    if (meta?.source !== 'PARTNER_CREATE_COMMISSION_PAYOUT') return sum
+                    const amount = Number(entry?.amount)
+                    return sum + (Number.isFinite(amount) ? Math.max(0, amount) : 0)
+                  }, 0)
+
+                const withdrawnAfter = Math.max(0, withdrawnProfit + amount)
+                const expectedCumulative = partnerProfitTarget > 0
+                  ? round2(Math.min(plannedCommission, (withdrawnAfter / partnerProfitTarget) * plannedCommission))
+                  : round2(plannedCommission)
+
+                const remainingCommission = Math.max(0, plannedCommission - alreadyPaid)
+                const payoutNow = round2(Math.min(remainingCommission, Math.max(0, expectedCumulative - alreadyPaid)))
+
+                if (payoutNow > 0.01) {
+                  const ownerCashAccount = await tx.account.findFirst({
+                    where: { type: 'CASH', isActive: true },
+                  }) ?? await tx.account.create({
+                    data: {
+                      name: 'Cash Balance',
+                      type: 'CASH',
+                      currency: investment.account?.currency || 'SAR',
+                      description: 'Cash ledger account',
+                    },
+                  })
+
+                  await createCashBucket(tx, {
+                    amount: payoutNow,
+                    haulStartDate: date,
+                    label: `${investment.name} Commission Receipt`,
+                    date,
+                    notes: notes || 'Partner-created Sukuk commission payout',
+                    investmentId: investment.id,
+                    type: 'CASH_IN',
+                    personId: null,
+                  })
+
+                  const ownerBucketAgg = await tx.cashBucket.aggregate({
+                    where: { personId: null },
+                    _sum: { balance: true },
+                  })
+                  const ownerBucketSumRaw = ownerBucketAgg?._sum?.balance
+                  const ownerBucketSum = Number.isFinite(ownerBucketSumRaw as any) ? Number(ownerBucketSumRaw) : 0
+
+                  await tx.systemSetting.upsert({
+                    where: { key: CASH_BALANCE_KEY },
+                    update: { value: ownerBucketSum.toString() },
+                    create: {
+                      key: CASH_BALANCE_KEY,
+                      value: ownerBucketSum.toString(),
+                      description: 'Available cash balance for investments',
+                    },
+                  })
+
+                  await tx.transaction.create({
+                    data: {
+                      accountId: ownerCashAccount.id,
+                      investmentId: investment.id,
+                      personId: ownerUser.personId || null,
+                      type: 'PARTNER_COMMISSION',
+                      amount: payoutNow,
+                      date,
+                      description: `Commission from partner deal ${investment.name}`,
+                      metadata: JSON.stringify({
+                        source: 'PARTNER_CREATE_COMMISSION_PAYOUT',
+                        partnerPersonId,
+                        partnerWithdrawAmount: amount,
+                        plannedCommission,
+                        alreadyPaid,
+                        partnerProfitTarget,
+                      }),
+                    },
+                  })
+                }
+              }
+            }
+          }
 
           await settleOwnerOnPartnerWithdraw()
         } catch (err) {

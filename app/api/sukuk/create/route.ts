@@ -19,6 +19,8 @@ const parseMetadata = (value: unknown) => {
   }
 }
 
+const round2 = (value: number) => Math.round((Number(value) || 0) * 100) / 100
+
 export async function POST(req: NextRequest) {
   try {
     const user = await requireModuleAccess('sukuk')
@@ -73,6 +75,52 @@ export async function POST(req: NextRequest) {
     const computedApr = periodYears && data.principalAmount > 0
       ? ((receivableAmount + fees) / data.principalAmount / periodYears) * 100
       : data.interestRate
+
+    const partnerCommissionType = data.partnerCommissionType === 'FIXED_CASH'
+      ? 'FIXED_CASH'
+      : 'AUTO_ABOVE_10'
+    const partnerCommissionCashRaw = Number(data.partnerCommissionCash ?? 0)
+    const partnerCommissionCash = Number.isFinite(partnerCommissionCashRaw)
+      ? Math.max(0, partnerCommissionCashRaw)
+      : 0
+    const autoCommissionRaw = periodYears && data.principalAmount > 0 && Number.isFinite(computedApr)
+      ? data.principalAmount * (Math.max(0, Number(computedApr) - 10) / 100) * periodYears
+      : 0
+    const configuredCommission = partnerCommissionType === 'FIXED_CASH'
+      ? partnerCommissionCash
+      : autoCommissionRaw
+    const ownerCommissionAmount = user.role === 'PARTNER'
+      ? round2(Math.max(0, configuredCommission))
+      : 0
+
+    if (user.role === 'PARTNER' && ownerCommissionAmount - receivableAmount > 0.01) {
+      return NextResponse.json(
+        { error: 'Commission cannot exceed net profit receivable' },
+        { status: 400 }
+      )
+    }
+
+    const partnerNetReceivable = user.role === 'PARTNER'
+      ? round2(Math.max(0, receivableAmount - ownerCommissionAmount))
+      : receivableAmount
+
+    const baseMetadata = parseMetadata(data.metadata)
+    const metadataWithCommission = user.role === 'PARTNER'
+      ? {
+          ...baseMetadata,
+          partnerCommissionPlan: {
+            type: partnerCommissionType,
+            thresholdApr: 10,
+            aprAtCreation: Number.isFinite(computedApr) ? round2(Number(computedApr)) : null,
+            grossReceivable: round2(receivableAmount),
+            amount: ownerCommissionAmount,
+            cashAmount: partnerCommissionType === 'FIXED_CASH' ? round2(partnerCommissionCash) : null,
+            partnerNetReceivable,
+            issuedAt: new Date().toISOString(),
+            maturityDate: maturityDate ? maturityDate.toISOString() : null,
+          },
+        }
+      : baseMetadata
     
     // Check if account exists
     const account = await prisma.account.findUnique({
@@ -199,7 +247,7 @@ export async function POST(req: NextRequest) {
           receivableAmount,
           isIjarah,
           notes: data.notes,
-          metadata: data.metadata,
+          metadata: user.role === 'PARTNER' ? JSON.stringify(metadataWithCommission) : data.metadata,
         },
       })
       console.log('[SUKUK_CREATE] Investment created with ID:', newSukuk.id, 'principalAmount:', newSukuk.principalAmount)
@@ -358,12 +406,55 @@ export async function POST(req: NextRequest) {
             personId: user.personId!,
             investedAmount: data.principalAmount,
             currentValue: data.principalAmount,
+            receivable: partnerNetReceivable,
+            profit: partnerNetReceivable,
             acquiredAt: startDate,
-            commissionFees: 0,
+            commissionFees: ownerCommissionAmount,
             sharePercentage: 100,
             notes: null,
           },
         })
+
+        if (ownerCommissionAmount > 0) {
+          const ownerUser = await tx.user.findFirst({
+            where: { role: 'OWNER' },
+            select: { id: true },
+          })
+
+          if (ownerUser?.id) {
+            const maturityLabel = maturityDate
+              ? maturityDate.toISOString().slice(0, 10)
+              : 'unspecified maturity'
+            const message = `Commission issued on ${newSukuk.name}: SAR ${ownerCommissionAmount.toFixed(2)} will be delivered on ${maturityLabel}`
+            const key = `NOTIFICATION:${ownerUser.id}:${newSukuk.id}`
+
+            await tx.systemSetting.upsert({
+              where: { key },
+              update: {
+                value: JSON.stringify({
+                  message,
+                  investmentId: newSukuk.id,
+                  createdAt: new Date().toISOString(),
+                  readAt: null,
+                  amounts: { commission: ownerCommissionAmount },
+                  partnerPersonId: user.personId,
+                }),
+              },
+              create: {
+                key,
+                value: JSON.stringify({
+                  message,
+                  investmentId: newSukuk.id,
+                  createdAt: new Date().toISOString(),
+                  readAt: null,
+                  amounts: { commission: ownerCommissionAmount },
+                  partnerPersonId: user.personId,
+                }),
+                description: 'Unread notification: partner sukuk commission issued',
+              },
+            })
+          }
+        }
       } else if (data.participants && data.participants.length > 0) {
         await tx.dealParticipant.createMany({
           data: data.participants.map((p: any) => ({

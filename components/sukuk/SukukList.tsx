@@ -2093,6 +2093,7 @@ export function SukukList({ initialSukuk, userRole, ownerPersonId, viewerPersonI
       >
         <SukukForm
           mode="create"
+          userRole={userRole as 'OWNER' | 'PARTNER'}
           onSuccess={handleCreateSuccess}
           onCancel={() => setIsCreateModalOpen(false)}
         />
@@ -2111,6 +2112,7 @@ export function SukukList({ initialSukuk, userRole, ownerPersonId, viewerPersonI
           <SukukForm
             mode="edit"
             initialData={editingSukuk}
+            userRole={userRole as 'OWNER' | 'PARTNER'}
             onSuccess={handleEditSuccess}
             onCancel={() => {
               setIsEditModalOpen(false)
