@@ -668,10 +668,22 @@ export function SukukList({ initialSukuk, userRole, ownerPersonId, viewerPersonI
       ? Math.min(1, Math.max(0, periodMonths / totalMonthsFull))
       : 1
     const round2 = (n: number) => Math.round((n || 0) * 100) / 100
-    
-    const fees = round2(participation
+
+    const hasOtherParticipants = participantList.some((p: any) => {
+      if (!p) return false
+      if (ownerPersonId && p.personId === ownerPersonId) return false
+      const invested = Number(p.investedAmount)
+      return Number.isFinite(invested) && invested > 0.01
+    })
+
+    const isOwnerOnlyDeal = userRole === 'OWNER' && !isSoldForOwner && !hasOtherParticipants
+
+    const proportionalFees = round2(participation
       ? (fullFees * participationRatio) * timeRatio
       : fullFees)
+
+    // Owner-only deals keep configured fees unchanged even if closed early.
+    const fees = isOwnerOnlyDeal ? round2(fullFees) : proportionalFees
 
     const totalReceived = getViewerReceived(inv)
     const periodYears = periodMonths ? periodMonths / 12 : 0
