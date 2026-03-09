@@ -118,11 +118,6 @@ export default async function DashboardPage({
   let investments: any[] = []
   let ownedInvestments: any[] = []
 
-  const investmentDateFilter = {
-    startDate: { lt: yearEnd },
-    OR: [{ maturityDate: null }, { maturityDate: { gte: yearStart } }],
-  }
-
   // Per-type breakdown
   type TypeBreakdown = { type: string; invested: number; value: number; count: number }
   let typeBreakdowns: TypeBreakdown[] = []
@@ -358,7 +353,6 @@ export default async function DashboardPage({
       where: {
         account: { isActive: true, type: { not: 'CASH' } },
         name: { notIn: DEMO_INVESTMENT_NAMES },
-        ...investmentDateFilter,
       },
       select: {
         id: true,
@@ -403,6 +397,18 @@ export default async function DashboardPage({
       return dps.find((p: any) => p?.personId === ownerPersonId) || null
     }
 
+    const getActiveSukukPrincipal = (inv: any) => {
+      const principal = Number(inv.principalAmount)
+      if (Number.isFinite(principal) && principal > 0) return principal
+
+      const participants = Array.isArray(inv.dealParticipants) ? inv.dealParticipants : []
+      const participantPrincipal = participants.reduce(
+        (sum: number, p: any) => sum + (Number(p?.investedAmount) || 0),
+        0
+      )
+      return participantPrincipal > 0 ? participantPrincipal : 0
+    }
+
     const owned = investments.filter((inv: any) => {
       // Exclude CASH and CIRCLYS from the main owned bucket
       if (inv.account?.type === 'CASH') return false
@@ -413,15 +419,12 @@ export default async function DashboardPage({
 
     ownedInvestments = owned
 
-    // Total Invested = Total principal in ACTIVE Sukuk deals only
-    totalInvested = owned
+    const activeSukuk = owned
       .filter((inv) => inv.account.type === 'SUKUK')
-      .reduce((sum, inv) => {
-        const pos = getOwnerPosition(inv)
-        const principal = pos ? Number(pos.investedAmount) || 0 : Number(inv.principalAmount) || 0
-        // Only count active deals (principal > 0)
-        return principal > 0 ? sum + principal : sum
-      }, 0)
+      .filter((inv) => getActiveSukukPrincipal(inv) > 0)
+
+    // Total Invested = principal in active Sukuk deals only
+    totalInvested = activeSukuk.reduce((sum, inv) => sum + getActiveSukukPrincipal(inv), 0)
 
     totalValue = owned.reduce(
       (sum, inv) => {
@@ -460,21 +463,11 @@ export default async function DashboardPage({
     
     totalProfit = ownedProfit + circlysProfit
     
-    // Active Deals = Only active Sukuk deals (principal > 0)
-    activeInvestments = owned
-      .filter((inv) => inv.account.type === 'SUKUK')
-      .filter((inv) => {
-        const pos = getOwnerPosition(inv)
-        const principal = pos ? Number(pos.investedAmount) || 0 : Number(inv.principalAmount) || 0
-        return principal > 0
-      }).length
+    // Active Deals = active Sukuk count by principal outstanding
+    activeInvestments = activeSukuk.length
 
-    sukukInvested = owned
-      .filter((inv) => inv.account.type === 'SUKUK')
-      .reduce((sum, inv) => {
-        const pos = getOwnerPosition(inv)
-        return sum + (pos ? Number(pos.investedAmount) || 0 : inv.principalAmount)
-      }, 0)
+    // Sukuk Total = principal in active Sukuk only
+    sukukInvested = activeSukuk.reduce((sum, inv) => sum + getActiveSukukPrincipal(inv), 0)
 
     const now = new Date()
     sukukReceivable = owned
@@ -563,7 +556,6 @@ export default async function DashboardPage({
         personId: user.personId,
         investment: {
           name: { notIn: DEMO_INVESTMENT_NAMES },
-          ...investmentDateFilter,
         },
       },
       include: {
