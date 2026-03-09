@@ -1,6 +1,7 @@
 import { redirect } from 'next/navigation'
 import { getCurrentUser } from '@/lib/auth'
 import { Navbar } from '@/components/dashboard/Navbar'
+import { GlobalRefreshIndicator } from '@/components/ui/GlobalRefreshIndicator'
 import { prisma } from '@/lib/db'
 
 export default async function DashboardLayout({
@@ -52,6 +53,7 @@ export default async function DashboardLayout({
 
   return (
     <div className="min-h-screen bg-[#0a1628] text-foreground">
+      <GlobalRefreshIndicator />
       <Navbar
         user={{ name: user.name, email: user.email, role: user.role as 'OWNER' | 'PARTNER', permissions: user.permissions }}
         activeAccountTypes={activeAccountTypes.map((a) => a.type)}
