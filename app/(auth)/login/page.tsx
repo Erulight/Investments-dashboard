@@ -3,6 +3,7 @@
 import { useState, useRef } from 'react'
 import { useRouter } from 'next/navigation'
 import { TradingBullMascot } from '@/components/auth/TradingBullMascot'
+import { LoginLaserEffect } from '@/components/effects/LoginLaserEffect'
 
 export default function LoginPage() {
   const [email, setEmail] = useState('')
@@ -11,6 +12,7 @@ export default function LoginPage() {
   const [loading, setLoading] = useState(false)
   const [emailFocused, setEmailFocused] = useState(false)
   const [passwordFocused, setPasswordFocused] = useState(false)
+  const [showLaser, setShowLaser] = useState(false)
   const emailRef = useRef<HTMLInputElement>(null)
   const passwordRef = useRef<HTMLInputElement>(null)
   const router = useRouter()
@@ -34,8 +36,11 @@ export default function LoginPage() {
         return
       }
 
-      router.push('/dashboard')
-      router.refresh()
+      setShowLaser(true)
+      setTimeout(() => {
+        router.push('/dashboard')
+        router.refresh()
+      }, 2000)
     } catch (err) {
       setError('An error occurred. Please try again.')
     } finally {
@@ -45,6 +50,7 @@ export default function LoginPage() {
 
   return (
     <div className="min-h-screen bg-[#f5f0e8] flex items-center justify-center py-12 px-4 sm:px-6 lg:px-8 overflow-hidden">
+      {showLaser && <LoginLaserEffect />}
       <TradingBullMascot
         emailFocused={emailFocused}
         passwordFocused={passwordFocused}

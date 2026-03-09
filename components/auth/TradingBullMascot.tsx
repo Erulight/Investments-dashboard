@@ -15,7 +15,9 @@ export function TradingBullMascot({ emailFocused, passwordFocused, emailRef, pas
   const [position, setPosition] = useState({ x: 100, y: 100 })
   const [targetPosition, setTargetPosition] = useState({ x: 100, y: 100 })
   const [isWalking, setIsWalking] = useState(false)
+  const [isRunning, setIsRunning] = useState(false)
   const [direction, setDirection] = useState<'left' | 'right'>('right')
+  const [mood, setMood] = useState<'idle' | 'curious' | 'excited'>('idle')
   
   const mouseX = useMotionValue(0)
   const mouseY = useMotionValue(0)
@@ -38,30 +40,64 @@ export function TradingBullMascot({ emailFocused, passwordFocused, emailRef, pas
   }, [mouseX, mouseY])
 
   useEffect(() => {
+    const playSound = (type: 'walk' | 'run' | 'curious') => {
+      try {
+        const audio = new Audio()
+        if (type === 'walk') {
+          audio.src = 'data:audio/wav;base64,UklGRnoGAABXQVZFZm10IBAAAAABAAEAQB8AAEAfAAABAAgAZGF0YQoGAACBhYqFbF1fdJivrJBhNjVgodDbq2EcBj+a2/LDciUFLIHO8tiJNwgZaLvt559NEAxQp+PwtmMcBjiR1/LMeSwFJHfH8N2QQAoUXrTp66hVFApGn+DyvmwhBSuBzvLZiTYIGGi77OeeSwwPUKfj8LZjHAU5kdfy0HksBS'}
+        } else if (type === 'run') {
+          audio.volume = 0.3
+        }
+        audio.play().catch(() => {})
+      } catch {}
+    }
+
     if (emailFocused && emailRef.current) {
       const rect = emailRef.current.getBoundingClientRect()
       setTargetPosition({ x: rect.left - 150, y: rect.top + 20 })
-      setIsWalking(true)
-    } else if (passwordFocused && passwordRef.current) {
+      setIsRunning(true)
+      setIsWalking(false)
+      setMood('curious')
+      playSound('curious')
+      return
+    }
+    
+    if (passwordFocused && passwordRef.current) {
       const rect = passwordRef.current.getBoundingClientRect()
       setTargetPosition({ x: rect.left - 150, y: rect.top + 20 })
-      setIsWalking(true)
-    } else {
-      const randomWalk = () => {
-        const newX = Math.random() * (window.innerWidth - 300) + 50
-        const newY = Math.random() * (window.innerHeight - 300) + 50
-        setTargetPosition({ x: newX, y: newY })
-        setIsWalking(true)
-      }
-      
-      const interval = setInterval(randomWalk, 6000)
-      randomWalk()
-      return () => clearInterval(interval)
+      setIsRunning(true)
+      setIsWalking(false)
+      setMood('curious')
+      playSound('curious')
+      return
     }
+    
+    setMood('idle')
+    const randomBehavior = () => {
+      const shouldRun = Math.random() > 0.6
+      const newX = Math.random() * (window.innerWidth - 300) + 50
+      const newY = Math.random() * (window.innerHeight - 300) + 50
+      setTargetPosition({ x: newX, y: newY })
+      
+      if (shouldRun) {
+        setIsRunning(true)
+        setIsWalking(false)
+        setMood('excited')
+        playSound('run')
+      } else {
+        setIsWalking(true)
+        setIsRunning(false)
+        playSound('walk')
+      }
+    }
+    
+    const interval = setInterval(randomBehavior, Math.random() * 3000 + 2000)
+    randomBehavior()
+    return () => clearInterval(interval)
   }, [emailFocused, passwordFocused, emailRef, passwordRef])
 
   useEffect(() => {
-    if (!isWalking) return
+    if (!isWalking && !isRunning) return
     
     const animate = () => {
       setPosition((prev) => {
@@ -71,10 +107,11 @@ export function TradingBullMascot({ emailFocused, passwordFocused, emailRef, pas
         
         if (distance < 5) {
           setIsWalking(false)
+          setIsRunning(false)
           return prev
         }
         
-        const speed = 2.5
+        const speed = isRunning ? 4.5 : 2.5
         const moveX = (dx / distance) * speed
         const moveY = (dy / distance) * speed
         
@@ -89,11 +126,11 @@ export function TradingBullMascot({ emailFocused, passwordFocused, emailRef, pas
     
     const animationFrame = requestAnimationFrame(function step() {
       animate()
-      if (isWalking) requestAnimationFrame(step)
+      if (isWalking || isRunning) requestAnimationFrame(step)
     })
     
     return () => cancelAnimationFrame(animationFrame)
-  }, [isWalking, targetPosition])
+  }, [isWalking, isRunning, targetPosition])
 
   const lookingAtField = emailFocused || passwordFocused
 
@@ -115,12 +152,12 @@ export function TradingBullMascot({ emailFocused, passwordFocused, emailRef, pas
         <motion.div
           className="absolute top-0 left-1/2 -translate-x-1/2"
           animate={{
-            y: isWalking ? [0, -6, 0] : 0,
-            rotate: isWalking ? [0, 2, 0, -2, 0] : 0,
+            y: isRunning ? [0, -10, 0] : isWalking ? [0, -6, 0] : 0,
+            rotate: isRunning ? [0, 4, 0, -4, 0] : isWalking ? [0, 2, 0, -2, 0] : 0,
           }}
           transition={{
-            duration: 0.6,
-            repeat: isWalking ? Infinity : 0,
+            duration: isRunning ? 0.3 : 0.6,
+            repeat: (isWalking || isRunning) ? Infinity : 0,
             ease: 'easeInOut',
           }}
         >
@@ -206,11 +243,11 @@ export function TradingBullMascot({ emailFocused, passwordFocused, emailRef, pas
         <motion.div
           className="absolute top-16 left-1/2 -translate-x-1/2 w-20 h-24 bg-gradient-to-br from-amber-600 to-amber-800 rounded-3xl shadow-xl"
           animate={{
-            scaleY: isWalking ? [1, 0.96, 1] : 1,
+            scaleY: isRunning ? [1, 0.92, 1] : isWalking ? [1, 0.96, 1] : 1,
           }}
           transition={{
-            duration: 0.6,
-            repeat: isWalking ? Infinity : 0,
+            duration: isRunning ? 0.3 : 0.6,
+            repeat: (isWalking || isRunning) ? Infinity : 0,
             ease: 'easeInOut',
           }}
         >
