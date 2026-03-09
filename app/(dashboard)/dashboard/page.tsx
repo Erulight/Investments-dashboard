@@ -378,12 +378,24 @@ export default async function DashboardPage({
         },
         transactions: {
           where: {
-            type: { in: ['WITHDRAW_PROFIT', 'WITHDRAW_PRINCIPAL', 'SELL_PROFIT_ACCRUED', 'PARTNER_COMMISSION'] },
+            type: {
+              in: [
+                'WITHDRAW_PROFIT',
+                'WITHDRAW_PRINCIPAL',
+                'SELL_PROFIT_ACCRUED',
+                'PARTNER_COMMISSION',
+                'SELL_TO_PARTNER',
+                'BUY_FROM_PARTNER',
+              ],
+            },
+            OR: [{ personId: user.personId }, { personId: null }],
           },
           select: {
             type: true,
             date: true,
             amount: true,
+            personId: true,
+            metadata: true,
           },
           orderBy: { date: 'asc' },
         },
@@ -407,6 +419,60 @@ export default async function DashboardPage({
         0
       )
       return participantPrincipal > 0 ? participantPrincipal : 0
+    }
+
+    const isSoldSukukForOwner = (inv: any) => {
+      if (inv?.account?.type !== 'SUKUK') return false
+      const participants = Array.isArray(inv.dealParticipants) ? inv.dealParticipants : []
+      if (participants.length === 0) return false
+      const ownerPosition = getOwnerPosition(inv)
+      return !ownerPosition || Number(ownerPosition.investedAmount || 0) <= 0
+    }
+
+    const getOwnerSoldSettlement = (inv: any) => {
+      if (!isSoldSukukForOwner(inv)) return { target: 0, received: 0, pending: 0 }
+
+      const txs = Array.isArray(inv.transactions) ? inv.transactions : []
+      const sells = txs
+        .filter((tx: any) => tx?.type === 'SELL_TO_PARTNER' && (!ownerPersonId || tx.personId === ownerPersonId))
+        .map((tx: any) => {
+          const d = tx?.date instanceof Date ? tx.date : new Date(tx?.date)
+          return { tx, d: Number.isNaN(d.getTime()) ? null : d, meta: parseMetadata(tx?.metadata) }
+        })
+        .filter((x: any) => x.d)
+        .sort((a: any, b: any) => (b.d as Date).getTime() - (a.d as Date).getTime())
+
+      const latestSell = sells[0]
+      if (!latestSell) return { target: 0, received: 0, pending: 0 }
+
+      const target = round2(Math.max(0, Number(latestSell.meta?.accruedProfitAtSale ?? latestSell.meta?.investorProfit ?? 0)))
+      if (target <= 0) return { target: 0, received: 0, pending: 0 }
+
+      const soldAt = latestSell.d as Date
+      const receivedRaw = txs.reduce((sum: number, tx: any) => {
+        if (ownerPersonId && tx?.personId !== ownerPersonId && tx?.personId != null) return sum
+
+        const d = tx?.date instanceof Date ? tx.date : new Date(tx?.date)
+        if (Number.isNaN(d.getTime()) || d.getTime() < soldAt.getTime()) return sum
+
+        if (tx.type === 'SELL_PROFIT_ACCRUED') {
+          const amount = Number(tx.amount)
+          return sum + (Number.isFinite(amount) ? Math.max(0, amount) : 0)
+        }
+
+        if (tx.type === 'WITHDRAW_PROFIT') {
+          const meta = parseMetadata(tx.metadata)
+          if (meta?.source !== 'SOLD_DEAL_RECEIPT') return sum
+          const amount = Number(tx.amount)
+          return sum + (Number.isFinite(amount) ? Math.max(0, amount) : 0)
+        }
+
+        return sum
+      }, 0)
+
+      const received = round2(Math.min(target, Math.max(0, receivedRaw)))
+      const pending = round2(Math.max(0, target - received))
+      return { target, received, pending }
     }
 
     const owned = investments.filter((inv: any) => {
@@ -510,9 +576,14 @@ export default async function DashboardPage({
         return sum + realized
       }, 0)
 
+    const soldPendingProfit = owned
+      .filter((inv) => inv.account.type === 'SUKUK')
+      .reduce((sum, inv) => sum + getOwnerSoldSettlement(inv).pending, 0)
+
     // Total Profit = Sukuk receivable + Sukuk realized (withdrawn/commission/sale accrual)
+    //              + sold pending (for settled-at-sale but not-yet-received sold deals)
     //              + non-Sukuk realized/unrealized profit
-    totalProfit = nonSukukOwnedProfit + circlysProfit + sukukReceivable + sukukRealizedProfit
+    totalProfit = nonSukukOwnedProfit + circlysProfit + sukukReceivable + sukukRealizedProfit + soldPendingProfit
 
     sukukValue = sukukInvested + sukukReceivable
     totalValue += sukukReceivable

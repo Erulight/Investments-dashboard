@@ -197,7 +197,10 @@ export function SukukList({ initialSukuk, userRole, ownerPersonId, viewerPersonI
 
     if (userRole === 'OWNER') {
       const totalReceived = Number(inv.totalReceived)
-      return Number.isFinite(totalReceived) ? totalReceived : scopedSum
+      if (Number.isFinite(totalReceived)) {
+        return Math.max(0, Math.max(totalReceived, scopedSum))
+      }
+      return Math.max(0, scopedSum)
     }
 
     if (viewerPersonId) {
@@ -206,7 +209,7 @@ export function SukukList({ initialSukuk, userRole, ownerPersonId, viewerPersonI
 
     const totalReceived = Number(inv.totalReceived)
     return Number.isFinite(totalReceived)
-      ? totalReceived
+      ? Math.max(0, Math.max(totalReceived, scopedSum))
       : scopedSum
   }
 
@@ -426,11 +429,17 @@ export function SukukList({ initialSukuk, userRole, ownerPersonId, viewerPersonI
 
   const handleReceiveAndClose = async (investment: any, metrics: any) => {
     if (actionLoading) return
-    setActionLoading(true)
     setActionError('')
-    try {
-      const isSoldDealForOwner = isSoldDealForOwnerView(investment)
+    const isSoldDealForOwner = isSoldDealForOwnerView(investment)
 
+    // For partner close flow, open modal immediately (do not lock button into Processing state).
+    if (!isSoldDealForOwner) {
+      openWithdrawModal(investment, metrics)
+      return
+    }
+
+    setActionLoading(true)
+    try {
       // For sold deals, call the receive route instead of withdraw
       if (isSoldDealForOwner) {
         const res = await fetch(`/api/sukuk/${investment.id}/receive`, {
@@ -446,11 +455,9 @@ export function SukukList({ initialSukuk, userRole, ownerPersonId, viewerPersonI
         window.location.reload()
         return
       }
-
-      // For non-sold deals, open the withdraw modal
-      openWithdrawModal(investment, metrics)
     } catch (error) {
       setActionError('Failed to receive sold deal')
+    } finally {
       setActionLoading(false)
     }
   }
@@ -503,10 +510,23 @@ export function SukukList({ initialSukuk, userRole, ownerPersonId, viewerPersonI
     const commissionEarned = transactions
       .filter((tx: any) => tx.type === 'PARTNER_COMMISSION')
       .reduce((sum: number, tx: any) => {
+        if (ownerPersonId && tx?.personId && tx.personId !== ownerPersonId) return sum
         const meta = parseMetadata(tx.metadata)
         if (meta?.investmentId && meta.investmentId !== inv.id) return sum
         const amount = Number(tx.amount)
         return sum + (Number.isFinite(amount) ? amount : 0)
+      }, 0)
+
+    const soldProfitReceived = transactions
+      .filter((tx: any) => tx.type === 'SELL_PROFIT_ACCRUED' || tx.type === 'WITHDRAW_PROFIT')
+      .reduce((sum: number, tx: any) => {
+        if (ownerPersonId && tx?.personId && tx.personId !== ownerPersonId) return sum
+        if (tx.type === 'WITHDRAW_PROFIT') {
+          const meta = parseMetadata(tx.metadata)
+          if (meta?.source !== 'SOLD_DEAL_RECEIPT') return sum
+        }
+        const amount = Number(tx.amount)
+        return sum + (Number.isFinite(amount) ? Math.max(0, amount) : 0)
       }, 0)
 
     const apr = Number.isFinite(inv.interestRate) ? inv.interestRate : 0
@@ -528,7 +548,9 @@ export function SukukList({ initialSukuk, userRole, ownerPersonId, viewerPersonI
       : Math.max(0, investorProfit + partnerFeeShare)
 
     const feesHeld = Number.isFinite(investorFeeShare) ? Math.max(0, investorFeeShare) : 0
-    const cashInflow = Math.max(0, salePrice) + Math.max(0, commissionEarned)
+    const receivedProfitRaw = Math.max(0, soldProfitReceived)
+    const receivedProfit = Math.min(receivedProfitRaw, profitEarnedToSale)
+    const receivable = Math.max(0, profitEarnedToSale - receivedProfit)
 
     // Calculate APR after fees
     const periodYears = monthsHeld ? monthsHeld / 12 : 0
@@ -554,13 +576,12 @@ export function SukukList({ initialSukuk, userRole, ownerPersonId, viewerPersonI
       commissionEarned,
       acquiredAt: null,
       commissionPaid: 0,
-      cashInflow,
-      totalReceived: cashInflow,
-      receivable: 0,
+      totalReceived: receivedProfit,
+      receivable,
       periodMonths: monthsHeld,
       daysRemaining,
       paymentStatus,
-      progress: getProgress(Math.max(0, cashInflow), Math.max(0, cashInflow)),
+      progress: getProgress(Math.max(0, profitEarnedToSale), receivedProfit),
       currency,
       aprAfterFees: Number.isFinite(aprAfterFees) ? aprAfterFees : 0,
       saleDate,
@@ -1085,7 +1106,7 @@ export function SukukList({ initialSukuk, userRole, ownerPersonId, viewerPersonI
       type: enforcedType,
       principalAmount: principalForForm,
       profitAmount: isSoldDealForOwner
-        ? (Number(metrics?.netProfit || 0) > 0 ? Number(metrics.netProfit || 0).toFixed(2) : '')
+        ? (Number(metrics?.receivable || 0) > 0 ? Number(metrics.receivable || 0).toFixed(2) : '')
         : (receivableRemaining > 0 ? receivableRemaining.toFixed(2) : ''),
       date: formatDateInput(new Date()),
       notes: '',
@@ -1152,16 +1173,25 @@ export function SukukList({ initialSukuk, userRole, ownerPersonId, viewerPersonI
       // from the investment. Profit bucket settlement + commission bucket are credited on partner closure.
       // Confirm here simply acknowledges and marks the notification as read.
       if (userRole === 'OWNER' && isSoldDealForOwner && partnerClosed) {
-        const res = await fetch('/api/notifications/dismiss', {
+        const remaining = Number(withdrawTarget.metrics?.receivable ?? 0)
+        if (remaining > 0.01) {
+          const receiveRes = await fetch(`/api/sukuk/${withdrawTarget.inv.id}/receive`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+          })
+          const receiveData = await receiveRes.json().catch(() => ({}))
+          if (!receiveRes.ok) {
+            setActionError(receiveData.error || 'Failed to receive sold deal')
+            return
+          }
+        }
+
+        await fetch('/api/notifications/dismiss', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ investmentId: withdrawTarget.inv.id }),
-        })
-        const data = await res.json().catch(() => ({}))
-        if (!res.ok) {
-          setActionError(data.error || 'Failed to mark notification as read')
-          return
-        }
+        }).catch(() => undefined)
+
         setWithdrawTarget(null)
         window.location.reload()
         return

@@ -156,13 +156,19 @@ export default async function InvestmentsPage() {
     const transactions = Array.isArray(inv.transactions) ? inv.transactions : []
     const profitWithdrawals = transactions.filter((tx: any) => tx.type === 'WITHDRAW_PROFIT')
 
-    const realizedFromSales = transactions
-      .filter((tx: any) => tx.type === 'SELL_PROFIT_ACCRUED')
-      .reduce((sum: number, tx: any) => {
-        if (user.personId && tx.personId !== user.personId) return sum
+    if (user.role === 'OWNER') {
+      const totalReceived = Number(inv.totalReceived)
+      if (Number.isFinite(totalReceived)) return totalReceived
+
+      return profitWithdrawals.reduce((sum: number, tx: any) => {
+        const ownerTx = user.personId
+          ? (tx.personId == null || tx.personId === user.personId)
+          : tx.personId == null
+        if (!ownerTx) return sum
         const amount = Number(tx.amount)
         return sum + (Number.isFinite(amount) ? amount : 0)
       }, 0)
+    }
 
     if (user.personId) {
       const withdrawn = profitWithdrawals.reduce((sum: number, tx: any) => {
@@ -171,16 +177,16 @@ export default async function InvestmentsPage() {
         return sum + (Number.isFinite(amount) ? amount : 0)
       }, 0)
 
-      return withdrawn + realizedFromSales
+      return withdrawn
     }
 
     const totalReceived = Number(inv.totalReceived)
     return Number.isFinite(totalReceived)
-      ? totalReceived + realizedFromSales
+      ? totalReceived
       : profitWithdrawals.reduce((sum: number, tx: any) => {
           const amount = Number(tx.amount)
           return sum + (Number.isFinite(amount) ? amount : 0)
-        }, 0) + realizedFromSales
+        }, 0)
   }
 
   const parseMetadata = (value: unknown) => {
@@ -250,8 +256,48 @@ export default async function InvestmentsPage() {
     )
   }
 
+  const isSoldDealForOwner = (inv: any) => {
+    if (user.role !== 'OWNER' || !user.personId) return false
+    const participants = Array.isArray(inv.dealParticipants) ? inv.dealParticipants : []
+    if (participants.length === 0) return false
+    const ownerParticipation = participants.find((p: any) => p?.personId === user.personId)
+    return !ownerParticipation || Number(ownerParticipation.investedAmount || 0) <= 0
+  }
+
+  const getOwnerSoldSettlement = (inv: any) => {
+    if (user.role !== 'OWNER' || !user.personId) {
+      return { target: 0, received: 0, pending: 0 }
+    }
+
+    const target = round2(Math.max(0, getOwnerRealizedFromSellMeta(inv).profit))
+    if (target <= 0) return { target: 0, received: 0, pending: 0 }
+
+    const transactions = Array.isArray(inv.transactions) ? inv.transactions : []
+    const receivedRaw = transactions.reduce((sum: number, tx: any) => {
+      if (tx?.personId !== user.personId) return sum
+
+      if (tx.type === 'SELL_PROFIT_ACCRUED') {
+        const amount = Number(tx.amount)
+        return sum + (Number.isFinite(amount) ? Math.max(0, amount) : 0)
+      }
+
+      if (tx.type === 'WITHDRAW_PROFIT') {
+        const meta = parseMetadata(tx.metadata)
+        if (meta?.source !== 'SOLD_DEAL_RECEIPT') return sum
+        const amount = Number(tx.amount)
+        return sum + (Number.isFinite(amount) ? Math.max(0, amount) : 0)
+      }
+
+      return sum
+    }, 0)
+
+    const received = round2(Math.min(target, Math.max(0, receivedRaw)))
+    const pending = round2(Math.max(0, target - received))
+    return { target, received, pending }
+  }
+
   const getNetProfit = (inv: any) => {
-    // For sold deals (owner perspective), use investorProfit from sale metadata
+    // For sold deals (owner perspective), use realized sale profit metadata.
     if (user.role === 'OWNER' && user.personId) {
       const transactions = Array.isArray(inv.transactions) ? inv.transactions : []
       const sellTx = transactions.find((tx: any) => tx.type === 'SELL_TO_PARTNER' && tx.personId === user.personId)
@@ -263,8 +309,8 @@ export default async function InvestmentsPage() {
             return null
           }
         })()
-        if (saleMeta && Number.isFinite(saleMeta.investorProfit)) {
-          return round2(Math.max(0, Number(saleMeta.investorProfit)))
+        if (saleMeta && Number.isFinite(saleMeta.accruedProfitAtSale ?? saleMeta.investorProfit)) {
+          return round2(Math.max(0, Number(saleMeta.accruedProfitAtSale ?? saleMeta.investorProfit)))
         }
       }
     }
@@ -317,6 +363,7 @@ export default async function InvestmentsPage() {
   }
 
   const isActiveDeal = (inv: any) => {
+    if (isSoldDealForOwner(inv)) return false
     const netProfit = getNetProfit(inv)
     const totalReceived = getViewerReceived(inv)
     const receivable = netProfit - totalReceived
@@ -342,21 +389,26 @@ export default async function InvestmentsPage() {
   const totalNetProfit = (() => {
     // Owner: include realized profit + commission from sold deals even after ownership is removed
     if (user.role === 'OWNER') {
-      const activeProfit = displayedInvestments.reduce((sum, inv) => sum + getNetProfit(inv), 0)
-      const soldProfit = investments.reduce((sum, inv) => sum + getOwnerRealizedProfitFromSales(inv), 0)
-      const soldFromMeta = investments.reduce((sum, inv) => sum + getOwnerRealizedFromSellMeta(inv).profit, 0)
-      return round2(activeProfit + Math.max(soldProfit, soldFromMeta))
+      const activeProfit = displayedInvestments
+        .filter((inv: any) => !isSoldDealForOwner(inv))
+        .reduce((sum, inv) => sum + getNetProfit(inv), 0)
+
+      const soldTarget = investments.reduce((sum, inv) => sum + getOwnerSoldSettlement(inv).target, 0)
+      return round2(activeProfit + soldTarget)
     }
 
     return round2(displayedInvestments.reduce((sum, inv) => sum + getNetProfit(inv), 0))
   })()
 
   const totalWithdrawn = (() => {
-    const activeReceived = displayedInvestments.reduce((sum, inv) => sum + getViewerReceived(inv), 0)
+    const activeReceived = displayedInvestments
+      .filter((inv: any) => !(user.role === 'OWNER' && isSoldDealForOwner(inv)))
+      .reduce((sum, inv) => sum + getViewerReceived(inv), 0)
+
     if (user.role !== 'OWNER' || !user.personId) return round2(activeReceived)
-    // Only count amounts that were actually received (cash/withdrawals) as "Received".
-    // For sold deals in SETTLE_DEBT mode, profit is earned but not received until partner closes.
-    return round2(activeReceived)
+
+    const soldReceived = investments.reduce((sum, inv) => sum + getOwnerSoldSettlement(inv).received, 0)
+    return round2(activeReceived + soldReceived)
   })()
 
   const totalCommissionEarned = (() => {
@@ -383,13 +435,24 @@ export default async function InvestmentsPage() {
 
   const totalPendingFromSoldDeals = (() => {
     if (user.role !== 'OWNER' || !user.personId) return 0
-    const soldProfitAccrued = investments.reduce((sum, inv) => sum + getOwnerRealizedProfitFromSales(inv), 0)
-    const soldProfitMeta = investments.reduce((sum, inv) => sum + getOwnerRealizedFromSellMeta(inv).profit, 0)
-    // Prefer explicit SELL_PROFIT_ACCRUED if it exists, otherwise fall back to sale metadata.
-    return round2(Math.max(soldProfitAccrued, soldProfitMeta))
+    return round2(investments.reduce((sum, inv) => sum + getOwnerSoldSettlement(inv).pending, 0))
   })()
 
-  const totalReceivable = round2(Math.max(0, totalNetProfit - totalWithdrawn))
+  const totalReceivable = (() => {
+    if (user.role === 'OWNER' && user.personId) {
+      const activeNet = displayedInvestments
+        .filter((inv: any) => !isSoldDealForOwner(inv))
+        .reduce((sum, inv) => sum + getNetProfit(inv), 0)
+
+      const activeReceived = displayedInvestments
+        .filter((inv: any) => !isSoldDealForOwner(inv))
+        .reduce((sum, inv) => sum + getViewerReceived(inv), 0)
+
+      return round2(Math.max(0, activeNet - activeReceived))
+    }
+
+    return round2(Math.max(0, totalNetProfit - totalWithdrawn))
+  })()
 
   const totalValue = totalInvested
   const totalReturn = totalNetProfit

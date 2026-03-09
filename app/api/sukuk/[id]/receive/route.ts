@@ -1,11 +1,27 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { getCurrentUser } from '@/lib/auth'
 import { prisma } from '@/lib/db'
 import { requireAuth } from '@/lib/rbac'
 import { createAuditLog } from '@/lib/audit'
 import { createSnapshot } from '@/lib/snapshot'
 
 const CASH_BALANCE_KEY = 'CASH_BALANCE'
+
+const parseMetadata = (value: unknown) => {
+  if (!value) return null
+  if (typeof value === 'object') return value as any
+  if (typeof value !== 'string') return null
+  try {
+    return JSON.parse(value)
+  } catch {
+    return null
+  }
+}
+
+const round2 = (value: number) => {
+  const n = Number(value)
+  if (!Number.isFinite(n)) return 0
+  return Math.round(n * 100) / 100
+}
 
 export async function POST(
   req: NextRequest,
@@ -32,30 +48,98 @@ export async function POST(
       return NextResponse.json({ error: 'User is missing a person profile' }, { status: 400 })
     }
 
-    // Find the SELL_TO_PARTNER transaction to get owner's profit share
-    const sellTx = investment.transactions.find((t: any) => t.type === 'SELL_TO_PARTNER')
+    // Find latest owner sale transaction for this sold cycle.
+    const ownerSellTxs = investment.transactions
+      .filter((t: any) => t.type === 'SELL_TO_PARTNER' && (!user.personId || t.personId === user.personId))
+      .map((t: any) => {
+        const d = new Date(t.date)
+        return {
+          tx: t,
+          date: Number.isNaN(d.getTime()) ? null : d,
+          meta: parseMetadata(t.metadata),
+        }
+      })
+      .filter((x: any) => x.date)
+      .sort((a: any, b: any) => (b.date as Date).getTime() - (a.date as Date).getTime())
+
+    const latestSell = ownerSellTxs[0] || null
+    const sellTx = latestSell?.tx || null
     if (!sellTx) {
       return NextResponse.json({ error: 'This is not a sold deal' }, { status: 400 })
     }
 
-    const saleMeta = (() => {
-      try {
-        return sellTx.metadata ? JSON.parse(sellTx.metadata) : null
-      } catch {
-        return null
-      }
-    })()
+    const saleMeta = latestSell?.meta || null
 
     if (!saleMeta) {
       return NextResponse.json({ error: 'Invalid sale metadata' }, { status: 400 })
     }
 
-    // Owner's profit share from the sale
-    const ownerProfit = Math.round((Number(saleMeta.investorProfit) || 0) * 100) / 100
+    const soldAt = latestSell?.date as Date
 
-    // Check if commission was already paid
-    const commissionTx = investment.transactions.find((t: any) => t.type === 'PARTNER_COMMISSION')
-    const commissionAlreadyPaid = !!commissionTx
+    // Owner's earned profit from this sold cycle.
+    // Prefer accruedProfitAtSale (includes fee recovery), fallback to investorProfit.
+    const ownerProfitTarget = round2(
+      Math.max(0, Number(saleMeta.accruedProfitAtSale ?? saleMeta.investorProfit ?? 0) || 0)
+    )
+
+    // Amount already received for this sold cycle.
+    const alreadyReceived = round2(
+      investment.transactions.reduce((sum: number, t: any) => {
+        if (user.personId && t.personId !== user.personId) return sum
+
+        const txDate = new Date(t.date)
+        if (Number.isNaN(txDate.getTime())) return sum
+        if (soldAt && txDate.getTime() < soldAt.getTime()) return sum
+
+        if (t.type === 'SELL_PROFIT_ACCRUED') {
+          const amount = Number(t.amount)
+          return sum + (Number.isFinite(amount) ? Math.max(0, amount) : 0)
+        }
+
+        if (t.type === 'WITHDRAW_PROFIT') {
+          const meta = parseMetadata(t.metadata)
+          if (meta?.source !== 'SOLD_DEAL_RECEIPT') return sum
+          const amount = Number(t.amount)
+          return sum + (Number.isFinite(amount) ? Math.max(0, amount) : 0)
+        }
+
+        return sum
+      }, 0)
+    )
+
+    // Only receive the remaining amount (idempotent).
+    const ownerProfit = round2(Math.max(0, ownerProfitTarget - alreadyReceived))
+
+    const commissionAlreadyPaid = investment.transactions.some(
+      (t: any) => t.type === 'PARTNER_COMMISSION' && (!user.personId || t.personId === user.personId)
+    )
+
+    if (ownerProfit <= 0.01) {
+      const reconciledTotalReceived = round2(
+        Math.max(Number(investment.totalReceived || 0), Math.min(ownerProfitTarget, alreadyReceived))
+      )
+
+      if (
+        Number(investment.receivableAmount || 0) > 0.01 ||
+        Math.abs(Number(investment.totalReceived || 0) - reconciledTotalReceived) > 0.01
+      ) {
+        await prisma.investment.update({
+          where: { id },
+          data: {
+            totalReceived: reconciledTotalReceived,
+            receivableAmount: 0,
+          },
+        })
+      }
+
+      return NextResponse.json({
+        success: true,
+        ownerProfit: 0,
+        ownerProfitTarget,
+        alreadyReceived,
+        commissionAlreadyPaid,
+      })
+    }
 
     // Snapshot before receiving
     await createSnapshot(prisma as any, {
@@ -115,11 +199,11 @@ export async function POST(
         }
       }
 
-      // Mark investment as fully received
+      // Mark sold-cycle receivable as settled for owner view.
       await tx.investment.update({
         where: { id },
         data: {
-          totalReceived: ownerProfit,
+          totalReceived: round2(Math.max(Number(investment.totalReceived || 0), alreadyReceived + ownerProfit)),
           receivableAmount: 0,
         },
       })
@@ -127,15 +211,19 @@ export async function POST(
       await createAuditLog(user.id, 'UPDATE', 'INVESTMENT', id, {
         action: 'RECEIVE_SOLD_DEAL',
         ownerProfit,
+        ownerProfitTarget,
+        alreadyReceived,
         commissionAlreadyPaid,
       })
 
-      return { ownerProfit, commissionAlreadyPaid }
+      return { ownerProfit, ownerProfitTarget, alreadyReceived, commissionAlreadyPaid }
     })
 
     return NextResponse.json({
       success: true,
       ownerProfit: result.ownerProfit,
+      ownerProfitTarget: result.ownerProfitTarget,
+      alreadyReceived: result.alreadyReceived,
       commissionAlreadyPaid: result.commissionAlreadyPaid,
     })
   } catch (error) {
