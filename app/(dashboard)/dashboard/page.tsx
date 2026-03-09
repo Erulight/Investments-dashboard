@@ -469,10 +469,14 @@ export default async function DashboardPage({
       .filter((inv) => inv.account.type === 'SUKUK')
       .reduce((sum, inv) => {
         const pos = getOwnerPosition(inv)
-        const v = getSukukValueAt(inv, now)
         const principal = pos
           ? (Number(pos.investedAmount) || 0)
           : (Number.isFinite(inv.principalAmount) ? Number(inv.principalAmount) : 0)
+        
+        // Skip sold deals where owner no longer has ownership (principal = 0)
+        if (principal <= 0) return sum
+        
+        const v = getSukukValueAt(inv, now)
         
         // Calculate total accrued profit
         const accruedProfit = Math.max(0, v - principal)
