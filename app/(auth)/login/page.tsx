@@ -1,13 +1,18 @@
 'use client'
 
-import { useState } from 'react'
+import { useState, useRef } from 'react'
 import { useRouter } from 'next/navigation'
+import { LoginMascot } from '@/components/auth/LoginMascot'
 
 export default function LoginPage() {
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
   const [error, setError] = useState('')
   const [loading, setLoading] = useState(false)
+  const [emailFocused, setEmailFocused] = useState(false)
+  const [passwordFocused, setPasswordFocused] = useState(false)
+  const emailRef = useRef<HTMLInputElement>(null)
+  const passwordRef = useRef<HTMLInputElement>(null)
   const router = useRouter()
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -39,7 +44,13 @@ export default function LoginPage() {
   }
 
   return (
-    <div className="min-h-screen bg-[#f5f0e8] flex items-center justify-center py-12 px-4 sm:px-6 lg:px-8">
+    <div className="min-h-screen bg-[#f5f0e8] flex items-center justify-center py-12 px-4 sm:px-6 lg:px-8 overflow-hidden">
+      <LoginMascot
+        emailFocused={emailFocused}
+        passwordFocused={passwordFocused}
+        emailRef={emailRef}
+        passwordRef={passwordRef}
+      />
       <div className="absolute inset-0 overflow-hidden pointer-events-none">
         <div className="absolute -top-40 -right-40 w-80 h-80 bg-[#1c2e4a] rounded-full mix-blend-multiply filter blur-xl opacity-20 animate-blob"></div>
         <div className="absolute -bottom-40 -left-40 w-80 h-80 bg-[#2f4052] rounded-full mix-blend-multiply filter blur-xl opacity-20 animate-blob animation-delay-2000"></div>
@@ -71,6 +82,7 @@ export default function LoginPage() {
                   Email Address
                 </label>
                 <input
+                  ref={emailRef}
                   id="email"
                   name="email"
                   type="email"
@@ -80,6 +92,8 @@ export default function LoginPage() {
                   placeholder="Enter your email"
                   value={email}
                   onChange={(e) => setEmail(e.target.value)}
+                  onFocus={() => setEmailFocused(true)}
+                  onBlur={() => setEmailFocused(false)}
                 />
               </div>
               
@@ -88,6 +102,7 @@ export default function LoginPage() {
                   Password
                 </label>
                 <input
+                  ref={passwordRef}
                   id="password"
                   name="password"
                   type="password"
@@ -97,6 +112,8 @@ export default function LoginPage() {
                   placeholder="Enter your password"
                   value={password}
                   onChange={(e) => setPassword(e.target.value)}
+                  onFocus={() => setPasswordFocused(true)}
+                  onBlur={() => setPasswordFocused(false)}
                 />
               </div>
             </div>
