@@ -266,27 +266,41 @@ export async function POST(req: NextRequest) {
           })
         })
 
+        const hasPrincipalReceiptFunding = fundingAllocations.some((alloc: any) => {
+          const label = typeof alloc?.cashBucket?.label === 'string' ? alloc.cashBucket.label : ''
+          return label.startsWith('Sukuk Principal •') || label.endsWith(' Principal Receipt')
+        })
+
+        if (hasPrincipalReceiptFunding) {
+          // Recycled Sukuk principal starts a new independent cycle.
+          // Do not inherit ROSCA savings hawl anchor.
+          console.log('[SUKUK_CREATE] Principal receipt funding detected - skipping savingsHaulStartDate inheritance')
+          inheritedSavingsHaulStart = null
+        }
+
         // Only inherit from Savings Receipt buckets (ROSCA funds)
         // Manual cash entries should NOT pass their hawl date to Sukuk
-        inheritedSavingsHaulStart = fundingAllocations
-          .map((alloc: any) => {
-            const label = typeof alloc?.cashBucket?.label === 'string' ? alloc.cashBucket.label : ''
-            const isRoscaReceipt = label.startsWith('Savings Receipt •')
-            console.log('[SUKUK_CREATE] Checking bucket:', label, 'isROSCA:', isRoscaReceipt)
-            if (!isRoscaReceipt) {
-              return null
-            }
-            const d = alloc?.cashBucket?.haulStartDate ? new Date(alloc.cashBucket.haulStartDate) : null
-            if (!d || Number.isNaN(d.getTime())) {
-              console.log('[SUKUK_CREATE] Invalid date for ROSCA bucket:', d)
-              return null
-            }
-            const normalized = new Date(d.getFullYear(), d.getMonth(), d.getDate())
-            console.log('[SUKUK_CREATE] Found valid ROSCA date:', normalized.toISOString().split('T')[0])
-            return normalized
-          })
-          .filter((d: Date | null): d is Date => Boolean(d))
-          .sort((a: Date, b: Date) => a.getTime() - b.getTime())[0] || null
+        if (!hasPrincipalReceiptFunding) {
+          inheritedSavingsHaulStart = fundingAllocations
+            .map((alloc: any) => {
+              const label = typeof alloc?.cashBucket?.label === 'string' ? alloc.cashBucket.label : ''
+              const isRoscaReceipt = label.startsWith('Savings Receipt •')
+              console.log('[SUKUK_CREATE] Checking bucket:', label, 'isROSCA:', isRoscaReceipt)
+              if (!isRoscaReceipt) {
+                return null
+              }
+              const d = alloc?.cashBucket?.haulStartDate ? new Date(alloc.cashBucket.haulStartDate) : null
+              if (!d || Number.isNaN(d.getTime())) {
+                console.log('[SUKUK_CREATE] Invalid date for ROSCA bucket:', d)
+                return null
+              }
+              const normalized = new Date(d.getFullYear(), d.getMonth(), d.getDate())
+              console.log('[SUKUK_CREATE] Found valid ROSCA date:', normalized.toISOString().split('T')[0])
+              return normalized
+            })
+            .filter((d: Date | null): d is Date => Boolean(d))
+            .sort((a: Date, b: Date) => a.getTime() - b.getTime())[0] || null
+        }
 
         console.log('[SUKUK_CREATE] Final inherited hawl start:', inheritedSavingsHaulStart?.toISOString().split('T')[0] || 'NONE')
       } catch (err) {
@@ -309,7 +323,19 @@ export async function POST(req: NextRequest) {
         })
         console.log('[SUKUK_CREATE] Metadata after update:', updatedInvestment.metadata)
       } else {
-        console.log('[SUKUK_CREATE] No ROSCA hawl start found - metadata NOT updated')
+        const existingMeta = parseMetadata(newSukuk.metadata)
+        if (typeof existingMeta?.savingsHaulStartDate === 'string') {
+          const { savingsHaulStartDate: _removed, ...metaWithoutSavingsHaul } = existingMeta as Record<string, unknown>
+          const updatedInvestment = await tx.investment.update({
+            where: { id: newSukuk.id },
+            data: {
+              metadata: JSON.stringify(metaWithoutSavingsHaul),
+            },
+          })
+          console.log('[SUKUK_CREATE] Cleared stale savingsHaulStartDate from metadata:', updatedInvestment.metadata)
+        } else {
+          console.log('[SUKUK_CREATE] No ROSCA hawl start found - metadata already clean')
+        }
       }
 
       await tx.transaction.create({
