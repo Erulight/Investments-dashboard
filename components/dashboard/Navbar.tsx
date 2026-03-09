@@ -2,6 +2,7 @@
 
 import { usePathname, useRouter } from 'next/navigation'
 import { useEffect, useMemo, useState } from 'react'
+import { motion } from 'framer-motion'
 
 type Role = 'OWNER' | 'PARTNER'
 
@@ -26,9 +27,9 @@ interface NavItem extends NavChild {
 
 const navigation: NavItem[] = [
   { name: 'Dashboard', href: '/dashboard', icon: '📊' },
-  { name: 'Cash Ledger', href: '/cash-ledger', roles: ['OWNER', 'PARTNER'], icon: '📒' },
-  { name: 'Debts', href: '/debts', roles: ['OWNER'], icon: '🧾' },
-  { name: 'Zakat', href: '/zakat', module: 'zakat', icon: '🧾' },
+  { name: 'Cash Ledger', href: '/cash-ledger', roles: ['OWNER', 'PARTNER'], icon: '�' },
+  { name: 'Debts', href: '/debts', roles: ['OWNER'], icon: '💳' },
+  { name: 'Zakat', href: '/zakat', module: 'zakat', icon: '🕌' },
   { 
     name: 'Investments', 
     href: '/investments', 
@@ -220,14 +221,21 @@ export function Navbar({ user, activeAccountTypes, notifications }: NavbarProps)
       : 'bg-emerald-500/15 text-emerald-300 border border-emerald-400/40'
 
   return (
-    <nav className="sticky top-0 z-[9999] pointer-events-auto shadow-md border-b border-slate-200/70 dark:border-slate-800/70 bg-white/95 dark:bg-slate-900/95 backdrop-blur">
+    <motion.nav 
+      className="sticky top-0 z-[9999] pointer-events-auto shadow-xl border-b border-cyan-500/20 bg-gradient-to-r from-slate-900/95 to-slate-800/95 backdrop-blur-xl"
+      initial={{ y: -100 }}
+      animate={{ y: 0 }}
+      transition={{ duration: 0.5, ease: 'easeOut' }}
+    >
       <div className="w-full px-4 sm:px-6 lg:px-8">
         <div className="flex items-center justify-between h-14">
           {/* Left: Logo + App name */}
           <div className="flex items-center space-x-3 lg:space-x-6">
-            <button
+            <motion.button
               type="button"
-              className="inline-flex items-center justify-center rounded-md p-1.5 text-slate-700 dark:text-slate-200 hover:bg-slate-900/5 dark:hover:bg-white/10 focus:outline-none focus:ring-2 focus:ring-slate-500 md:hidden"
+              className="inline-flex items-center justify-center rounded-md p-1.5 text-slate-200 hover:bg-cyan-500/20 focus:outline-none focus:ring-2 focus:ring-cyan-500 md:hidden"
+              whileHover={{ scale: 1.05 }}
+              whileTap={{ scale: 0.95 }}
               aria-label="Toggle navigation menu"
               onClick={() => setMobileOpen((prev) => !prev)}
             >
@@ -238,15 +246,15 @@ export function Navbar({ user, activeAccountTypes, notifications }: NavbarProps)
                   <path strokeLinecap="round" strokeLinejoin="round" d="M4 6h16M4 12h16M4 18h16" />
                 )}
               </svg>
-            </button>
+            </motion.button>
 
             <div className="flex-shrink-0 flex items-center">
               <div className="flex items-center space-x-2.5">
                 <div className="flex items-center gap-2">
                   <img src="/legacy-loop-logo.png" alt="Legacy Loop" className="h-8 w-8" />
                   <div>
-                    <div className="font-bold text-sm text-slate-900 dark:text-white">Legacy Loop</div>
-                    <div className="text-xs text-slate-500 dark:text-slate-400">Smart Investment Platform</div>
+                    <div className="font-bold text-sm text-white">Legacy Loop</div>
+                    <div className="text-xs text-cyan-400">Smart Investment Platform</div>
                   </div>
                 </div>
               </div>
@@ -263,21 +271,28 @@ export function Navbar({ user, activeAccountTypes, notifications }: NavbarProps)
                 >
                   {item.children ? (
                     <>
-                      <button
+                      <motion.button
                         className={`inline-flex items-center px-3 py-1.5 rounded-full text-xs font-medium transition-all duration-150 border ${
                           isActiveLink(item.href, item.children)
-                            ? 'bg-slate-900 text-white border-slate-900 shadow-sm'
-                            : 'bg-transparent border-transparent text-slate-700 dark:text-slate-300 hover:bg-slate-900/5 dark:hover:bg-white/10 hover:text-slate-900 dark:hover:text-white'
+                            ? 'bg-gradient-to-r from-cyan-500 to-blue-600 text-white border-cyan-400 shadow-lg shadow-cyan-500/50'
+                            : 'bg-transparent border-transparent text-slate-300 hover:bg-cyan-500/20 hover:text-white'
                         }`}
+                        whileHover={{ scale: 1.05 }}
+                        whileTap={{ scale: 0.95 }}
                       >
                         <span className="mr-1.5 text-sm">{item.icon}</span>
                         {item.name}
                         <svg className="ml-1 w-3 h-3 opacity-60" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                           <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
                         </svg>
-                      </button>
+                      </motion.button>
                       {openDropdown === item.name && (
-                        <div className="absolute left-0 mt-1 w-56 rounded-lg shadow-xl bg-white dark:bg-slate-900 ring-1 ring-black/10 dark:ring-white/10 overflow-hidden z-[10000]">
+                        <motion.div 
+                          className="absolute left-0 mt-1 w-56 rounded-lg shadow-xl bg-slate-800/95 backdrop-blur-xl ring-1 ring-cyan-500/30 overflow-hidden z-[10000]"
+                          initial={{ opacity: 0, y: -10 }}
+                          animate={{ opacity: 1, y: 0 }}
+                          transition={{ duration: 0.2 }}
+                        >
                           <div className="py-1">
                             {item.children.map((child) => (
                               <a
@@ -285,8 +300,8 @@ export function Navbar({ user, activeAccountTypes, notifications }: NavbarProps)
                                 href={child.href}
                                 className={`flex items-center px-3 py-2.5 text-xs font-medium transition-colors duration-100 ${
                                   pathname === child.href || pathname?.startsWith(child.href + '/')
-                                    ? 'bg-slate-900/5 dark:bg-white/10 text-slate-900 dark:text-white'
-                                    : 'text-slate-700 dark:text-slate-300 hover:bg-slate-900/5 dark:hover:bg-white/5 hover:text-slate-900 dark:hover:text-white'
+                                    ? 'bg-cyan-500/20 text-white'
+                                    : 'text-slate-300 hover:bg-cyan-500/10 hover:text-white'
                                 }`}
                               >
                                 <span className="mr-2.5 text-sm">{child.icon}</span>
@@ -294,7 +309,7 @@ export function Navbar({ user, activeAccountTypes, notifications }: NavbarProps)
                               </a>
                             ))}
                           </div>
-                        </div>
+                        </motion.div>
                       )}
                     </>
                   ) : (
@@ -488,6 +503,6 @@ export function Navbar({ user, activeAccountTypes, notifications }: NavbarProps)
           </div>
         )}
       </div>
-    </nav>
+    </motion.nav>
   )
 }

@@ -145,13 +145,61 @@ body {
   }
 
   .premium-input {
-    background: rgba(30, 41, 59, 0.5);
-    border: 1px solid rgba(148, 163, 184, 0.2);
-    color: #e2e8f0;
+    background: rgba(30, 41, 59, 0.8);
+    border: 1px solid rgba(148, 163, 184, 0.3);
+    color: #f1f5f9;
+    font-weight: 500;
+  }
+
+  .premium-input::placeholder {
+    color: rgba(148, 163, 184, 0.5);
   }
 
   .premium-input:focus {
-    border-color: #38bdf8;
-    box-shadow: 0 0 0 3px rgba(56, 189, 248, 0.1);
+    background: rgba(30, 41, 59, 0.95);
+    border-color: #22d3ee;
+    box-shadow: 0 0 0 3px rgba(34, 211, 238, 0.15);
+    outline: none;
+  }
+
+  .premium-input:hover:not(:focus) {
+    border-color: rgba(148, 163, 184, 0.4);
+  }
+
+  .premium-select {
+    background: rgba(30, 41, 59, 0.8);
+    border: 1px solid rgba(148, 163, 184, 0.3);
+    color: #f1f5f9;
+    font-weight: 500;
+  }
+
+  .premium-select:focus {
+    background: rgba(30, 41, 59, 0.95);
+    border-color: #22d3ee;
+    box-shadow: 0 0 0 3px rgba(34, 211, 238, 0.15);
+    outline: none;
+  }
+
+  .premium-textarea {
+    background: rgba(30, 41, 59, 0.8);
+    border: 1px solid rgba(148, 163, 184, 0.3);
+    color: #f1f5f9;
+    font-weight: 500;
+  }
+
+  .premium-textarea::placeholder {
+    color: rgba(148, 163, 184, 0.5);
+  }
+
+  .premium-textarea:focus {
+    background: rgba(30, 41, 59, 0.95);
+    border-color: #22d3ee;
+    box-shadow: 0 0 0 3px rgba(34, 211, 238, 0.15);
+    outline: none;
+  }
+
+  .premium-label {
+    color: #cbd5e1;
+    font-weight: 600;
   }
 }

@@ -2,7 +2,7 @@
 
 import { useState, useRef } from 'react'
 import { useRouter } from 'next/navigation'
-import { BullVsBearMascots } from '@/components/auth/BullVsBearMascots'
+import { TradingRobotMascot } from '@/components/auth/TradingRobotMascot'
 import { LoginLaserEffect } from '@/components/effects/LoginLaserEffect'
 
 export default function LoginPage() {
@@ -53,9 +53,9 @@ export default function LoginPage() {
   }
 
   return (
-    <div className="min-h-screen bg-[#f5f0e8] flex items-center justify-center py-12 px-4 sm:px-6 lg:px-8 overflow-hidden">
+    <div className="min-h-screen bg-[#0a1628] flex items-center justify-center py-12 px-4 sm:px-6 lg:px-8 overflow-hidden">
       {showLaser && <LoginLaserEffect />}
-      <BullVsBearMascots
+      <TradingRobotMascot
         emailFocused={emailFocused}
         passwordFocused={passwordFocused}
         loginError={hasLoginError}
@@ -69,12 +69,12 @@ export default function LoginPage() {
         <div className="text-center">
           <div className="flex flex-col items-center mb-8">
             <img src="/legacy-loop-logo.png" alt="Legacy Loop" className="h-20 w-20 mb-4" />
-            <h1 className="text-2xl font-bold text-[#0a1628]">Legacy Loop</h1>
-            <p className="text-sm text-gray-500">Smart Investment Platform</p>
+            <h1 className="text-2xl font-bold text-white">Legacy Loop</h1>
+            <p className="text-sm text-slate-400">Smart Investment Platform</p>
           </div>
         </div>
         
-        <div className="bg-white rounded-2xl shadow-xl p-8 w-full max-w-md">
+        <div className="premium-card p-8 w-full max-w-md">
           <form className="space-y-6" onSubmit={handleSubmit}>
             {error && (
               <div className="rounded-xl bg-red-50 p-4 border border-red-200">
@@ -87,7 +87,7 @@ export default function LoginPage() {
             
             <div className="space-y-4">
               <div>
-                <label htmlFor="email" className="block text-sm font-semibold text-gray-700 mb-2">
+                <label htmlFor="email" className="block text-sm font-semibold text-slate-300 mb-2">
                   Email Address
                 </label>
                 <input
@@ -97,7 +97,7 @@ export default function LoginPage() {
                   type="email"
                   autoComplete="email"
                   required
-                  className="appearance-none relative block w-full px-4 py-3 border border-gray-300 placeholder-gray-400 text-gray-900 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all duration-200 bg-white"
+                  className="premium-input appearance-none relative block w-full px-4 py-3 rounded-xl focus:outline-none transition-all duration-200 text-white placeholder-slate-500"
                   placeholder="Enter your email"
                   value={email}
                   onChange={(e) => setEmail(e.target.value)}
@@ -107,7 +107,7 @@ export default function LoginPage() {
               </div>
               
               <div>
-                <label htmlFor="password" className="block text-sm font-semibold text-gray-700 mb-2">
+                <label htmlFor="password" className="block text-sm font-semibold text-slate-300 mb-2">
                   Password
                 </label>
                 <input
@@ -117,7 +117,7 @@ export default function LoginPage() {
                   type="password"
                   autoComplete="current-password"
                   required
-                  className="appearance-none relative block w-full px-4 py-3 border border-gray-300 placeholder-gray-400 text-gray-900 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all duration-200 bg-white"
+                  className="premium-input appearance-none relative block w-full px-4 py-3 rounded-xl focus:outline-none transition-all duration-200 text-white placeholder-slate-500"
                   placeholder="Enter your password"
                   value={password}
                   onChange={(e) => setPassword(e.target.value)}
@@ -131,7 +131,7 @@ export default function LoginPage() {
               <button
                 type="submit"
                 disabled={loading}
-                className="group relative w-full flex justify-center py-3.5 px-4 border border-transparent text-sm font-semibold rounded-xl text-white bg-gradient-to-r from-blue-500 to-purple-600 hover:from-blue-600 hover:to-purple-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 disabled:opacity-50 shadow-lg hover:shadow-xl transform hover:-translate-y-0.5 transition-all duration-200"
+                className="group relative w-full flex justify-center py-3.5 px-4 border border-transparent text-sm font-semibold rounded-xl text-white bg-gradient-to-r from-cyan-500 to-blue-600 hover:from-cyan-600 hover:to-blue-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-cyan-500 disabled:opacity-50 shadow-lg hover:shadow-xl transform hover:-translate-y-0.5 transition-all duration-200"
               >
                 {loading ? (
                   <span className="flex items-center">
