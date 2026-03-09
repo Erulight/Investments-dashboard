@@ -376,6 +376,11 @@ export default async function InvestmentsPage() {
     return round2(Math.max(fromCommissionTx, fromSellMeta))
   })()
 
+  const totalCommissionPaid = (() => {
+    if (user.role !== 'PARTNER' || !user.personId) return 0
+    return round2(investments.reduce((sum, inv) => sum + getPartnerCommissionPaid(inv), 0))
+  })()
+
   const totalPendingFromSoldDeals = (() => {
     if (user.role !== 'OWNER' || !user.personId) return 0
     const soldProfitAccrued = investments.reduce((sum, inv) => sum + getOwnerRealizedProfitFromSales(inv), 0)
@@ -561,10 +566,18 @@ export default async function InvestmentsPage() {
             <p className="text-[11px] text-slate-400 uppercase tracking-wider">Fees Paid</p>
             <p className="text-sm font-bold mt-0.5">SAR {totalFeesPaid.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</p>
           </div>
-          <div className="bg-white/5 rounded-lg p-3 border border-white/10">
-            <p className="text-[11px] text-slate-400 uppercase tracking-wider">Commission Earned</p>
-            <p className="text-sm font-bold mt-0.5">SAR {totalCommissionEarned.toLocaleString(undefined, { maximumFractionDigits: 0 })}</p>
-          </div>
+          {user.role === 'OWNER' && (
+            <div className="bg-white/5 rounded-lg p-3 border border-white/10">
+              <p className="text-[11px] text-slate-400 uppercase tracking-wider">Commission Earned</p>
+              <p className="text-sm font-bold mt-0.5">SAR {totalCommissionEarned.toLocaleString(undefined, { maximumFractionDigits: 0 })}</p>
+            </div>
+          )}
+          {user.role === 'PARTNER' && (
+            <div className="bg-white/5 rounded-lg p-3 border border-white/10">
+              <p className="text-[11px] text-slate-400 uppercase tracking-wider">Commission Paid</p>
+              <p className="text-sm font-bold mt-0.5">SAR {totalCommissionPaid.toLocaleString(undefined, { maximumFractionDigits: 0 })}</p>
+            </div>
+          )}
           <div className="bg-white/5 rounded-lg p-3 border border-white/10">
             <p className="text-[11px] text-slate-400 uppercase tracking-wider">Receivable</p>
             <p className="text-sm font-bold mt-0.5">SAR {totalReceivable.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</p>
