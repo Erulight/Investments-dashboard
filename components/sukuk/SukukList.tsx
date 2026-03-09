@@ -172,8 +172,30 @@ export function SukukList({ initialSukuk, userRole, ownerPersonId, viewerPersonI
     const participantList = Array.isArray(investment?.dealParticipants) ? investment.dealParticipants : []
     if (participantList.length === 0) return false
     const ownerParticipant = getOwnerParticipant(participantList)
-    if (!ownerParticipant) return true
-    return Number(ownerParticipant.investedAmount || 0) <= 0
+    const ownerExited = !ownerParticipant || Number(ownerParticipant.investedAmount || 0) <= 0
+    if (!ownerExited) return false
+
+    const txs = Array.isArray(investment?.transactions) ? investment.transactions : []
+    const hasOwnerSellTx = txs.some((tx: any) => tx?.type === 'SELL_TO_PARTNER' && tx.personId === ownerPersonId)
+    return hasOwnerSellTx
+  }
+
+  const isOwnerCommissionOnlyClose = (investment: any, metrics?: any) => {
+    if (userRole !== 'OWNER') return false
+    if (!investment?.partnerClosed) return false
+    const participantList = Array.isArray(investment?.dealParticipants) ? investment.dealParticipants : []
+    const ownerParticipant = getOwnerParticipant(participantList)
+    const ownerPrincipal = ownerParticipant ? Number(ownerParticipant.investedAmount || 0) : 0
+    const hasOwnerPrincipal = Number.isFinite(ownerPrincipal) && ownerPrincipal > 0.01
+    if (hasOwnerPrincipal) return false
+
+    const txs = Array.isArray(investment?.transactions) ? investment.transactions : []
+    const hasOwnerSellTx = txs.some((tx: any) => tx?.type === 'SELL_TO_PARTNER' && tx.personId === ownerPersonId)
+    if (hasOwnerSellTx) return false
+
+    const commissionEarned = Math.max(0, Number(metrics?.commissionEarned || 0))
+    const receivable = Math.max(0, Number(metrics?.receivable || 0))
+    return commissionEarned > 0.01 && receivable <= 0.01
   }
 
   const isViewerTransaction = (tx: any) => {
@@ -568,10 +590,13 @@ export function SukukList({ initialSukuk, userRole, ownerPersonId, viewerPersonI
 
     const apr = Number.isFinite(inv.interestRate) ? inv.interestRate : 0
     const meta = sellTx?.meta || null
+    const invMeta = parseMetadata(inv?.metadata)
     const commissionFromSaleMeta = Number(meta?.commissionAmount ?? 0)
+    const commissionFromPlan = Number(invMeta?.partnerCommissionPlan?.amount ?? 0)
     const effectiveCommissionEarned = Math.max(
       Math.max(0, commissionEarned),
       Number.isFinite(commissionFromSaleMeta) ? Math.max(0, commissionFromSaleMeta) : 0,
+      Number.isFinite(commissionFromPlan) ? Math.max(0, commissionFromPlan) : 0,
     )
 
     const investorDays = Number(meta?.investorDays ?? 0)
@@ -1121,6 +1146,7 @@ export function SukukList({ initialSukuk, userRole, ownerPersonId, viewerPersonI
     const isSoldDealForOwner = isSoldDealForOwnerView(investment)
 
     const metrics = metricsOverride || (isSoldDealForOwner ? getSoldDealMetrics(investment) : getMetrics(investment))
+    const isCommissionOnlyClose = isOwnerCommissionOnlyClose(investment, metrics)
 
     // Compute viewer-specific remaining principal and profit
     const currencyLabel = investment?.account?.currency || 'SAR'
@@ -1152,17 +1178,19 @@ export function SukukList({ initialSukuk, userRole, ownerPersonId, viewerPersonI
           : 'PROFIT'
 
     const enforcedType: 'PRINCIPAL' | 'PROFIT' | 'BOTH' =
-      (userRole === 'OWNER' && isSoldDealForOwner)
+      (userRole === 'OWNER' && (isSoldDealForOwner || isCommissionOnlyClose))
         ? 'PROFIT'
         : defaultType
 
-    const principalForForm = (userRole === 'OWNER' && isSoldDealForOwner) ? '' : (principalRemaining > 0 ? principalRemaining.toFixed(2) : '')
+    const principalForForm = (userRole === 'OWNER' && (isSoldDealForOwner || isCommissionOnlyClose)) ? '' : (principalRemaining > 0 ? principalRemaining.toFixed(2) : '')
 
     setWithdrawTarget({ inv: investment, metrics })
     setWithdrawForm({
       type: enforcedType,
       principalAmount: principalForForm,
-      profitAmount: isSoldDealForOwner
+      profitAmount: isCommissionOnlyClose
+        ? ''
+        : isSoldDealForOwner
         ? (Number(metrics?.receivable || 0) > 0 ? Number(metrics.receivable || 0).toFixed(2) : '')
         : (receivableRemaining > 0 ? receivableRemaining.toFixed(2) : ''),
       date: formatDateInput(new Date()),
@@ -1225,6 +1253,19 @@ export function SukukList({ initialSukuk, userRole, ownerPersonId, viewerPersonI
     try {
       const isSoldDealForOwner = isSoldDealForOwnerView(withdrawTarget.inv)
       const partnerClosed = Boolean(withdrawTarget.inv?.partnerClosed)
+      const isCommissionOnlyClose = isOwnerCommissionOnlyClose(withdrawTarget.inv, withdrawTarget.metrics)
+
+      if (userRole === 'OWNER' && isCommissionOnlyClose) {
+        await fetch('/api/notifications/dismiss', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ investmentId: withdrawTarget.inv.id }),
+        }).catch(() => undefined)
+
+        setWithdrawTarget(null)
+        window.location.reload()
+        return
+      }
 
       // FIX 4: for sold deals, owner does not withdraw principal and does not directly withdraw profit/commission
       // from the investment. Profit bucket settlement + commission bucket are credited on partner closure.
@@ -2290,6 +2331,26 @@ export function SukukList({ initialSukuk, userRole, ownerPersonId, viewerPersonI
             </label>
             {withdrawTarget && (() => {
               const isSoldDealForOwner = isSoldDealForOwnerView(withdrawTarget.inv)
+              const isCommissionOnlyClose = isOwnerCommissionOnlyClose(withdrawTarget.inv, withdrawTarget.metrics)
+              const commissionAmount = Number(withdrawTarget.metrics?.commissionEarned || 0)
+              const hasCommission = Number.isFinite(commissionAmount) && commissionAmount > 0.01
+              const soldReceiptLabel = hasCommission ? 'Profit + Commission' : 'Profit'
+
+              if (userRole === 'OWNER' && isCommissionOnlyClose) {
+                return (
+                  <div>
+                    <div
+                      className="w-full rounded-lg border border-slate-200 bg-slate-50 px-4 py-2 text-sm text-slate-700 dark:border-white/10 dark:bg-slate-950/60 dark:text-slate-200"
+                      title="Commission receipt"
+                    >
+                      Commission
+                    </div>
+                    <div className="mt-1 text-[11px] text-slate-500 dark:text-slate-400">
+                      Commission has been credited. Confirm to close this commission receipt.
+                    </div>
+                  </div>
+                )
+              }
 
               if (userRole === 'OWNER' && isSoldDealForOwner) {
                 return (
@@ -2298,10 +2359,11 @@ export function SukukList({ initialSukuk, userRole, ownerPersonId, viewerPersonI
                       className="w-full rounded-lg border border-slate-200 bg-slate-50 px-4 py-2 text-sm text-slate-700 dark:border-white/10 dark:bg-slate-950/60 dark:text-slate-200"
                       title="Principal belongs to partner — cannot be received"
                     >
-                      Profit
+                      {soldReceiptLabel}
                     </div>
                     <div className="mt-1 text-[11px] text-slate-500 dark:text-slate-400">
                       Principal belongs to partner — cannot be received.
+                      {hasCommission ? ' Commission is included in close settlement.' : ''}
                     </div>
                   </div>
                 )
@@ -2408,10 +2470,12 @@ export function SukukList({ initialSukuk, userRole, ownerPersonId, viewerPersonI
             const profitAmount = Number(withdrawForm.profitAmount || 0) || 0
 
             const isSoldDealForOwner = isSoldDealForOwnerView(withdrawTarget.inv)
+            const isCommissionOnlyClose = isOwnerCommissionOnlyClose(withdrawTarget.inv, withdrawTarget.metrics)
             const partnerClosed = Boolean(withdrawTarget.inv?.partnerClosed)
             const commissionAmount = isSoldDealForOwner
               ? Math.max(0, Number(withdrawTarget.metrics?.commissionEarned || 0))
-              : 0
+              : Math.max(0, Number(withdrawTarget.metrics?.commissionEarned || 0))
+            const showProfitLine = hasProfit && !isCommissionOnlyClose && (profitAmount > 0 || !(userRole === 'OWNER' && isSoldDealForOwner))
 
             if (!hasPrincipal && !hasProfit) return null
 
@@ -2424,12 +2488,12 @@ export function SukukList({ initialSukuk, userRole, ownerPersonId, viewerPersonI
                       Principal: {currencyLabel} {principalAmount.toFixed(2)} on {dateLabel}
                     </li>
                   )}
-                  {hasProfit && (
+                  {showProfitLine && (
                     <li>
                       Profit: {currencyLabel} {profitAmount.toFixed(2)} on {dateLabel}
                     </li>
                   )}
-                  {userRole === 'OWNER' && isSoldDealForOwner && partnerClosed && commissionAmount > 0 && (
+                  {userRole === 'OWNER' && (isSoldDealForOwner || isCommissionOnlyClose) && (!isSoldDealForOwner || partnerClosed) && commissionAmount > 0 && (
                     <li>
                       Commission: {currencyLabel} {commissionAmount.toFixed(2)}
                     </li>
