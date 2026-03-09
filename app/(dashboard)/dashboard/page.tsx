@@ -6,6 +6,7 @@ import { YearFilter } from '@/components/dashboard/YearFilter'
 import { CashBalanceCard } from '@/components/dashboard/CashBalanceCard'
 import { ReportButton } from '@/components/dashboard/ReportButton'
 import { DashboardCharts } from '@/components/dashboard/DashboardCharts'
+import { PremiumStatsGrid } from '@/components/dashboard/PremiumStatsGrid'
 
 export const dynamic = 'force-dynamic'
 
@@ -797,10 +798,15 @@ export default async function DashboardPage({
     return [] as any[]
   })()
 
+  const portfolioSparkline = monthlyPortfolioValue.map(m => m.value)
+  const cashSparkline = user.role === 'OWNER' ? monthlyCashflow.map(m => Math.abs(m.value)) : undefined
+  const profitTrend = totalInvested > 0 ? (totalProfit / totalInvested) * 100 : 0
+  const portfolioTrend = yearlyValueChange.pct
+
   return (
     <div className="space-y-6 animate-fade-in">
       {/* Header */}
-      <div className="bg-gradient-to-r from-slate-800 to-slate-900 rounded-xl shadow-md p-6 text-white">
+      <div className="bg-gradient-to-r from-slate-800/80 to-slate-900/80 backdrop-blur-sm rounded-xl shadow-md p-6 text-white border border-slate-700/50">
         <div className="flex items-center justify-between">
           <div>
             <h1 className="text-2xl font-bold">Welcome back, {user.name}</h1>
@@ -813,48 +819,18 @@ export default async function DashboardPage({
         </div>
       </div>
 
-      {/* Top Stats Row */}
-      <div className="grid grid-cols-2 gap-3 lg:grid-cols-4 items-start auto-rows-min">
-        {(user.role === 'OWNER' || user.role === 'PARTNER') && (
-          <CashBalanceCard
-            initialCash={user.role === 'OWNER' && Number.isFinite(cashBalance) ? cashBalance : 0}
-            role={user.role}
-          />
-        )}
-        <Card className="p-4">
-          <CardContent>
-            <p className="text-xs font-medium text-gray-500 uppercase tracking-wider">Total Invested</p>
-            <div className="text-xl font-bold text-gray-900 mt-1 tabular-nums">
-              SAR {totalInvested.toLocaleString()}
-            </div>
-            <p className="text-[11px] text-gray-400 mt-0.5">Principal</p>
-          </CardContent>
-        </Card>
-        <Card className="p-4">
-          <CardContent>
-            <p className="text-xs font-medium text-gray-500 uppercase tracking-wider">
-              {user.role === 'OWNER' ? 'Portfolio Value' : 'Investment Value'}
-            </p>
-            <div className="text-xl font-bold text-gray-900 mt-1 tabular-nums">
-              SAR {displayedValue.toLocaleString()}
-            </div>
-            <p className="text-[11px] text-gray-400 mt-0.5">
-              {user.role === 'OWNER' ? 'Cash + Investments' : 'Your share'}
-            </p>
-          </CardContent>
-        </Card>
-        <Card className="p-4">
-          <CardContent>
-            <p className="text-xs font-medium text-gray-500 uppercase tracking-wider">Yearly Return</p>
-            <div className={`text-xl font-bold mt-1 tabular-nums ${yearlyProfitValue >= 0 ? 'text-emerald-600' : 'text-red-600'}`}>
-              SAR {yearlyProfitValue.toLocaleString()}
-            </div>
-            <p className={`text-[11px] mt-0.5 font-semibold ${yearlyReturnPercentage >= 0 ? 'text-emerald-600' : 'text-red-600'}`}>
-              {yearlyReturnPercentage >= 0 ? '↑' : '↓'} {Math.abs(yearlyReturnPercentage).toFixed(2)}%
-            </p>
-          </CardContent>
-        </Card>
-      </div>
+      {/* Premium Stats Grid */}
+      <PremiumStatsGrid
+        portfolioValue={displayedValue}
+        cashBalance={user.role === 'OWNER' ? cashBalance : 0}
+        totalInvested={totalInvested}
+        totalProfit={totalProfit}
+        portfolioTrend={portfolioTrend}
+        profitTrend={profitTrend}
+        portfolioSparkline={portfolioSparkline}
+        cashSparkline={cashSparkline}
+        role={user.role}
+      />
 
 
       {user.role === 'PARTNER' && user.personId && (

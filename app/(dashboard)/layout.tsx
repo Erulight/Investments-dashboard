@@ -51,7 +51,7 @@ export default async function DashboardLayout({
   })()
 
   return (
-    <div className="min-h-screen bg-background text-foreground">
+    <div className="min-h-screen bg-[#0a1628] text-foreground">
       <Navbar
         user={{ name: user.name, email: user.email, role: user.role as 'OWNER' | 'PARTNER', permissions: user.permissions }}
         activeAccountTypes={activeAccountTypes.map((a) => a.type)}

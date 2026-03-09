@@ -126,4 +126,8 @@ body {
   .dark .hover\:bg-gray-50:hover {
     @apply bg-white/5;
   }
+
+  .bg-navy-dark {
+    background-color: #0a1628;
+  }
 }
