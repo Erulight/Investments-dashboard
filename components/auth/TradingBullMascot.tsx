@@ -44,12 +44,14 @@ export function TradingBullMascot({ emailFocused, passwordFocused, emailRef, pas
       try {
         const audio = new Audio()
         if (type === 'walk') {
-          audio.src = 'data:audio/wav;base64,UklGRnoGAABXQVZFZm10IBAAAAABAAEAQB8AAEAfAAABAAgAZGF0YQoGAACBhYqFbF1fdJivrJBhNjVgodDbq2EcBj+a2/LDciUFLIHO8tiJNwgZaLvt559NEAxQp+PwtmMcBjiR1/LMeSwFJHfH8N2QQAoUXrTp66hVFApGn+DyvmwhBSuBzvLZiTYIGGi77OeeSwwPUKfj8LZjHAU5kdfy0HksBS'}
+          audio.src = 'data:audio/wav;base64,UklGRnoGAABXQVZFZm10IBAAAAABAAEAQB8AAEAfAAABAAgAZGF0YQoGAACBhYqFbF1fdJivrJBhNjVgodDbq2EcBj+a2/LDciUFLIHO8tiJNwgZaLvt559NEAxQp+PwtmMcBjiR1/LMeSwFJHfH8N2QQAoUXrTp66hVFApGn+DyvmwhBSuBzvLZiTYIGGi77OeeSwwPUKfj8LZjHAU5kdfy0HksBS'
         } else if (type === 'run') {
           audio.volume = 0.3
         }
         audio.play().catch(() => {})
-      } catch {}
+      } catch (e) {
+        // Ignore audio errors
+      }
     }
 
     if (emailFocused && emailRef.current) {
