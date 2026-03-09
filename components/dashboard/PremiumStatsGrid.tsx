@@ -1,6 +1,7 @@
 'use client'
 
 import { PremiumStatsCard } from './PremiumStatsCard'
+import { PremiumCashBalanceCard } from './PremiumCashBalanceCard'
 
 interface StatsData {
   portfolioValue: number
@@ -49,13 +50,10 @@ export function PremiumStatsGrid({
       />
       
       {role === 'OWNER' && (
-        <PremiumStatsCard
-          title="Cash Balance"
-          value={cashBalance}
-          subtitle="Available liquidity"
+        <PremiumCashBalanceCard
+          initialCash={cashBalance}
           trend={cashTrend}
           sparklineData={cashSparkline}
-          accentColor="sky"
           index={1}
         />
       )}

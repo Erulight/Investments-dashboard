@@ -18,16 +18,16 @@ type AccordionSection = {
 
 function Accordion({ sections }: { sections: AccordionSection[] }) {
   return (
-    <div className="space-y-3">
+    <div className="space-y-4">
       {sections.map((section) => (
-        <details key={section.id} className="border border-slate-200 rounded-lg bg-white">
-          <summary className="px-4 py-3 text-left cursor-pointer select-none hover:bg-slate-50">
-            <div className="text-sm font-semibold text-slate-900">{section.title}</div>
+        <details key={section.id} className="premium-card border-slate-700/50 overflow-hidden group">
+          <summary className="px-6 py-4 text-left cursor-pointer select-none hover:bg-slate-700/30 transition-all">
+            <div className="text-sm font-semibold text-slate-100">{section.title}</div>
             {section.description && (
-              <div className="text-xs text-slate-500 mt-0.5">{section.description}</div>
+              <div className="text-xs text-slate-400 mt-1">{section.description}</div>
             )}
           </summary>
-          <div className="px-4 pb-4">
+          <div className="px-6 pb-6 pt-2 border-t border-slate-700/30">
             {section.content}
           </div>
         </details>
@@ -122,7 +122,7 @@ export default async function SettingsPage() {
 
   return (
     <div className="space-y-6">
-      <div className="bg-gradient-to-r from-slate-800 to-slate-900 rounded-xl shadow-md p-6 text-white">
+      <div className="bg-gradient-to-r from-slate-800/80 to-slate-900/80 backdrop-blur-sm rounded-xl shadow-md p-6 text-white border border-slate-700/50">
         <h1 className="text-2xl font-bold">Settings</h1>
         <p className="text-sm text-slate-400 mt-1">Manage system configuration and user permissions</p>
       </div>
