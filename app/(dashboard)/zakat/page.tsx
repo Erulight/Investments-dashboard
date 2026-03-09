@@ -1100,10 +1100,10 @@ export default async function ZakatPage() {
               : start
           const movementType = typeof m?.type === 'string' ? m.type : ''
           const isPrincipalReceiptMovement = movementType === 'WITHDRAW_PRINCIPAL' || movementType === 'ROLLBACK_PRINCIPAL'
-          const isProfitReceiptMovement = movementType === 'WITHDRAW_PROFIT'
+          const isProfitReceiptMovement = movementType === 'WITHDRAW_PROFIT' || (isProfitBucket && movementType === 'CASH_IN')
 
           // For principal receipts from ROSCA-funded Sukuk, use ROSCA first contribution date
-          // For profit receipts, use investment start date for OWNER (Sukuk start)
+          // For profit receipts (including Profit bucket CASH_IN), use investment start date for OWNER (Sukuk start)
           const eligibilityAnchor = (isCommissionBucket
             ? bucketStart
             : (isPrincipalReceiptMovement
