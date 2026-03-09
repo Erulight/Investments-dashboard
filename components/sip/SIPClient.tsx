@@ -472,20 +472,20 @@ export function SIPClient({ investments, userRole }: SIPClientProps) {
 
             <form onSubmit={handleSubmitCurrentValue} className="space-y-4">
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">Date</label>
+                <label className="mb-2 block text-sm font-medium text-slate-700 dark:text-slate-200">Date</label>
                 <input
                   type="date"
                   value={valueForm.date}
                   onChange={(e: ChangeEvent<HTMLInputElement>) =>
                     setValueForm((prev: { date: string; currentValue: string }) => ({ ...prev, date: e.target.value }))
                   }
-                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500"
+                  className="w-full rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm text-slate-900 shadow-sm transition-colors focus:border-emerald-500 focus:outline-none focus:ring-2 focus:ring-emerald-500/20 dark:border-white/10 dark:bg-slate-900/60 dark:text-slate-100"
                   required
                 />
               </div>
 
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">Current Value (SAR)</label>
+                <label className="mb-2 block text-sm font-medium text-slate-700 dark:text-slate-200">Current Value (SAR)</label>
                 <input
                   type="number"
                   min="0"
@@ -494,26 +494,26 @@ export function SIPClient({ investments, userRole }: SIPClientProps) {
                   onChange={(e: ChangeEvent<HTMLInputElement>) =>
                     setValueForm((prev: { date: string; currentValue: string }) => ({ ...prev, currentValue: e.target.value }))
                   }
-                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500"
+                  className="w-full rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm text-slate-900 shadow-sm transition-colors focus:border-emerald-500 focus:outline-none focus:ring-2 focus:ring-emerald-500/20 dark:border-white/10 dark:bg-slate-900/60 dark:text-slate-100"
                   required
                 />
               </div>
 
-              <div className="flex justify-end space-x-3 pt-4 border-t">
+              <div className="flex justify-end space-x-3 border-t border-slate-200 pt-4 dark:border-white/10">
                 <button
                   type="button"
                   onClick={() => {
                     setShowValueForm(false)
                     setValueTargetId(null)
                   }}
-                  className="px-4 py-2 border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50 transition-colors"
+                  className="rounded-lg border border-slate-200 bg-white px-4 py-2 text-sm font-medium text-slate-700 transition-colors hover:bg-slate-50 dark:border-white/10 dark:bg-slate-900/60 dark:text-slate-200 dark:hover:bg-white/5"
                 >
                   Cancel
                 </button>
                 <button
                   type="submit"
                   disabled={isLoading}
-                  className="px-4 py-2 bg-purple-600 text-white rounded-lg hover:bg-purple-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+                  className="rounded-lg bg-emerald-600 px-4 py-2 text-sm font-medium text-white transition-colors hover:bg-emerald-500 disabled:cursor-not-allowed disabled:opacity-50"
                 >
                   {isLoading ? 'Saving...' : 'Save'}
                 </button>

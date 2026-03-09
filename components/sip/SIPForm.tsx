@@ -1,6 +1,7 @@
 'use client'
 
 import { useState, useEffect } from 'react'
+import { Button } from '@/components/ui/Button'
 import { CreateSipInput } from '@/lib/validation'
 
 interface Account {
@@ -89,14 +90,14 @@ export function SIPForm({ onSubmit, onCancel, isLoading = false, initialData }: 
     <form onSubmit={handleSubmit} className="space-y-6">
       {/* Account Selection */}
       <div>
-        <label htmlFor="accountId" className="block text-sm font-medium text-gray-700 mb-2">
+        <label htmlFor="accountId" className="mb-2 block text-sm font-medium text-slate-700 dark:text-slate-200">
           Investment Account *
         </label>
         <select
           id="accountId"
           value={formData.accountId}
           onChange={(e) => handleChange('accountId', e.target.value)}
-          className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500"
+          className="w-full rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm text-slate-900 shadow-sm transition-colors focus:border-emerald-500 focus:outline-none focus:ring-2 focus:ring-emerald-500/20 dark:border-white/10 dark:bg-slate-900/60 dark:text-slate-100"
           required
         >
           <option value="">Select an account</option>
@@ -111,7 +112,7 @@ export function SIPForm({ onSubmit, onCancel, isLoading = false, initialData }: 
 
       {/* SIP Name */}
       <div>
-        <label htmlFor="name" className="block text-sm font-medium text-gray-700 mb-2">
+        <label htmlFor="name" className="mb-2 block text-sm font-medium text-slate-700 dark:text-slate-200">
           SIP Plan Name *
         </label>
         <input
@@ -120,7 +121,7 @@ export function SIPForm({ onSubmit, onCancel, isLoading = false, initialData }: 
           value={formData.name}
           onChange={(e) => handleChange('name', e.target.value)}
           placeholder="e.g., Retirement Fund, Education Savings"
-          className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500"
+          className="w-full rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm text-slate-900 placeholder:text-slate-400 shadow-sm transition-colors focus:border-emerald-500 focus:outline-none focus:ring-2 focus:ring-emerald-500/20 dark:border-white/10 dark:bg-slate-900/60 dark:text-slate-100 dark:placeholder:text-slate-500"
           required
         />
         {errors.name && <p className="mt-1 text-sm text-red-600">{errors.name}</p>}
@@ -128,7 +129,7 @@ export function SIPForm({ onSubmit, onCancel, isLoading = false, initialData }: 
 
       {/* Start Date */}
       <div>
-        <label htmlFor="startDate" className="block text-sm font-medium text-gray-700 mb-2">
+        <label htmlFor="startDate" className="mb-2 block text-sm font-medium text-slate-700 dark:text-slate-200">
           Start Date *
         </label>
         <input
@@ -136,7 +137,7 @@ export function SIPForm({ onSubmit, onCancel, isLoading = false, initialData }: 
           type="date"
           value={formData.startDate}
           onChange={(e) => handleChange('startDate', e.target.value)}
-          className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500"
+          className="w-full rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm text-slate-900 shadow-sm transition-colors focus:border-emerald-500 focus:outline-none focus:ring-2 focus:ring-emerald-500/20 dark:border-white/10 dark:bg-slate-900/60 dark:text-slate-100"
           required
         />
         {errors.startDate && <p className="mt-1 text-sm text-red-600">{errors.startDate}</p>}
@@ -144,7 +145,7 @@ export function SIPForm({ onSubmit, onCancel, isLoading = false, initialData }: 
 
       {/* Notes */}
       <div>
-        <label htmlFor="notes" className="block text-sm font-medium text-gray-700 mb-2">
+        <label htmlFor="notes" className="mb-2 block text-sm font-medium text-slate-700 dark:text-slate-200">
           Notes (Optional)
         </label>
         <textarea
@@ -153,26 +154,26 @@ export function SIPForm({ onSubmit, onCancel, isLoading = false, initialData }: 
           onChange={(e) => handleChange('notes', e.target.value)}
           placeholder="Any additional notes about this SIP plan..."
           rows={3}
-          className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500"
+          className="w-full rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm text-slate-900 placeholder:text-slate-400 shadow-sm transition-colors focus:border-emerald-500 focus:outline-none focus:ring-2 focus:ring-emerald-500/20 dark:border-white/10 dark:bg-slate-900/60 dark:text-slate-100 dark:placeholder:text-slate-500"
         />
       </div>
 
       {/* Form Actions */}
-      <div className="flex justify-end space-x-3 pt-4 border-t">
-        <button
+      <div className="flex justify-end space-x-3 border-t border-slate-200 pt-4 dark:border-white/10">
+        <Button
           type="button"
+          variant="secondary"
           onClick={onCancel}
-          className="px-4 py-2 border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50 transition-colors"
         >
           Cancel
-        </button>
-        <button
+        </Button>
+        <Button
           type="submit"
+          variant="primary"
           disabled={isLoading}
-          className="px-4 py-2 bg-emerald-600 text-white rounded-lg hover:bg-emerald-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
         >
           {isLoading ? 'Creating...' : 'Create SIP Plan'}
-        </button>
+        </Button>
       </div>
 
       {errors.submit && <p className="mt-2 text-sm text-red-600">{errors.submit}</p>}

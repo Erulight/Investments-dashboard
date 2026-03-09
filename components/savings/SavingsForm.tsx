@@ -97,7 +97,7 @@ export function SavingsForm({ onSubmit, onCancel, initialData, isLoading }: Savi
   return (
     <Card className="w-full max-w-2xl">
       <CardHeader>
-        <CardTitle className="text-2xl font-bold text-gray-900">
+        <CardTitle className="text-2xl font-bold text-slate-900 dark:text-slate-100">
           {initialData ? 'Edit Savings Plan' : 'Create New Savings Plan'}
         </CardTitle>
       </CardHeader>
@@ -105,7 +105,7 @@ export function SavingsForm({ onSubmit, onCancel, initialData, isLoading }: Savi
         <form onSubmit={handleSubmit} className="space-y-6">
           {/* Account Selection */}
           <div>
-            <label htmlFor="accountId" className="block text-sm font-medium text-gray-700 mb-2">
+            <label htmlFor="accountId" className="mb-2 block text-sm font-medium text-slate-700 dark:text-slate-200">
               Account *
             </label>
             <select
@@ -113,7 +113,7 @@ export function SavingsForm({ onSubmit, onCancel, initialData, isLoading }: Savi
               name="accountId"
               value={formData.accountId}
               onChange={handleChange}
-              className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500"
+              className="w-full rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm text-slate-900 shadow-sm transition-colors focus:border-emerald-500 focus:outline-none focus:ring-2 focus:ring-emerald-500/20 dark:border-white/10 dark:bg-slate-900/60 dark:text-slate-100"
               required
               disabled={accountsLoading}
             >
@@ -133,7 +133,7 @@ export function SavingsForm({ onSubmit, onCancel, initialData, isLoading }: Savi
 
           {/* Plan Name */}
           <div>
-            <label htmlFor="name" className="block text-sm font-medium text-gray-700 mb-2">
+            <label htmlFor="name" className="mb-2 block text-sm font-medium text-slate-700 dark:text-slate-200">
               Plan Name *
             </label>
             <input
@@ -143,7 +143,7 @@ export function SavingsForm({ onSubmit, onCancel, initialData, isLoading }: Savi
               value={formData.name}
               onChange={handleChange}
               placeholder="e.g., Emergency Fund, Vacation Savings"
-              className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500"
+              className="w-full rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm text-slate-900 placeholder:text-slate-400 shadow-sm transition-colors focus:border-emerald-500 focus:outline-none focus:ring-2 focus:ring-emerald-500/20 dark:border-white/10 dark:bg-slate-900/60 dark:text-slate-100 dark:placeholder:text-slate-500"
               required
             />
             {errors.name && <p className="mt-1 text-sm text-red-600">{errors.name}</p>}
@@ -151,7 +151,7 @@ export function SavingsForm({ onSubmit, onCancel, initialData, isLoading }: Savi
 
           {/* Monthly Contribution */}
           <div>
-            <label htmlFor="monthlyContribution" className="block text-sm font-medium text-gray-700 mb-2">
+            <label htmlFor="monthlyContribution" className="mb-2 block text-sm font-medium text-slate-700 dark:text-slate-200">
               Monthly Contribution (SAR) *
             </label>
             <input
@@ -163,7 +163,7 @@ export function SavingsForm({ onSubmit, onCancel, initialData, isLoading }: Savi
               value={formData.monthlyContribution}
               onChange={handleChange}
               placeholder="1000"
-              className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500"
+              className="w-full rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm text-slate-900 placeholder:text-slate-400 shadow-sm transition-colors focus:border-emerald-500 focus:outline-none focus:ring-2 focus:ring-emerald-500/20 dark:border-white/10 dark:bg-slate-900/60 dark:text-slate-100 dark:placeholder:text-slate-500"
               required
             />
             {errors.monthlyContribution && <p className="mt-1 text-sm text-red-600">{errors.monthlyContribution}</p>}
@@ -171,7 +171,7 @@ export function SavingsForm({ onSubmit, onCancel, initialData, isLoading }: Savi
 
           {/* Total Months */}
           <div>
-            <label htmlFor="totalMonths" className="block text-sm font-medium text-gray-700 mb-2">
+            <label htmlFor="totalMonths" className="mb-2 block text-sm font-medium text-slate-700 dark:text-slate-200">
               Total Months *
             </label>
             <input
@@ -182,7 +182,7 @@ export function SavingsForm({ onSubmit, onCancel, initialData, isLoading }: Savi
               value={formData.totalMonths}
               onChange={handleChange}
               placeholder="12"
-              className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500"
+              className="w-full rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm text-slate-900 placeholder:text-slate-400 shadow-sm transition-colors focus:border-emerald-500 focus:outline-none focus:ring-2 focus:ring-emerald-500/20 dark:border-white/10 dark:bg-slate-900/60 dark:text-slate-100 dark:placeholder:text-slate-500"
               required
             />
             {errors.totalMonths && <p className="mt-1 text-sm text-red-600">{errors.totalMonths}</p>}
@@ -190,7 +190,7 @@ export function SavingsForm({ onSubmit, onCancel, initialData, isLoading }: Savi
 
           {/* Booking Fee (optional) */}
           <div>
-            <label htmlFor="bookingFee" className="block text-sm font-medium text-gray-700 mb-2">
+            <label htmlFor="bookingFee" className="mb-2 block text-sm font-medium text-slate-700 dark:text-slate-200">
               Booking Fee (SAR)
             </label>
             <input
@@ -202,16 +202,16 @@ export function SavingsForm({ onSubmit, onCancel, initialData, isLoading }: Savi
               value={formData.bookingFee ?? ''}
               onChange={handleChange}
               placeholder="One-time booking fee"
-              className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500"
+              className="w-full rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm text-slate-900 placeholder:text-slate-400 shadow-sm transition-colors focus:border-emerald-500 focus:outline-none focus:ring-2 focus:ring-emerald-500/20 dark:border-white/10 dark:bg-slate-900/60 dark:text-slate-100 dark:placeholder:text-slate-500"
             />
-            <p className="mt-1 text-sm text-gray-500">
+            <p className="mt-1 text-sm text-slate-500 dark:text-slate-400">
               One-time fee for joining the ROSCA
             </p>
           </div>
 
           {/* Reward Amount (optional) */}
           <div>
-            <label htmlFor="rewardAmount" className="block text-sm font-medium text-gray-700 mb-2">
+            <label htmlFor="rewardAmount" className="mb-2 block text-sm font-medium text-slate-700 dark:text-slate-200">
               Reward (SAR)
             </label>
             <input
@@ -223,9 +223,9 @@ export function SavingsForm({ onSubmit, onCancel, initialData, isLoading }: Savi
               value={formData.rewardAmount ?? ''}
               onChange={handleChange}
               placeholder="0"
-              className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500"
+              className="w-full rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm text-slate-900 placeholder:text-slate-400 shadow-sm transition-colors focus:border-emerald-500 focus:outline-none focus:ring-2 focus:ring-emerald-500/20 dark:border-white/10 dark:bg-slate-900/60 dark:text-slate-100 dark:placeholder:text-slate-500"
             />
-            <p className="mt-1 text-sm text-gray-500">
+            <p className="mt-1 text-sm text-slate-500 dark:text-slate-400">
               Optional: Fixed reward amount per month. Leave empty or 0 for no reward.
             </p>
             {errors.rewardAmount && <p className="mt-1 text-sm text-red-600">{errors.rewardAmount}</p>}
@@ -233,7 +233,7 @@ export function SavingsForm({ onSubmit, onCancel, initialData, isLoading }: Savi
 
           {/* Receipt Month (optional) */}
           <div>
-            <label htmlFor="receiptMonth" className="block text-sm font-medium text-gray-700 mb-2">
+            <label htmlFor="receiptMonth" className="mb-2 block text-sm font-medium text-slate-700 dark:text-slate-200">
               Receipt Month (Early Receipt)
             </label>
             <input
@@ -245,9 +245,9 @@ export function SavingsForm({ onSubmit, onCancel, initialData, isLoading }: Savi
               value={formData.receiptMonth ?? ''}
               onChange={handleChange}
               placeholder={`1-${formData.totalMonths}`}
-              className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500"
+              className="w-full rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm text-slate-900 placeholder:text-slate-400 shadow-sm transition-colors focus:border-emerald-500 focus:outline-none focus:ring-2 focus:ring-emerald-500/20 dark:border-white/10 dark:bg-slate-900/60 dark:text-slate-100 dark:placeholder:text-slate-500"
             />
-            <p className="mt-1 text-sm text-gray-500">
+            <p className="mt-1 text-sm text-slate-500 dark:text-slate-400">
               Optional: Month you want to receive the payout (1-{formData.totalMonths}). You'll pay back remaining months.
             </p>
             {errors.receiptMonth && <p className="mt-1 text-sm text-red-600">{errors.receiptMonth}</p>}
@@ -255,7 +255,7 @@ export function SavingsForm({ onSubmit, onCancel, initialData, isLoading }: Savi
 
           {/* Start Date */}
           <div>
-            <label htmlFor="startDate" className="block text-sm font-medium text-gray-700 mb-2">
+            <label htmlFor="startDate" className="mb-2 block text-sm font-medium text-slate-700 dark:text-slate-200">
               Start Date *
             </label>
             <input
@@ -264,7 +264,7 @@ export function SavingsForm({ onSubmit, onCancel, initialData, isLoading }: Savi
               type="date"
               value={formData.startDate}
               onChange={handleChange}
-              className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500"
+              className="w-full rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm text-slate-900 shadow-sm transition-colors focus:border-emerald-500 focus:outline-none focus:ring-2 focus:ring-emerald-500/20 dark:border-white/10 dark:bg-slate-900/60 dark:text-slate-100"
               required
             />
             {errors.startDate && <p className="mt-1 text-sm text-red-600">{errors.startDate}</p>}
@@ -272,7 +272,7 @@ export function SavingsForm({ onSubmit, onCancel, initialData, isLoading }: Savi
 
           {/* Notes */}
           <div>
-            <label htmlFor="notes" className="block text-sm font-medium text-gray-700 mb-2">
+            <label htmlFor="notes" className="mb-2 block text-sm font-medium text-slate-700 dark:text-slate-200">
               Notes
             </label>
             <textarea
@@ -282,13 +282,13 @@ export function SavingsForm({ onSubmit, onCancel, initialData, isLoading }: Savi
               onChange={handleChange}
               rows={3}
               placeholder="Any additional notes about this savings plan..."
-              className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500"
+              className="w-full rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm text-slate-900 placeholder:text-slate-400 shadow-sm transition-colors focus:border-emerald-500 focus:outline-none focus:ring-2 focus:ring-emerald-500/20 dark:border-white/10 dark:bg-slate-900/60 dark:text-slate-100 dark:placeholder:text-slate-500"
             />
           </div>
 
           {/* Error Message */}
           {errors.submit && (
-            <div className="p-3 bg-red-50 border border-red-200 rounded-lg">
+            <div className="rounded-lg border border-red-200 bg-red-50 p-3 dark:border-red-500/30 dark:bg-red-500/10">
               <p className="text-sm text-red-600">{errors.submit}</p>
             </div>
           )}

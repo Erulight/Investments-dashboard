@@ -1025,8 +1025,8 @@ export function ZakatDashboard({
 
       {/* Pagination Controls */}
       {!summaryView && totalPages > 1 && (
-        <div className="flex items-center justify-between px-4 py-3 bg-white border border-gray-200 rounded-lg">
-          <div className="flex items-center gap-2 text-sm text-gray-600">
+        <div className="flex items-center justify-between rounded-lg border border-slate-200 bg-white px-4 py-3 dark:border-white/10 dark:bg-slate-900/60">
+          <div className="flex items-center gap-2 text-sm text-slate-600 dark:text-slate-300">
             <span>
               Showing {((currentPage - 1) * rowsPerPage) + 1} to {Math.min(currentPage * rowsPerPage, totalFilteredRows)} of {totalFilteredRows} rows
             </span>
@@ -1035,14 +1035,14 @@ export function ZakatDashboard({
             <button
               onClick={() => setCurrentPage(1)}
               disabled={currentPage === 1}
-              className="px-3 py-1.5 text-sm font-medium text-gray-700 bg-white border border-gray-300 rounded-md hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed"
+              className="rounded-md border border-slate-200 bg-white px-3 py-1.5 text-sm font-medium text-slate-700 transition-colors hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-50 dark:border-white/10 dark:bg-slate-900/60 dark:text-slate-200 dark:hover:bg-white/5"
             >
               First
             </button>
             <button
               onClick={() => setCurrentPage(prev => Math.max(1, prev - 1))}
               disabled={currentPage === 1}
-              className="px-3 py-1.5 text-sm font-medium text-gray-700 bg-white border border-gray-300 rounded-md hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed"
+              className="rounded-md border border-slate-200 bg-white px-3 py-1.5 text-sm font-medium text-slate-700 transition-colors hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-50 dark:border-white/10 dark:bg-slate-900/60 dark:text-slate-200 dark:hover:bg-white/5"
             >
               Previous
             </button>
@@ -1065,7 +1065,7 @@ export function ZakatDashboard({
                     className={`px-3 py-1.5 text-sm font-medium rounded-md ${
                       currentPage === pageNum
                         ? 'bg-emerald-600 text-white'
-                        : 'text-gray-700 bg-white border border-gray-300 hover:bg-gray-50'
+                        : 'border border-slate-200 bg-white text-slate-700 hover:bg-slate-50 dark:border-white/10 dark:bg-slate-900/60 dark:text-slate-200 dark:hover:bg-white/5'
                     }`}
                   >
                     {pageNum}
@@ -1076,14 +1076,14 @@ export function ZakatDashboard({
             <button
               onClick={() => setCurrentPage(prev => Math.min(totalPages, prev + 1))}
               disabled={currentPage === totalPages}
-              className="px-3 py-1.5 text-sm font-medium text-gray-700 bg-white border border-gray-300 rounded-md hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed"
+              className="rounded-md border border-slate-200 bg-white px-3 py-1.5 text-sm font-medium text-slate-700 transition-colors hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-50 dark:border-white/10 dark:bg-slate-900/60 dark:text-slate-200 dark:hover:bg-white/5"
             >
               Next
             </button>
             <button
               onClick={() => setCurrentPage(totalPages)}
               disabled={currentPage === totalPages}
-              className="px-3 py-1.5 text-sm font-medium text-gray-700 bg-white border border-gray-300 rounded-md hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed"
+              className="rounded-md border border-slate-200 bg-white px-3 py-1.5 text-sm font-medium text-slate-700 transition-colors hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-50 dark:border-white/10 dark:bg-slate-900/60 dark:text-slate-200 dark:hover:bg-white/5"
             >
               Last
             </button>
@@ -1107,24 +1107,24 @@ export function ZakatDashboard({
         )}
 
         {detailsLoading && (
-          <div className="text-sm text-gray-500">Loading bucket details...</div>
+          <div className="text-sm text-slate-500 dark:text-slate-400">Loading bucket details...</div>
         )}
 
         {!detailsLoading && detailsTarget && (
           <div className="space-y-6">
-            <div className="rounded-lg border border-gray-200 bg-gray-50 p-4">
-              <div className="text-sm font-semibold text-gray-900">How this bucket’s zakat is calculated</div>
-              <div className="text-sm text-gray-700 mt-2">
+            <div className="rounded-lg border border-slate-200 bg-slate-50 p-4 dark:border-white/10 dark:bg-white/5">
+              <div className="text-sm font-semibold text-slate-900 dark:text-slate-100">How this bucket’s zakat is calculated</div>
+              <div className="mt-2 text-sm text-slate-700 dark:text-slate-200">
                 Zakat is calculated as 2.5% of:
               </div>
-              <div className="mt-2 text-sm text-gray-700 space-y-1">
+              <div className="mt-2 space-y-1 text-sm text-slate-700 dark:text-slate-200">
                 <div>
                   Idle cash held through haul completion ({detailsTarget.haulStartDate} → {detailsTarget.haulCompleteDate}):
-                  <span className="font-semibold"> {detailsTarget.currency} {detailsTarget.idleBase.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
+                  <span className="font-semibold text-slate-900 dark:text-slate-100"> {detailsTarget.currency} {detailsTarget.idleBase.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
                 </div>
                 <div>
                   + Receipts after haul completion:
-                  <span className="font-semibold"> {detailsTarget.currency} {detailsTarget.receiptsTotal.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
+                  <span className="font-semibold text-slate-900 dark:text-slate-100"> {detailsTarget.currency} {detailsTarget.receiptsTotal.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
                 </div>
                 <div>
                   = Zakat due:
@@ -1134,22 +1134,22 @@ export function ZakatDashboard({
             </div>
 
             <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-              <div className="rounded-lg border border-gray-200 p-4">
-                <div className="text-sm font-semibold text-gray-900 mb-2">Bucket movements / logs</div>
+              <div className="rounded-lg border border-slate-200 p-4 dark:border-white/10">
+                <div className="mb-2 text-sm font-semibold text-slate-900 dark:text-slate-100">Bucket movements / logs</div>
                 {detailsData?.bucket?.movements?.length ? (
                   <div className="overflow-auto max-h-80">
                     <table className="min-w-full text-sm">
-                      <thead className="sticky top-0 bg-white">
-                        <tr className="text-left text-xs text-gray-500 border-b">
+                      <thead className="sticky top-0 bg-white dark:bg-slate-950">
+                        <tr className="border-b border-slate-200 text-left text-xs text-slate-500 dark:border-white/10 dark:text-slate-400">
                           <th className="py-2 pr-3">Date</th>
                           <th className="py-2 pr-3">Type</th>
                           <th className="py-2 pr-3">Investment</th>
                           <th className="py-2 text-right">Amount</th>
                         </tr>
                       </thead>
-                      <tbody className="divide-y">
+                      <tbody className="divide-y divide-slate-100 dark:divide-white/10">
                         {detailsData.bucket.movements.map((m: any) => (
-                          <tr key={m.id} className="text-gray-700">
+                          <tr key={m.id} className="text-slate-700 dark:text-slate-200">
                             <td className="py-2 pr-3 whitespace-nowrap">
                               {new Date(m.date).toISOString().split('T')[0]}
                             </td>
@@ -1167,26 +1167,26 @@ export function ZakatDashboard({
                     </table>
                   </div>
                 ) : (
-                  <div className="text-sm text-gray-500">No movements found.</div>
+                  <div className="text-sm text-slate-500 dark:text-slate-400">No movements found.</div>
                 )}
               </div>
 
-              <div className="rounded-lg border border-gray-200 p-4">
-                <div className="text-sm font-semibold text-gray-900 mb-2">Related transactions</div>
+              <div className="rounded-lg border border-slate-200 p-4 dark:border-white/10">
+                <div className="mb-2 text-sm font-semibold text-slate-900 dark:text-slate-100">Related transactions</div>
                 {detailsData?.transactions?.length ? (
                   <div className="overflow-auto max-h-80">
                     <table className="min-w-full text-sm">
-                      <thead className="sticky top-0 bg-white">
-                        <tr className="text-left text-xs text-gray-500 border-b">
+                      <thead className="sticky top-0 bg-white dark:bg-slate-950">
+                        <tr className="border-b border-slate-200 text-left text-xs text-slate-500 dark:border-white/10 dark:text-slate-400">
                           <th className="py-2 pr-3">Date</th>
                           <th className="py-2 pr-3">Type</th>
                           <th className="py-2 pr-3">Description</th>
                           <th className="py-2 text-right">Amount</th>
                         </tr>
                       </thead>
-                      <tbody className="divide-y">
+                      <tbody className="divide-y divide-slate-100 dark:divide-white/10">
                         {detailsData.transactions.map((t: any) => (
-                          <tr key={t.id} className="text-gray-700">
+                          <tr key={t.id} className="text-slate-700 dark:text-slate-200">
                             <td className="py-2 pr-3 whitespace-nowrap">
                               {new Date(t.date).toISOString().split('T')[0]}
                             </td>
@@ -1204,7 +1204,7 @@ export function ZakatDashboard({
                     </table>
                   </div>
                 ) : (
-                  <div className="text-sm text-gray-500">No related transactions found.</div>
+                  <div className="text-sm text-slate-500 dark:text-slate-400">No related transactions found.</div>
                 )}
               </div>
             </div>
@@ -1224,7 +1224,7 @@ export function ZakatDashboard({
             </div>
           )}
           {payTarget && (
-            <div className="text-sm text-gray-600">
+            <div className="text-sm text-slate-600 dark:text-slate-300">
               {payTarget.label || payTarget.source} — Hawl {payTarget.periodIndex} • Due {payTarget.currency} {payTarget.zakatDue.toFixed(2)}
             </div>
           )}
@@ -1239,14 +1239,14 @@ export function ZakatDashboard({
             step="0.01"
             value={payAmount}
             onChange={(e: ChangeEvent<HTMLInputElement>) => setPayAmount(e.target.value)}
-            className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:border-blue-500 focus:ring-2 focus:ring-blue-500"
+            className="w-full rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm text-slate-900 placeholder:text-slate-400 shadow-sm transition-colors focus:border-emerald-500 focus:outline-none focus:ring-2 focus:ring-emerald-500/20 dark:border-white/10 dark:bg-slate-900/60 dark:text-slate-100 dark:placeholder:text-slate-500"
             placeholder="Amount"
           />
           <input
             type="text"
             value={payNotes}
             onChange={(e: ChangeEvent<HTMLInputElement>) => setPayNotes(e.target.value)}
-            className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:border-blue-500 focus:ring-2 focus:ring-blue-500"
+            className="w-full rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm text-slate-900 placeholder:text-slate-400 shadow-sm transition-colors focus:border-emerald-500 focus:outline-none focus:ring-2 focus:ring-emerald-500/20 dark:border-white/10 dark:bg-slate-900/60 dark:text-slate-100 dark:placeholder:text-slate-500"
             placeholder="Notes (optional)"
           />
           <div className="flex justify-end gap-2">

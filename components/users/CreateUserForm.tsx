@@ -137,10 +137,10 @@ export function CreateUserForm() {
           {success}
         </div>
       )}
-
+@@
       <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
         <div>
-          <label className="block text-sm font-medium text-gray-700 mb-2">
+          <label className="mb-2 block text-sm font-medium text-slate-700 dark:text-slate-200">
             Name
           </label>
           <input
@@ -148,13 +148,13 @@ export function CreateUserForm() {
             required
             value={formData.name}
             onChange={(e) => setFormData({ ...formData, name: e.target.value })}
-            className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+            className="w-full rounded-lg border border-slate-200 bg-white px-4 py-2 text-sm text-slate-900 placeholder:text-slate-400 shadow-sm transition-colors focus:border-emerald-500 focus:outline-none focus:ring-2 focus:ring-emerald-500/20 dark:border-white/10 dark:bg-slate-900/60 dark:text-slate-100 dark:placeholder:text-slate-500"
             placeholder="John Doe"
           />
         </div>
 
         <div>
-          <label className="block text-sm font-medium text-gray-700 mb-2">
+          <label className="mb-2 block text-sm font-medium text-slate-700 dark:text-slate-200">
             Email
           </label>
           <input
@@ -162,13 +162,13 @@ export function CreateUserForm() {
             required
             value={formData.email}
             onChange={(e) => setFormData({ ...formData, email: e.target.value })}
-            className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+            className="w-full rounded-lg border border-slate-200 bg-white px-4 py-2 text-sm text-slate-900 placeholder:text-slate-400 shadow-sm transition-colors focus:border-emerald-500 focus:outline-none focus:ring-2 focus:ring-emerald-500/20 dark:border-white/10 dark:bg-slate-900/60 dark:text-slate-100 dark:placeholder:text-slate-500"
             placeholder="user@example.com"
           />
         </div>
 
         <div>
-          <label className="block text-sm font-medium text-gray-700 mb-2">
+          <label className="mb-2 block text-sm font-medium text-slate-700 dark:text-slate-200">
             Password
           </label>
           <input
@@ -177,19 +177,19 @@ export function CreateUserForm() {
             minLength={8}
             value={formData.password}
             onChange={(e) => setFormData({ ...formData, password: e.target.value })}
-            className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+            className="w-full rounded-lg border border-slate-200 bg-white px-4 py-2 text-sm text-slate-900 placeholder:text-slate-400 shadow-sm transition-colors focus:border-emerald-500 focus:outline-none focus:ring-2 focus:ring-emerald-500/20 dark:border-white/10 dark:bg-slate-900/60 dark:text-slate-100 dark:placeholder:text-slate-500"
             placeholder="Minimum 8 characters"
           />
         </div>
 
         <div>
-          <label className="block text-sm font-medium text-gray-700 mb-2">
+          <label className="mb-2 block text-sm font-medium text-slate-700 dark:text-slate-200">
             Role
           </label>
           <select
             value={formData.role}
             onChange={(e) => setFormData({ ...formData, role: e.target.value as any })}
-            className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+            className="w-full rounded-lg border border-slate-200 bg-white px-4 py-2 text-sm text-slate-900 shadow-sm transition-colors focus:border-emerald-500 focus:outline-none focus:ring-2 focus:ring-emerald-500/20 dark:border-white/10 dark:bg-slate-900/60 dark:text-slate-100"
           >
             <option value="PARTNER">Partner</option>
             <option value="VIEWER">Viewer</option>
@@ -200,13 +200,13 @@ export function CreateUserForm() {
 
       <div>
         <div className="flex items-center justify-between mb-4">
-          <label className="block text-sm font-medium text-gray-700">
+          <label className="block text-sm font-medium text-slate-700 dark:text-slate-200">
             Module Permissions
           </label>
           <button
             type="button"
             onClick={selectAllPermissions}
-            className="text-sm text-blue-600 hover:text-blue-800 font-medium"
+            className="text-sm font-medium text-emerald-600 hover:text-emerald-700 dark:text-emerald-300 dark:hover:text-emerald-200"
           >
             {Object.values(permissions).every(v => v === true) ? 'Deselect All' : 'Select All'}
           </button>
@@ -216,22 +216,22 @@ export function CreateUserForm() {
           {modules.map((module) => (
             <label
               key={module.id}
-              className="flex items-center space-x-3 p-3 border border-gray-200 rounded-lg hover:bg-gray-50 cursor-pointer transition-colors"
+              className="flex cursor-pointer items-center space-x-3 rounded-lg border border-slate-200 p-3 transition-colors hover:bg-slate-50 dark:border-white/10 dark:hover:bg-white/5"
             >
               <input
                 type="checkbox"
                 checked={permissions[module.id as keyof ModulePermissions] || false}
                 onChange={() => togglePermission(module.id as keyof ModulePermissions)}
-                className="w-4 h-4 text-blue-600 border-gray-300 rounded focus:ring-blue-500"
+                className="h-4 w-4 rounded border-slate-300 text-emerald-600 focus:ring-emerald-500 dark:border-white/10 dark:bg-slate-900"
               />
-              <span className="flex items-center space-x-2 text-sm font-medium text-gray-700">
+              <span className="flex items-center space-x-2 text-sm font-medium text-slate-700 dark:text-slate-200">
                 <span>{module.icon}</span>
                 <span>{module.label}</span>
               </span>
             </label>
           ))}
         </div>
-        <p className="mt-2 text-xs text-gray-500">
+        <p className="mt-2 text-xs text-slate-500 dark:text-slate-400">
           Select which modules this user can access. OWNER role will have access to all modules regardless of selections.
         </p>
       </div>
