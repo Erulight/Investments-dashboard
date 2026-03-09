@@ -829,7 +829,7 @@ export default async function DashboardPage({
         profitTrend={profitTrend}
         portfolioSparkline={portfolioSparkline}
         cashSparkline={cashSparkline}
-        role={user.role}
+        role={user.role as 'OWNER' | 'PARTNER'}
       />
 
 
