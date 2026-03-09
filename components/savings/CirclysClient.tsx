@@ -31,9 +31,9 @@ const fmt = (n: number) => n.toLocaleString(undefined, { minimumFractionDigits: 
 function getPlanStatus(meta: any): { label: string; color: string } {
   const total = Number(meta.totalMonths || 0)
   const paid = Number(meta.monthsPaid || 0)
-  if (total > 0 && paid >= total) return { label: 'Completed', color: 'bg-emerald-50 text-emerald-700' }
-  if (paid > 0) return { label: 'Ongoing', color: 'bg-blue-50 text-blue-700' }
-  return { label: 'Pending', color: 'bg-amber-50 text-amber-700' }
+  if (total > 0 && paid >= total) return { label: 'Completed', color: 'bg-emerald-100 text-emerald-800 dark:bg-emerald-500/15 dark:text-emerald-300' }
+  if (paid > 0) return { label: 'Ongoing', color: 'bg-blue-100 text-blue-800 dark:bg-blue-500/15 dark:text-blue-300' }
+  return { label: 'Pending', color: 'bg-amber-100 text-amber-800 dark:bg-amber-500/15 dark:text-amber-300' }
 }
 
 function getStartYear(inv: any): number {
@@ -258,8 +258,8 @@ export function CirclysClient({ initialInvestments, userRole }: CirclysClientPro
       {filteredInvestments.length === 0 ? (
         <Card>
           <CardContent className="py-16 text-center">
-            <h3 className="text-xl font-bold text-gray-900 mb-2">No Plans Found</h3>
-            <p className="text-gray-500">
+            <h3 className="mb-2 text-xl font-bold text-slate-900 dark:text-slate-100">No Plans Found</h3>
+            <p className="text-slate-500 dark:text-slate-400">
               {investments.length === 0
                 ? (userRole === 'OWNER' ? 'Create your first Circlys plan to get started.' : 'No plans available.')
                 : 'No plans match the selected year filter.'}
@@ -272,24 +272,24 @@ export function CirclysClient({ initialInvestments, userRole }: CirclysClientPro
             <div className="overflow-x-auto">
               <Table>
                 <TableHeader>
-                  <TableRow className="bg-gray-50">
+                  <TableRow className="bg-slate-50 dark:bg-slate-900/70">
                     <TableHead className="w-10">
                       <input
                         type="checkbox"
                         checked={filteredInvestments.every((i: any) => selectedIds.has(i.id))}
                         onChange={toggleAll}
-                        className="rounded border-gray-300 text-slate-800 focus:ring-slate-500"
+                        className="rounded border-slate-300 text-emerald-600 focus:ring-emerald-500 dark:border-white/10 dark:bg-slate-900 dark:text-emerald-400"
                       />
                     </TableHead>
-                    <TableHead className="font-semibold text-gray-700">Plan</TableHead>
-                    <TableHead className="font-semibold text-gray-700">Account</TableHead>
-                    <TableHead className="font-semibold text-gray-700 text-right">Monthly</TableHead>
-                    <TableHead className="font-semibold text-gray-700 text-center">Progress</TableHead>
-                    <TableHead className="font-semibold text-gray-700 text-center">Receipt</TableHead>
-                    <TableHead className="font-semibold text-gray-700 text-right">Reward Earned</TableHead>
-                    <TableHead className="font-semibold text-gray-700 text-right">Booking Fee</TableHead>
-                    <TableHead className="font-semibold text-gray-700 text-center">Status</TableHead>
-                    {userRole === 'OWNER' && <TableHead className="font-semibold text-gray-700 text-right">Actions</TableHead>}
+                    <TableHead className="font-semibold text-slate-700 dark:text-slate-200">Plan</TableHead>
+                    <TableHead className="font-semibold text-slate-700 dark:text-slate-200">Account</TableHead>
+                    <TableHead className="text-right font-semibold text-slate-700 dark:text-slate-200">Monthly</TableHead>
+                    <TableHead className="text-center font-semibold text-slate-700 dark:text-slate-200">Progress</TableHead>
+                    <TableHead className="text-center font-semibold text-slate-700 dark:text-slate-200">Receipt</TableHead>
+                    <TableHead className="text-right font-semibold text-slate-700 dark:text-slate-200">Reward Earned</TableHead>
+                    <TableHead className="text-right font-semibold text-slate-700 dark:text-slate-200">Booking Fee</TableHead>
+                    <TableHead className="text-center font-semibold text-slate-700 dark:text-slate-200">Status</TableHead>
+                    {userRole === 'OWNER' && <TableHead className="text-right font-semibold text-slate-700 dark:text-slate-200">Actions</TableHead>}
                   </TableRow>
                 </TableHeader>
                 <TableBody>
@@ -309,7 +309,7 @@ export function CirclysClient({ initialInvestments, userRole }: CirclysClientPro
                     return (
                       <TableRow
                         key={inv.id}
-                        className={`transition-colors duration-150 cursor-pointer ${isExpanded ? 'bg-slate-50' : 'hover:bg-gray-50'}`}
+                        className={`cursor-pointer transition-colors duration-150 ${isExpanded ? 'bg-slate-50 dark:bg-white/5' : 'hover:bg-slate-50 dark:hover:bg-white/5'}`}
                         onClick={() => setExpandedId((prev: string | null) => (prev === inv.id ? null : inv.id))}
                       >
                         <TableCell onClick={(e: MouseEvent<HTMLTableCellElement>) => e.stopPropagation()}>
@@ -317,59 +317,59 @@ export function CirclysClient({ initialInvestments, userRole }: CirclysClientPro
                             type="checkbox"
                             checked={checked}
                             onChange={() => toggleSelected(inv.id)}
-                            className="rounded border-gray-300 text-slate-800 focus:ring-slate-500"
+                            className="rounded border-slate-300 text-emerald-600 focus:ring-emerald-500 dark:border-white/10 dark:bg-slate-900 dark:text-emerald-400"
                           />
                         </TableCell>
-                        <TableCell className="font-semibold text-gray-900">
+                        <TableCell className="font-semibold text-slate-900 dark:text-slate-100">
                           <div className="flex items-center gap-2">
                             <span className="truncate max-w-[160px]">{inv.name}</span>
-                            <span className="text-[10px] text-gray-400">{isExpanded ? '▲' : '▼'}</span>
+                            <span className="text-[10px] text-slate-400 dark:text-slate-500">{isExpanded ? '▲' : '▼'}</span>
                           </div>
                         </TableCell>
                         <TableCell>
-                          <span className="px-2 py-0.5 bg-slate-100 text-slate-600 rounded text-xs font-medium">
+                          <span className="rounded px-2 py-0.5 text-xs font-medium bg-slate-100 text-slate-700 dark:bg-white/10 dark:text-slate-200">
                             {inv.account?.name}
                           </span>
                         </TableCell>
-                        <TableCell className="text-right font-medium text-gray-700 tabular-nums">
+                        <TableCell className="text-right font-medium tabular-nums text-slate-700 dark:text-slate-200">
                           {inv.account?.currency} {meta.monthlyContribution?.toLocaleString() || 0}
                         </TableCell>
                         <TableCell>
                           <div className="flex flex-col items-center gap-1">
-                            <div className="w-full bg-gray-200 rounded-full h-1.5 max-w-[80px]">
+                            <div className="h-1.5 w-full max-w-[80px] rounded-full bg-slate-200 dark:bg-white/10">
                               <div
                                 className={`h-1.5 rounded-full ${progressPct >= 100 ? 'bg-emerald-500' : 'bg-blue-500'}`}
                                 style={{ width: `${Math.min(progressPct, 100)}%` }}
                               />
                             </div>
-                            <span className="text-[11px] text-gray-500 tabular-nums">{monthsPaid}/{totalMo}</span>
+                            <span className="text-[11px] tabular-nums text-slate-500 dark:text-slate-400">{monthsPaid}/{totalMo}</span>
                           </div>
                         </TableCell>
                         <TableCell className="text-center">
                           {receiptMonth ? (
-                            <span className="px-2 py-0.5 bg-blue-50 text-blue-700 rounded text-xs font-medium">
+                            <span className="rounded px-2 py-0.5 text-xs font-medium bg-blue-100 text-blue-800 dark:bg-blue-500/15 dark:text-blue-300">
                               Mo {receiptMonth}
                             </span>
                           ) : (
-                            <span className="text-gray-400 text-xs">—</span>
+                            <span className="text-xs text-slate-400 dark:text-slate-500">—</span>
                           )}
                         </TableCell>
                         <TableCell className="text-right tabular-nums">
                           {rewardEarned > 0 ? (
-                            <span className="font-semibold text-emerald-600">
+                            <span className="font-semibold text-emerald-700 dark:text-emerald-300">
                               +{inv.account?.currency} {fmt(rewardEarned)}
                             </span>
                           ) : (
-                            <span className="text-gray-400 text-xs">—</span>
+                            <span className="text-xs text-slate-400 dark:text-slate-500">—</span>
                           )}
                         </TableCell>
                         <TableCell className="text-right tabular-nums">
                           {bookingFee > 0 ? (
-                            <span className="text-red-600 font-medium">
+                            <span className="font-medium text-red-700 dark:text-red-300">
                               {inv.account?.currency} {fmt(bookingFee)}
                             </span>
                           ) : (
-                            <span className="text-gray-400 text-xs">—</span>
+                            <span className="text-xs text-slate-400 dark:text-slate-500">—</span>
                           )}
                         </TableCell>
                         <TableCell className="text-center">
@@ -384,13 +384,13 @@ export function CirclysClient({ initialInvestments, userRole }: CirclysClientPro
                           >
                             <div className="flex justify-end gap-1">
                               <button
-                                className="px-2 py-1 text-xs font-medium text-gray-600 bg-gray-100 hover:bg-gray-200 rounded transition-colors"
+                                className="rounded px-2 py-1 text-xs font-medium transition-colors bg-slate-100 text-slate-700 hover:bg-slate-200 dark:bg-white/10 dark:text-slate-200 dark:hover:bg-white/15"
                                 onClick={() => setEditingInvestment(inv)}
                               >
                                 Edit
                               </button>
                               <button
-                                className="px-2 py-1 text-xs font-medium text-red-600 bg-red-50 hover:bg-red-100 rounded transition-colors"
+                                className="rounded px-2 py-1 text-xs font-medium transition-colors bg-red-100 text-red-700 hover:bg-red-200 dark:bg-red-500/15 dark:text-red-300 dark:hover:bg-red-500/25"
                                 disabled={deleteLoadingId === inv.id}
                                 onClick={() => {
                                   const ok = window.confirm('Delete this plan? This will also delete any monthly zakat buckets created from its payments.')
@@ -410,17 +410,17 @@ export function CirclysClient({ initialInvestments, userRole }: CirclysClientPro
                   <TableFooter>
                     <TableRow>
                       <TableCell className="w-10">{null}</TableCell>
-                      <TableCell className="font-semibold text-gray-900">Total</TableCell>
+                      <TableCell className="font-semibold text-slate-900 dark:text-slate-100">Total</TableCell>
                       <TableCell>{null}</TableCell>
-                      <TableCell className="text-right font-semibold text-gray-900 tabular-nums whitespace-nowrap">
+                      <TableCell className="text-right font-semibold tabular-nums whitespace-nowrap text-slate-900 dark:text-slate-100">
                         {tableTotals.currency} {fmt(tableTotals.monthly)}
                       </TableCell>
                       <TableCell>{null}</TableCell>
                       <TableCell>{null}</TableCell>
-                      <TableCell className="text-right font-semibold text-emerald-700 tabular-nums whitespace-nowrap">
+                      <TableCell className="text-right font-semibold tabular-nums whitespace-nowrap text-emerald-700 dark:text-emerald-300">
                         +{tableTotals.currency} {fmt(tableTotals.reward)}
                       </TableCell>
-                      <TableCell className="text-right font-semibold text-red-700 tabular-nums whitespace-nowrap">
+                      <TableCell className="text-right font-semibold tabular-nums whitespace-nowrap text-red-700 dark:text-red-300">
                         {tableTotals.currency} {fmt(tableTotals.bookingFee)}
                       </TableCell>
                       <TableCell>{null}</TableCell>
@@ -432,7 +432,7 @@ export function CirclysClient({ initialInvestments, userRole }: CirclysClientPro
             </div>
 
             {deleteError && (
-              <div className="mx-4 mt-3 mb-2 text-sm text-red-600">{deleteError}</div>
+              <div className="mx-4 mt-3 mb-2 text-sm text-red-600 dark:text-red-300">{deleteError}</div>
             )}
 
             {/* Expanded monthly details */}
@@ -503,10 +503,10 @@ export function CirclysClient({ initialInvestments, userRole }: CirclysClientPro
               }
 
               return (
-                <div className="mx-4 mb-4 mt-2 rounded-xl border border-gray-200 bg-gray-50/50 p-4">
+                <div className="mx-4 mb-4 mt-2 rounded-xl border border-slate-200 bg-slate-50/60 p-4 dark:border-white/10 dark:bg-white/5">
                   <div className="flex items-center justify-between mb-3">
-                    <h4 className="text-sm font-bold text-gray-800">Monthly Contributions — {expandedInvestment.name}</h4>
-                    <span className="text-[11px] text-gray-400">Click plan row to collapse</span>
+                    <h4 className="text-sm font-bold text-slate-800 dark:text-slate-100">Monthly Contributions — {expandedInvestment.name}</h4>
+                    <span className="text-[11px] text-slate-400 dark:text-slate-500">Click plan row to collapse</span>
                   </div>
 
                   {/* Receive payout banner */}

@@ -202,10 +202,10 @@ export function ZakatDashboard({
   const kindBadge = (kind?: BucketRow['rowKind']) => {
     const k = kind || 'PROFIT'
     const base = 'inline-flex items-center rounded-full px-2 py-0.5 text-[11px] font-semibold'
-    if (k === 'PROFIT') return <span className={`${base} bg-emerald-100 text-emerald-700`}>Profit</span>
-    if (k === 'COMMISSION') return <span className={`${base} bg-blue-100 text-blue-700`}>Commission</span>
-    if (k === 'IDLE') return <span className={`${base} bg-amber-100 text-amber-800`}>Idle Cash</span>
-    return <span className={`${base} bg-gray-100 text-gray-700`}>Principal</span>
+    if (k === 'PROFIT') return <span className={`${base} bg-emerald-100 text-emerald-800 dark:bg-emerald-500/15 dark:text-emerald-300`}>Profit</span>
+    if (k === 'COMMISSION') return <span className={`${base} bg-blue-100 text-blue-800 dark:bg-blue-500/15 dark:text-blue-300`}>Commission</span>
+    if (k === 'IDLE') return <span className={`${base} bg-amber-100 text-amber-800 dark:bg-amber-500/15 dark:text-amber-300`}>Idle Cash</span>
+    return <span className={`${base} bg-slate-100 text-slate-700 dark:bg-white/10 dark:text-slate-200`}>Principal</span>
   }
 
   // --- Derived data ---
@@ -651,11 +651,11 @@ export function ZakatDashboard({
 
       {/* Source Filter */}
       <div className="flex items-center gap-3">
-        <label className="text-xs font-medium text-gray-500">Source:</label>
+        <label className="text-xs font-medium text-slate-500 dark:text-slate-400">Source:</label>
         <select
           value={activeTab}
           onChange={(e: ChangeEvent<HTMLSelectElement>) => setActiveTab(e.target.value)}
-          className="rounded-md border border-gray-200 px-3 py-1.5 text-sm text-gray-700 focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500 outline-none max-w-[300px]"
+          className="max-w-[300px] rounded-md border border-slate-200 bg-white px-3 py-1.5 text-sm text-slate-700 shadow-sm outline-none focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500 dark:border-white/10 dark:bg-slate-900/60 dark:text-slate-200"
         >
           <option value="all">All sources ({buckets.length})</option>
           {sourceGroups.map((grp: string) => {
@@ -670,7 +670,7 @@ export function ZakatDashboard({
         {activeTab !== 'all' && (
           <button
             onClick={() => setActiveTab('all')}
-            className="text-xs text-gray-400 hover:text-gray-600"
+            className="text-xs text-slate-400 hover:text-slate-600 dark:text-slate-500 dark:hover:text-slate-300"
           >
             Clear
           </button>
@@ -680,15 +680,15 @@ export function ZakatDashboard({
       {/* Filters */}
       <div className="flex flex-wrap items-center gap-3 text-sm">
         <div className="flex items-center gap-1.5">
-          <span className="text-gray-500 font-medium">Status:</span>
+          <span className="font-medium text-slate-500 dark:text-slate-400">Status:</span>
           {(['all', 'completed', 'pending'] as StatusFilter[]).map(f => (
             <button
               key={f}
               onClick={() => setStatusFilter(f)}
               className={`px-2 py-0.5 rounded text-xs font-medium ${
                 statusFilter === f
-                  ? 'bg-emerald-100 text-emerald-700'
-                  : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
+                  ? 'bg-emerald-100 text-emerald-800 dark:bg-emerald-500/15 dark:text-emerald-300'
+                  : 'bg-slate-100 text-slate-600 hover:bg-slate-200 dark:bg-white/10 dark:text-slate-300 dark:hover:bg-white/15'
               }`}
             >
               {f === 'all' ? 'All' : f === 'completed' ? 'Haul Complete' : 'Pending'}
@@ -696,15 +696,15 @@ export function ZakatDashboard({
           ))}
         </div>
         <div className="flex items-center gap-1.5">
-          <span className="text-gray-500 font-medium">Zakat:</span>
+          <span className="font-medium text-slate-500 dark:text-slate-400">Zakat:</span>
           {(['all', 'due', 'none'] as DueFilter[]).map(f => (
             <button
               key={f}
               onClick={() => setDueFilter(f)}
               className={`px-2 py-0.5 rounded text-xs font-medium ${
                 dueFilter === f
-                  ? 'bg-emerald-100 text-emerald-700'
-                  : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
+                  ? 'bg-emerald-100 text-emerald-800 dark:bg-emerald-500/15 dark:text-emerald-300'
+                  : 'bg-slate-100 text-slate-600 hover:bg-slate-200 dark:bg-white/10 dark:text-slate-300 dark:hover:bg-white/15'
               }`}
             >
               {f === 'all' ? 'All' : f === 'due' ? 'Has Due' : 'No Due'}
@@ -717,55 +717,55 @@ export function ZakatDashboard({
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-3">
         {/* Search */}
         <div>
-          <label className="block text-xs font-medium text-gray-500 mb-1">Search</label>
+          <label className="mb-1 block text-xs font-medium text-slate-500 dark:text-slate-400">Search</label>
           <input
             type="text"
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
             placeholder="Investment name..."
-            className="w-full rounded-md border border-gray-200 px-3 py-1.5 text-sm text-gray-700 focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500 outline-none"
+            className="w-full rounded-md border border-slate-200 bg-white px-3 py-1.5 text-sm text-slate-700 shadow-sm outline-none focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500 dark:border-white/10 dark:bg-slate-900/60 dark:text-slate-200"
           />
         </div>
 
         {/* Date Range Start */}
         <div>
-          <label className="block text-xs font-medium text-gray-500 mb-1">From Date</label>
+          <label className="mb-1 block text-xs font-medium text-slate-500 dark:text-slate-400">From Date</label>
           <input
             type="date"
             value={dateRangeStart}
             onChange={(e) => setDateRangeStart(e.target.value)}
-            className="w-full rounded-md border border-gray-200 px-3 py-1.5 text-sm text-gray-700 focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500 outline-none"
+            className="w-full rounded-md border border-slate-200 bg-white px-3 py-1.5 text-sm text-slate-700 shadow-sm outline-none focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500 dark:border-white/10 dark:bg-slate-900/60 dark:text-slate-200"
           />
         </div>
 
         {/* Date Range End */}
         <div>
-          <label className="block text-xs font-medium text-gray-500 mb-1">To Date</label>
+          <label className="mb-1 block text-xs font-medium text-slate-500 dark:text-slate-400">To Date</label>
           <input
             type="date"
             value={dateRangeEnd}
             onChange={(e) => setDateRangeEnd(e.target.value)}
-            className="w-full rounded-md border border-gray-200 px-3 py-1.5 text-sm text-gray-700 focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500 outline-none"
+            className="w-full rounded-md border border-slate-200 bg-white px-3 py-1.5 text-sm text-slate-700 shadow-sm outline-none focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500 dark:border-white/10 dark:bg-slate-900/60 dark:text-slate-200"
           />
         </div>
 
         {/* View Options */}
         <div className="flex flex-col gap-2">
-          <label className="flex items-center gap-2 text-xs font-medium text-gray-700 cursor-pointer">
+          <label className="flex cursor-pointer items-center gap-2 text-xs font-medium text-slate-700 dark:text-slate-200">
             <input
               type="checkbox"
               checked={showActiveOnly}
               onChange={(e) => setShowActiveOnly(e.target.checked)}
-              className="rounded border-gray-300 text-emerald-600 focus:ring-emerald-500"
+              className="rounded border-slate-300 text-emerald-600 focus:ring-emerald-500 dark:border-white/10 dark:bg-slate-900"
             />
             Active Only
           </label>
-          <label className="flex items-center gap-2 text-xs font-medium text-gray-700 cursor-pointer">
+          <label className="flex cursor-pointer items-center gap-2 text-xs font-medium text-slate-700 dark:text-slate-200">
             <input
               type="checkbox"
               checked={summaryView}
               onChange={(e) => setSummaryView(e.target.checked)}
-              className="rounded border-gray-300 text-emerald-600 focus:ring-emerald-500"
+              className="rounded border-slate-300 text-emerald-600 focus:ring-emerald-500 dark:border-white/10 dark:bg-slate-900"
             />
             Summary View
           </label>
@@ -782,7 +782,7 @@ export function ZakatDashboard({
               setDateRangeEnd('')
               setShowActiveOnly(false)
             }}
-            className="text-xs text-emerald-600 hover:text-emerald-700 font-medium"
+            className="text-xs font-medium text-emerald-600 hover:text-emerald-700 dark:text-emerald-300 dark:hover:text-emerald-200"
           >
             Clear Advanced Filters
           </button>
@@ -794,27 +794,27 @@ export function ZakatDashboard({
         <Card>
           <CardContent className="p-4">
             <div className="space-y-3">
-              <div className="text-sm font-semibold text-gray-700">Summary by Investment</div>
+              <div className="text-sm font-semibold text-slate-700 dark:text-slate-200">Summary by Investment</div>
               {summaryGroups.map((group) => (
-                <div key={group.sourceGroup} className="flex items-center justify-between p-3 bg-gray-50 rounded-lg">
+                <div key={group.sourceGroup} className="flex items-center justify-between rounded-lg bg-slate-50 p-3 dark:bg-white/5">
                   <div className="flex-1">
-                    <div className="text-sm font-medium text-gray-900">{group.sourceGroup}</div>
-                    <div className="text-xs text-gray-500 mt-0.5">{group.count} hawl{group.count !== 1 ? 's' : ''}</div>
+                    <div className="text-sm font-medium text-slate-900 dark:text-slate-100">{group.sourceGroup}</div>
+                    <div className="mt-0.5 text-xs text-slate-500 dark:text-slate-400">{group.count} hawl{group.count !== 1 ? 's' : ''}</div>
                   </div>
                   <div className="text-right">
-                    <div className="text-xs text-gray-500">Balance</div>
-                    <div className="text-sm font-semibold text-gray-900">SAR {fmt(group.totalBalance)}</div>
+                    <div className="text-xs text-slate-500 dark:text-slate-400">Balance</div>
+                    <div className="text-sm font-semibold text-slate-900 dark:text-slate-100">SAR {fmt(group.totalBalance)}</div>
                   </div>
                   <div className="text-right ml-4">
-                    <div className="text-xs text-gray-500">Zakat Due</div>
-                    <div className="text-sm font-semibold text-emerald-700">SAR {fmt(group.totalDue)}</div>
+                    <div className="text-xs text-slate-500 dark:text-slate-400">Zakat Due</div>
+                    <div className="text-sm font-semibold text-emerald-700 dark:text-emerald-300">SAR {fmt(group.totalDue)}</div>
                   </div>
                   <button
                     onClick={() => {
                       setSummaryView(false)
                       setActiveTab(group.sourceGroup)
                     }}
-                    className="ml-4 text-xs text-emerald-600 hover:text-emerald-700 font-medium"
+                    className="ml-4 text-xs font-medium text-emerald-600 hover:text-emerald-700 dark:text-emerald-300 dark:hover:text-emerald-200"
                   >
                     View Details
                   </button>
@@ -829,12 +829,12 @@ export function ZakatDashboard({
       <Card>
         <CardContent className="p-0">
           {filteredBuckets.length === 0 ? (
-            <div className="p-6 text-sm text-gray-500 text-center">No buckets match your filters.</div>
+            <div className="p-6 text-center text-sm text-slate-500 dark:text-slate-400">No buckets match your filters.</div>
           ) : (
             <div className="overflow-x-auto">
               <table className="min-w-full text-sm">
                 <thead>
-                  <tr className="bg-gray-50 text-left text-xs text-gray-500 border-b border-gray-200">
+                  <tr className="border-b border-slate-200 bg-slate-50 text-left text-xs text-slate-500 dark:border-white/10 dark:bg-slate-900/70 dark:text-slate-300">
                     <th className="py-2.5 px-3 font-medium cursor-pointer select-none whitespace-nowrap" onClick={() => toggleSort('label')}>
                       Item <SortArrow active={sortKey === 'label'} dir={sortDir} />
                     </th>
@@ -860,7 +860,7 @@ export function ZakatDashboard({
                     <th className="py-2.5 px-3 font-medium text-right whitespace-nowrap">Actions</th>
                   </tr>
                 </thead>
-                <tbody className="divide-y divide-gray-100">
+                <tbody className="divide-y divide-slate-100 dark:divide-white/10">
                   {(() => {
                     const groupMap = new Map<string, BucketRow[]>()
                     paginatedBuckets.forEach(r => {
@@ -888,32 +888,32 @@ export function ZakatDashboard({
                       rows.push(
                         <tr
                           key={`group-${groupName}`}
-                          className="bg-slate-50 hover:bg-slate-100 cursor-pointer transition-colors"
+                          className="cursor-pointer bg-slate-50 transition-colors hover:bg-slate-100 dark:bg-white/5 dark:hover:bg-white/10"
                           onClick={() => toggleGroup(groupName)}
                         >
                           <td className="py-2.5 px-3">
                             <div className="flex items-center gap-2">
-                              <span className="text-gray-400 text-xs">{isExpanded ? '▾' : '▸'}</span>
+                              <span className="text-xs text-slate-400 dark:text-slate-500">{isExpanded ? '▾' : '▸'}</span>
                               <div>
-                                <div className="font-semibold text-gray-900">{groupName}</div>
-                                <div className="text-[11px] text-gray-400">{groupRows.length} item{groupRows.length !== 1 ? 's' : ''}</div>
+                                <div className="font-semibold text-slate-900 dark:text-slate-100">{groupName}</div>
+                                <div className="text-[11px] text-slate-400 dark:text-slate-500">{groupRows.length} item{groupRows.length !== 1 ? 's' : ''}</div>
                               </div>
                             </div>
                           </td>
-                          <td className="py-2.5 px-3 text-gray-500">-</td>
-                          <td className="py-2.5 px-3 text-gray-500">-</td>
-                          <td className="py-2.5 px-3 text-right font-medium">{cur} {fmt(gBalance)}</td>
-                          <td className="py-2.5 px-3 text-right">{cur} {fmt(gIdle)}</td>
-                          <td className="py-2.5 px-3 text-right">{cur} {fmt(gReceipts)}</td>
-                          <td className="py-2.5 px-3 text-right font-semibold">{cur} {fmt(gZakat)}</td>
+                          <td className="py-2.5 px-3 text-slate-500 dark:text-slate-400">-</td>
+                          <td className="py-2.5 px-3 text-slate-500 dark:text-slate-400">-</td>
+                          <td className="py-2.5 px-3 text-right font-medium text-slate-900 dark:text-slate-100">{cur} {fmt(gBalance)}</td>
+                          <td className="py-2.5 px-3 text-right text-slate-700 dark:text-slate-200">{cur} {fmt(gIdle)}</td>
+                          <td className="py-2.5 px-3 text-right text-slate-700 dark:text-slate-200">{cur} {fmt(gReceipts)}</td>
+                          <td className="py-2.5 px-3 text-right font-semibold text-slate-900 dark:text-slate-100">{cur} {fmt(gZakat)}</td>
                           <td className="py-2.5 px-3 text-center">
                             {gZakat > 0.000001 ? (
-                              <span className="text-[11px] font-semibold text-amber-700">Due</span>
+                              <span className="text-[11px] font-semibold text-amber-700 dark:text-amber-300">Due</span>
                             ) : (
-                              <span className="text-[11px] font-semibold text-emerald-700">Paid</span>
+                              <span className="text-[11px] font-semibold text-emerald-700 dark:text-emerald-300">Paid</span>
                             )}
                           </td>
-                          <td className="py-2.5 px-3 text-right text-gray-400 text-xs">Toggle</td>
+                          <td className="py-2.5 px-3 text-right text-xs text-slate-400 dark:text-slate-500">Toggle</td>
                         </tr>
                       )
 
@@ -929,11 +929,11 @@ export function ZakatDashboard({
 
                       sorted.forEach((b) => {
                         rows.push(
-                          <tr key={b.id} className="hover:bg-gray-50">
+                          <tr key={b.id} className="hover:bg-slate-50 dark:hover:bg-white/5">
                             <td className="py-2.5 px-3">
                               <div className="flex items-start justify-between gap-2">
                                 <div>
-                                  <div className="font-medium text-gray-900">{b.label || b.source}</div>
+                                  <div className="font-medium text-slate-900 dark:text-slate-100">{b.label || b.source}</div>
                                   <div className="mt-1 flex items-center gap-2">
                                     {kindBadge(b.rowKind)}
                                     <span className="text-[11px] text-gray-400">{b.sourceType}</span>

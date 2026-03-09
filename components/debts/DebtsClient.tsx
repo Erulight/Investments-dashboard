@@ -39,6 +39,7 @@ type Debt = {
 
 const fmt = (n: number) => n.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })
 const fmtDate = (d: string) => new Date(d).toLocaleDateString('en-CA')
+const fieldClassName = 'rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm text-slate-900 placeholder:text-slate-400 shadow-sm transition-colors focus:border-emerald-500 focus:outline-none focus:ring-2 focus:ring-emerald-500/20 dark:border-white/10 dark:bg-slate-900/60 dark:text-slate-100 dark:placeholder:text-slate-500 dark:focus:border-emerald-400 dark:focus:ring-emerald-400/20'
 
 export function DebtsClient() {
   const router = useRouter()
@@ -311,23 +312,23 @@ export function DebtsClient() {
         </div>
       </div>
 
-      {error && <div className="rounded-lg bg-red-50 p-3 text-sm text-red-700 border border-red-200">{error}</div>}
+      {error && <div className="rounded-lg border border-red-200 bg-red-50 p-3 text-sm text-red-700 dark:border-red-500/30 dark:bg-red-500/10 dark:text-red-300">{error}</div>}
 
       <Card>
         <CardHeader>
-          <CardTitle className="text-sm font-bold text-gray-800">Add Debt</CardTitle>
+          <CardTitle className="text-sm font-bold text-slate-800 dark:text-slate-100">Add Debt</CardTitle>
         </CardHeader>
         <CardContent>
-          {createError && <div className="mb-3 rounded-lg bg-red-50 p-3 text-sm text-red-700 border border-red-200">{createError}</div>}
+          {createError && <div className="mb-3 rounded-lg border border-red-200 bg-red-50 p-3 text-sm text-red-700 dark:border-red-500/30 dark:bg-red-500/10 dark:text-red-300">{createError}</div>}
           <div className="grid grid-cols-1 md:grid-cols-5 gap-3">
             <input
-              className="rounded-md border border-gray-200 px-3 py-2 text-sm"
+              className={fieldClassName}
               placeholder="Lender name"
               value={createForm.lenderName}
               onChange={(e) => setCreateForm((p) => ({ ...p, lenderName: e.target.value }))}
             />
             <input
-              className="rounded-md border border-gray-200 px-3 py-2 text-sm"
+              className={fieldClassName}
               placeholder="Amount"
               inputMode="decimal"
               value={createForm.amount}
@@ -338,7 +339,7 @@ export function DebtsClient() {
               onChange={(v) => setCreateForm((p) => ({ ...p, borrowedAt: v }))}
             />
             <input
-              className="rounded-md border border-gray-200 px-3 py-2 text-sm"
+              className={fieldClassName}
               placeholder="Notes"
               value={createForm.notes}
               onChange={(e) => setCreateForm((p) => ({ ...p, notes: e.target.value }))}
@@ -355,7 +356,7 @@ export function DebtsClient() {
       <Card>
         <CardHeader>
           <div className="flex items-center justify-between gap-3">
-            <CardTitle className="text-sm font-bold text-gray-800">Debt List</CardTitle>
+            <CardTitle className="text-sm font-bold text-slate-800 dark:text-slate-100">Debt List</CardTitle>
             <Button size="sm" variant="danger" onClick={resetDebts} disabled={resetLoading || loading || debts.length === 0}>
               {resetLoading ? 'Resetting...' : 'Reset'}
             </Button>
@@ -363,14 +364,14 @@ export function DebtsClient() {
         </CardHeader>
         <CardContent className="p-0">
           {loading ? (
-            <div className="p-6 text-center text-sm text-gray-400">Loading...</div>
+            <div className="p-6 text-center text-sm text-slate-500 dark:text-slate-400">Loading...</div>
           ) : rows.length === 0 ? (
-            <div className="p-6 text-center text-sm text-gray-400">No debts yet.</div>
+            <div className="p-6 text-center text-sm text-slate-500 dark:text-slate-400">No debts yet.</div>
           ) : (
             <div className="overflow-x-auto">
               <table className="min-w-full text-sm">
                 <thead>
-                  <tr className="bg-gray-50 text-left text-xs text-gray-500 border-b border-gray-200">
+                  <tr className="border-b border-slate-200 bg-slate-50 text-left text-xs text-slate-600 dark:border-white/10 dark:bg-slate-900/70 dark:text-slate-300">
                     <th className="py-2.5 px-4 font-medium">Borrowed</th>
                     <th className="py-2.5 px-4 font-medium">Lender</th>
                     <th className="py-2.5 px-4 font-medium text-right">Amount</th>
@@ -380,16 +381,16 @@ export function DebtsClient() {
                     <th className="py-2.5 px-4 font-medium text-right">Actions</th>
                   </tr>
                 </thead>
-                <tbody className="divide-y divide-gray-50">
+                <tbody className="divide-y divide-slate-100 dark:divide-white/10">
                   {rows.map(({ debt, totalPaid, outstanding, currency }) => (
                     <Fragment key={debt.id}>
-                      <tr className="hover:bg-gray-50/50 transition-colors">
-                        <td className="py-2.5 px-4 text-gray-600 whitespace-nowrap tabular-nums">{fmtDate(debt.borrowedAt)}</td>
-                        <td className="py-2.5 px-4 font-medium text-gray-900">{debt.lenderName}</td>
+                      <tr className="transition-colors hover:bg-slate-50 dark:hover:bg-white/5">
+                        <td className="py-2.5 px-4 whitespace-nowrap tabular-nums text-slate-600 dark:text-slate-300">{fmtDate(debt.borrowedAt)}</td>
+                        <td className="py-2.5 px-4 font-medium text-slate-900 dark:text-slate-100">{debt.lenderName}</td>
                         <td className="py-2.5 px-4 text-right tabular-nums">{currency} {fmt(debt.amount)}</td>
-                        <td className="py-2.5 px-4 text-right tabular-nums text-emerald-700">{currency} {fmt(totalPaid)}</td>
-                        <td className="py-2.5 px-4 text-right tabular-nums text-red-700">{currency} {fmt(outstanding)}</td>
-                        <td className="py-2.5 px-4 text-gray-600 truncate max-w-[240px]">{debt.notes || '—'}</td>
+                        <td className="py-2.5 px-4 text-right tabular-nums text-emerald-700 dark:text-emerald-300">{currency} {fmt(totalPaid)}</td>
+                        <td className="py-2.5 px-4 text-right tabular-nums text-red-700 dark:text-red-300">{currency} {fmt(outstanding)}</td>
+                        <td className="py-2.5 px-4 max-w-[240px] truncate text-slate-600 dark:text-slate-300">{debt.notes || '—'}</td>
                         <td className="py-2.5 px-4">
                           <div className="flex items-center justify-end gap-2">
                             <Button size="sm" variant="secondary" onClick={() => openPay(debt)} disabled={outstanding <= 0}>
@@ -408,17 +409,17 @@ export function DebtsClient() {
                         </td>
                       </tr>
                       {debt.payments.length > 0 && (
-                        <tr className="bg-gray-50/30">
+                        <tr className="bg-slate-50/60 dark:bg-white/5">
                           <td className="py-2.5 px-4" colSpan={7}>
-                            <div className="text-xs text-gray-600 mb-2">Payments</div>
+                            <div className="mb-2 text-xs text-slate-600 dark:text-slate-300">Payments</div>
                             <div className="space-y-2">
                               {debt.payments.map((p) => (
-                                <div key={p.id} className="flex items-center justify-between rounded-md border border-gray-200 bg-white px-3 py-2">
-                                  <div className="text-xs text-gray-700">
+                                <div key={p.id} className="flex items-center justify-between rounded-md border border-slate-200 bg-white px-3 py-2 dark:border-white/10 dark:bg-slate-900/50">
+                                  <div className="text-xs text-slate-700 dark:text-slate-200">
                                     <span className="tabular-nums">{fmtDate(p.paidAt)}</span>
-                                    <span className="mx-2 text-gray-300">|</span>
+                                    <span className="mx-2 text-slate-300 dark:text-slate-600">|</span>
                                     <span className="tabular-nums font-medium">{currency} {fmt(p.amount)}</span>
-                                    {p.notes ? <span className="mx-2 text-gray-400">— {p.notes}</span> : null}
+                                    {p.notes ? <span className="mx-2 text-slate-400 dark:text-slate-500">— {p.notes}</span> : null}
                                   </div>
                                   <Button size="sm" variant="ghost" onClick={() => undoPayment(p.id)}>
                                     Undo
@@ -439,10 +440,10 @@ export function DebtsClient() {
       </Card>
 
       <Modal isOpen={Boolean(payTarget)} onClose={closePay} title="Record Payment">
-        {payError && <div className="mb-3 rounded-lg bg-red-50 p-3 text-sm text-red-700 border border-red-200">{payError}</div>}
+        {payError && <div className="mb-3 rounded-lg border border-red-200 bg-red-50 p-3 text-sm text-red-700 dark:border-red-500/30 dark:bg-red-500/10 dark:text-red-300">{payError}</div>}
         <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
           <input
-            className="rounded-md border border-gray-200 px-3 py-2 text-sm"
+            className={fieldClassName}
             placeholder="Amount"
             inputMode="decimal"
             value={payForm.amount}
@@ -450,7 +451,7 @@ export function DebtsClient() {
           />
           <DateInput value={payForm.paidAt} onChange={(v) => setPayForm((p) => ({ ...p, paidAt: v }))} />
           <input
-            className="rounded-md border border-gray-200 px-3 py-2 text-sm"
+            className={fieldClassName}
             placeholder="Notes"
             value={payForm.notes}
             onChange={(e) => setPayForm((p) => ({ ...p, notes: e.target.value }))}
@@ -463,16 +464,16 @@ export function DebtsClient() {
       </Modal>
 
       <Modal isOpen={Boolean(editTarget)} onClose={closeEdit} title="Edit Debt">
-        {editError && <div className="mb-3 rounded-lg bg-red-50 p-3 text-sm text-red-700 border border-red-200">{editError}</div>}
+        {editError && <div className="mb-3 rounded-lg border border-red-200 bg-red-50 p-3 text-sm text-red-700 dark:border-red-500/30 dark:bg-red-500/10 dark:text-red-300">{editError}</div>}
         <div className="grid grid-cols-1 md:grid-cols-4 gap-3">
           <input
-            className="rounded-md border border-gray-200 px-3 py-2 text-sm"
+            className={fieldClassName}
             placeholder="Lender name"
             value={editForm.lenderName}
             onChange={(e) => setEditForm((p) => ({ ...p, lenderName: e.target.value }))}
           />
           <input
-            className="rounded-md border border-gray-200 px-3 py-2 text-sm"
+            className={fieldClassName}
             placeholder="Amount"
             inputMode="decimal"
             value={editForm.amount}
@@ -480,7 +481,7 @@ export function DebtsClient() {
           />
           <DateInput value={editForm.borrowedAt} onChange={(v) => setEditForm((p) => ({ ...p, borrowedAt: v }))} />
           <input
-            className="rounded-md border border-gray-200 px-3 py-2 text-sm"
+            className={fieldClassName}
             placeholder="Notes"
             value={editForm.notes}
             onChange={(e) => setEditForm((p) => ({ ...p, notes: e.target.value }))}
