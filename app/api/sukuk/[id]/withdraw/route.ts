@@ -319,6 +319,13 @@ export async function POST(
             const partnerProfitTarget = Number.isFinite(partnerProfitTargetRaw)
               ? Math.max(0, partnerProfitTargetRaw)
               : 0
+            const commissionIssuedAtRaw = typeof commissionPlan?.issuedAt === 'string'
+              ? commissionPlan.issuedAt
+              : null
+            const commissionIssuedAt = commissionIssuedAtRaw ? new Date(commissionIssuedAtRaw) : null
+            const commissionHaulStartDate = commissionIssuedAt && !Number.isNaN(commissionIssuedAt.getTime())
+              ? commissionIssuedAt
+              : date
             const commissionMaturityRaw = typeof commissionPlan?.maturityDate === 'string'
               ? commissionPlan.maturityDate
               : null
@@ -366,7 +373,7 @@ export async function POST(
 
                   await createCashBucket(tx, {
                     amount: payoutNow,
-                    haulStartDate: date,
+                    haulStartDate: commissionHaulStartDate,
                     label: `${investment.name} Commission Receipt`,
                     date,
                     notes: notes || 'Partner-created Sukuk commission payout',

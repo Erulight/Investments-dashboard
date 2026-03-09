@@ -421,16 +421,28 @@ export default async function DashboardPage({
       return dps.find((p: any) => p?.personId === ownerPersonId) || null
     }
 
-    const getActiveSukukPrincipal = (inv: any) => {
-      const principal = Number(inv.principalAmount)
-      if (Number.isFinite(principal) && principal > 0) return principal
+    const getOwnerSukukPrincipal = (inv: any) => {
+      const ownerPosition = getOwnerPosition(inv)
+      if (ownerPosition) {
+        const ownerPrincipal = Number(ownerPosition.investedAmount)
+        return Number.isFinite(ownerPrincipal) ? Math.max(0, ownerPrincipal) : 0
+      }
 
+      // Legacy deals may not have participants; in that case fallback to investment principal.
       const participants = Array.isArray(inv.dealParticipants) ? inv.dealParticipants : []
-      const participantPrincipal = participants.reduce(
-        (sum: number, p: any) => sum + (Number(p?.investedAmount) || 0),
-        0
-      )
-      return participantPrincipal > 0 ? participantPrincipal : 0
+      if (participants.length === 0) {
+        const principal = Number(inv.principalAmount)
+        return Number.isFinite(principal) ? Math.max(0, principal) : 0
+      }
+
+      // Partner-only / transferred deals should not count in owner principal metrics.
+      return 0
+    }
+
+    const hasOwnerSellTx = (inv: any) => {
+      if (!ownerPersonId) return false
+      const txs = Array.isArray(inv.transactions) ? inv.transactions : []
+      return txs.some((tx: any) => tx?.type === 'SELL_TO_PARTNER' && tx.personId === ownerPersonId)
     }
 
     const isSoldSukukForOwner = (inv: any) => {
@@ -491,33 +503,38 @@ export default async function DashboardPage({
       // Exclude CASH and CIRCLYS from the main owned bucket
       if (inv.account?.type === 'CASH') return false
       if (inv.account?.type === 'CIRCLYS') return false
-      // For owners, include all other investments regardless of participant linkage
       return true
     })
 
-    ownedInvestments = owned
+    const ownerScoped = owned.filter((inv: any) => {
+      if (inv.account?.type !== 'SUKUK') return true
+      return getOwnerSukukPrincipal(inv) > 0 || hasOwnerSellTx(inv)
+    })
 
-    const activeSukuk = owned
+    ownedInvestments = ownerScoped
+
+    const activeSukuk = ownerScoped
       .filter((inv) => inv.account.type === 'SUKUK')
-      .filter((inv) => getActiveSukukPrincipal(inv) > 0)
+      .filter((inv) => getOwnerSukukPrincipal(inv) > 0)
 
     // Total Invested = principal in active Sukuk deals only
-    totalInvested = activeSukuk.reduce((sum, inv) => sum + getActiveSukukPrincipal(inv), 0)
+    totalInvested = activeSukuk.reduce((sum, inv) => sum + getOwnerSukukPrincipal(inv), 0)
 
     // Active Deals and Sukuk Total use active Sukuk principal only
     activeInvestments = activeSukuk.length
-    sukukInvested = activeSukuk.reduce((sum, inv) => sum + getActiveSukukPrincipal(inv), 0)
+    sukukInvested = activeSukuk.reduce((sum, inv) => sum + getOwnerSukukPrincipal(inv), 0)
 
-    totalValue = owned.reduce(
+    totalValue = ownerScoped.reduce(
       (sum, inv) => {
-        const pos = getOwnerPosition(inv)
-        const principal = pos ? Number(pos.investedAmount) || 0 : inv.principalAmount
+        const principal = inv.account.type === 'SUKUK'
+          ? getOwnerSukukPrincipal(inv)
+          : inv.principalAmount
         return sum + (inv.account.type === 'SUKUK' ? principal : inv.currentValue)
       },
       0
     )
     // Profit from non-Sukuk owned investments (SIP currently excluded intentionally)
-    const nonSukukOwnedProfit = owned.reduce(
+    const nonSukukOwnedProfit = ownerScoped.reduce(
       (sum, inv) => {
         const accountType = inv.account.type
         const pos = getOwnerPosition(inv)
@@ -555,13 +572,10 @@ export default async function DashboardPage({
       }, 0)
     
     const now = new Date()
-    sukukReceivable = owned
+    sukukReceivable = ownerScoped
       .filter((inv) => inv.account.type === 'SUKUK')
       .reduce((sum, inv) => {
-        const pos = getOwnerPosition(inv)
-        const principal = pos
-          ? (Number(pos.investedAmount) || 0)
-          : (Number.isFinite(inv.principalAmount) ? Number(inv.principalAmount) : 0)
+        const principal = getOwnerSukukPrincipal(inv)
         
         // Skip sold deals where owner no longer has ownership (principal = 0)
         if (principal <= 0) return sum
@@ -592,7 +606,7 @@ export default async function DashboardPage({
         return sum + receivable
       }, 0)
 
-    const sukukReceivedProfit = owned
+    const sukukReceivedProfit = ownerScoped
       .filter((inv) => inv.account.type === 'SUKUK')
       .reduce((sum, inv) => {
         if (isSoldSukukForOwner(inv)) {
@@ -612,7 +626,10 @@ export default async function DashboardPage({
         return sum + received
       }, 0)
 
-    const sukukCommissionFromTx = owned
+    const commissionSourceSukuk = owned
+      .filter((inv) => inv.account.type === 'SUKUK')
+
+    const sukukCommissionFromTx = commissionSourceSukuk
       .filter((inv) => inv.account.type === 'SUKUK')
       .reduce((sum, inv) => {
         const txs = Array.isArray(inv.transactions) ? inv.transactions : []
@@ -627,7 +644,7 @@ export default async function DashboardPage({
         return sum + commission
       }, 0)
 
-    const sukukCommissionFromSellMeta = owned
+    const sukukCommissionFromSellMeta = commissionSourceSukuk
       .filter((inv) => inv.account.type === 'SUKUK')
       .reduce((sum, inv) => {
         const txs = Array.isArray(inv.transactions) ? inv.transactions : []
@@ -654,11 +671,11 @@ export default async function DashboardPage({
 
     sukukValue = sukukInvested + sukukReceivable
     totalValue += sukukReceivable
-    sipValue = owned
+    sipValue = ownerScoped
       .filter((inv) => inv.account.type === 'SIP')
       .reduce((sum, inv) => sum + inv.currentValue, 0)
 
-    cryptoValue = owned
+    cryptoValue = ownerScoped
       .filter((inv) => inv.account.type === 'CRYPTO')
       .reduce((sum, inv) => sum + inv.currentValue, 0)
 
@@ -685,14 +702,17 @@ export default async function DashboardPage({
 
     // Build per-type breakdown
     const typeMap = new Map<string, { invested: number; value: number; count: number }>()
-    for (const inv of owned) {
+    for (const inv of ownerScoped) {
       const t = inv.account.type
       const existing = typeMap.get(t) || { invested: 0, value: 0, count: 0 }
-      const pos = getOwnerPosition(inv)
-      existing.invested += pos ? (Number(pos.investedAmount) || 0) : inv.principalAmount
+      const invested = t === 'SUKUK'
+        ? getOwnerSukukPrincipal(inv)
+        : (Number(inv.principalAmount) || 0)
+      existing.invested += invested
       if (t === 'SUKUK') {
+        const principal = getOwnerSukukPrincipal(inv)
         const v = getSukukValueAt(inv, new Date())
-        existing.value += v
+        existing.value += principal > 0 ? Math.max(0, Math.min(v, principal + Math.max(0, v - principal))) : 0
       } else {
         existing.value += inv.currentValue
       }
