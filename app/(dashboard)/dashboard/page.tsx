@@ -402,10 +402,15 @@ export default async function DashboardPage({
 
     ownedInvestments = owned
 
-    totalInvested = owned.reduce((sum, inv) => {
-      const pos = getOwnerPosition(inv)
-      return sum + (pos ? Number(pos.investedAmount) || 0 : inv.principalAmount)
-    }, 0)
+    // Total Invested = Total principal in ACTIVE Sukuk deals only
+    totalInvested = owned
+      .filter((inv) => inv.account.type === 'SUKUK')
+      .reduce((sum, inv) => {
+        const pos = getOwnerPosition(inv)
+        const principal = pos ? Number(pos.investedAmount) || 0 : Number(inv.principalAmount) || 0
+        // Only count active deals (principal > 0)
+        return principal > 0 ? sum + principal : sum
+      }, 0)
 
     totalValue = owned.reduce(
       (sum, inv) => {
@@ -415,14 +420,34 @@ export default async function DashboardPage({
       },
       0
     )
-    totalProfit = owned.reduce(
+    // Total Profit = Sukuk yearly profit + Circles rewards + Crypto profit + Malaa profit
+    // First, get profit from owned investments (SUKUK, CRYPTO, MALAA)
+    const ownedProfit = owned.reduce(
       (sum, inv) => {
+        const accountType = inv.account.type
         const pos = getOwnerPosition(inv)
-        if (pos) return sum + (Number(pos.profit) || 0)
-        return sum + inv.realizedProfit + inv.unrealizedProfit
+        
+        // Include profit from: SUKUK, CRYPTO, MALAA
+        if (['SUKUK', 'CRYPTO', 'MALAA'].includes(accountType)) {
+          if (pos) return sum + (Number(pos.profit) || 0)
+          return sum + (Number(inv.realizedProfit) || 0) + (Number(inv.unrealizedProfit) || 0)
+        }
+        
+        return sum
       },
       0
     )
+    
+    // Add CIRCLYS (Circles) rewards separately since they're excluded from owned
+    const circlysProfit = investments
+      .filter((inv: any) => inv.account?.type === 'CIRCLYS')
+      .reduce((sum, inv) => {
+        const pos = getOwnerPosition(inv)
+        if (pos) return sum + (Number(pos.profit) || 0)
+        return sum + (Number(inv.realizedProfit) || 0) + (Number(inv.unrealizedProfit) || 0)
+      }, 0)
+    
+    totalProfit = ownedProfit + circlysProfit
     activeInvestments = owned.length
 
     sukukInvested = owned
