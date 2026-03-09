@@ -473,7 +473,22 @@ export default async function DashboardPage({
         const principal = pos
           ? (Number(pos.investedAmount) || 0)
           : (Number.isFinite(inv.principalAmount) ? Number(inv.principalAmount) : 0)
-        const receivable = Math.max(0, v - principal)
+        
+        // Calculate total accrued profit
+        const accruedProfit = Math.max(0, v - principal)
+        
+        // Subtract already withdrawn profit
+        const txs = Array.isArray(inv.transactions) ? inv.transactions : []
+        const withdrawnProfit = txs
+          .filter((tx: any) => ['WITHDRAW_PROFIT', 'SELL_PROFIT_ACCRUED', 'PARTNER_COMMISSION'].includes(tx?.type))
+          .filter((tx: any) => {
+            const d = tx?.date instanceof Date ? tx.date : new Date(tx?.date)
+            return !Number.isNaN(d.getTime()) && d.getTime() <= now.getTime()
+          })
+          .reduce((s: number, tx: any) => s + Math.max(0, Number(tx?.amount) || 0), 0)
+        
+        // Receivable = accrued profit - withdrawn profit
+        const receivable = Math.max(0, accruedProfit - withdrawnProfit)
         return sum + receivable
       }, 0)
 
