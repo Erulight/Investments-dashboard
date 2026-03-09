@@ -1650,7 +1650,7 @@ export function SukukList({ initialSukuk, userRole, ownerPersonId, viewerPersonI
                     <>
                       <TableRow
                         key={`platform-${platformName}`}
-                        className="bg-gray-50 hover:bg-gray-100 cursor-pointer"
+                        className="bg-gray-50 dark:bg-slate-800/50 hover:bg-cyan-500/10 dark:hover:bg-cyan-500/20 cursor-pointer transition-all duration-200"
                         onClick={() =>
                           setExpandedPlatforms((prev) => ({
                             ...prev,
@@ -1700,13 +1700,13 @@ export function SukukList({ initialSukuk, userRole, ownerPersonId, viewerPersonI
                   return (
                     <TableRow
                       key={inv.id}
-                      className="hover:bg-blue-50 transition-colors duration-150 border-l-4 border-l-blue-50"
+                      className="hover:bg-cyan-500/10 dark:hover:bg-cyan-500/20 transition-all duration-200 border-l-4 border-l-transparent hover:border-l-cyan-500 cursor-pointer"
                     >
-                      <TableCell className="px-2 py-1.5 font-semibold text-gray-900 align-middle">
+                      <TableCell className="px-2 py-1.5 font-semibold text-gray-900 dark:text-slate-100 align-middle">
                         <button
                           type="button"
                           onClick={() => setDetailTarget(inv)}
-                          className="block w-full text-left hover:text-blue-600 transition-colors truncate"
+                          className="block w-full text-left hover:text-cyan-500 dark:hover:text-cyan-400 transition-colors truncate"
                           title={inv.name}
                         >
                           {inv.name}
@@ -1732,16 +1732,16 @@ export function SukukList({ initialSukuk, userRole, ownerPersonId, viewerPersonI
                           </div>
                         )}
                       </TableCell>
-                      <TableCell className="px-2 py-1.5 text-gray-700 tabular-nums text-right whitespace-nowrap align-middle">
+                      <TableCell className="px-2 py-1.5 text-gray-700 dark:text-slate-300 tabular-nums text-right whitespace-nowrap align-middle">
                         {formatCurrency(metrics.totalInvestment, metrics.currency)}
                       </TableCell>
-                      <TableCell className="px-2 py-1.5 text-gray-700 tabular-nums text-right whitespace-nowrap align-middle">
+                      <TableCell className="px-2 py-1.5 text-gray-700 dark:text-slate-300 tabular-nums text-right whitespace-nowrap align-middle">
                         {formatPercent(metrics.apr)}
                       </TableCell>
-                      <TableCell className="px-2 py-1.5 text-gray-700 tabular-nums text-right whitespace-nowrap align-middle">
+                      <TableCell className="px-2 py-1.5 text-gray-700 dark:text-slate-300 tabular-nums text-right whitespace-nowrap align-middle">
                         {formatPercent(metrics.aprAfterFees)}
                       </TableCell>
-                      <TableCell className="px-2 py-1.5 text-gray-700 tabular-nums text-right whitespace-nowrap align-middle">
+                      <TableCell className="px-2 py-1.5 text-gray-700 dark:text-slate-300 tabular-nums text-right whitespace-nowrap align-middle">
                         {metrics.periodMonths === null ? '—' : metrics.periodMonths.toFixed(1)}
                       </TableCell>
                       {userRole !== 'OWNER' && (
@@ -1752,7 +1752,7 @@ export function SukukList({ initialSukuk, userRole, ownerPersonId, viewerPersonI
                       <TableCell className="px-2 py-1.5 text-gray-700 tabular-nums whitespace-nowrap align-middle">
                         {formatDate(inv.maturityDate)}
                       </TableCell>
-                      <TableCell className="px-2 py-1.5 text-gray-700 tabular-nums text-right whitespace-nowrap align-middle">
+                      <TableCell className="px-2 py-1.5 text-gray-700 dark:text-slate-300 tabular-nums text-right whitespace-nowrap align-middle">
                     {metrics.daysRemaining === null ? (
                       '—'
                     ) : metrics.paymentStatus === 'delayed' ? (
@@ -1767,26 +1767,26 @@ export function SukukList({ initialSukuk, userRole, ownerPersonId, viewerPersonI
                       metrics.daysRemaining
                     )}
                       </TableCell>
-                      <TableCell className="px-2 py-1.5 text-gray-700 tabular-nums text-right whitespace-nowrap align-middle">
+                      <TableCell className="px-2 py-1.5 text-gray-700 dark:text-slate-300 tabular-nums text-right whitespace-nowrap align-middle">
                         {formatCurrency(metrics.fees, metrics.currency)}
                       </TableCell>
                       {userRole !== 'OWNER' && (
-                        <TableCell className="px-2 py-1.5 text-gray-700 tabular-nums text-right whitespace-nowrap align-middle">
+                        <TableCell className="px-2 py-1.5 text-gray-700 dark:text-slate-300 tabular-nums text-right whitespace-nowrap align-middle">
                           {formatCurrency(Number(metrics.commissionPaid || 0), metrics.currency)}
                         </TableCell>
                       )}
-                      <TableCell className="px-2 py-1.5 text-gray-700 tabular-nums text-right whitespace-nowrap align-middle">
+                      <TableCell className="px-2 py-1.5 text-gray-700 dark:text-slate-300 tabular-nums text-right whitespace-nowrap align-middle">
                         {formatCurrency(metrics.netProfit, metrics.currency)}
                       </TableCell>
                       {userRole === 'OWNER' && ownerView === 'sold' && (
-                        <TableCell className="px-2 py-1.5 text-gray-700 tabular-nums text-right whitespace-nowrap align-middle">
+                        <TableCell className="px-2 py-1.5 text-gray-700 dark:text-slate-300 tabular-nums text-right whitespace-nowrap align-middle">
                           {formatCurrency(Number(metrics.commissionEarned || 0), metrics.currency)}
                         </TableCell>
                       )}
-                      <TableCell className="px-2 py-1.5 text-gray-700 tabular-nums text-right whitespace-nowrap align-middle">
+                      <TableCell className="px-2 py-1.5 text-gray-700 dark:text-slate-300 tabular-nums text-right whitespace-nowrap align-middle">
                         {formatCurrency(metrics.totalReceived, metrics.currency)}
                       </TableCell>
-                      <TableCell className="px-2 py-1.5 text-gray-700 tabular-nums text-right whitespace-nowrap align-middle">
+                      <TableCell className="px-2 py-1.5 text-gray-700 dark:text-slate-300 tabular-nums text-right whitespace-nowrap align-middle">
                         {formatCurrency(metrics.receivable, metrics.currency)}
                       </TableCell>
                       <TableCell className="px-2 py-1.5 whitespace-nowrap align-middle">
