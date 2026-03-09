@@ -512,6 +512,22 @@ export function SukukList({ initialSukuk, userRole, ownerPersonId, viewerPersonI
     const feesHeld = Number.isFinite(investorFeeShare) ? Math.max(0, investorFeeShare) : 0
     const cashInflow = Math.max(0, salePrice) + Math.max(0, commissionEarned)
 
+    // Calculate APR after fees
+    const periodYears = monthsHeld ? monthsHeld / 12 : 0
+    const aprAfterFees = principalSold > 0 && periodYears > 0
+      ? ((profitEarnedToSale - feesHeld) / principalSold / periodYears) * 100
+      : 0
+
+    // Calculate days remaining and payment status
+    const daysRemaining = getDaysRemaining(inv.maturityDate, saleDate ?? asOfDate)
+    const paymentStatus = daysRemaining === null
+      ? 'unknown'
+      : daysRemaining < 0
+        ? 'delayed'
+        : daysRemaining > 0
+          ? 'early'
+          : 'ontime'
+
     return {
       totalInvestment: Number.isFinite(principalSold) ? principalSold : 0,
       apr,
@@ -524,11 +540,11 @@ export function SukukList({ initialSukuk, userRole, ownerPersonId, viewerPersonI
       totalReceived: cashInflow,
       receivable: 0,
       periodMonths: monthsHeld,
-      daysRemaining: getDaysRemaining(inv.maturityDate, saleDate ?? asOfDate),
-      paymentStatus: 'sold',
+      daysRemaining,
+      paymentStatus,
       progress: getProgress(Math.max(0, cashInflow), Math.max(0, cashInflow)),
       currency,
-      aprAfterFees: 0,
+      aprAfterFees: Number.isFinite(aprAfterFees) ? aprAfterFees : 0,
       saleDate,
       salePrice,
       principalSold,
