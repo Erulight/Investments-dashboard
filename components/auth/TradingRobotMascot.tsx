@@ -12,6 +12,8 @@ interface TradingRobotMascotProps {
 export function TradingRobotMascot({ emailFocused, passwordFocused, loginError }: TradingRobotMascotProps) {
   const [action, setAction] = useState<'idle' | 'analyzing' | 'celebrating' | 'error'>('idle')
   const [position, setPosition] = useState({ x: 0, y: 100 })
+  const [sarcasticMessage, setSarcasticMessage] = useState('')
+  const [eyeExpression, setEyeExpression] = useState<'normal' | 'rolling' | 'squint' | 'wink'>('normal')
   
   const rotateY = useMotionValue(0)
   const rotateX = useMotionValue(0)
@@ -54,14 +56,49 @@ export function TradingRobotMascot({ emailFocused, passwordFocused, loginError }
     if (typeof window === 'undefined') return
 
     const floatInterval = setInterval(() => {
-      setPosition(prev => ({
-        x: Math.random() * (window.innerWidth - 200),
-        y: Math.random() * 200 + 50
-      }))
+      // Keep mascot within screen bounds with padding
+      const maxX = Math.max(100, window.innerWidth - 250)
+      const maxY = Math.max(50, Math.min(300, window.innerHeight - 350))
+      
+      setPosition({
+        x: Math.random() * maxX + 50,
+        y: Math.random() * maxY + 50
+      })
     }, 4000)
 
     return () => clearInterval(floatInterval)
   }, [])
+
+  // Random eye expressions and sarcastic messages
+  useEffect(() => {
+    if (typeof window === 'undefined') return
+
+    const sarcasticMessages = [
+      "Still here? 🙄",
+      "Watching you...",
+      "*yawn* Boring...",
+      "Type faster! ⚡",
+      "I've seen better logins",
+      "Really? That password?",
+      "Oh great, another human",
+      "*eye roll*",
+      "Judging you silently",
+      "Is this gonna take long?"
+    ]
+
+    const expressionInterval = setInterval(() => {
+      const expressions: Array<'normal' | 'rolling' | 'squint' | 'wink'> = ['normal', 'rolling', 'squint', 'wink']
+      setEyeExpression(expressions[Math.floor(Math.random() * expressions.length)])
+      
+      // Show random sarcastic message occasionally
+      if (Math.random() > 0.7 && action === 'idle') {
+        setSarcasticMessage(sarcasticMessages[Math.floor(Math.random() * sarcasticMessages.length)])
+        setTimeout(() => setSarcasticMessage(''), 3000)
+      }
+    }, 5000)
+
+    return () => clearInterval(expressionInterval)
+  }, [action])
 
   return (
     <motion.div
@@ -124,36 +161,65 @@ export function TradingRobotMascot({ emailFocused, passwordFocused, loginError }
               <div className="absolute -top-10 left-1/2 -translate-x-1/2 w-3 h-3 bg-yellow-400 rounded-full shadow-lg"
                 style={{ boxShadow: '0 0 20px #fbbf24' }} />
               
-              {/* Eyes */}
+              {/* Eyes with expressions */}
               <div className="absolute top-4 left-3 flex gap-3">
+                {/* Left Eye */}
                 <motion.div
-                  className="w-4 h-4 bg-gradient-to-br from-green-400 to-emerald-600 rounded-full"
+                  className="relative w-5 h-5"
                   animate={{
-                    scale: action === 'analyzing' ? [1, 1.2, 1] : 1,
-                    boxShadow: action === 'analyzing' 
-                      ? ['0 0 10px #10b981', '0 0 20px #10b981', '0 0 10px #10b981']
-                      : '0 0 10px #10b981',
+                    rotateZ: eyeExpression === 'rolling' ? [0, 360] : 0,
                   }}
                   transition={{
-                    duration: 0.5,
-                    repeat: action === 'analyzing' ? Infinity : 0,
+                    duration: 1,
+                    repeat: eyeExpression === 'rolling' ? 1 : 0,
                   }}
-                />
+                >
+                  <div className="w-5 h-5 bg-gradient-to-br from-green-400 to-emerald-600 rounded-full" />
+                  {eyeExpression === 'squint' && (
+                    <div className="absolute inset-0 bg-cyan-400/50 h-1 top-2" />
+                  )}
+                  {eyeExpression === 'wink' && (
+                    <motion.div 
+                      className="absolute inset-0 bg-slate-800 h-1 top-2"
+                      animate={{ scaleY: [0, 1, 0] }}
+                      transition={{ duration: 0.3 }}
+                    />
+                  )}
+                  <div className="absolute inset-0 flex items-center justify-center">
+                    <div className="w-2 h-2 bg-black rounded-full" />
+                  </div>
+                </motion.div>
+                
+                {/* Right Eye */}
                 <motion.div
-                  className="w-4 h-4 bg-gradient-to-br from-green-400 to-emerald-600 rounded-full"
+                  className="relative w-5 h-5"
                   animate={{
-                    scale: action === 'analyzing' ? [1, 1.2, 1] : 1,
-                    boxShadow: action === 'analyzing' 
-                      ? ['0 0 10px #10b981', '0 0 20px #10b981', '0 0 10px #10b981']
-                      : '0 0 10px #10b981',
+                    rotateZ: eyeExpression === 'rolling' ? [0, 360] : 0,
                   }}
                   transition={{
-                    duration: 0.5,
-                    repeat: action === 'analyzing' ? Infinity : 0,
+                    duration: 1,
+                    repeat: eyeExpression === 'rolling' ? 1 : 0,
                     delay: 0.1,
                   }}
-                />
+                >
+                  <div className="w-5 h-5 bg-gradient-to-br from-green-400 to-emerald-600 rounded-full" />
+                  {eyeExpression === 'squint' && (
+                    <div className="absolute inset-0 bg-cyan-400/50 h-1 top-2" />
+                  )}
+                  <div className="absolute inset-0 flex items-center justify-center">
+                    <div className="w-2 h-2 bg-black rounded-full" />
+                  </div>
+                </motion.div>
               </div>
+              
+              {/* Mouth/Expression */}
+              <motion.div
+                className="absolute bottom-4 left-1/2 -translate-x-1/2 w-8 h-1 bg-cyan-400 rounded-full"
+                animate={{
+                  scaleX: action === 'error' ? 0.5 : eyeExpression === 'squint' ? 1.2 : 1,
+                  rotateZ: action === 'error' ? 180 : eyeExpression === 'squint' ? -10 : 0,
+                }}
+              />
 
               {/* Display screen */}
               <div className="absolute bottom-2 left-2 right-2 h-3 bg-black/50 rounded flex items-center justify-center overflow-hidden">
@@ -324,14 +390,14 @@ export function TradingRobotMascot({ emailFocused, passwordFocused, loginError }
           )}
         </div>
 
-        {/* Speech bubble */}
+        {/* Speech bubbles */}
         {action === 'analyzing' && (
           <motion.div
             className="absolute -top-16 left-1/2 -translate-x-1/2 bg-cyan-500 text-white px-4 py-2 rounded-lg font-bold text-sm whitespace-nowrap shadow-xl"
             initial={{ opacity: 0, scale: 0 }}
             animate={{ opacity: 1, scale: 1 }}
           >
-            ANALYZING LOGIN...
+            Oh wow, typing... 🙄
             <div className="absolute -bottom-2 left-1/2 -translate-x-1/2 w-0 h-0 border-l-8 border-r-8 border-t-8 border-transparent border-t-cyan-500" />
           </motion.div>
         )}
@@ -342,8 +408,21 @@ export function TradingRobotMascot({ emailFocused, passwordFocused, loginError }
             initial={{ opacity: 0, scale: 0 }}
             animate={{ opacity: 1, scale: 1 }}
           >
-            ACCESS DENIED! 🚫
+            HAHA! Wrong! �
             <div className="absolute -bottom-2 left-1/2 -translate-x-1/2 w-0 h-0 border-l-8 border-r-8 border-t-8 border-transparent border-t-red-500" />
+          </motion.div>
+        )}
+        
+        {/* Random sarcastic messages */}
+        {sarcasticMessage && action === 'idle' && (
+          <motion.div
+            className="absolute -top-16 left-1/2 -translate-x-1/2 bg-purple-500 text-white px-4 py-2 rounded-lg font-bold text-sm whitespace-nowrap shadow-xl"
+            initial={{ opacity: 0, scale: 0, y: 10 }}
+            animate={{ opacity: 1, scale: 1, y: 0 }}
+            exit={{ opacity: 0, scale: 0 }}
+          >
+            {sarcasticMessage}
+            <div className="absolute -bottom-2 left-1/2 -translate-x-1/2 w-0 h-0 border-l-8 border-r-8 border-t-8 border-transparent border-t-purple-500" />
           </motion.div>
         )}
       </motion.div>
