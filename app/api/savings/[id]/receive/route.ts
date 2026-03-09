@@ -140,9 +140,9 @@ export async function POST(
         0,
       )
 
-      const rewardReceiptAmount = legacyRewardBuckets.length > 0
-        ? legacyRewardBalance
-        : Math.max(0, configuredTotalReward)
+      const rewardTargetAmount = Math.max(0, configuredTotalReward)
+      const rewardReceiptAmount = Math.max(rewardTargetAmount, legacyRewardBalance)
+      const rewardNewCashCredit = Math.max(0, rewardReceiptAmount - legacyRewardBalance)
 
       let rewardBucketId: string | null = null
 
@@ -251,14 +251,14 @@ export async function POST(
         },
       })
 
-      if (rewardReceiptAmount > 0 && legacyRewardBuckets.length === 0) {
+      if (rewardNewCashCredit > 0) {
         await tx.transaction.create({
           data: {
             accountId: cashAccount.id,
             investmentId: investment.id,
             personId: null,
             type: 'CASH_IN',
-            amount: rewardReceiptAmount,
+            amount: rewardNewCashCredit,
             date: receiveDate,
             description: `Circlys reward receipt • ${investment.name}`,
           },
