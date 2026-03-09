@@ -533,13 +533,25 @@ export default async function DashboardPage({
       0
     )
     
-    // Add CIRCLYS (Circles) rewards separately since they're excluded from owned
+    // Add CIRCLYS (Circles) rewards separately since they're excluded from owned.
+    // Reward source of truth is current value minus principal (matches Savings page).
     const circlysProfit = investments
       .filter((inv: any) => inv.account?.type === 'CIRCLYS')
       .reduce((sum, inv) => {
         const pos = getOwnerPosition(inv)
-        if (pos) return sum + (Number(pos.profit) || 0)
-        return sum + (Number(inv.realizedProfit) || 0) + (Number(inv.unrealizedProfit) || 0)
+        const principal = pos
+          ? (Number(pos.investedAmount) || 0)
+          : (Number(inv.principalAmount) || 0)
+        const value = pos
+          ? (Number(pos.currentValue) || 0)
+          : (Number(inv.currentValue) || 0)
+
+        if (Number.isFinite(value) && Number.isFinite(principal) && value > 0 && principal > 0) {
+          return sum + Math.max(0, value - principal)
+        }
+
+        if (pos) return sum + Math.max(0, Number(pos.profit) || 0)
+        return sum + Math.max(0, Number(inv.realizedProfit) || 0) + Math.max(0, Number(inv.unrealizedProfit) || 0)
       }, 0)
     
     const now = new Date()
@@ -561,13 +573,19 @@ export default async function DashboardPage({
         
         // Subtract already withdrawn profit
         const txs = Array.isArray(inv.transactions) ? inv.transactions : []
-        const withdrawnProfit = txs
-          .filter((tx: any) => ['WITHDRAW_PROFIT', 'SELL_PROFIT_ACCRUED', 'PARTNER_COMMISSION'].includes(tx?.type))
+        const receivedFromTx = txs
+          .filter((tx: any) => tx?.type === 'WITHDRAW_PROFIT')
           .filter((tx: any) => {
+            if (ownerPersonId && tx?.personId !== ownerPersonId && tx?.personId != null) return false
             const d = tx?.date instanceof Date ? tx.date : new Date(tx?.date)
             return !Number.isNaN(d.getTime()) && d.getTime() <= now.getTime()
           })
           .reduce((s: number, tx: any) => s + Math.max(0, Number(tx?.amount) || 0), 0)
+
+        const totalReceivedRaw = Number(inv.totalReceived)
+        const withdrawnProfit = Number.isFinite(totalReceivedRaw)
+          ? Math.max(Math.max(0, totalReceivedRaw), receivedFromTx)
+          : receivedFromTx
         
         // Receivable = accrued profit - withdrawn profit
         const receivable = Math.max(0, accruedProfit - withdrawnProfit)
@@ -594,7 +612,7 @@ export default async function DashboardPage({
         return sum + received
       }, 0)
 
-    const sukukCommissionEarned = owned
+    const sukukCommissionFromTx = owned
       .filter((inv) => inv.account.type === 'SUKUK')
       .reduce((sum, inv) => {
         const txs = Array.isArray(inv.transactions) ? inv.transactions : []
@@ -609,14 +627,30 @@ export default async function DashboardPage({
         return sum + commission
       }, 0)
 
-    const soldPendingProfit = owned
+    const sukukCommissionFromSellMeta = owned
       .filter((inv) => inv.account.type === 'SUKUK')
-      .reduce((sum, inv) => sum + getOwnerSoldSettlement(inv).pending, 0)
+      .reduce((sum, inv) => {
+        const txs = Array.isArray(inv.transactions) ? inv.transactions : []
+        const sells = txs
+          .filter((tx: any) => tx?.type === 'SELL_TO_PARTNER' && (!ownerPersonId || tx.personId === ownerPersonId))
+          .map((tx: any) => {
+            const d = tx?.date instanceof Date ? tx.date : new Date(tx?.date)
+            return { d: Number.isNaN(d.getTime()) ? null : d, meta: parseMetadata(tx?.metadata) }
+          })
+          .filter((x: any) => x.d)
+          .sort((a: any, b: any) => (b.d as Date).getTime() - (a.d as Date).getTime())
 
-    const sukukTotalReceivable = sukukReceivable + soldPendingProfit
+        const latestSell = sells[0]
+        if (!latestSell) return sum
+
+        const commission = Number(latestSell.meta?.commissionAmount ?? latestSell.meta?.commission ?? 0)
+        return sum + (Number.isFinite(commission) ? Math.max(0, commission) : 0)
+      }, 0)
+
+    const sukukCommissionEarned = round2(Math.max(sukukCommissionFromTx, sukukCommissionFromSellMeta))
 
     // Total Profit = receivable + received + commission (plus non-Sukuk/Circlys profit)
-    totalProfit = nonSukukOwnedProfit + circlysProfit + sukukTotalReceivable + sukukReceivedProfit + sukukCommissionEarned
+    totalProfit = nonSukukOwnedProfit + circlysProfit + sukukReceivable + sukukReceivedProfit + sukukCommissionEarned
 
     sukukValue = sukukInvested + sukukReceivable
     totalValue += sukukReceivable
