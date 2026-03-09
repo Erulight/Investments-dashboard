@@ -7,6 +7,8 @@ import { CashBalanceCard } from '@/components/dashboard/CashBalanceCard'
 import { ReportButton } from '@/components/dashboard/ReportButton'
 import { DashboardCharts } from '@/components/dashboard/DashboardCharts'
 import { PremiumStatsGrid } from '@/components/dashboard/PremiumStatsGrid'
+import { AnimatedCard } from '@/components/ui/AnimatedCard'
+import { TradingChartOverlay } from '@/components/dashboard/TradingChartOverlay'
 
 export const dynamic = 'force-dynamic'
 
@@ -805,6 +807,7 @@ export default async function DashboardPage({
 
   return (
     <div className="space-y-6 animate-fade-in">
+      <TradingChartOverlay />
       {/* Header */}
       <div className="bg-gradient-to-r from-slate-800/80 to-slate-900/80 backdrop-blur-sm rounded-xl shadow-md p-6 text-white border border-slate-700/50">
         <div className="flex items-center justify-between">
@@ -835,114 +838,114 @@ export default async function DashboardPage({
 
       {user.role === 'PARTNER' && user.personId && (
         <div className="grid grid-cols-2 gap-3 lg:grid-cols-4 items-start auto-rows-min">
-          <Card className="p-4">
-            <CardContent>
-              <p className="text-xs font-medium text-gray-500 uppercase tracking-wider">Profit (Accrued)</p>
-              <div className="text-xl font-bold text-gray-900 mt-1 tabular-nums">
+          <AnimatedCard index={0}>
+            <div className="p-6">
+              <p className="text-xs font-medium text-slate-400 uppercase tracking-wider">Profit (Accrued)</p>
+              <div className="text-2xl font-bold text-emerald-400 mt-2 tabular-nums">
                 SAR {round2(totalProfit).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
               </div>
-              <p className="text-[11px] text-gray-400 mt-0.5">Across your deals</p>
-            </CardContent>
-          </Card>
-          <Card className="p-4">
-            <CardContent>
-              <p className="text-xs font-medium text-gray-500 uppercase tracking-wider">Receivable</p>
-              <div className="text-xl font-bold text-gray-900 mt-1 tabular-nums">
+              <p className="text-xs text-slate-500 mt-1">Across your deals</p>
+            </div>
+          </AnimatedCard>
+          <AnimatedCard index={1}>
+            <div className="p-6">
+              <p className="text-xs font-medium text-slate-400 uppercase tracking-wider">Receivable</p>
+              <div className="text-2xl font-bold text-sky-400 mt-2 tabular-nums">
                 SAR {round2(Math.max(0, totalValue - totalInvested)).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
               </div>
-              <p className="text-[11px] text-gray-400 mt-0.5">Accrued - received</p>
-            </CardContent>
-          </Card>
-          <Card className="p-4">
-            <CardContent>
-              <p className="text-xs font-medium text-gray-500 uppercase tracking-wider">Received (This Year)</p>
-              <div className="text-xl font-bold text-gray-900 mt-1 tabular-nums">
+              <p className="text-xs text-slate-500 mt-1">Accrued - received</p>
+            </div>
+          </AnimatedCard>
+          <AnimatedCard index={2}>
+            <div className="p-6">
+              <p className="text-xs font-medium text-slate-400 uppercase tracking-wider">Received (This Year)</p>
+              <div className="text-2xl font-bold text-purple-400 mt-2 tabular-nums">
                 SAR {round2(yearlyProfitValue).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
               </div>
-              <p className="text-[11px] text-gray-400 mt-0.5">Withdrawals / realized</p>
-            </CardContent>
-          </Card>
-          <Card className="p-4">
-            <CardContent>
-              <p className="text-xs font-medium text-gray-500 uppercase tracking-wider">Yearly Return %</p>
-              <div className={`text-xl font-bold mt-1 tabular-nums ${yearlyReturnPercentage >= 0 ? 'text-emerald-600' : 'text-red-600'}`}>
+              <p className="text-xs text-slate-500 mt-1">Withdrawals / realized</p>
+            </div>
+          </AnimatedCard>
+          <AnimatedCard index={3}>
+            <div className="p-6">
+              <p className="text-xs font-medium text-slate-400 uppercase tracking-wider">Yearly Return %</p>
+              <div className={`text-2xl font-bold mt-2 tabular-nums ${yearlyReturnPercentage >= 0 ? 'text-emerald-400' : 'text-red-400'}`}>
                 {yearlyReturnPercentage >= 0 ? '+' : ''}{Math.abs(yearlyReturnPercentage).toFixed(2)}%
               </div>
-              <p className="text-[11px] text-gray-400 mt-0.5">Based on invested</p>
-            </CardContent>
-          </Card>
+              <p className="text-xs text-slate-500 mt-1">Based on invested</p>
+            </div>
+          </AnimatedCard>
         </div>
       )}
 
       {/* Second Row: Deals + Debt + Net Worth */}
       <div className="grid grid-cols-2 gap-3 lg:grid-cols-4 items-start auto-rows-min">
-        <Card className="p-4">
-          <CardContent>
-            <p className="text-xs font-medium text-gray-500 uppercase tracking-wider">Active Deals</p>
-            <div className="text-xl font-bold text-gray-900 mt-1">{activeInvestments}</div>
-            <p className="text-[11px] text-gray-400 mt-0.5">Across all types</p>
-          </CardContent>
-        </Card>
+        <AnimatedCard index={4}>
+          <div className="p-6">
+            <p className="text-xs font-medium text-slate-400 uppercase tracking-wider">Active Deals</p>
+            <div className="text-2xl font-bold text-amber-400 mt-2">{activeInvestments}</div>
+            <p className="text-xs text-slate-500 mt-1">Across all types</p>
+          </div>
+        </AnimatedCard>
 
         {user.role === 'OWNER' && roscaDebt > 0 && (
-          <Card className="p-4">
-            <CardContent>
-              <p className="text-xs font-medium text-red-500 uppercase tracking-wider">ROSCA Remaining</p>
-              <div className="text-xl font-bold text-red-600 mt-1 tabular-nums">
+          <AnimatedCard index={5}>
+            <div className="p-6">
+              <p className="text-xs font-medium text-red-400 uppercase tracking-wider">ROSCA Remaining</p>
+              <div className="text-2xl font-bold text-red-500 mt-2 tabular-nums">
                 SAR {roscaDebt.toLocaleString()}
               </div>
-              <p className="text-[11px] text-red-400 mt-0.5">Unpaid commitments</p>
-            </CardContent>
-          </Card>
+              <p className="text-xs text-red-400 mt-1">Unpaid commitments</p>
+            </div>
+          </AnimatedCard>
         )}
 
         {user.role === 'OWNER' && (
-          <Card className="p-4">
-            <CardContent>
-              <p className="text-xs font-medium text-gray-500 uppercase tracking-wider">Net Worth</p>
-              <div className={`text-xl font-bold mt-1 tabular-nums ${netWorth >= 0 ? 'text-gray-900' : 'text-red-600'}`}>
+          <AnimatedCard index={6}>
+            <div className="p-6">
+              <p className="text-xs font-medium text-slate-400 uppercase tracking-wider">Net Worth</p>
+              <div className={`text-2xl font-bold mt-2 tabular-nums ${netWorth >= 0 ? 'text-emerald-400' : 'text-red-400'}`}>
                 SAR {netWorth.toLocaleString()}
               </div>
-              <p className="text-[11px] text-gray-400 mt-0.5">Portfolio − Debt</p>
-            </CardContent>
-          </Card>
+              <p className="text-xs text-slate-500 mt-1">Portfolio − Debt</p>
+            </div>
+          </AnimatedCard>
         )}
       </div>
 
       {/* Third Row: Key Totals */}
       {user.role === 'OWNER' && (
         <div className="grid grid-cols-2 gap-3 lg:grid-cols-3 items-start auto-rows-min">
-          <Card className="p-4">
-            <CardContent>
-              <p className="text-xs font-medium text-gray-500 uppercase tracking-wider">Sukuk Total</p>
-              <div className="text-xl font-bold text-gray-900 mt-1 tabular-nums">
+          <AnimatedCard index={7}>
+            <div className="p-6">
+              <p className="text-xs font-medium text-slate-400 uppercase tracking-wider">Sukuk Total</p>
+              <div className="text-2xl font-bold text-indigo-400 mt-2 tabular-nums">
                 SAR {sukukValue.toLocaleString()}
               </div>
-              <p className="text-[11px] text-gray-400 mt-0.5 tabular-nums">
+              <p className="text-xs text-slate-500 mt-1 tabular-nums">
                 Invested SAR {sukukInvested.toLocaleString()}
               </p>
-            </CardContent>
-          </Card>
+            </div>
+          </AnimatedCard>
 
-          <Card className="p-4">
-            <CardContent>
-              <p className="text-xs font-medium text-gray-500 uppercase tracking-wider">Circlys Ongoing</p>
-              <div className="text-xl font-bold text-gray-900 mt-1 tabular-nums">
+          <AnimatedCard index={8}>
+            <div className="p-6">
+              <p className="text-xs font-medium text-slate-400 uppercase tracking-wider">Circlys Ongoing</p>
+              <div className="text-2xl font-bold text-pink-400 mt-2 tabular-nums">
                 SAR {circlysOngoingSaved.toLocaleString()}
               </div>
-              <p className="text-[11px] text-gray-400 mt-0.5">Saved (not received)</p>
-            </CardContent>
-          </Card>
+              <p className="text-xs text-slate-500 mt-1">Saved (not received)</p>
+            </div>
+          </AnimatedCard>
 
-          <Card className="p-4">
-            <CardContent>
-              <p className="text-xs font-medium text-gray-500 uppercase tracking-wider">SIP Total</p>
-              <div className="text-xl font-bold text-gray-900 mt-1 tabular-nums">
+          <AnimatedCard index={9}>
+            <div className="p-6">
+              <p className="text-xs font-medium text-slate-400 uppercase tracking-wider">SIP Total</p>
+              <div className="text-2xl font-bold text-teal-400 mt-2 tabular-nums">
                 SAR {sipValue.toLocaleString()}
               </div>
-              <p className="text-[11px] text-gray-400 mt-0.5">Current value</p>
-            </CardContent>
-          </Card>
+              <p className="text-xs text-slate-500 mt-1">Current value</p>
+            </div>
+          </AnimatedCard>
         </div>
       )}
 

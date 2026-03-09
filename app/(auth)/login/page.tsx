@@ -2,7 +2,7 @@
 
 import { useState, useRef } from 'react'
 import { useRouter } from 'next/navigation'
-import { TradingBullMascot } from '@/components/auth/TradingBullMascot'
+import { BullVsBearMascots } from '@/components/auth/BullVsBearMascots'
 import { LoginLaserEffect } from '@/components/effects/LoginLaserEffect'
 
 export default function LoginPage() {
@@ -13,6 +13,7 @@ export default function LoginPage() {
   const [emailFocused, setEmailFocused] = useState(false)
   const [passwordFocused, setPasswordFocused] = useState(false)
   const [showLaser, setShowLaser] = useState(false)
+  const [hasLoginError, setHasLoginError] = useState(false)
   const emailRef = useRef<HTMLInputElement>(null)
   const passwordRef = useRef<HTMLInputElement>(null)
   const router = useRouter()
@@ -20,6 +21,7 @@ export default function LoginPage() {
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
     setError('')
+    setHasLoginError(false)
     setLoading(true)
 
     try {
@@ -33,6 +35,7 @@ export default function LoginPage() {
 
       if (!res.ok) {
         setError(data.error || 'Login failed')
+        setHasLoginError(true)
         return
       }
 
@@ -43,6 +46,7 @@ export default function LoginPage() {
       }, 2000)
     } catch (err) {
       setError('An error occurred. Please try again.')
+      setHasLoginError(true)
     } finally {
       setLoading(false)
     }
@@ -51,11 +55,10 @@ export default function LoginPage() {
   return (
     <div className="min-h-screen bg-[#f5f0e8] flex items-center justify-center py-12 px-4 sm:px-6 lg:px-8 overflow-hidden">
       {showLaser && <LoginLaserEffect />}
-      <TradingBullMascot
+      <BullVsBearMascots
         emailFocused={emailFocused}
         passwordFocused={passwordFocused}
-        emailRef={emailRef}
-        passwordRef={passwordRef}
+        loginError={hasLoginError}
       />
       <div className="absolute inset-0 overflow-hidden pointer-events-none">
         <div className="absolute -top-40 -right-40 w-80 h-80 bg-[#1c2e4a] rounded-full mix-blend-multiply filter blur-xl opacity-20 animate-blob"></div>
