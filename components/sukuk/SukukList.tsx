@@ -732,11 +732,15 @@ export function SukukList({ initialSukuk, userRole, ownerPersonId, viewerPersonI
   const filteredSukuk = list.filter((inv) => {
     if (userRole === 'OWNER' && ownerPersonId) {
       const participantList = Array.isArray(inv.dealParticipants) ? inv.dealParticipants : []
-      const ownerHas = participantList.length === 0
-        ? true
-        : participantList.some((p: any) => p.personId === ownerPersonId)
-      if (ownerView === 'active' && !ownerHas) return false
-      if (ownerView === 'sold' && ownerHas) return false
+      const ownerParticipant = participantList.find((p: any) => p.personId === ownerPersonId)
+      
+      // Check if owner has active ownership (principal > 0)
+      const ownerHasActivePrincipal = participantList.length === 0
+        ? (Number(inv.principalAmount) > 0)
+        : (ownerParticipant && Number(ownerParticipant.investedAmount || 0) > 0)
+      
+      if (ownerView === 'active' && !ownerHasActivePrincipal) return false
+      if (ownerView === 'sold' && ownerHasActivePrincipal) return false
     }
     const metrics = getMetrics(inv)
     const platform = inv.account?.name || ''
