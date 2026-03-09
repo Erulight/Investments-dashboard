@@ -213,13 +213,13 @@ export function CashLedgerClient() {
       </div>
 
       {/* Tab Toggle */}
-      <div className="flex items-center gap-1 bg-gray-100 rounded-lg p-1 w-fit">
+      <div className="flex w-fit items-center gap-1 rounded-lg bg-gray-100 p-1 dark:bg-slate-900/60">
         <button
           onClick={() => setActiveTab('transactions')}
           className={`px-4 py-1.5 text-sm font-medium rounded-md transition-colors ${
             activeTab === 'transactions'
-              ? 'bg-white text-gray-900 shadow-sm'
-              : 'text-gray-500 hover:text-gray-700'
+              ? 'bg-white text-gray-900 shadow-sm dark:bg-slate-100 dark:text-slate-900'
+              : 'text-gray-500 hover:text-gray-700 dark:text-slate-400 dark:hover:text-slate-200'
           }`}
         >
           Transactions ({data?.totalCount ?? 0})
@@ -228,8 +228,8 @@ export function CashLedgerClient() {
           onClick={() => setActiveTab('buckets')}
           className={`px-4 py-1.5 text-sm font-medium rounded-md transition-colors ${
             activeTab === 'buckets'
-              ? 'bg-white text-gray-900 shadow-sm'
-              : 'text-gray-500 hover:text-gray-700'
+              ? 'bg-white text-gray-900 shadow-sm dark:bg-slate-100 dark:text-slate-900'
+              : 'text-gray-500 hover:text-gray-700 dark:text-slate-400 dark:hover:text-slate-200'
           }`}
         >
           Haul Buckets ({data?.buckets.length ?? 0})
@@ -251,7 +251,7 @@ export function CashLedgerClient() {
                   <select
                     value={typeFilter}
                     onChange={(e) => { setTypeFilter(e.target.value); setPage(1) }}
-                    className="rounded-md border border-gray-200 px-2 py-1 text-xs text-gray-700 focus:border-slate-500 focus:ring-1 focus:ring-slate-500 outline-none"
+                    className="rounded-md border border-slate-200 bg-white px-2 py-1 text-xs text-slate-700 outline-none focus:border-slate-500 focus:ring-1 focus:ring-slate-500 dark:border-white/10 dark:bg-slate-900/60 dark:text-slate-200"
                   >
                     <option value="">All types</option>
                     {data.transactionTypes.map(t => (

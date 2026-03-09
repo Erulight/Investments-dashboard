@@ -621,7 +621,7 @@ export default async function InvestmentsPage() {
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
               <div className="rounded-lg border border-gray-100 p-3">
                 <div className="flex items-center justify-between">
-                  <p className="text-xs font-semibold text-gray-700">Monthly Received</p>
+                  <p className="text-xs font-semibold text-gray-700 dark:text-slate-200">Monthly Received</p>
                   <p className="text-[11px] text-gray-500">Last {monthlySeries.length} months</p>
                 </div>
                 <div className="mt-2">
@@ -631,7 +631,7 @@ export default async function InvestmentsPage() {
 
               <div className="rounded-lg border border-gray-100 p-3">
                 <div className="flex items-center justify-between">
-                  <p className="text-xs font-semibold text-gray-700">Monthly Realized Profit</p>
+                  <p className="text-xs font-semibold text-gray-700 dark:text-slate-200">Monthly Realized Profit</p>
                   <p className="text-[11px] text-gray-500">Withdrawals + Sold profit + Commission</p>
                 </div>
                 <div className="mt-2">
@@ -688,7 +688,7 @@ export default async function InvestmentsPage() {
                     return (
                       <div key={platform} className="space-y-1">
                         <div className="flex items-center justify-between gap-2">
-                          <span className="text-xs text-gray-700 truncate">{platform}</span>
+                          <span className="truncate text-xs text-gray-700 dark:text-slate-200">{platform}</span>
                           <span className="text-xs font-semibold tabular-nums text-gray-900">
                             SAR {value.toLocaleString(undefined, { maximumFractionDigits: 0 })}
                           </span>

@@ -1329,24 +1329,24 @@ export function SukukList({ initialSukuk, userRole, ownerPersonId, viewerPersonI
 
   return (
     <>
-      <div className="flex flex-wrap items-center justify-between gap-3 mb-3">
+      <div className="mb-3 flex flex-wrap items-center justify-between gap-3">
         <div>
-          <h2 className="text-xl font-bold text-gray-900">All Sukuk Deals</h2>
-          <p className="text-xs text-gray-500 mt-0.5">
+          <h2 className="text-xl font-bold text-gray-900 dark:text-gray-100">All Sukuk Deals</h2>
+          <p className="mt-0.5 text-xs text-gray-500 dark:text-gray-400">
             {filteredSukuk.length} of {list.length} deals
           </p>
         </div>
         <div className="flex items-center gap-3">
-          <span className="text-xs text-gray-500">As of {asOfLabel}</span>
+          <span className="text-xs text-slate-500 dark:text-slate-400">As of {asOfLabel}</span>
           {userRole === 'OWNER' && ownerPersonId && (
             <div className="flex items-center gap-2">
               <button
                 type="button"
                 onClick={() => setOwnerView('active')}
-                className={`px-3 py-1.5 rounded-full text-xs font-semibold border transition-colors ${
+                className={`rounded-full border px-3 py-1.5 text-xs font-semibold transition-colors ${
                   ownerView === 'active'
-                    ? 'bg-blue-600 text-white border-blue-600'
-                    : 'bg-white text-gray-700 border-gray-200 hover:border-gray-300'
+                    ? 'border-blue-600 bg-blue-600 text-white dark:bg-blue-500 dark:text-blue-100'
+                    : 'border-slate-200 bg-white text-slate-700 hover:border-slate-300 dark:border-white/10 dark:bg-slate-900/60 dark:text-slate-200 dark:hover:border-white/20'
                 }`}
               >
                 Active
@@ -1354,10 +1354,10 @@ export function SukukList({ initialSukuk, userRole, ownerPersonId, viewerPersonI
               <button
                 type="button"
                 onClick={() => setOwnerView('sold')}
-                className={`px-3 py-1.5 rounded-full text-xs font-semibold border transition-colors ${
+                className={`rounded-full border px-3 py-1.5 text-xs font-semibold transition-colors ${
                   ownerView === 'sold'
-                    ? 'bg-blue-600 text-white border-blue-600'
-                    : 'bg-white text-gray-700 border-gray-200 hover:border-gray-300'
+                    ? 'border-blue-600 bg-blue-600 text-white dark:bg-blue-500 dark:text-blue-100'
+                    : 'border-slate-200 bg-white text-slate-700 hover:border-slate-300 dark:border-white/10 dark:bg-slate-900/60 dark:text-slate-200 dark:hover:border-white/20'
                 }`}
               >
                 Sold
@@ -1365,11 +1365,7 @@ export function SukukList({ initialSukuk, userRole, ownerPersonId, viewerPersonI
             </div>
           )}
           {(userRole === 'OWNER' || userRole === 'PARTNER') && (
-            <Button
-              onClick={openCreateModal}
-              variant="primary"
-              size="sm"
-            >
+            <Button onClick={openCreateModal} variant="primary" size="sm">
               + Add New Deal
             </Button>
           )}
@@ -1377,10 +1373,10 @@ export function SukukList({ initialSukuk, userRole, ownerPersonId, viewerPersonI
       </div>
 
       {isEmpty ? (
-        <div className="rounded-xl border border-dashed border-gray-200 bg-gray-50 p-10 text-center">
-          <div className="text-4xl mb-3">💼</div>
-          <h3 className="text-lg font-bold text-gray-900 mb-1">No Sukuk Investments Yet</h3>
-          <p className="text-sm text-gray-500 mb-4">
+        <div className="rounded-xl border border-dashed border-slate-200 bg-slate-50 p-10 text-center dark:border-white/10 dark:bg-slate-900/60">
+          <div className="mb-3 text-4xl">💼</div>
+          <h3 className="mb-1 text-lg font-bold text-slate-900 dark:text-slate-100">No Sukuk Investments Yet</h3>
+          <p className="mb-4 text-sm text-slate-500 dark:text-slate-400">
             {userRole === 'OWNER'
               ? 'Start by creating your first Sukuk investment.'
               : 'Contact the owner to add you to Sukuk investments.'}
@@ -1393,7 +1389,7 @@ export function SukukList({ initialSukuk, userRole, ownerPersonId, viewerPersonI
         </div>
       ) : (
         <>
-          <div className="mb-3 rounded-xl border border-gray-200 bg-white p-3">
+          <div className="mb-3 rounded-xl border border-slate-200 bg-white p-3 dark:border-white/10 dark:bg-slate-900/60">
             <div className="flex flex-wrap items-center justify-between gap-3">
               <div className="flex items-center gap-3">
                 <Button
@@ -1403,7 +1399,7 @@ export function SukukList({ initialSukuk, userRole, ownerPersonId, viewerPersonI
                 >
                   {filtersOpen ? 'Hide Filters' : 'Show Filters'}
                 </Button>
-                <span className="text-xs text-gray-500">
+                <span className="text-xs text-slate-500 dark:text-slate-400">
                   {activeFilterCount} active
                 </span>
               </div>
@@ -1413,8 +1409,8 @@ export function SukukList({ initialSukuk, userRole, ownerPersonId, viewerPersonI
             </div>
 
             {filtersOpen && (
-              <div className="mt-4 rounded-lg border border-gray-200">
-                <div className="flex flex-wrap gap-2 border-b border-gray-200 bg-gray-50 px-3 py-2 text-xs">
+              <div className="mt-4 rounded-lg border border-slate-200 dark:border-white/10">
+                <div className="flex flex-wrap gap-2 border-b border-slate-200 bg-slate-50 px-3 py-2 text-xs dark:border-white/10 dark:bg-slate-950/60">
                   {[
                     { key: 'platforms', label: 'Platforms' },
                     { key: 'terms', label: 'Term' },
@@ -1428,7 +1424,7 @@ export function SukukList({ initialSukuk, userRole, ownerPersonId, viewerPersonI
                       className={`rounded-full px-3 py-1 font-semibold ${
                         filterTab === tab.key
                           ? 'bg-blue-600 text-white'
-                          : 'bg-white text-gray-600 border border-gray-200'
+                          : 'border border-slate-200 bg-white text-slate-600 dark:border-white/10 dark:bg-slate-900/60 dark:text-slate-300'
                       }`}
                     >
                       {tab.label}
@@ -1436,7 +1432,7 @@ export function SukukList({ initialSukuk, userRole, ownerPersonId, viewerPersonI
                   ))}
                 </div>
 
-                <div className="p-4 text-xs text-gray-600">
+                <div className="p-4 text-xs text-slate-600 dark:text-slate-300">
                   {filterTab === 'platforms' && (
                     <div className="flex flex-wrap gap-2">
                       {Array.from(filterOptions.platforms).map((platform) => (
@@ -1445,7 +1441,7 @@ export function SukukList({ initialSukuk, userRole, ownerPersonId, viewerPersonI
                             type="checkbox"
                             checked={filters.platforms.includes(platform)}
                             onChange={() => toggleFilter('platforms', platform)}
-                            className="h-3 w-3 rounded border-gray-300 text-blue-600"
+                            className="h-3 w-3 rounded border-slate-300 text-emerald-600 focus:ring-emerald-500 dark:border-white/10 dark:bg-slate-900"
                           />
                           {platform}
                         </label>
@@ -1461,7 +1457,7 @@ export function SukukList({ initialSukuk, userRole, ownerPersonId, viewerPersonI
                             type="checkbox"
                             checked={filters.terms.includes(term)}
                             onChange={() => toggleFilter('terms', term)}
-                            className="h-3 w-3 rounded border-gray-300 text-blue-600"
+                            className="h-3 w-3 rounded border-slate-300 text-emerald-600 focus:ring-emerald-500 dark:border-white/10 dark:bg-slate-900"
                           />
                           {term} term
                         </label>
@@ -1482,7 +1478,7 @@ export function SukukList({ initialSukuk, userRole, ownerPersonId, viewerPersonI
                             type="checkbox"
                             checked={filters.statuses.includes(status.key)}
                             onChange={() => toggleFilter('statuses', status.key)}
-                            className="h-3 w-3 rounded border-gray-300 text-blue-600"
+                            className="h-3 w-3 rounded border-slate-300 text-emerald-600 focus:ring-emerald-500 dark:border-white/10 dark:bg-slate-900"
                           />
                           {status.label}
                         </label>
@@ -1493,7 +1489,7 @@ export function SukukList({ initialSukuk, userRole, ownerPersonId, viewerPersonI
                   {filterTab === 'dates' && (
                     <div className="grid grid-cols-1 gap-4 md:grid-cols-3">
                       <div>
-                        <div className="font-semibold text-gray-500 mb-2">Year</div>
+                        <div className="mb-2 font-semibold text-slate-500 dark:text-slate-400">Year</div>
                         <div className="flex flex-wrap gap-2">
                           {Array.from(filterOptions.years).sort().map((year) => (
                             <label key={year} className="flex items-center gap-1">
@@ -1501,7 +1497,7 @@ export function SukukList({ initialSukuk, userRole, ownerPersonId, viewerPersonI
                                 type="checkbox"
                                 checked={filters.years.includes(year)}
                                 onChange={() => toggleFilter('years', year)}
-                                className="h-3 w-3 rounded border-gray-300 text-blue-600"
+                                className="h-3 w-3 rounded border-slate-300 text-emerald-600 focus:ring-emerald-500 dark:border-white/10 dark:bg-slate-900"
                               />
                               {year}
                             </label>
@@ -1509,7 +1505,7 @@ export function SukukList({ initialSukuk, userRole, ownerPersonId, viewerPersonI
                         </div>
                       </div>
                       <div>
-                        <div className="font-semibold text-gray-500 mb-2">Month</div>
+                        <div className="mb-2 font-semibold text-slate-500 dark:text-slate-400">Month</div>
                         <div className="flex flex-wrap gap-2">
                           {Array.from(filterOptions.months)
                             .sort((a, b) => Number(a) - Number(b))
@@ -1519,7 +1515,7 @@ export function SukukList({ initialSukuk, userRole, ownerPersonId, viewerPersonI
                                   type="checkbox"
                                   checked={filters.months.includes(month)}
                                   onChange={() => toggleFilter('months', month)}
-                                  className="h-3 w-3 rounded border-gray-300 text-blue-600"
+                                  className="h-3 w-3 rounded border-slate-300 text-emerald-600 focus:ring-emerald-500 dark:border-white/10 dark:bg-slate-900"
                                 />
                                 {month}
                               </label>
@@ -1527,7 +1523,7 @@ export function SukukList({ initialSukuk, userRole, ownerPersonId, viewerPersonI
                         </div>
                       </div>
                       <div>
-                        <div className="font-semibold text-gray-500 mb-2">Day</div>
+                        <div className="mb-2 font-semibold text-slate-500 dark:text-slate-400">Day</div>
                         <div className="flex flex-wrap gap-2">
                           {Array.from(filterOptions.days)
                             .sort((a, b) => Number(a) - Number(b))
@@ -1537,7 +1533,7 @@ export function SukukList({ initialSukuk, userRole, ownerPersonId, viewerPersonI
                                   type="checkbox"
                                   checked={filters.days.includes(dayValue)}
                                   onChange={() => toggleFilter('days', dayValue)}
-                                  className="h-3 w-3 rounded border-gray-300 text-blue-600"
+                                  className="h-3 w-3 rounded border-slate-300 text-emerald-600 focus:ring-emerald-500 dark:border-white/10 dark:bg-slate-900"
                                 />
                                 {dayValue}
                               </label>
@@ -2017,49 +2013,49 @@ export function SukukList({ initialSukuk, userRole, ownerPersonId, viewerPersonI
             <div className="space-y-4">
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                 <div>
-                  <p className="text-gray-500">Company</p>
-                  <p className="font-semibold text-gray-900">{detailTarget.name}</p>
+                  <p className="text-slate-500 dark:text-slate-400">Company</p>
+                  <p className="font-semibold text-slate-900 dark:text-slate-100">{detailTarget.name}</p>
                 </div>
                 {/* ... */}
                 <div>
-                  <p className="text-gray-500">Platform</p>
-                  <p className="font-semibold text-gray-900">{detailTarget.account?.name || '—'}</p>
+                  <p className="text-slate-500 dark:text-slate-400">Platform</p>
+                  <p className="font-semibold text-slate-900 dark:text-slate-100">{detailTarget.account?.name || '—'}</p>
                 </div>
                 <div>
-                  <p className="text-gray-500">Type</p>
-                  <p className="font-semibold text-gray-900">{detailTarget.category || '—'}</p>
+                  <p className="text-slate-500 dark:text-slate-400">Type</p>
+                  <p className="font-semibold text-slate-900 dark:text-slate-100">{detailTarget.category || '—'}</p>
                 </div>
                 <div>
-                  <p className="text-gray-500">Total Investment</p>
-                  <p className="font-semibold text-gray-900">
+                  <p className="text-slate-500 dark:text-slate-400">Total Investment</p>
+                  <p className="font-semibold text-slate-900 dark:text-slate-100">
                     {formatCurrency(metrics.totalInvestment, metrics.currency)}
                   </p>
                 </div>
                 <div>
-                  <p className="text-gray-500">APR</p>
-                  <p className="font-semibold text-gray-900">{formatPercent(metrics.apr)}</p>
+                  <p className="text-slate-500 dark:text-slate-400">APR</p>
+                  <p className="font-semibold text-slate-900 dark:text-slate-100">{formatPercent(metrics.apr)}</p>
                 </div>
                 <div>
-                  <p className="text-gray-500">APR After Fees</p>
-                  <p className="font-semibold text-gray-900">{formatPercent(metrics.aprAfterFees)}</p>
+                  <p className="text-slate-500 dark:text-slate-400">APR After Fees</p>
+                  <p className="font-semibold text-slate-900 dark:text-slate-100">{formatPercent(metrics.aprAfterFees)}</p>
                 </div>
                 <div>
-                  <p className="text-gray-500">Start Date</p>
-                  <p className="font-semibold text-gray-900">{formatDate(detailTarget.startDate)}</p>
+                  <p className="text-slate-500 dark:text-slate-400">Start Date</p>
+                  <p className="font-semibold text-slate-900 dark:text-slate-100">{formatDate(detailTarget.startDate)}</p>
                 </div>
                 <div>
-                  <p className="text-gray-500">Maturity Date</p>
-                  <p className="font-semibold text-gray-900">{formatDate(detailTarget.maturityDate)}</p>
+                  <p className="text-slate-500 dark:text-slate-400">Maturity Date</p>
+                  <p className="font-semibold text-slate-900 dark:text-slate-100">{formatDate(detailTarget.maturityDate)}</p>
                 </div>
                 <div>
-                  <p className="text-gray-500">Investment Period (months)</p>
-                  <p className="font-semibold text-gray-900">
+                  <p className="text-slate-500 dark:text-slate-400">Investment Period (months)</p>
+                  <p className="font-semibold text-slate-900 dark:text-slate-100">
                     {metrics.periodMonths === null ? '—' : metrics.periodMonths.toFixed(1)}
                   </p>
                 </div>
                 <div>
-                  <p className="text-gray-500">Maturity Days Remaining</p>
-                  <p className="font-semibold text-gray-900">
+                  <p className="text-slate-500 dark:text-slate-400">Maturity Days Remaining</p>
+                  <p className="font-semibold text-slate-900 dark:text-slate-100">
                     {metrics.daysRemaining === null
                       ? '—'
                       : metrics.paymentStatus === 'delayed'
@@ -2070,39 +2066,39 @@ export function SukukList({ initialSukuk, userRole, ownerPersonId, viewerPersonI
                   </p>
                 </div>
                 <div>
-                  <p className="text-gray-500">Fees</p>
-                  <p className="font-semibold text-gray-900">
+                  <p className="text-slate-500 dark:text-slate-400">Fees</p>
+                  <p className="font-semibold text-slate-900 dark:text-slate-100">
                     {formatCurrency(metrics.fees, metrics.currency)}
                   </p>
                 </div>
                 <div>
-                  <p className="text-gray-500">Net Profit</p>
-                  <p className="font-semibold text-gray-900">
+                  <p className="text-slate-500 dark:text-slate-400">Net Profit</p>
+                  <p className="font-semibold text-slate-900 dark:text-slate-100">
                     {formatCurrency(metrics.netProfit, metrics.currency)}
                   </p>
                 </div>
                 <div>
-                  <p className="text-gray-500">Total Received</p>
-                  <p className="font-semibold text-gray-900">
+                  <p className="text-slate-500 dark:text-slate-400">Total Received</p>
+                  <p className="font-semibold text-slate-900 dark:text-slate-100">
                     {formatCurrency(metrics.totalReceived, metrics.currency)}
                   </p>
                 </div>
                 <div>
-                  <p className="text-gray-500">Receivable</p>
-                  <p className="font-semibold text-gray-900">
+                  <p className="text-slate-500 dark:text-slate-400">Receivable</p>
+                  <p className="font-semibold text-slate-900 dark:text-slate-100">
                     {formatCurrency(metrics.receivable, metrics.currency)}
                   </p>
                 </div>
                 <div>
-                  <p className="text-gray-500">Status %</p>
-                  <p className="font-semibold text-gray-900">
+                  <p className="text-slate-500 dark:text-slate-400">Status %</p>
+                  <p className="font-semibold text-slate-900 dark:text-slate-100">
                     {(metrics.paymentStatus === 'delayed' ? 'Delayed ' : metrics.paymentStatus === 'early' ? 'Early ' : '')}
                     {metrics.progress.percent.toFixed(2)}%
                   </p>
                 </div>
                 <div>
-                  <p className="text-gray-500">Payment Timing</p>
-                  <p className="font-semibold text-gray-900 capitalize">
+                  <p className="text-slate-500 dark:text-slate-400">Payment Timing</p>
+                  <p className="font-semibold capitalize text-slate-900 dark:text-slate-100">
                     {metrics.paymentStatus.replace('-', ' ')}
                   </p>
                 </div>
@@ -2119,13 +2115,13 @@ export function SukukList({ initialSukuk, userRole, ownerPersonId, viewerPersonI
       >
         <form onSubmit={handleWithdraw} className="space-y-4">
           {actionError && (
-            <div className="rounded-lg bg-red-50 p-3 text-sm text-red-700 border border-red-200">
+            <div className="rounded-lg border border-red-200 bg-red-50 p-3 text-sm text-red-700">
               {actionError}
             </div>
           )}
 
           <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">
+            <label className="mb-1 block text-sm font-medium text-slate-700 dark:text-slate-200">
               Receipt Type
             </label>
             {withdrawTarget && (() => {
@@ -2140,12 +2136,12 @@ export function SukukList({ initialSukuk, userRole, ownerPersonId, viewerPersonI
                 return (
                   <div>
                     <div
-                      className="w-full px-4 py-2 border border-gray-200 rounded-lg bg-gray-50 text-sm text-gray-700"
+                      className="w-full rounded-lg border border-slate-200 bg-slate-50 px-4 py-2 text-sm text-slate-700 dark:border-white/10 dark:bg-slate-950/60 dark:text-slate-200"
                       title="Principal belongs to partner — cannot be received"
                     >
                       Profit
                     </div>
-                    <div className="text-[11px] text-gray-500 mt-1">
+                    <div className="mt-1 text-[11px] text-slate-500 dark:text-slate-400">
                       Principal belongs to partner — cannot be received.
                     </div>
                   </div>
@@ -2161,7 +2157,7 @@ export function SukukList({ initialSukuk, userRole, ownerPersonId, viewerPersonI
                       type: e.target.value as 'PRINCIPAL' | 'PROFIT' | 'BOTH',
                     }))
                   }
-                  className="w-full px-4 py-2 border border-gray-300 rounded-lg bg-white focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                  className="w-full rounded-lg border border-slate-200 bg-white px-4 py-2 text-sm text-slate-900 shadow-sm transition-colors focus:border-emerald-500 focus:outline-none focus:ring-2 focus:ring-emerald-500/20 dark:border-white/10 dark:bg-slate-900/60 dark:text-slate-100"
                 >
                   <option value="PRINCIPAL">Principal</option>
                   <option value="PROFIT">Profit</option>
@@ -2191,7 +2187,7 @@ export function SukukList({ initialSukuk, userRole, ownerPersonId, viewerPersonI
           })()}
 
           <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">
+            <label className="mb-1 block text-sm font-medium text-slate-700 dark:text-slate-200">
               Date Received
             </label>
             <DateInput
@@ -2203,7 +2199,7 @@ export function SukukList({ initialSukuk, userRole, ownerPersonId, viewerPersonI
 
           {(withdrawForm.type === 'PRINCIPAL' || withdrawForm.type === 'BOTH') && (
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">
+              <label className="mb-1 block text-sm font-medium text-slate-700 dark:text-slate-200">
                 Principal Amount
               </label>
               <input
@@ -2214,14 +2210,14 @@ export function SukukList({ initialSukuk, userRole, ownerPersonId, viewerPersonI
                 onChange={(e) =>
                   setWithdrawForm((prev) => ({ ...prev, principalAmount: e.target.value }))
                 }
-                className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                className="w-full rounded-lg border border-slate-200 bg-white px-4 py-2 text-sm text-slate-900 placeholder:text-slate-400 shadow-sm transition-colors focus:border-emerald-500 focus:outline-none focus:ring-2 focus:ring-emerald-500/20 dark:border-white/10 dark:bg-slate-900/60 dark:text-slate-100 dark:placeholder:text-slate-500"
               />
             </div>
           )}
 
           {(withdrawForm.type === 'PROFIT' || withdrawForm.type === 'BOTH') && (
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">
+              <label className="mb-1 block text-sm font-medium text-slate-700 dark:text-slate-200">
                 Profit Amount
               </label>
               <input
@@ -2232,20 +2228,20 @@ export function SukukList({ initialSukuk, userRole, ownerPersonId, viewerPersonI
                 onChange={(e) =>
                   setWithdrawForm((prev) => ({ ...prev, profitAmount: e.target.value }))
                 }
-                className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                className="w-full rounded-lg border border-slate-200 bg-white px-4 py-2 text-sm text-slate-900 placeholder:text-slate-400 shadow-sm transition-colors focus:border-emerald-500 focus:outline-none focus:ring-2 focus:ring-emerald-500/20 dark:border-white/10 dark:bg-slate-900/60 dark:text-slate-100 dark:placeholder:text-slate-500"
               />
             </div>
           )}
 
           <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">
+            <label className="mb-1 block text-sm font-medium text-slate-700 dark:text-slate-200">
               Notes
             </label>
             <textarea
               rows={2}
               value={withdrawForm.notes}
               onChange={(e) => setWithdrawForm((prev) => ({ ...prev, notes: e.target.value }))}
-              className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+              className="w-full rounded-lg border border-slate-200 bg-white px-4 py-2 text-sm text-slate-900 placeholder:text-slate-400 shadow-sm transition-colors focus:border-emerald-500 focus:outline-none focus:ring-2 focus:ring-emerald-500/20 dark:border-white/10 dark:bg-slate-900/60 dark:text-slate-100 dark:placeholder:text-slate-500"
             />
           </div>
 
@@ -2271,8 +2267,8 @@ export function SukukList({ initialSukuk, userRole, ownerPersonId, viewerPersonI
             if (!hasPrincipal && !hasProfit) return null
 
             return (
-              <div className="rounded-lg bg-gray-50 border border-gray-200 p-3 text-xs text-gray-700">
-                <p className="font-semibold mb-1">You will receive:</p>
+              <div className="rounded-lg border border-slate-200 bg-slate-50 p-3 text-xs text-slate-700 dark:border-white/10 dark:bg-white/5 dark:text-slate-200">
+                <p className="mb-1 font-semibold">You will receive:</p>
                 <ul className="list-disc list-inside space-y-0.5">
                   {hasPrincipal && (
                     <li>
@@ -2331,11 +2327,11 @@ export function SukukList({ initialSukuk, userRole, ownerPersonId, viewerPersonI
           )}
 
           <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">Partner</label>
+            <label className="mb-1 block text-sm font-medium text-slate-700 dark:text-slate-200">Partner</label>
             <select
               value={sellForm.buyerPersonId}
               onChange={(e) => setSellForm((prev) => ({ ...prev, buyerPersonId: e.target.value }))}
-              className="w-full px-4 py-2 border border-gray-300 rounded-lg bg-white focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+              className="w-full rounded-lg border border-slate-200 bg-white px-4 py-2 text-sm text-slate-900 shadow-sm transition-colors focus:border-emerald-500 focus:outline-none focus:ring-2 focus:ring-emerald-500/20 dark:border-white/10 dark:bg-slate-900/60 dark:text-slate-100"
               required
             >
               <option value="">Select partner</option>
@@ -2349,19 +2345,19 @@ export function SukukList({ initialSukuk, userRole, ownerPersonId, viewerPersonI
 
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">Amount (Principal)</label>
+              <label className="mb-1 block text-sm font-medium text-slate-700 dark:text-slate-200">Amount (Principal)</label>
               <input
                 type="number"
                 min="0"
                 step="0.01"
                 value={sellForm.amount}
                 onChange={(e) => setSellForm((prev) => ({ ...prev, amount: e.target.value }))}
-                className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                className="w-full rounded-lg border border-slate-200 bg-white px-4 py-2 text-sm text-slate-900 placeholder:text-slate-400 shadow-sm transition-colors focus:border-emerald-500 focus:outline-none focus:ring-2 focus:ring-emerald-500/20 dark:border-white/10 dark:bg-slate-900/60 dark:text-slate-100 dark:placeholder:text-slate-500"
                 required
               />
             </div>
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">
+              <label className="mb-1 block text-sm font-medium text-slate-700 dark:text-slate-200">
                 {sellForm.paymentMode === 'SETTLE_DEBT' ? 'Settlement Amount (Debt)' : 'Sale Price (Cash)'}
               </label>
               <input
@@ -2370,7 +2366,7 @@ export function SukukList({ initialSukuk, userRole, ownerPersonId, viewerPersonI
                 step="0.01"
                 value={sellForm.paymentMode === 'SETTLE_DEBT' ? sellForm.amount : sellForm.salePrice}
                 onChange={(e) => setSellForm((prev) => ({ ...prev, salePrice: e.target.value }))}
-                className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                className="w-full rounded-lg border border-slate-200 bg-white px-4 py-2 text-sm text-slate-900 placeholder:text-slate-400 shadow-sm transition-colors focus:border-emerald-500 focus:outline-none focus:ring-2 focus:ring-emerald-500/20 dark:border-white/10 dark:bg-slate-900/60 dark:text-slate-100 dark:placeholder:text-slate-500"
                 placeholder={sellForm.paymentMode === 'SETTLE_DEBT' ? 'Locked to amount' : 'Defaults to amount'}
                 disabled={sellForm.paymentMode === 'SETTLE_DEBT'}
               />
@@ -2379,11 +2375,11 @@ export function SukukList({ initialSukuk, userRole, ownerPersonId, viewerPersonI
 
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">Payment Mode</label>
+              <label className="mb-1 block text-sm font-medium text-slate-700 dark:text-slate-200">Payment Mode</label>
               <select
                 value={sellForm.paymentMode}
                 onChange={(e) => setSellForm((prev) => ({ ...prev, paymentMode: e.target.value, debtId: '' }))}
-                className="w-full px-4 py-2 border border-gray-300 rounded-lg bg-white focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                className="w-full rounded-lg border border-slate-200 bg-white px-4 py-2 text-sm text-slate-900 shadow-sm transition-colors focus:border-emerald-500 focus:outline-none focus:ring-2 focus:ring-emerald-500/20 dark:border-white/10 dark:bg-slate-900/60 dark:text-slate-100"
               >
                 <option value="CASH">Cash</option>
                 <option value="SETTLE_DEBT">Settle Debt (no cash)</option>
@@ -2391,11 +2387,11 @@ export function SukukList({ initialSukuk, userRole, ownerPersonId, viewerPersonI
             </div>
 
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">Debt</label>
+              <label className="mb-1 block text-sm font-medium text-slate-700 dark:text-slate-200">Debt</label>
               <select
                 value={sellForm.debtId}
                 onChange={(e) => setSellForm((prev) => ({ ...prev, debtId: e.target.value }))}
-                className="w-full px-4 py-2 border border-gray-300 rounded-lg bg-white focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                className="w-full rounded-lg border border-slate-200 bg-white px-4 py-2 text-sm text-slate-900 shadow-sm transition-colors focus:border-emerald-500 focus:outline-none focus:ring-2 focus:ring-emerald-500/20 dark:border-white/10 dark:bg-slate-900/60 dark:text-slate-100"
                 disabled={sellForm.paymentMode !== 'SETTLE_DEBT'}
                 required={sellForm.paymentMode === 'SETTLE_DEBT'}
               >
@@ -2426,11 +2422,11 @@ export function SukukList({ initialSukuk, userRole, ownerPersonId, viewerPersonI
 
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">Commission Type</label>
+              <label className="mb-1 block text-sm font-medium text-slate-700 dark:text-slate-200">Commission Type</label>
               <select
                 value={sellForm.commissionType}
                 onChange={(e) => setSellForm((prev) => ({ ...prev, commissionType: e.target.value }))}
-                className="w-full px-4 py-2 border border-gray-300 rounded-lg bg-white focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                className="w-full rounded-lg border border-slate-200 bg-white px-4 py-2 text-sm text-slate-900 shadow-sm transition-colors focus:border-emerald-500 focus:outline-none focus:ring-2 focus:ring-emerald-500/20 dark:border-white/10 dark:bg-slate-900/60 dark:text-slate-100"
               >
                 <option value="FIXED">Fixed</option>
                 <option value="PERCENT">Percentage (of partner gross profit)</option>
@@ -2438,21 +2434,21 @@ export function SukukList({ initialSukuk, userRole, ownerPersonId, viewerPersonI
               </select>
             </div>
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">Commission Value</label>
+              <label className="mb-1 block text-sm font-medium text-slate-700 dark:text-slate-200">Commission Value</label>
               <input
                 type="number"
                 min="0"
                 step="0.01"
                 value={sellForm.commissionValue}
                 onChange={(e) => setSellForm((prev) => ({ ...prev, commissionValue: e.target.value }))}
-                className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                className="w-full rounded-lg border border-slate-200 bg-white px-4 py-2 text-sm text-slate-900 placeholder:text-slate-400 shadow-sm transition-colors focus:border-emerald-500 focus:outline-none focus:ring-2 focus:ring-emerald-500/20 dark:border-white/10 dark:bg-slate-900/60 dark:text-slate-100 dark:placeholder:text-slate-500"
                 placeholder={sellForm.commissionType === 'PERCENT' ? 'e.g. 5' : sellForm.commissionType === 'AUTO' ? 'Leave 0 for auto' : 'e.g. 50'}
               />
             </div>
           </div>
 
           <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">Date</label>
+            <label className="mb-1 block text-sm font-medium text-slate-700 dark:text-slate-200">Date</label>
             <DateInput
               value={sellForm.date}
               onChange={(value) => setSellForm((prev) => ({ ...prev, date: value }))}
@@ -2461,12 +2457,12 @@ export function SukukList({ initialSukuk, userRole, ownerPersonId, viewerPersonI
           </div>
 
           <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">Notes</label>
+            <label className="mb-1 block text-sm font-medium text-slate-700 dark:text-slate-200">Notes</label>
             <textarea
               rows={2}
               value={sellForm.notes}
               onChange={(e) => setSellForm((prev) => ({ ...prev, notes: e.target.value }))}
-              className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+              className="w-full rounded-lg border border-slate-200 bg-white px-4 py-2 text-sm text-slate-900 placeholder:text-slate-400 shadow-sm transition-colors focus:border-emerald-500 focus:outline-none focus:ring-2 focus:ring-emerald-500/20 dark:border-white/10 dark:bg-slate-900/60 dark:text-slate-100 dark:placeholder:text-slate-500"
             />
           </div>
 

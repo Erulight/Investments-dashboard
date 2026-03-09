@@ -1053,7 +1053,7 @@ export default async function DashboardPage({
                     <div className="flex items-center gap-6">
                       <div className="text-right">
                         <div className="text-xs text-gray-400">Invested</div>
-                        <div className="text-sm font-medium text-gray-700 tabular-nums">SAR {tb.invested.toLocaleString()}</div>
+                        <div className="text-sm font-medium text-gray-700 dark:text-slate-200 tabular-nums">SAR {tb.invested.toLocaleString()}</div>
                       </div>
                       <div className="text-right">
                         <div className="text-xs text-gray-400">Value</div>

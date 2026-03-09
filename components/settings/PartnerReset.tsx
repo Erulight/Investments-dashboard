@@ -109,7 +109,7 @@ export function PartnerReset() {
             </div>
           )}
 
-          <p className="text-sm text-gray-600">
+          <p className="text-sm text-slate-600 dark:text-slate-400">
             Select a partner. You can optionally rebuild Zakat bucket haul dates.
             Then type <span className="font-semibold">RESET PARTNER</span> or enter your owner password.
           </p>
@@ -118,7 +118,7 @@ export function PartnerReset() {
             <select
               value={partnerPersonId}
               onChange={(e) => setPartnerPersonId(e.target.value)}
-              className="w-full rounded-lg border border-gray-200 px-3 py-2 text-sm focus:border-red-500 focus:ring-1 focus:ring-red-500 outline-none"
+              className="w-full rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm text-slate-900 outline-none transition-colors focus:border-red-500 focus:ring-1 focus:ring-red-500 dark:border-white/10 dark:bg-slate-900/60 dark:text-slate-100"
               required
             >
               <option value="">Select partner...</option>
@@ -129,7 +129,7 @@ export function PartnerReset() {
               ))}
             </select>
 
-            <label className="flex items-center gap-2 text-sm text-gray-700">
+            <label className="flex items-center gap-2 text-sm text-gray-700 dark:text-slate-300">
               <input
                 type="checkbox"
                 checked={rebuildZakatBuckets}
@@ -144,14 +144,14 @@ export function PartnerReset() {
                 type="text"
                 value={confirmText}
                 onChange={(e) => setConfirmText(e.target.value)}
-                className="w-full rounded-lg border border-gray-200 px-3 py-2 text-sm focus:border-red-500 focus:ring-1 focus:ring-red-500 outline-none"
+                className="w-full rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm text-slate-900 outline-none transition-colors focus:border-red-500 focus:ring-1 focus:ring-red-500 dark:border-white/10 dark:bg-slate-900/60 dark:text-slate-100"
                 placeholder="Type RESET PARTNER"
               />
               <input
                 type="password"
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
-                className="w-full rounded-lg border border-gray-200 px-3 py-2 text-sm focus:border-red-500 focus:ring-1 focus:ring-red-500 outline-none"
+                className="w-full rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm text-slate-900 outline-none transition-colors focus:border-red-500 focus:ring-1 focus:ring-red-500 dark:border-white/10 dark:bg-slate-900/60 dark:text-slate-100"
                 placeholder="Owner password"
               />
             </div>

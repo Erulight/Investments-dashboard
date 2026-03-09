@@ -117,7 +117,7 @@ export function InvestmentTypeManager() {
               required
               value={newType}
               onChange={(e) => setNewType(e.target.value.toUpperCase())}
-              className="w-full rounded-lg border border-gray-200 px-3 py-2 text-sm focus:border-slate-500 focus:ring-1 focus:ring-slate-500 outline-none"
+              className="w-full rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm text-slate-900 outline-none transition-colors focus:border-slate-500 focus:ring-1 focus:ring-slate-500 dark:border-white/10 dark:bg-slate-900/60 dark:text-slate-100"
               placeholder="e.g., REAL_ESTATE"
             />
           </div>
@@ -187,7 +187,7 @@ export function InvestmentTypeManager() {
                   type="text"
                   value={deleteConfirmText}
                   onChange={(e) => setDeleteConfirmText(e.target.value)}
-                  className="w-full rounded-lg border border-gray-200 px-3 py-2 text-sm focus:border-red-500 focus:ring-1 focus:ring-red-500 outline-none"
+                  className="w-full rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm text-slate-900 outline-none transition-colors focus:border-red-500 focus:ring-1 focus:ring-red-500 dark:border-white/10 dark:bg-slate-900/60 dark:text-slate-100"
                   placeholder="DELETE"
                 />
               </div>
@@ -200,7 +200,7 @@ export function InvestmentTypeManager() {
                   type="password"
                   value={deletePassword}
                   onChange={(e) => setDeletePassword(e.target.value)}
-                  className="w-full rounded-lg border border-gray-200 px-3 py-2 text-sm focus:border-red-500 focus:ring-1 focus:ring-red-500 outline-none"
+                  className="w-full rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm text-slate-900 outline-none transition-colors focus:border-red-500 focus:ring-1 focus:ring-red-500 dark:border-white/10 dark:bg-slate-900/60 dark:text-slate-100"
                   placeholder="Enter your password"
                 />
               </div>

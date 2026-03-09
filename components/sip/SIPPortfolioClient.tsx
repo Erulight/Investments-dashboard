@@ -916,7 +916,9 @@ export default function SIPPortfolioClient({ investment, userRole }: SIPPortfoli
               type="button"
               onClick={() => setActiveTab(tab.key)}
               className={`px-4 py-2 rounded-full text-sm font-semibold transition-colors ${
-                activeTab === tab.key ? 'bg-slate-900 text-white' : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+                activeTab === tab.key
+                  ? 'bg-slate-900 text-white dark:bg-slate-100 dark:text-slate-900'
+                  : 'bg-gray-100 text-gray-700 hover:bg-gray-200 dark:bg-slate-900/60 dark:text-slate-300 dark:hover:bg-slate-800'
               }`}
             >
               {tab.label}
@@ -978,7 +980,7 @@ export default function SIPPortfolioClient({ investment, userRole }: SIPPortfoli
                       {holdingsSummary.rows.map((h: HoldingRow) => (
                         <tr key={h.id || `${h.assetType}-${h.name}`}>
                           <td className="py-3 pr-4 font-medium text-gray-900 whitespace-nowrap">{h.name || '-'}</td>
-                          <td className="py-3 pr-4 text-gray-700 whitespace-nowrap">{h.assetType}</td>
+                          <td className="py-3 pr-4 text-gray-700 whitespace-nowrap dark:text-slate-300">{h.assetType}</td>
                           <td className="py-3 pr-4 text-right tabular-nums text-gray-900 whitespace-nowrap">{formatCurrency(h.cost)}</td>
                           <td className="py-3 pr-4 text-right tabular-nums text-gray-900 whitespace-nowrap">{formatCurrency(h.currentValue)}</td>
                           <td className="py-3 text-right tabular-nums text-gray-900 whitespace-nowrap">{h.allocationPct.toFixed(2)}%</td>
@@ -1020,7 +1022,7 @@ export default function SIPPortfolioClient({ investment, userRole }: SIPPortfoli
                   <tbody className="divide-y divide-gray-100">
                     {transactionLogRows.map((r) => (
                       <tr key={r.key}>
-                        <td className="py-3 pr-4 text-gray-700 whitespace-nowrap">{formatGregorianAndHijriDate(r.at) || '-'}</td>
+                        <td className="py-3 pr-4 text-gray-700 whitespace-nowrap dark:text-slate-300">{formatGregorianAndHijriDate(r.at) || '-'}</td>
                         <td className="py-3 pr-4 font-semibold text-gray-900 whitespace-nowrap">{r.action || '-'}</td>
                         <td className="py-3 pr-4 text-right tabular-nums text-gray-900 whitespace-nowrap">{r.amount ? formatCurrency(r.amount) : '-'}</td>
                         <td className="py-3 pr-4 text-right tabular-nums text-gray-900 whitespace-nowrap">{Number.isFinite(r.investedAmount) ? formatCurrency(r.investedAmount) : '-'}</td>
@@ -1047,7 +1049,7 @@ export default function SIPPortfolioClient({ investment, userRole }: SIPPortfoli
                     <button
                       type="button"
                       onClick={openZakatBaseEditor}
-                      className="px-3 py-2 rounded-lg bg-gray-100 text-gray-700 hover:bg-gray-200 text-sm font-semibold"
+                      className="rounded-lg bg-gray-100 px-3 py-2 text-sm font-semibold text-gray-700 hover:bg-gray-200 dark:bg-slate-900/60 dark:text-slate-200 dark:hover:bg-slate-800"
                     >
                       Reset
                     </button>
@@ -1093,12 +1095,12 @@ export default function SIPPortfolioClient({ investment, userRole }: SIPPortfoli
                                       [row.key]: e.target.value,
                                     }))
                                   }
-                                  className="w-28 rounded-lg border border-gray-300 px-3 py-1.5 text-sm focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500 outline-none"
+                                  className="w-28 rounded-lg border border-slate-200 bg-white px-3 py-1.5 text-sm text-slate-900 outline-none transition-colors focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500 dark:border-white/10 dark:bg-slate-900/60 dark:text-slate-100"
                                 />
                                 <span className="text-gray-500">%</span>
                               </div>
                             ) : (
-                              <span className="text-gray-700 tabular-nums">{Number(row.value ?? 0).toFixed(2)}%</span>
+                              <span className="text-gray-700 tabular-nums dark:text-slate-300">{Number(row.value ?? 0).toFixed(2)}%</span>
                             )}
                           </td>
                         </tr>
@@ -1143,9 +1145,9 @@ export default function SIPPortfolioClient({ investment, userRole }: SIPPortfoli
                       {zakatBreakdown.rows.map((r: ZakatBreakdownRow) => (
                         <tr key={r.periodKey}>
                           <td className="py-3 pr-4 font-semibold text-gray-900 whitespace-nowrap">{r.hijriYear}</td>
-                          <td className="py-3 pr-4 text-gray-700 whitespace-nowrap">{formatGregorianAndHijriDate(r.startAt) || '-'}</td>
-                          <td className="py-3 pr-4 text-gray-700 whitespace-nowrap">{formatGregorianAndHijriDate(r.endAt) || '-'}</td>
-                          <td className="py-3 pr-4 text-gray-700 tabular-nums whitespace-nowrap">{r.basePct.toFixed(2)}%</td>
+                          <td className="py-3 pr-4 text-gray-700 whitespace-nowrap dark:text-slate-300">{formatGregorianAndHijriDate(r.startAt) || '-'}</td>
+                          <td className="py-3 pr-4 text-gray-700 whitespace-nowrap dark:text-slate-300">{formatGregorianAndHijriDate(r.endAt) || '-'}</td>
+                          <td className="py-3 pr-4 text-gray-700 tabular-nums whitespace-nowrap dark:text-slate-300">{r.basePct.toFixed(2)}%</td>
                           <td className="py-3 pr-4 text-right tabular-nums text-gray-900 whitespace-nowrap">{formatCurrency(r.endValue)}</td>
                           <td className="py-3 pr-4 text-right tabular-nums text-gray-900 whitespace-nowrap">{formatCurrency(r.zakatable)}</td>
                           <td className="py-3 pr-4 text-right tabular-nums text-gray-900 whitespace-nowrap">{formatCurrency(r.zakatDue)}</td>
@@ -1173,43 +1175,44 @@ export default function SIPPortfolioClient({ investment, userRole }: SIPPortfoli
             </div>
           </div>
         )}
+
       </div>
 
       {showZakatPayForm && zakatPayTarget && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
-          <div className="bg-white rounded-xl p-6 max-w-md w-full mx-4">
-            <div className="flex justify-between items-center mb-6">
-              <h2 className="text-xl font-bold text-gray-900">Pay Zakat</h2>
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black bg-opacity-50">
+          <div className="mx-4 w-full max-w-md rounded-xl bg-white p-6 dark:bg-slate-950 dark:text-slate-100">
+            <div className="mb-6 flex items-center justify-between">
+              <h2 className="text-xl font-bold text-gray-900 dark:text-gray-100">Pay Zakat</h2>
               <button
                 onClick={() => (isPayingZakat ? null : setShowZakatPayForm(false))}
-                className="text-gray-400 hover:text-gray-600"
+                className="text-gray-400 hover:text-gray-600 dark:text-slate-500 dark:hover:text-slate-300"
               >
                 ✕
               </button>
             </div>
 
             <form onSubmit={submitZakatPay} className="space-y-4">
-              <div className="text-sm text-gray-600">
+              <div className="text-sm text-gray-600 dark:text-slate-300">
                 Period: {formatGregorianAndHijriDate(zakatPayTarget.startAt)} → {formatGregorianAndHijriDate(zakatPayTarget.endAt)}
               </div>
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">Date</label>
+                <label className="mb-2 block text-sm font-medium text-slate-700 dark:text-slate-200">Date</label>
                 <input
                   type="date"
                   value={zakatPayDate}
                   onChange={(e: ChangeEvent<HTMLInputElement>) => setZakatPayDate(e.target.value)}
-                  className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500 outline-none"
+                  className="w-full rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm text-slate-900 shadow-sm outline-none transition-colors focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500 dark:border-white/10 dark:bg-slate-900/60 dark:text-slate-100"
                 />
               </div>
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">Amount</label>
+                <label className="mb-2 block text-sm font-medium text-slate-700 dark:text-slate-200">Amount</label>
                 <input
                   type="number"
                   min="0"
                   step="0.01"
                   value={zakatPayAmount}
                   onChange={(e: ChangeEvent<HTMLInputElement>) => setZakatPayAmount(e.target.value)}
-                  className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500 outline-none"
+                  className="w-full rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm text-slate-900 shadow-sm outline-none transition-colors focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500 dark:border-white/10 dark:bg-slate-900/60 dark:text-slate-100"
                 />
               </div>
 
@@ -1218,7 +1221,7 @@ export default function SIPPortfolioClient({ investment, userRole }: SIPPortfoli
                   type="button"
                   onClick={() => setShowZakatPayForm(false)}
                   disabled={isPayingZakat}
-                  className="flex-1 rounded-lg border border-gray-300 px-4 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50 disabled:opacity-50"
+                  className="flex-1 rounded-lg border border-slate-200 bg-white px-4 py-2 text-sm font-medium text-slate-700 transition-colors hover:bg-slate-50 disabled:opacity-50 dark:border-white/10 dark:bg-slate-900/60 dark:text-slate-200 dark:hover:bg-white/5"
                 >
                   Cancel
                 </button>
@@ -1259,28 +1262,28 @@ export default function SIPPortfolioClient({ investment, userRole }: SIPPortfoli
 
       {showInvestForm && (
         <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
-          <div className="bg-white rounded-xl p-6 max-w-md w-full mx-4">
+          <div className="mx-4 w-full max-w-md rounded-xl bg-white p-6 dark:bg-slate-950 dark:text-slate-100">
             <div className="flex justify-between items-center mb-6">
-              <h2 className="text-xl font-bold text-gray-900">Invest</h2>
-              <button onClick={() => setShowInvestForm(false)} className="text-gray-400 hover:text-gray-600">✕</button>
+              <h2 className="text-xl font-bold text-gray-900 dark:text-gray-100">Invest</h2>
+              <button onClick={() => setShowInvestForm(false)} className="text-gray-400 hover:text-gray-600 dark:text-slate-500 dark:hover:text-slate-300">✕</button>
             </div>
 
             <form onSubmit={handleSubmitInvest} className="space-y-4">
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">Date</label>
+                <label className="mb-2 block text-sm font-medium text-slate-700 dark:text-slate-200">Date</label>
                 <input
                   type="date"
                   value={investForm.date}
                   onChange={(e: ChangeEvent<HTMLInputElement>) =>
                     setInvestForm((prev: { date: string; amount: string }) => ({ ...prev, date: e.target.value }))
                   }
-                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500"
+                  className="w-full rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm text-slate-900 shadow-sm transition-colors focus:border-emerald-500 focus:outline-none focus:ring-2 focus:ring-emerald-500/20 dark:border-white/10 dark:bg-slate-900/60 dark:text-slate-100"
                   required
                 />
               </div>
 
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">Amount (SAR)</label>
+                <label className="mb-2 block text-sm font-medium text-slate-700 dark:text-slate-200">Amount (SAR)</label>
                 <input
                   type="number"
                   min="0"
@@ -1289,16 +1292,16 @@ export default function SIPPortfolioClient({ investment, userRole }: SIPPortfoli
                   onChange={(e: ChangeEvent<HTMLInputElement>) =>
                     setInvestForm((prev: { date: string; amount: string }) => ({ ...prev, amount: e.target.value }))
                   }
-                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500"
+                  className="w-full rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm text-slate-900 shadow-sm transition-colors focus:border-emerald-500 focus:outline-none focus:ring-2 focus:ring-emerald-500/20 dark:border-white/10 dark:bg-slate-900/60 dark:text-slate-100"
                   required
                 />
               </div>
 
-              <div className="flex justify-end space-x-3 pt-4 border-t">
+              <div className="flex justify-end space-x-3 border-t border-slate-200 pt-4 dark:border-white/10">
                 <button
                   type="button"
                   onClick={() => setShowInvestForm(false)}
-                  className="px-4 py-2 border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50 transition-colors"
+                  className="rounded-lg border border-slate-200 bg-white px-4 py-2 text-sm font-medium text-slate-700 transition-colors hover:bg-slate-50 dark:border-white/10 dark:bg-slate-900/60 dark:text-slate-200 dark:hover:bg-white/5"
                 >
                   Cancel
                 </button>
@@ -1317,28 +1320,28 @@ export default function SIPPortfolioClient({ investment, userRole }: SIPPortfoli
 
       {showValueForm && (
         <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
-          <div className="bg-white rounded-xl p-6 max-w-md w-full mx-4">
+          <div className="mx-4 w-full max-w-md rounded-xl bg-white p-6 dark:bg-slate-950 dark:text-slate-100">
             <div className="flex justify-between items-center mb-6">
-              <h2 className="text-xl font-bold text-gray-900">Update Current Value</h2>
-              <button onClick={() => setShowValueForm(false)} className="text-gray-400 hover:text-gray-600">✕</button>
+              <h2 className="text-xl font-bold text-gray-900 dark:text-gray-100">Update Current Value</h2>
+              <button onClick={() => setShowValueForm(false)} className="text-gray-400 hover:text-gray-600 dark:text-slate-500 dark:hover:text-slate-300">✕</button>
             </div>
 
             <form onSubmit={handleSubmitCurrentValue} className="space-y-4">
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">Date</label>
+                <label className="mb-2 block text-sm font-medium text-slate-700 dark:text-slate-200">Date</label>
                 <input
                   type="date"
                   value={valueForm.date}
                   onChange={(e: ChangeEvent<HTMLInputElement>) =>
                     setValueForm((prev: { date: string; currentValue: string }) => ({ ...prev, date: e.target.value }))
                   }
-                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500"
+                  className="w-full rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm text-slate-900 shadow-sm transition-colors focus:border-emerald-500 focus:outline-none focus:ring-2 focus:ring-emerald-500/20 dark:border-white/10 dark:bg-slate-900/60 dark:text-slate-100"
                   required
                 />
               </div>
 
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">Current Value (SAR)</label>
+                <label className="mb-2 block text-sm font-medium text-slate-700 dark:text-slate-200">Current Value (SAR)</label>
                 <input
                   type="number"
                   min="0"
@@ -1347,16 +1350,16 @@ export default function SIPPortfolioClient({ investment, userRole }: SIPPortfoli
                   onChange={(e: ChangeEvent<HTMLInputElement>) =>
                     setValueForm((prev: { date: string; currentValue: string }) => ({ ...prev, currentValue: e.target.value }))
                   }
-                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500"
+                  className="w-full rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm text-slate-900 shadow-sm transition-colors focus:border-emerald-500 focus:outline-none focus:ring-2 focus:ring-emerald-500/20 dark:border-white/10 dark:bg-slate-900/60 dark:text-slate-100"
                   required
                 />
               </div>
 
-              <div className="flex justify-end space-x-3 pt-4 border-t">
+              <div className="flex justify-end space-x-3 border-t border-slate-200 pt-4 dark:border-white/10">
                 <button
                   type="button"
                   onClick={() => setShowValueForm(false)}
-                  className="px-4 py-2 border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50 transition-colors"
+                  className="rounded-lg border border-slate-200 bg-white px-4 py-2 text-sm font-medium text-slate-700 transition-colors hover:bg-slate-50 dark:border-white/10 dark:bg-slate-900/60 dark:text-slate-200 dark:hover:bg-white/5"
                 >
                   Cancel
                 </button>
@@ -1381,7 +1384,7 @@ export default function SIPPortfolioClient({ investment, userRole }: SIPPortfoli
               <button onClick={() => setShowHoldingsForm(false)} className="text-gray-400 hover:text-gray-600">✕</button>
             </div>
 
-            <div className="mb-4 rounded-lg border border-gray-200 bg-gray-50 p-3 text-sm text-gray-700">
+            <div className="mb-4 rounded-lg border border-gray-200 bg-gray-50 p-3 text-sm text-gray-700 dark:border-white/10 dark:bg-slate-900/60 dark:text-slate-300">
               <div className="font-semibold text-gray-900">How this works</div>
               <div className="mt-1">
                 - Holdings values represent your <span className="font-semibold">current market value</span> breakdown.
@@ -1395,7 +1398,7 @@ export default function SIPPortfolioClient({ investment, userRole }: SIPPortfoli
               <button
                 type="button"
                 onClick={addHoldingDraft}
-                className="px-3 py-2 rounded-lg bg-gray-100 text-gray-700 hover:bg-gray-200 text-sm font-semibold"
+                className="rounded-lg bg-gray-100 px-3 py-2 text-sm font-semibold text-gray-700 hover:bg-gray-200 dark:bg-slate-900/60 dark:text-slate-200 dark:hover:bg-slate-800"
               >
                 + Add Holding
               </button>
@@ -1416,7 +1419,7 @@ export default function SIPPortfolioClient({ investment, userRole }: SIPPortfoli
                             prev.map((x: HoldingDraftRow) => (x.id === h.id ? { ...x, name: e.target.value } : x))
                           )
                         }
-                        className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500 outline-none"
+                        className="w-full rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm text-slate-900 outline-none transition-colors focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500 dark:border-white/10 dark:bg-slate-900/60 dark:text-slate-100"
                         placeholder="e.g., SPUS / REIT / Cash"
                       />
                     </div>
@@ -1430,7 +1433,7 @@ export default function SIPPortfolioClient({ investment, userRole }: SIPPortfoli
                             prev.map((x: HoldingDraftRow) => (x.id === h.id ? { ...x, assetType: e.target.value } : x))
                           )
                         }
-                        className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500 outline-none"
+                        className="w-full rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm text-slate-900 outline-none transition-colors focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500 dark:border-white/10 dark:bg-slate-900/60 dark:text-slate-100"
                       >
                         <option value="us_stocks">US Stocks</option>
                         <option value="developed_emerging_stocks">Developed/Emerging Stocks</option>
@@ -1453,7 +1456,7 @@ export default function SIPPortfolioClient({ investment, userRole }: SIPPortfoli
                             prev.map((x: HoldingDraftRow) => (x.id === h.id ? { ...x, cost: e.target.value } : x))
                           )
                         }
-                        className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500 outline-none"
+                        className="w-full rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm text-slate-900 outline-none transition-colors focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500 dark:border-white/10 dark:bg-slate-900/60 dark:text-slate-100"
                       />
                     </div>
 
@@ -1469,7 +1472,7 @@ export default function SIPPortfolioClient({ investment, userRole }: SIPPortfoli
                             prev.map((x: HoldingDraftRow) => (x.id === h.id ? { ...x, currentValue: e.target.value } : x))
                           )
                         }
-                        className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500 outline-none"
+                        className="w-full rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm text-slate-900 outline-none transition-colors focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500 dark:border-white/10 dark:bg-slate-900/60 dark:text-slate-100"
                       />
                     </div>
 
@@ -1495,7 +1498,7 @@ export default function SIPPortfolioClient({ investment, userRole }: SIPPortfoli
               <button
                 type="button"
                 onClick={() => setShowHoldingsForm(false)}
-                className="px-4 py-2 border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50 transition-colors"
+                className="rounded-lg border border-slate-200 bg-white px-4 py-2 text-sm font-medium text-slate-700 transition-colors hover:bg-slate-50 dark:border-white/10 dark:bg-slate-900/60 dark:text-slate-200 dark:hover:bg-white/5"
               >
                 Cancel
               </button>

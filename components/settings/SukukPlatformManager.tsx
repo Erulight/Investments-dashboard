@@ -176,7 +176,7 @@ export function SukukPlatformManager() {
               required
               value={form.name}
               onChange={(e) => setForm((prev) => ({ ...prev, name: e.target.value }))}
-              className="w-full rounded-lg border border-gray-200 px-3 py-2 text-sm focus:border-slate-500 focus:ring-1 focus:ring-slate-500 outline-none"
+              className="w-full rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm text-slate-900 outline-none transition-colors focus:border-slate-500 focus:ring-1 focus:ring-slate-500 dark:border-white/10 dark:bg-slate-900/60 dark:text-slate-100"
               placeholder="e.g., Sukuk Capital"
             />
           </div>
@@ -187,7 +187,7 @@ export function SukukPlatformManager() {
               required
               value={form.currency}
               onChange={(e) => setForm((prev) => ({ ...prev, currency: e.target.value.toUpperCase() }))}
-              className="w-full rounded-lg border border-gray-200 px-3 py-2 text-sm focus:border-slate-500 focus:ring-1 focus:ring-slate-500 outline-none"
+              className="w-full rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm text-slate-900 outline-none transition-colors focus:border-slate-500 focus:ring-1 focus:ring-slate-500 dark:border-white/10 dark:bg-slate-900/60 dark:text-slate-100"
               placeholder="SAR"
             />
           </div>
@@ -197,7 +197,7 @@ export function SukukPlatformManager() {
               type="text"
               value={form.description}
               onChange={(e) => setForm((prev) => ({ ...prev, description: e.target.value }))}
-              className="w-full rounded-lg border border-gray-200 px-3 py-2 text-sm focus:border-slate-500 focus:ring-1 focus:ring-slate-500 outline-none"
+              className="w-full rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm text-slate-900 outline-none transition-colors focus:border-slate-500 focus:ring-1 focus:ring-slate-500 dark:border-white/10 dark:bg-slate-900/60 dark:text-slate-100"
               placeholder="Short description for this platform"
             />
           </div>
@@ -227,7 +227,7 @@ export function SukukPlatformManager() {
                         type="text"
                         value={editForm.name}
                         onChange={(e) => setEditForm((prev) => ({ ...prev, name: e.target.value }))}
-                        className="w-full rounded-lg border border-gray-200 px-3 py-2 text-sm focus:border-slate-500 focus:ring-1 focus:ring-slate-500 outline-none"
+                        className="w-full rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm text-slate-900 outline-none transition-colors focus:border-slate-500 focus:ring-1 focus:ring-slate-500 dark:border-white/10 dark:bg-slate-900/60 dark:text-slate-100"
                       />
                     </div>
                     <div>
@@ -241,7 +241,7 @@ export function SukukPlatformManager() {
                             currency: e.target.value.toUpperCase(),
                           }))
                         }
-                        className="w-full rounded-lg border border-gray-200 px-3 py-2 text-sm focus:border-slate-500 focus:ring-1 focus:ring-slate-500 outline-none"
+                        className="w-full rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm text-slate-900 outline-none transition-colors focus:border-slate-500 focus:ring-1 focus:ring-slate-500 dark:border-white/10 dark:bg-slate-900/60 dark:text-slate-100"
                       />
                     </div>
                   </div>
@@ -253,7 +253,7 @@ export function SukukPlatformManager() {
                       onChange={(e) =>
                         setEditForm((prev) => ({ ...prev, description: e.target.value }))
                       }
-                      className="w-full rounded-lg border border-gray-200 px-3 py-2 text-sm focus:border-slate-500 focus:ring-1 focus:ring-slate-500 outline-none"
+                      className="w-full rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm text-slate-900 outline-none transition-colors focus:border-slate-500 focus:ring-1 focus:ring-slate-500 dark:border-white/10 dark:bg-slate-900/60 dark:text-slate-100"
                     />
                   </div>
                   <div className="flex items-center gap-2">
@@ -306,7 +306,7 @@ export function SukukPlatformManager() {
               type="text"
               value={deleteConfirmText}
               onChange={(e) => setDeleteConfirmText(e.target.value)}
-              className="w-full rounded-lg border border-gray-200 px-3 py-2 text-sm focus:border-red-500 focus:ring-1 focus:ring-red-500 outline-none"
+              className="w-full rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm text-slate-900 outline-none transition-colors focus:border-red-500 focus:ring-1 focus:ring-red-500 dark:border-white/10 dark:bg-slate-900/60 dark:text-slate-100"
             />
           </div>
           <div>
@@ -315,7 +315,7 @@ export function SukukPlatformManager() {
               type="password"
               value={deletePassword}
               onChange={(e) => setDeletePassword(e.target.value)}
-              className="w-full rounded-lg border border-gray-200 px-3 py-2 text-sm focus:border-red-500 focus:ring-1 focus:ring-red-500 outline-none"
+              className="w-full rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm text-slate-900 outline-none transition-colors focus:border-red-500 focus:ring-1 focus:ring-red-500 dark:border-white/10 dark:bg-slate-900/60 dark:text-slate-100"
             />
           </div>
           {deleteError && <p className="text-sm text-red-600">{deleteError}</p>}

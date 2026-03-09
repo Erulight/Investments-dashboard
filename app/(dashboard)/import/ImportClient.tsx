@@ -63,17 +63,16 @@ export default function ImportClient() {
         <CardContent>
           <div className="space-y-4">
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-2">Select CSV File</label>
+              <label className="mb-2 block text-sm font-medium text-slate-700 dark:text-slate-200">Select CSV File</label>
               <input
                 type="file"
                 accept=".csv"
                 onChange={handleFileChange}
-                className="block w-full text-sm text-gray-500
-                  file:mr-4 file:py-2 file:px-4
-                  file:rounded-md file:border-0
-                  file:text-sm file:font-semibold
-                  file:bg-indigo-50 file:text-indigo-700
-                  hover:file:bg-indigo-100"
+                className="block w-full text-sm text-slate-500 dark:text-slate-400
+                  file:mr-4 file:rounded-md file:border-0
+                  file:bg-indigo-50 file:px-4 file:py-2
+                  file:text-sm file:font-semibold file:text-indigo-700
+                  hover:file:bg-indigo-100 dark:file:bg-indigo-500/15 dark:file:text-indigo-200 dark:hover:file:bg-indigo-500/25"
               />
             </div>
 

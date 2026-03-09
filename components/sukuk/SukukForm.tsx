@@ -310,17 +310,17 @@ export function SukukForm({ mode, initialData, onSuccess, onCancel }: SukukFormP
         <div className="rounded-xl bg-red-50 p-4 border border-red-200">
           <div className="flex items-center">
             <span className="text-xl mr-2">⚠️</span>
-            <p className="text-sm text-red-800 font-medium">{error}</p>
+            <p className="text-sm text-red-800 font-medium dark:text-red-200">{error}</p>
           </div>
         </div>
       )}
 
       {/* Basic Information */}
       <div className="space-y-4">
-        <h3 className="text-lg font-semibold text-gray-900">Basic Information</h3>
+        <h3 className="text-lg font-semibold text-slate-900 dark:text-slate-100">Basic Information</h3>
         
         <div>
-          <label htmlFor="name" className="block text-sm font-medium text-gray-700 mb-1">
+          <label htmlFor="name" className="mb-1 block text-sm font-medium text-slate-700 dark:text-slate-200">
             Sukuk Name *
           </label>
           <input
@@ -330,14 +330,14 @@ export function SukukForm({ mode, initialData, onSuccess, onCancel }: SukukFormP
             required
             value={formData.name}
             onChange={handleChange}
-            className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+            className="w-full rounded-lg border border-slate-200 bg-white px-4 py-2 text-sm text-slate-900 placeholder:text-slate-400 shadow-sm transition-colors focus:border-emerald-500 focus:outline-none focus:ring-2 focus:ring-emerald-500/20 dark:border-white/10 dark:bg-slate-900/60 dark:text-slate-100 dark:placeholder:text-slate-500"
             placeholder="e.g., ABC Corp Sukuk 2024"
           />
-          {errors.name && <p className="text-sm text-red-600 mt-1">{errors.name}</p>}
+          {errors.name && <p className="text-sm text-red-600 mt-1 dark:text-red-200">{errors.name}</p>}
         </div>
 
         <div>
-          <label htmlFor="accountId" className="block text-sm font-medium text-gray-700 mb-1">
+          <label htmlFor="accountId" className="mb-1 block text-sm font-medium text-slate-700 dark:text-slate-200">
             Account *
           </label>
           <select
@@ -346,7 +346,7 @@ export function SukukForm({ mode, initialData, onSuccess, onCancel }: SukukFormP
             required
             value={formData.accountId}
             onChange={handleChange}
-            className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent bg-white"
+            className="w-full rounded-lg border border-slate-200 bg-white px-4 py-2 text-sm text-slate-900 shadow-sm transition-colors focus:border-emerald-500 focus:outline-none focus:ring-2 focus:ring-emerald-500/20 dark:border-white/10 dark:bg-slate-900/60 dark:text-slate-100"
           >
             <option value="">Select a Sukuk account</option>
             {accounts.map((account) => (
@@ -355,15 +355,15 @@ export function SukukForm({ mode, initialData, onSuccess, onCancel }: SukukFormP
               </option>
             ))}
           </select>
-          {errors.accountId && <p className="text-sm text-red-600 mt-1">{errors.accountId}</p>}
-          {loadError && <p className="text-sm text-red-600 mt-1">{loadError}</p>}
+          {errors.accountId && <p className="text-sm text-red-600 mt-1 dark:text-red-200">{errors.accountId}</p>}
+          {loadError && <p className="text-sm text-red-600 mt-1 dark:text-red-200">{loadError}</p>}
           {!loadError && accounts.length === 0 && (
-            <p className="text-sm text-gray-500 mt-1">No Sukuk accounts found.</p>
+            <p className="mt-1 text-sm text-slate-500 dark:text-slate-400">No Sukuk accounts found.</p>
           )}
         </div>
 
         <div>
-          <label htmlFor="category" className="block text-sm font-medium text-gray-700 mb-1">
+          <label htmlFor="category" className="mb-1 block text-sm font-medium text-slate-700 dark:text-slate-200">
             Category
           </label>
           <input
@@ -372,12 +372,12 @@ export function SukukForm({ mode, initialData, onSuccess, onCancel }: SukukFormP
             name="category"
             value={formData.category}
             onChange={handleChange}
-            className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+            className="w-full rounded-lg border border-slate-200 bg-white px-4 py-2 text-sm text-slate-900 placeholder:text-slate-400 shadow-sm transition-colors focus:border-emerald-500 focus:outline-none focus:ring-2 focus:ring-emerald-500/20 dark:border-white/10 dark:bg-slate-900/60 dark:text-slate-100 dark:placeholder:text-slate-500"
             placeholder="e.g., Corporate, Sovereign"
           />
         </div>
         <div>
-          <label htmlFor="isIjarah" className="block text-sm font-medium text-gray-700 mb-1">
+          <label htmlFor="isIjarah" className="mb-1 block text-sm font-medium text-slate-700 dark:text-slate-200">
             Sukuk Type
           </label>
           <select
@@ -385,7 +385,7 @@ export function SukukForm({ mode, initialData, onSuccess, onCancel }: SukukFormP
             name="isIjarah"
             value={String(formData.isIjarah)}
             onChange={handleChange}
-            className="w-full px-4 py-2 border border-gray-300 rounded-lg bg-white focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+            className="w-full rounded-lg border border-slate-200 bg-white px-4 py-2 text-sm text-slate-900 shadow-sm transition-colors focus:border-emerald-500 focus:outline-none focus:ring-2 focus:ring-emerald-500/20 dark:border-white/10 dark:bg-slate-900/60 dark:text-slate-100"
           >
             <option value="false">Standard (Zakat applies)</option>
             <option value="true">Ijarah (Zakat excluded)</option>
@@ -395,11 +395,11 @@ export function SukukForm({ mode, initialData, onSuccess, onCancel }: SukukFormP
 
       {/* Financial Information */}
       <div className="space-y-4">
-        <h3 className="text-lg font-semibold text-gray-900">Financial Details</h3>
+        <h3 className="text-lg font-semibold text-slate-900 dark:text-slate-100">Financial Details</h3>
         
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
           <div>
-            <label htmlFor="principalAmount" className="block text-sm font-medium text-gray-700 mb-1">
+            <label htmlFor="principalAmount" className="mb-1 block text-sm font-medium text-slate-700 dark:text-slate-200">
               Principal Amount *
             </label>
             <input
@@ -411,14 +411,14 @@ export function SukukForm({ mode, initialData, onSuccess, onCancel }: SukukFormP
               min="0"
               value={formData.principalAmount}
               onChange={handleChange}
-              className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+              className="w-full rounded-lg border border-slate-200 bg-white px-4 py-2 text-sm text-slate-900 placeholder:text-slate-400 shadow-sm transition-colors focus:border-emerald-500 focus:outline-none focus:ring-2 focus:ring-emerald-500/20 dark:border-white/10 dark:bg-slate-900/60 dark:text-slate-100 dark:placeholder:text-slate-500"
               placeholder="0.00"
             />
-            {errors.principalAmount && <p className="text-sm text-red-600 mt-1">{errors.principalAmount}</p>}
+            {errors.principalAmount && <p className="text-sm text-red-600 mt-1 dark:text-red-200">{errors.principalAmount}</p>}
           </div>
 
           <div>
-            <label htmlFor="currentValue" className="block text-sm font-medium text-gray-700 mb-1">
+            <label htmlFor="currentValue" className="mb-1 block text-sm font-medium text-slate-700 dark:text-slate-200">
               Current Value
             </label>
             <input
@@ -429,15 +429,15 @@ export function SukukForm({ mode, initialData, onSuccess, onCancel }: SukukFormP
               min="0"
               value={formData.currentValue}
               onChange={handleChange}
-              className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+              className="w-full rounded-lg border border-slate-200 bg-white px-4 py-2 text-sm text-slate-900 placeholder:text-slate-400 shadow-sm transition-colors focus:border-emerald-500 focus:outline-none focus:ring-2 focus:ring-emerald-500/20 dark:border-white/10 dark:bg-slate-900/60 dark:text-slate-100 dark:placeholder:text-slate-500"
               placeholder="0.00"
             />
-            {errors.currentValue && <p className="text-sm text-red-600 mt-1">{errors.currentValue}</p>}
+            {errors.currentValue && <p className="text-sm text-red-600 mt-1 dark:text-red-200">{errors.currentValue}</p>}
           </div>
         </div>
 
         <div>
-          <label htmlFor="interestRate" className="block text-sm font-medium text-gray-700 mb-1">
+          <label htmlFor="interestRate" className="mb-1 block text-sm font-medium text-slate-700 dark:text-slate-200">
             APR Yearly (auto)
           </label>
           <input
@@ -449,15 +449,15 @@ export function SukukForm({ mode, initialData, onSuccess, onCancel }: SukukFormP
             max="100"
             value={formData.interestRate}
             readOnly
-            className="w-full px-4 py-2 border border-gray-300 rounded-lg bg-gray-50 text-gray-700"
+            className="w-full rounded-lg border border-slate-200 bg-slate-50 px-4 py-2 text-sm text-slate-600 shadow-sm dark:border-white/10 dark:bg-slate-950/60 dark:text-slate-300"
             placeholder="Auto-calculated"
           />
-          {errors.interestRate && <p className="text-sm text-red-600 mt-1">{errors.interestRate}</p>}
+          {errors.interestRate && <p className="text-sm text-red-600 mt-1 dark:text-red-200">{errors.interestRate}</p>}
         </div>
 
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
           <div>
-            <label htmlFor="fees" className="block text-sm font-medium text-gray-700 mb-1">
+            <label htmlFor="fees" className="mb-1 block text-sm font-medium text-slate-700 dark:text-slate-200">
               Fees
             </label>
             <input
@@ -468,14 +468,14 @@ export function SukukForm({ mode, initialData, onSuccess, onCancel }: SukukFormP
               min="0"
               value={formData.fees}
               onChange={handleChange}
-              className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+              className="w-full rounded-lg border border-slate-200 bg-white px-4 py-2 text-sm text-slate-900 placeholder:text-slate-400 shadow-sm transition-colors focus:border-emerald-500 focus:outline-none focus:ring-2 focus:ring-emerald-500/20 dark:border-white/10 dark:bg-slate-900/60 dark:text-slate-100 dark:placeholder:text-slate-500"
               placeholder="0.00"
             />
-            {errors.fees && <p className="text-sm text-red-600 mt-1">{errors.fees}</p>}
+            {errors.fees && <p className="text-sm text-red-600 mt-1 dark:text-red-200">{errors.fees}</p>}
           </div>
 
           <div>
-            <label htmlFor="totalReceived" className="block text-sm font-medium text-gray-700 mb-1">
+            <label htmlFor="totalReceived" className="mb-1 block text-sm font-medium text-slate-700 dark:text-slate-200">
               Total Received
             </label>
             <input
@@ -486,12 +486,12 @@ export function SukukForm({ mode, initialData, onSuccess, onCancel }: SukukFormP
               min="0"
               value={formData.totalReceived}
               onChange={handleChange}
-              className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+              className="w-full rounded-lg border border-slate-200 bg-white px-4 py-2 text-sm text-slate-900 placeholder:text-slate-400 shadow-sm transition-colors focus:border-emerald-500 focus:outline-none focus:ring-2 focus:ring-emerald-500/20 dark:border-white/10 dark:bg-slate-900/60 dark:text-slate-100 dark:placeholder:text-slate-500"
               placeholder="0.00"
             />
-            {errors.totalReceived && <p className="text-sm text-red-600 mt-1">{errors.totalReceived}</p>}
+            {errors.totalReceived && <p className="text-sm text-red-600 mt-1 dark:text-red-200">{errors.totalReceived}</p>}
             {mode === 'edit' && (
-              <p className="text-xs text-gray-500 mt-1">
+              <p className="mt-1 text-xs text-slate-500 dark:text-slate-400">
                 Use receipts below for dated entries; this total will update automatically.
               </p>
             )}
@@ -499,7 +499,7 @@ export function SukukForm({ mode, initialData, onSuccess, onCancel }: SukukFormP
         </div>
 
         <div>
-          <label htmlFor="receivableAmount" className="block text-sm font-medium text-gray-700 mb-1">
+          <label htmlFor="receivableAmount" className="mb-1 block text-sm font-medium text-slate-700 dark:text-slate-200">
             Receivable (Net Profit)
           </label>
           <input
@@ -510,11 +510,11 @@ export function SukukForm({ mode, initialData, onSuccess, onCancel }: SukukFormP
             min="0"
             value={formData.receivableAmount}
             onChange={handleChange}
-            className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+            className="w-full rounded-lg border border-slate-200 bg-white px-4 py-2 text-sm text-slate-900 placeholder:text-slate-400 shadow-sm transition-colors focus:border-emerald-500 focus:outline-none focus:ring-2 focus:ring-emerald-500/20 dark:border-white/10 dark:bg-slate-900/60 dark:text-slate-100 dark:placeholder:text-slate-500"
             placeholder="0.00"
           />
-          {errors.receivableAmount && <p className="text-sm text-red-600 mt-1">{errors.receivableAmount}</p>}
-          <p className="text-xs text-gray-500 mt-1">
+          {errors.receivableAmount && <p className="text-sm text-red-600 mt-1 dark:text-red-200">{errors.receivableAmount}</p>}
+          <p className="mt-1 text-xs text-slate-500 dark:text-slate-400">
             Enter expected net profit after fees. APR will be calculated automatically.
           </p>
         </div>
@@ -522,13 +522,13 @@ export function SukukForm({ mode, initialData, onSuccess, onCancel }: SukukFormP
 
       {mode === 'edit' && (
         <div className="space-y-4">
-          <h3 className="text-lg font-semibold text-gray-900">Record Receipts</h3>
-          <p className="text-xs text-gray-500">
+          <h3 className="text-lg font-semibold text-slate-900 dark:text-slate-100">Record Receipts</h3>
+          <p className="text-xs text-slate-500 dark:text-slate-400">
             Log partial profit receipts with dates so maturity timing stays accurate.
           </p>
           <div className="space-y-3">
             {receiptError && (
-              <div className="rounded-lg bg-red-50 p-3 text-sm text-red-700 border border-red-200">
+              <div className="rounded-lg bg-red-50 p-3 text-sm text-red-700 border border-red-200 dark:bg-red-900/60 dark:border-red-900/60">
                 {receiptError}
               </div>
             )}
@@ -541,7 +541,7 @@ export function SukukForm({ mode, initialData, onSuccess, onCancel }: SukukFormP
               <select
                 value={receiptForm.source}
                 onChange={(e) => setReceiptForm((prev) => ({ ...prev, source: e.target.value }))}
-                className="w-full px-4 py-2 border border-gray-300 rounded-lg bg-white focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                className="w-full rounded-lg border border-slate-200 bg-white px-4 py-2 text-sm text-slate-900 shadow-sm transition-colors focus:border-emerald-500 focus:outline-none focus:ring-2 focus:ring-emerald-500/20 dark:border-white/10 dark:bg-slate-900/60 dark:text-slate-100"
               >
                 <option value="PROFIT">Profit</option>
                 <option value="PRINCIPAL">Principal</option>
@@ -552,7 +552,7 @@ export function SukukForm({ mode, initialData, onSuccess, onCancel }: SukukFormP
                 step="0.01"
                 value={receiptForm.amount}
                 onChange={(e) => setReceiptForm((prev) => ({ ...prev, amount: e.target.value }))}
-                className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                className="w-full rounded-lg border border-slate-200 bg-white px-4 py-2 text-sm text-slate-900 placeholder:text-slate-400 shadow-sm transition-colors focus:border-emerald-500 focus:outline-none focus:ring-2 focus:ring-emerald-500/20 dark:border-white/10 dark:bg-slate-900/60 dark:text-slate-100 dark:placeholder:text-slate-500"
                 placeholder="Amount"
               />
               <DateInput
@@ -564,7 +564,7 @@ export function SukukForm({ mode, initialData, onSuccess, onCancel }: SukukFormP
                 type="text"
                 value={receiptForm.notes}
                 onChange={(e) => setReceiptForm((prev) => ({ ...prev, notes: e.target.value }))}
-                className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                className="w-full rounded-lg border border-slate-200 bg-white px-4 py-2 text-sm text-slate-900 placeholder:text-slate-400 shadow-sm transition-colors focus:border-emerald-500 focus:outline-none focus:ring-2 focus:ring-emerald-500/20 dark:border-white/10 dark:bg-slate-900/60 dark:text-slate-100 dark:placeholder:text-slate-500"
                 placeholder="Notes (optional)"
               />
             </div>
@@ -576,14 +576,14 @@ export function SukukForm({ mode, initialData, onSuccess, onCancel }: SukukFormP
           </div>
 
           {receiptRows.length > 0 && (
-            <div className="rounded-xl border border-gray-200">
-              <div className="px-4 py-2 border-b text-xs font-semibold text-gray-500">
+            <div className="rounded-xl border border-slate-200 dark:border-white/10">
+              <div className="border-b border-slate-200 px-4 py-2 text-xs font-semibold text-slate-500 dark:border-white/10 dark:text-slate-400">
                 Recent Receipts
               </div>
-              <div className="divide-y text-xs">
+              <div className="divide-y divide-slate-100 text-xs dark:divide-white/10">
                 {receiptRows.slice(0, 6).map((tx) => (
                   <div key={tx.id} className="flex items-center justify-between px-4 py-2">
-                    <div className="text-gray-700">
+                    <div className="text-slate-700 dark:text-slate-200">
                       {new Date(tx.date).toLocaleDateString()} • {tx.type}
                     </div>
                     <div className="text-green-600">
@@ -599,11 +599,11 @@ export function SukukForm({ mode, initialData, onSuccess, onCancel }: SukukFormP
 
       {/* Dates */}
       <div className="space-y-4">
-        <h3 className="text-lg font-semibold text-gray-900">Timeline</h3>
+        <h3 className="text-lg font-semibold text-slate-900 dark:text-slate-100">Timeline</h3>
         
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
           <div>
-            <label htmlFor="startDate" className="block text-sm font-medium text-gray-700 mb-1">
+            <label htmlFor="startDate" className="mb-1 block text-sm font-medium text-slate-700 dark:text-slate-200">
               Start Date *
             </label>
             <DateInput
@@ -618,7 +618,7 @@ export function SukukForm({ mode, initialData, onSuccess, onCancel }: SukukFormP
           </div>
 
           <div>
-            <label htmlFor="maturityDate" className="block text-sm font-medium text-gray-700 mb-1">
+            <label htmlFor="maturityDate" className="mb-1 block text-sm font-medium text-slate-700 dark:text-slate-200">
               Maturity Date
             </label>
             <DateInput
@@ -635,7 +635,7 @@ export function SukukForm({ mode, initialData, onSuccess, onCancel }: SukukFormP
 
       {/* Notes */}
       <div>
-        <label htmlFor="notes" className="block text-sm font-medium text-gray-700 mb-1">
+        <label htmlFor="notes" className="mb-1 block text-sm font-medium text-slate-700 dark:text-slate-200">
           Notes
         </label>
         <textarea
@@ -644,13 +644,13 @@ export function SukukForm({ mode, initialData, onSuccess, onCancel }: SukukFormP
           rows={3}
           value={formData.notes}
           onChange={handleChange}
-          className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+          className="w-full rounded-lg border border-slate-200 bg-white px-4 py-2 text-sm text-slate-900 placeholder:text-slate-400 shadow-sm transition-colors focus:border-emerald-500 focus:outline-none focus:ring-2 focus:ring-emerald-500/20 dark:border-white/10 dark:bg-slate-900/60 dark:text-slate-100 dark:placeholder:text-slate-500"
           placeholder="Additional notes..."
         />
       </div>
 
       {/* Action Buttons */}
-      <div className="flex items-center justify-end space-x-4 pt-4 border-t">
+      <div className="flex items-center justify-end space-x-4 border-t border-slate-200 pt-4 dark:border-white/10">
         {onCancel && (
           <Button
             type="button"

@@ -172,10 +172,10 @@ export default async function BusinessDealsPage() {
                               {inv.account?.name}
                             </span>
                           </TableCell>
-                          <TableCell className="font-medium text-gray-700 tabular-nums">
+                          <TableCell className="font-medium text-gray-700 dark:text-slate-200 tabular-nums">
                             {inv.account?.currency} {principal.toLocaleString()}
                           </TableCell>
-                          <TableCell className="font-medium text-gray-900 tabular-nums">
+                          <TableCell className="font-medium text-gray-900 dark:text-slate-200 tabular-nums">
                             {inv.account?.currency} {current.toLocaleString()}
                           </TableCell>
                           <TableCell>

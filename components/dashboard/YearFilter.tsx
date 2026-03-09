@@ -25,11 +25,11 @@ export function YearFilter({ selectedYear }: { selectedYear: number }) {
 
   return (
     <div className="flex items-center gap-2">
-      <span className="text-sm text-gray-600">Year</span>
+      <span className="text-sm text-slate-600 dark:text-slate-300">Year</span>
       <select
         value={year}
         onChange={(e) => handleChange(e.target.value)}
-        className="rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm focus:border-blue-500 focus:ring-2 focus:ring-blue-500"
+        className="rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm text-slate-900 shadow-sm transition-colors focus:border-emerald-500 focus:outline-none focus:ring-2 focus:ring-emerald-500/20 dark:border-white/10 dark:bg-slate-900/60 dark:text-slate-100"
       >
         {years.map((year) => (
           <option key={year} value={year}>

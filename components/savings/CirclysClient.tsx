@@ -608,7 +608,7 @@ export function CirclysClient({ initialInvestments, userRole }: CirclysClientPro
                                   onChange={(e: ChangeEvent<HTMLInputElement>) =>
                                     setPayAmountByKey((prev: Record<string, string>) => ({ ...prev, [key]: e.target.value }))
                                   }
-                                  className="w-28 rounded border border-gray-200 px-2 py-1 text-sm tabular-nums disabled:bg-gray-100 disabled:text-gray-500"
+                                  className="w-28 rounded border border-slate-200 bg-white px-2 py-1 text-sm tabular-nums text-slate-900 transition-colors disabled:bg-slate-100 disabled:text-slate-500 dark:border-white/10 dark:bg-slate-900/60 dark:text-slate-100 dark:disabled:bg-slate-800 dark:disabled:text-slate-500"
                                 />
                               </td>
                               <td className="py-2 pr-3">
@@ -621,7 +621,7 @@ export function CirclysClient({ initialInvestments, userRole }: CirclysClientPro
                                   onChange={(e: ChangeEvent<HTMLInputElement>) =>
                                     setPayRewardByKey((prev: Record<string, string>) => ({ ...prev, [key]: e.target.value }))
                                   }
-                                  className="w-24 rounded border border-gray-200 px-2 py-1 text-sm tabular-nums disabled:bg-gray-100 disabled:text-gray-500"
+                                  className="w-24 rounded border border-slate-200 bg-white px-2 py-1 text-sm tabular-nums text-slate-900 transition-colors disabled:bg-slate-100 disabled:text-slate-500 dark:border-white/10 dark:bg-slate-900/60 dark:text-slate-100 dark:disabled:bg-slate-800 dark:disabled:text-slate-500"
                                 />
                               </td>
                               <td className="py-2 pr-3 whitespace-nowrap">
@@ -639,7 +639,7 @@ export function CirclysClient({ initialInvestments, userRole }: CirclysClientPro
                                   userRole === 'OWNER' ? (
                                     <button
                                       disabled={loading}
-                                      className="px-2.5 py-1 text-xs font-medium text-gray-600 bg-gray-100 hover:bg-gray-200 rounded transition-colors disabled:opacity-50"
+                                      className="rounded px-2.5 py-1 text-xs font-medium text-slate-600 transition-colors hover:bg-slate-200 disabled:opacity-50 dark:bg-white/10 dark:text-slate-300 dark:hover:bg-white/15 bg-slate-100"
                                       onClick={async () => {
                                         setPayErrorByKey((prev: Record<string, string>) => {
                                           const next = { ...prev }; delete next[key]; return next
@@ -749,7 +749,7 @@ export function CirclysClient({ initialInvestments, userRole }: CirclysClientPro
       {/* Create Plan Modal */}
       {showCreateForm && (
         <div className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center p-4 z-50">
-          <div className="bg-white rounded-xl shadow-2xl max-h-[90vh] overflow-y-auto">
+          <div className="max-h-[90vh] overflow-y-auto rounded-xl bg-white shadow-2xl dark:bg-slate-950">
             <SavingsForm
               onSubmit={handleCreatePlan}
               onCancel={() => setShowCreateForm(false)}
@@ -762,7 +762,7 @@ export function CirclysClient({ initialInvestments, userRole }: CirclysClientPro
       {/* Edit Plan Modal */}
       {editingInvestment && (
         <div className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center p-4 z-50">
-          <div className="bg-white rounded-xl shadow-2xl max-h-[90vh] overflow-y-auto">
+          <div className="max-h-[90vh] overflow-y-auto rounded-xl bg-white shadow-2xl dark:bg-slate-950">
             <SavingsForm
               initialData={(() => {
                 const meta = parseRoscaMetadata(editingInvestment)
@@ -788,30 +788,29 @@ export function CirclysClient({ initialInvestments, userRole }: CirclysClientPro
         </div>
       )}
 
-      {/* Receive Savings Modal */}
       {showReceiveModal && (
         <div className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center p-4 z-50">
-          <div className="bg-white rounded-xl shadow-2xl max-w-md w-full">
-            <div className="border-b border-gray-200 px-6 py-4">
-              <h2 className="text-xl font-bold text-gray-900">Receive Savings</h2>
+          <div className="w-full max-w-md rounded-xl bg-white shadow-2xl dark:border dark:border-white/10 dark:bg-slate-950">
+            <div className="border-b border-slate-200 px-6 py-4 dark:border-white/10">
+              <h2 className="text-xl font-bold text-slate-900 dark:text-slate-100">Receive Savings</h2>
             </div>
             <div className="p-6 space-y-4">
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">Receipt Date</label>
+                <label className="mb-2 block text-sm font-medium text-slate-700 dark:text-slate-200">Receipt Date</label>
                 <input
                   type="date"
                   value={receiveModalDate}
                   onChange={(e) => setReceiveModalDate(e.target.value)}
-                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                  className="w-full rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm text-slate-900 shadow-sm transition-colors focus:border-emerald-500 focus:outline-none focus:ring-2 focus:ring-emerald-500/20 dark:border-white/10 dark:bg-slate-900/60 dark:text-slate-100"
                 />
               </div>
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">Total Amount Received (SAR)</label>
+                <label className="mb-2 block text-sm font-medium text-slate-700 dark:text-slate-200">Total Amount Received (SAR)</label>
                 <input
                   type="number"
                   value={receiveModalAmount}
                   onChange={(e) => setReceiveModalAmount(e.target.value)}
-                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                  className="w-full rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm text-slate-900 placeholder:text-slate-400 shadow-sm transition-colors focus:border-emerald-500 focus:outline-none focus:ring-2 focus:ring-emerald-500/20 dark:border-white/10 dark:bg-slate-900/60 dark:text-slate-100 dark:placeholder:text-slate-500"
                   step="0.01"
                   min="0"
                 />
@@ -820,11 +819,10 @@ export function CirclysClient({ initialInvestments, userRole }: CirclysClientPro
                 <div className="text-sm text-red-600 bg-red-50 p-3 rounded-lg">{receiveError}</div>
               )}
             </div>
-            <div className="border-t border-gray-200 px-6 py-4 flex gap-3 justify-end">
+            <div className="flex justify-end gap-3 border-t border-slate-200 px-6 py-4 dark:border-white/10">
               <button
                 onClick={() => setShowReceiveModal(null)}
-                disabled={receiveLoadingId !== null}
-                className="px-4 py-2 text-sm font-medium text-gray-700 bg-gray-100 hover:bg-gray-200 rounded-lg transition-colors disabled:opacity-50"
+                className="px-4 py-2 rounded-lg border border-slate-200 bg-white text-sm font-medium text-slate-700 transition-colors hover:bg-slate-50 dark:border-white/10 dark:bg-slate-900/60 dark:text-slate-200 dark:hover:bg-white/5"
               >
                 Cancel
               </button>
@@ -860,7 +858,7 @@ export function CirclysClient({ initialInvestments, userRole }: CirclysClientPro
                   }
                 }}
                 disabled={receiveLoadingId !== null}
-                className="px-4 py-2 text-sm font-medium text-white bg-blue-600 hover:bg-blue-700 rounded-lg transition-colors disabled:opacity-50"
+                className="rounded-lg bg-emerald-600 px-4 py-2 text-sm font-medium text-white transition-colors hover:bg-emerald-500 disabled:opacity-50"
               >
                 {receiveLoadingId ? '...' : 'Confirm'}
               </button>

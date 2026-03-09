@@ -81,7 +81,7 @@ export function NisabSettings() {
               step="0.01"
               value={nisabValue}
               onChange={(e) => setNisabValue(e.target.value)}
-              className="w-48 rounded-md border border-gray-200 px-3 py-2 text-sm focus:border-slate-500 focus:ring-1 focus:ring-slate-500 outline-none"
+              className="w-48 rounded-md border border-slate-200 bg-white px-3 py-2 text-sm text-slate-900 outline-none transition-colors focus:border-slate-500 focus:ring-1 focus:ring-slate-500 dark:border-white/10 dark:bg-slate-900/60 dark:text-slate-100"
             />
             <Button size="sm" variant="primary" onClick={save} disabled={loading}>
               {loading ? 'Saving…' : 'Save'}
