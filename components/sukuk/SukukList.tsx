@@ -699,13 +699,16 @@ export function SukukList({ initialSukuk, userRole, ownerPersonId, viewerPersonI
       ? round2(Number(participation.commissionFees))
       : 0
     
-    const netProfit = round2(manualReceivable !== null
+    const calculatedNetProfit = round2(manualReceivable !== null
       ? Math.max(0, manualReceivable - commissionFees)
       : Math.max(0, grossProfit - fees - commissionFees))
+
+    const netProfit = round2(Math.max(calculatedNetProfit, totalReceived))
+
     const aprAfterFees = totalInvestment > 0 && periodYears > 0
-      ? ((netProfit / totalInvestment) / periodYears) * 100
+      ? ((calculatedNetProfit / totalInvestment) / periodYears) * 100
       : 0
-    const receivable = round2(Math.max(0, netProfit - totalReceived))
+    const receivable = round2(Math.max(0, calculatedNetProfit - totalReceived))
     const receiptDate = getLatestReceiptDate(inv)
     const isFullyReceived = receivable <= 0.01
     const referenceDate = isFullyReceived

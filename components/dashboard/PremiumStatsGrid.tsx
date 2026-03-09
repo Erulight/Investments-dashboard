@@ -37,26 +37,24 @@ export function PremiumStatsGrid({
   return (
     <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
       <PremiumStatsCard
-        title={role === 'OWNER' ? 'Portfolio Value' : 'Investment Value'}
+        title="Portfolio Value"
         value={portfolioValue}
-        subtitle={role === 'OWNER' ? 'Cash + Investments' : 'Your share'}
+        subtitle="Cash + Investments"
         trend={portfolioTrend}
         sparklineData={portfolioSparkline}
         accentColor="gold"
         index={0}
-        showProgress={role === 'OWNER'}
+        showProgress={role === 'OWNER' || role === 'PARTNER'}
         progressValue={totalInvested}
         progressMax={portfolioValue}
       />
-      
-      {role === 'OWNER' && (
-        <PremiumCashBalanceCard
-          initialCash={cashBalance}
-          trend={cashTrend}
-          sparklineData={cashSparkline}
-          index={1}
-        />
-      )}
+
+      <PremiumCashBalanceCard
+        initialCash={cashBalance}
+        trend={cashTrend}
+        sparklineData={cashSparkline}
+        index={1}
+      />
       
       <PremiumStatsCard
         title="Total Invested"
@@ -65,7 +63,7 @@ export function PremiumStatsGrid({
         trend={investedTrend}
         sparklineData={investedSparkline}
         accentColor="purple"
-        index={role === 'OWNER' ? 2 : 1}
+        index={2}
       />
       
       <PremiumStatsCard
@@ -76,7 +74,7 @@ export function PremiumStatsGrid({
         trendLabel={profitTrend !== undefined ? `${profitTrend >= 0 ? '↑' : '↓'} ${Math.abs(profitTrend).toFixed(2)}% ROI` : undefined}
         sparklineData={profitSparkline}
         accentColor="green"
-        index={role === 'OWNER' ? 3 : 2}
+        index={3}
       />
     </div>
   )

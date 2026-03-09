@@ -59,10 +59,7 @@ export default async function DashboardPage({
 
   const dashboardDebug = process.env.DASHBOARD_DEBUG === '1'
 
-  const cashAccount =
-    user.role === 'OWNER'
-      ? await prisma.account.findFirst({ where: { type: 'CASH', isActive: true } })
-      : null
+  const cashAccount = await prisma.account.findFirst({ where: { type: 'CASH', isActive: true } })
 
   const cashSetting =
     user.role === 'OWNER'
@@ -99,7 +96,22 @@ export default async function DashboardPage({
 
   const cashAtStart = await cashAt(yearStart)
   const cashAtEnd = await cashAt(yearEnd)
-  const cashBalance = cashAtEnd
+  let cashBalance = cashAtEnd
+
+  if (user.role === 'PARTNER' && user.personId) {
+    const bucketAgg = await prisma.cashBucket.aggregate({
+      where: {
+        personId: user.personId,
+        NOT: [
+          { label: { startsWith: 'Debt •' } },
+          { label: 'Partner Commission' },
+        ],
+      } as any,
+      _sum: { balance: true },
+    })
+    const bucketSum = Number(bucketAgg._sum.balance || 0)
+    cashBalance = Number.isFinite(bucketSum) ? bucketSum : 0
+  }
 
   if (dashboardDebug && user.role === 'OWNER') {
     console.log('[DASHBOARD_DEBUG] year', selectedYear)
@@ -680,8 +692,8 @@ export default async function DashboardPage({
 
     const now = new Date()
 
-    totalInvested = participants.reduce((sum, p) => sum + (Number(p.investedAmount) || 0), 0)
-    totalValue = participants.reduce((sum, p) => {
+    totalInvested = participants.reduce((sum: number, p: any) => sum + (Number(p.investedAmount) || 0), 0)
+    totalValue = participants.reduce((sum: number, p: any) => {
       const t = p.investment.account.type
       if (t === 'SUKUK') {
         const m = getPartnerSukukMetrics(p.investment, p, now)
@@ -691,7 +703,7 @@ export default async function DashboardPage({
     }, 0)
 
     // For partners, totalProfit = accrued profit-to-date (not just stored p.profit)
-    totalProfit = participants.reduce((sum, p) => {
+    totalProfit = participants.reduce((sum: number, p: any) => {
       const t = p.investment.account.type
       if (t === 'SUKUK') {
         const m = getPartnerSukukMetrics(p.investment, p, now)
@@ -763,7 +775,7 @@ export default async function DashboardPage({
     return { start: startNetWorth, end: endNetWorth, change, pct }
   })()
 
-  const displayedValue = user.role === 'OWNER' ? cashBalance + totalValue : totalValue
+  const displayedValue = cashBalance + totalValue
   const yearlyProfitValue = await (async () => {
     if (user.role === 'OWNER') {
       if (!cashAccount) return 0
@@ -842,12 +854,20 @@ export default async function DashboardPage({
   const monthlyLabels = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec']
 
   const monthlyCashflow = await (async () => {
-    if (user.role !== 'OWNER' || !cashAccount) {
+    if (!cashAccount) {
       return monthlyLabels.map((l) => ({ label: l, value: 0 }))
     }
 
+    if (user.role === 'PARTNER' && !user.personId) {
+      return monthlyLabels.map((l) => ({ label: l, value: 0 }))
+    }
+
+    const scope = user.role === 'OWNER'
+      ? {}
+      : ({ personId: user.personId } as any)
+
     const txs = await prisma.transaction.findMany({
-      where: { accountId: cashAccount.id, date: { gte: yearStart, lt: yearEnd } },
+      where: { accountId: cashAccount.id, date: { gte: yearStart, lt: yearEnd }, ...scope },
       select: { date: true, amount: true },
     })
 
@@ -863,7 +883,7 @@ export default async function DashboardPage({
 
   const monthlyPortfolioValue = await (async () => {
     if (user.role !== 'OWNER') {
-      return monthlyLabels.map((l) => ({ label: l, value: 0 }))
+      return monthlyLabels.map((l) => ({ label: l, value: displayedValue }))
     }
 
     const points: { label: string; value: number }[] = []
@@ -912,7 +932,7 @@ export default async function DashboardPage({
         },
       })
 
-      return txs.map((t) => ({
+      return txs.map((t: any) => ({
         id: t.id,
         date: t.date.toISOString(),
         type: t.type,
@@ -946,7 +966,7 @@ export default async function DashboardPage({
         },
       })
 
-      return txs.map((t) => ({
+      return txs.map((t: any) => ({
         id: t.id,
         date: t.date.toISOString(),
         type: t.type,
@@ -961,9 +981,9 @@ export default async function DashboardPage({
   })()
 
   const portfolioSparkline = monthlyPortfolioValue.map(m => m.value)
-  const cashSparkline = user.role === 'OWNER' ? monthlyCashflow.map(m => Math.abs(m.value)) : undefined
+  const cashSparkline = monthlyCashflow.map(m => Math.abs(m.value))
   const profitTrend = totalInvested > 0 ? (totalProfit / totalInvested) * 100 : 0
-  const portfolioTrend = yearlyValueChange.pct
+  const portfolioTrend = user.role === 'OWNER' ? yearlyValueChange.pct : yearlyReturnPercentage
 
   return (
     <div className="space-y-6 animate-fade-in">
@@ -985,7 +1005,7 @@ export default async function DashboardPage({
       {/* Premium Stats Grid */}
       <PremiumStatsGrid
         portfolioValue={displayedValue}
-        cashBalance={user.role === 'OWNER' ? cashBalance : 0}
+        cashBalance={cashBalance}
         totalInvested={totalInvested}
         totalProfit={totalProfit}
         portfolioTrend={portfolioTrend}
@@ -1059,17 +1079,15 @@ export default async function DashboardPage({
           </AnimatedCard>
         )}
 
-        {user.role === 'OWNER' && (
-          <AnimatedCard index={6}>
-            <div className="p-6">
-              <p className="text-xs font-medium text-slate-400 uppercase tracking-wider">Net Worth</p>
-              <div className={`text-2xl font-bold mt-2 tabular-nums ${netWorth >= 0 ? 'text-emerald-400' : 'text-red-400'}`}>
-                SAR {netWorth.toLocaleString()}
-              </div>
-              <p className="text-xs text-slate-500 mt-1">Portfolio − Debt</p>
+        <AnimatedCard index={6}>
+          <div className="p-6">
+            <p className="text-xs font-medium text-slate-400 uppercase tracking-wider">Net Worth</p>
+            <div className={`text-2xl font-bold mt-2 tabular-nums ${netWorth >= 0 ? 'text-emerald-400' : 'text-red-400'}`}>
+              SAR {netWorth.toLocaleString()}
             </div>
-          </AnimatedCard>
-        )}
+            <p className="text-xs text-slate-500 mt-1">Portfolio − Debt</p>
+          </div>
+        </AnimatedCard>
       </div>
 
       {/* Third Row: Key Totals */}
