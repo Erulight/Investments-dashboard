@@ -461,7 +461,15 @@ export default async function DashboardPage({
       }, 0)
     
     totalProfit = ownedProfit + circlysProfit
-    activeInvestments = owned.length
+    
+    // Active Deals = Only active Sukuk deals (principal > 0)
+    activeInvestments = owned
+      .filter((inv) => inv.account.type === 'SUKUK')
+      .filter((inv) => {
+        const pos = getOwnerPosition(inv)
+        const principal = pos ? Number(pos.investedAmount) || 0 : Number(inv.principalAmount) || 0
+        return principal > 0
+      }).length
 
     sukukInvested = owned
       .filter((inv) => inv.account.type === 'SUKUK')
@@ -494,20 +502,9 @@ export default async function DashboardPage({
       .reduce((sum, inv) => sum + inv.currentValue, 0)
 
     // Calculate Circles ongoing: total contributed in active ongoing Circles
-    const circlysInvestments = investments.filter((inv: any) => inv.account?.type === 'CIRCLYS')
-    
-    if (dashboardDebug) {
-      console.log('[DASHBOARD_DEBUG] circlysInvestments count:', circlysInvestments.length)
-      circlysInvestments.forEach((inv: any) => {
-        console.log('[DASHBOARD_DEBUG] Circles investment:', {
-          id: inv.id,
-          name: inv.name,
-          metadata: inv.metadata,
-        })
-      })
-    }
-    
-    circlysOngoingSaved = circlysInvestments.reduce((sum, inv) => {
+    circlysOngoingSaved = investments
+      .filter((inv: any) => inv.account?.type === 'CIRCLYS')
+      .reduce((sum, inv) => {
         try {
           const meta = inv.metadata ? JSON.parse(inv.metadata as string) : {}
           const totalPaid = Number(meta.totalPaid) || 0
@@ -515,26 +512,12 @@ export default async function DashboardPage({
           const durationMonths = Number(meta.durationMonths) || 0
           const totalRequired = monthlyAmount * durationMonths
           
-          if (dashboardDebug) {
-            console.log('[DASHBOARD_DEBUG] Circles calc:', {
-              name: inv.name,
-              totalPaid,
-              monthlyAmount,
-              durationMonths,
-              totalRequired,
-              isActive: totalRequired > totalPaid,
-            })
-          }
-          
           // Only count active ongoing Circles (not fully paid)
           if (totalRequired > totalPaid) {
             return sum + totalPaid
           }
           return sum
-        } catch (err) {
-          if (dashboardDebug) {
-            console.log('[DASHBOARD_DEBUG] Circles error:', err)
-          }
+        } catch {
           return sum
         }
       }, 0)
