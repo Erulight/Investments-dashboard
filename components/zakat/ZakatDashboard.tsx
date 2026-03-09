@@ -464,6 +464,8 @@ export function ZakatDashboard({
         throw new Error(data.error || 'Failed to pay zakat')
       }
       setPayTarget(null)
+      // Dispatch custom event to notify ZakatPageClient
+      window.dispatchEvent(new CustomEvent('zakat-payment-made'))
       router.refresh()
     } catch (err) {
       setPayError(err instanceof Error ? err.message : 'Failed to pay zakat')
@@ -491,6 +493,8 @@ export function ZakatDashboard({
       if (!res.ok) {
         throw new Error(data.error || 'Failed to rollback zakat')
       }
+      // Dispatch custom event to notify ZakatPageClient
+      window.dispatchEvent(new CustomEvent('zakat-payment-made'))
       router.refresh()
     } catch (err) {
       setRollbackError(err instanceof Error ? err.message : 'Failed to rollback zakat')

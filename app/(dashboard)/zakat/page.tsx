@@ -1,6 +1,6 @@
 import { getCurrentUser } from '@/lib/auth'
 import { prisma } from '@/lib/db'
-import { ZakatDashboard } from '@/components/zakat/ZakatDashboard'
+import { ZakatPageClient } from '@/components/zakat/ZakatPageClient'
 
 export const dynamic = 'force-dynamic'
 
@@ -1424,7 +1424,7 @@ export default async function ZakatPage() {
         </div>
       )}
 
-      <ZakatDashboard buckets={rows} zakatEnabled={zakatEnabled} />
+      <ZakatPageClient initialBuckets={rows} zakatEnabled={zakatEnabled} />
     </div>
   )
 }
