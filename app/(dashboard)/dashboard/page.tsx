@@ -507,10 +507,10 @@ export default async function DashboardPage({
       .reduce((sum, inv) => {
         try {
           const meta = inv.metadata ? JSON.parse(inv.metadata as string) : {}
+          const monthlyContribution = Number(meta.monthlyContribution) || 0
+          const totalMonths = Number(meta.totalMonths) || 0
+          const totalRequired = monthlyContribution * totalMonths
           const totalPaid = Number(meta.totalPaid) || 0
-          const monthlyAmount = Number(meta.monthlyAmount) || 0
-          const durationMonths = Number(meta.durationMonths) || 0
-          const totalRequired = monthlyAmount * durationMonths
           
           // Only count active ongoing Circles (not fully paid)
           if (totalRequired > totalPaid) {
@@ -548,10 +548,10 @@ export default async function DashboardPage({
     for (const inv of roscaInvestments) {
       try {
         const meta = inv.metadata ? JSON.parse(inv.metadata as string) : {}
-        const monthlyAmount = Number(meta.monthlyAmount) || 0
-        const durationMonths = Number(meta.durationMonths) || 0
+        const monthlyContribution = Number(meta.monthlyContribution) || 0
+        const totalMonths = Number(meta.totalMonths) || 0
         const totalPaid = Number(meta.totalPaid) || 0
-        const totalRequired = monthlyAmount * durationMonths
+        const totalRequired = monthlyContribution * totalMonths
         if (totalRequired > totalPaid) {
           roscaDebt += (totalRequired - totalPaid)
         }
