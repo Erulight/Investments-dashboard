@@ -1773,6 +1773,20 @@ export default async function ZakatPage() {
 
       const completedIdleRows: BucketRow[] = []
       qualifyingReceipts.forEach((r) => {
+        // Check if this receipt was reinvested after receipt date
+        const receiptTime = r.receiptDay.getTime()
+        const reinvestedAmount = movements.reduce((sum: number, m: any) => {
+          if (m?.type !== 'INVEST_OUT') return sum
+          const movementDate = m?.date ? new Date(m.date) : null
+          if (!movementDate || Number.isNaN(movementDate.getTime())) return sum
+          if (movementDate.getTime() <= receiptTime) return sum
+          const amt = Math.abs(Number(m?.amount) || 0)
+          return sum + amt
+        }, 0)
+
+        // If receipt was fully reinvested, skip idle rows to avoid double-counting
+        if (reinvestedAmount >= r.amount - 0.01) return
+
         // If receipt itself completed the first hawl (>=354), next hawl starts from receipt day.
         // If receipt happened before first hawl completion, keep continuity from eligibilityStart.
         const idleAnchorStart = r.eligibilityDuration >= 354 ? r.receiptDay : r.eligibilityStart
