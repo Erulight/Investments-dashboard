@@ -738,17 +738,6 @@ export async function POST(
           unrealizedProfit: Number.isFinite(investment.unrealizedProfit) ? investment.unrealizedProfit : 0,
         }
 
-        console.log('RETURN_TO_OWNER INVESTMENT UPDATE DATA:', {
-          principalAmount: restoreSnap.principalAmount,
-          receivableAmount: restoreSnap.receivableAmount,
-          interestRate: restoreSnap.interestRate,
-          fees: restoreSnap.fees,
-          totalReceived: restoreSnap.totalReceived ?? 0,
-          currentValue: restoreSnap.currentValue ?? restoreSnap.principalAmount,
-          realizedProfit: restoreSnap.realizedProfit ?? 0,
-          unrealizedProfit: restoreSnap.unrealizedProfit ?? 0,
-        })
-
         await tx.investment.update({
           where: { id: investment.id },
           data: {
@@ -763,13 +752,9 @@ export async function POST(
           },
         })
 
-        // When partner returns deal: just restore investment and delete partner participant
+        // When partner returns deal: just restore investment and delete partner participant.
         // No cash transactions needed since SOLD_DEAL_SETTLEMENT and PARTNER_COMMISSION
-        // are never created when selling to partner (only when owner withdraws)
-        console.log('PARTNER RETURNED DEAL TO OWNER:', {
-          investmentId: id,
-          investmentName: investment.name
-        })
+        // are only created on owner receive/withdraw flows.
 
         await tx.dealParticipant.deleteMany({
           where: {

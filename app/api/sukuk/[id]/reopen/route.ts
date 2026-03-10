@@ -4,8 +4,6 @@ import { requireAuth } from '@/lib/rbac'
 import { logAudit } from '@/lib/audit'
 import { createSnapshot } from '@/lib/snapshot'
 
-// Trivial change to trigger redeploy: added explicit logging below
-
 const RECEIPT_TYPES = ['WITHDRAW_PROFIT', 'WITHDRAW_PRINCIPAL', 'ROLLBACK_PRINCIPAL'] as const
 const CASH_BALANCE_KEY = 'CASH_BALANCE'
 
@@ -47,12 +45,6 @@ export async function POST(
     const user = await requireAuth(['OWNER', 'PARTNER'])
     const { id } = await params
 
-    console.log('REOPEN START', {
-      investmentId: id,
-      role: user.role,
-      personId: user.personId,
-    })
-
     const investment = await prisma.investment.findUnique({
       where: { id },
       include: {
@@ -73,8 +65,6 @@ export async function POST(
       const participants = Array.isArray(investment.dealParticipants)
         ? investment.dealParticipants
         : []
-
-      console.log('PARTICIPANTS', participants)
 
       const partnerParticipant = participants.find((p: any) => p?.personId === user.personId)
       if (!partnerParticipant) {
@@ -370,13 +360,8 @@ export async function POST(
         if (sellTx?.metadata) {
           try {
             meta = JSON.parse(sellTx.metadata as string)
-          } catch (err) {
-            console.log('SELL_TO_PARTNER metadata parse error:', err, sellTx.metadata)
-          }
+          } catch {}
         }
-
-        console.log('SELL_TX metadata', sellTx?.metadata)
-        console.log('SELL_TO_PARTNER metadata:', meta)
 
         const snap = meta?.snapshot
         
@@ -424,17 +409,10 @@ export async function POST(
         partnerCanonicalPrincipal = canonicalPrincipal
         partnerCanonicalProfit = canonicalProfit
 
-        console.log('CANONICAL VALUES', {
-          canonicalPrincipal,
-          canonicalProfit,
-        })
-
         const partnerParticipant = await tx.dealParticipant.findFirst({
           where: { investmentId: id, personId: user.personId },
         })
         partnerParticipantId = partnerParticipant?.id || null
-
-        console.log('PARTNER PARTICIPANT before restore', partnerParticipant)
 
         if (partnerParticipant) {
           await tx.dealParticipant.update({
@@ -555,14 +533,6 @@ export async function POST(
           },
         })
       }
-
-      console.log('REOPEN INVESTMENT UPDATE DATA:', {
-        principalAmount: principalAmountValue,
-        receivableAmount: receivableAmountValue,
-        interestRate: interestRateValue,
-        fees: feesValue,
-        totalReceived: 0, // Reset to 0 on reopen
-      })
 
       const updatedInvestment = await tx.investment.update({
         where: { id },

@@ -3,6 +3,7 @@ import { prisma } from '@/lib/db'
 import { requireAuth } from '@/lib/rbac'
 import { createAuditLog } from '@/lib/audit'
 import { createSnapshot } from '@/lib/snapshot'
+import { creditBucketsForReceipt } from '@/lib/cashBuckets'
 
 const CASH_BALANCE_KEY = 'CASH_BALANCE'
 
@@ -21,6 +22,25 @@ const round2 = (value: number) => {
   const n = Number(value)
   if (!Number.isFinite(n)) return 0
   return Math.round(n * 100) / 100
+}
+
+const recomputeOwnerCashSetting = async (tx: any) => {
+  const cashBucketAgg = await tx.cashBucket.aggregate({
+    where: { personId: null },
+    _sum: { balance: true },
+  })
+  const cashBucketSumRaw = cashBucketAgg?._sum?.balance
+  const cashBucketSum = Number.isFinite(cashBucketSumRaw as any) ? Number(cashBucketSumRaw) : 0
+
+  await tx.systemSetting.upsert({
+    where: { key: CASH_BALANCE_KEY },
+    update: { value: cashBucketSum.toString() },
+    create: {
+      key: CASH_BALANCE_KEY,
+      value: cashBucketSum.toString(),
+      description: 'Available cash balance for investments',
+    },
+  })
 }
 
 export async function POST(
@@ -72,6 +92,35 @@ export async function POST(
 
     if (!saleMeta) {
       return NextResponse.json({ error: 'Invalid sale metadata' }, { status: 400 })
+    }
+
+    const openPartnerHolders = (Array.isArray(investment.dealParticipants) ? investment.dealParticipants : [])
+      .filter((p: any) => p?.personId && p.personId !== user.personId)
+      .filter((p: any) => {
+        const invested = Number(p?.investedAmount || 0)
+        return Number.isFinite(invested) && invested > 0.01
+      })
+
+    const ownerParticipant = (Array.isArray(investment.dealParticipants) ? investment.dealParticipants : [])
+      .find((p: any) => p?.personId === user.personId)
+    const ownerPrincipal = Number(ownerParticipant?.investedAmount || 0)
+    if (Number.isFinite(ownerPrincipal) && ownerPrincipal > 0.01) {
+      return NextResponse.json(
+        { error: 'This deal has active owner principal and is not eligible for sold-deal receive' },
+        { status: 409 },
+      )
+    }
+
+    if (openPartnerHolders.length > 0) {
+      const holderNames = openPartnerHolders
+        .map((p: any) => p?.person?.name || p?.personId)
+        .filter(Boolean)
+      return NextResponse.json(
+        {
+          error: `Cannot receive sold deal before partner closes position. Remaining holders: ${holderNames.join(', ')}`,
+        },
+        { status: 409 },
+      )
     }
 
     const soldAt = latestSell?.date as Date
@@ -153,26 +202,17 @@ export async function POST(
     const result = await prisma.$transaction(async (tx: any) => {
       // Only add profit if there's profit to receive
       if (ownerProfit > 0) {
-        const cashSetting = await tx.systemSetting.findUnique({
-          where: { key: CASH_BALANCE_KEY },
+        await creditBucketsForReceipt(tx, {
+          investmentId: investment.id,
+          amount: ownerProfit,
+          principalReduction: 0,
+          date: new Date(),
+          type: 'WITHDRAW_PROFIT',
+          notes: `Sold deal receipt • ${investment.name}`,
+          personId: null,
         })
-        const currentCash = cashSetting ? Number(cashSetting.value) : 0
-        const nextCash = currentCash + ownerProfit
 
-        if (cashSetting) {
-          await tx.systemSetting.update({
-            where: { key: CASH_BALANCE_KEY },
-            data: { value: nextCash.toString() },
-          })
-        } else {
-          await tx.systemSetting.create({
-            data: {
-              key: CASH_BALANCE_KEY,
-              value: nextCash.toString(),
-              description: 'Available cash balance for investments',
-            },
-          })
-        }
+        await recomputeOwnerCashSetting(tx)
 
         // Create cash account if needed
         const cashAccount = await tx.account.findFirst({

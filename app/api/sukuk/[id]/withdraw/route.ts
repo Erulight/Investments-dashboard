@@ -75,13 +75,6 @@ export async function POST(
           )
         }
 
-        console.log('PARTNER WITHDRAW START', {
-          investmentId: id,
-          userId: user.id,
-          personId: user.personId,
-          body,
-        })
-
         const participants = Array.isArray(investment.dealParticipants)
           ? investment.dealParticipants
           : []
@@ -206,13 +199,6 @@ export async function POST(
             : []
           const partnerParticipant = participants.find((p: any) => p?.personId === partnerPersonId)
 
-          console.log('PARTNER WITHDRAW PARTICIPANT LOOKUP', {
-            investmentId: investment.id,
-            partnerPersonId,
-            participantsCount: participants.length,
-            found: Boolean(partnerParticipant),
-          })
-
           if (!partnerParticipant) {
             throw new Error('Forbidden')
           }
@@ -243,32 +229,12 @@ export async function POST(
           const remainingPrincipal = Math.max(0, principalCap - withdrawnPrincipal)
           const remainingProfit = Math.max(0, partnerMaxProfit - withdrawnProfit)
 
-          console.log('PARTNER WITHDRAW CAPS', {
-            investmentId: investment.id,
-            partnerPersonId,
-            source,
-            amount,
-            principalCap,
-            withdrawnPrincipal,
-            remainingPrincipal,
-            partnerMaxProfit,
-            withdrawnProfit,
-            remainingProfit,
-          })
-
           if (source === 'PRINCIPAL' && amount > remainingPrincipal + 0.01) {
             throw new Error('AMOUNT_EXCEEDS_PARTNER_PRINCIPAL')
           }
           if (source === 'PROFIT' && amount > remainingProfit + 0.01) {
             throw new Error('AMOUNT_EXCEEDS_PARTNER_PROFIT')
           }
-
-          console.log('PARTNER WITHDRAW creditBucketsForReceipt START', {
-            investmentId: investment.id,
-            partnerPersonId,
-            amount,
-            source,
-          })
 
           await creditBucketsForReceipt(tx, {
             investmentId: investment.id,
@@ -279,11 +245,6 @@ export async function POST(
             notes: notes || null,
             personId: partnerPersonId,
             profitHaulStartDate: partnerParticipant.acquiredAt ? new Date(partnerParticipant.acquiredAt) : undefined,
-          })
-
-          console.log('PARTNER WITHDRAW creditBucketsForReceipt DONE', {
-            investmentId: investment.id,
-            partnerPersonId,
           })
 
           await tx.dealParticipant.update({
