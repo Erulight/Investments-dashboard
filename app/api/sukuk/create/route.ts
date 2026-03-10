@@ -116,7 +116,7 @@ export async function POST(req: NextRequest) {
             amount: ownerCommissionAmount,
             cashAmount: partnerCommissionType === 'FIXED_CASH' ? round2(partnerCommissionCash) : null,
             partnerNetReceivable,
-            issuedAt: new Date().toISOString(),
+            issuedAt: startDate.toISOString(),
             maturityDate: maturityDate ? maturityDate.toISOString() : null,
           },
         }

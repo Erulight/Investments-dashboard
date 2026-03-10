@@ -1012,8 +1012,6 @@ export default async function ZakatPage() {
       const isCirclys = typeof bucket.label === 'string' && bucket.label.startsWith('Circlys')
       const isSavingsContribution = typeof bucket.label === 'string' && bucket.label.startsWith('Circlys •') && !bucket.label.includes('Receipt')
       const isSavingsReceiptBucket = typeof bucket.label === 'string' && bucket.label.startsWith('Savings Receipt •')
-      const isSukukPrincipalBucket =
-        typeof bucket.label === 'string' && bucket.label.startsWith('Sukuk Principal •')
 
       const alloc = bucket.allocations?.[0]
       const source = alloc?.investment?.name || bucket.label || 'General'
@@ -1367,15 +1365,15 @@ export default async function ZakatPage() {
           const isPrincipalReceiptMovement = movementType === 'WITHDRAW_PRINCIPAL' || movementType === 'ROLLBACK_PRINCIPAL'
           const isProfitReceiptMovement = movementType === 'WITHDRAW_PROFIT' || (isProfitBucket && movementType === 'CASH_IN')
 
-          // For principal receipts from ROSCA-funded Sukuk, use ROSCA first contribution date
-          // For profit receipts (including Profit bucket CASH_IN), use investment start date for OWNER (Sukuk start)
+          // For principal receipts from ROSCA-funded Sukuk, use ROSCA first contribution date.
+          // For profit receipts (including Profit bucket CASH_IN), use investment start date.
           const eligibilityAnchor = (isCommissionBucket
             ? bucketStart
             : (isPrincipalReceiptMovement
-              ? (user.role === 'PARTNER' ? bucketStart : ownerSukukAnchor)
+              ? ownerSukukAnchor
               : (isProfitReceiptMovement
-                ? (user.role === 'PARTNER' ? bucketStart : start)
-                : (user.role === 'PARTNER' ? bucketStart : ownerSukukAnchor))))
+                ? start
+                : ownerSukukAnchor)))
           const eligibilityStart = startOfDay(eligibilityAnchor)
           const duration = diffDaysFloor(eligibilityStart, day)
 
@@ -1543,8 +1541,7 @@ export default async function ZakatPage() {
 
       const hasAnyInvestOut = movements.some((m: any) => m?.type === 'INVEST_OUT')
       const hasPrincipalWithdrawal = movements.some((m: any) => m?.type === 'WITHDRAW_PRINCIPAL' || m?.type === 'ROLLBACK_PRINCIPAL')
-      const disableDepositIdle = user.role === 'PARTNER' && isSukukPrincipalBucket
-      if (!hasAnyInvestOut && !hasPrincipalWithdrawal && !isImmediateReceiptBucket && !disableDepositIdle) {
+      if (!hasAnyInvestOut && !hasPrincipalWithdrawal && !isImmediateReceiptBucket) {
         const start = startOfDay(bucketStart)
         const elapsed = diffDaysFloor(start, now)
         const completed = Math.floor(elapsed / 354)

@@ -119,7 +119,7 @@ export function SukukList({ initialSukuk, userRole, ownerPersonId, viewerPersonI
   const [actionableOnly, setActionableOnly] = useState(false)
   const [filtersOpen, setFiltersOpen] = useState(false)
   const [filterTab, setFilterTab] = useState<'platforms' | 'terms' | 'statuses' | 'dates'>('platforms')
-  const [ownerView, setOwnerView] = useState<'all' | 'active' | 'closed' | 'sold'>('all')
+  const [ownerView, setOwnerView] = useState<'all' | 'active' | 'closed' | 'sold' | 'commission'>('all')
   const list = Array.isArray(sukuk) ? sukuk : []
   const isEmpty = list.length === 0
 
@@ -160,29 +160,11 @@ export function SukukList({ initialSukuk, userRole, ownerPersonId, viewerPersonI
     return hasOwnerSellTx
   }
 
-  const isOwnerCommissionOnlyClose = (investment: any, metrics?: any) => {
+  const isOwnerCommissionOnlyClose = (investment: any) => {
     if (userRole !== 'OWNER') return false
     if (!investment?.partnerClosed) return false
-    const participantList = Array.isArray(investment?.dealParticipants) ? investment.dealParticipants : []
-    const ownerParticipant = getOwnerParticipant(participantList)
-    const ownerPrincipal = ownerParticipant ? Number(ownerParticipant.investedAmount || 0) : 0
-    const hasOwnerPrincipal = Number.isFinite(ownerPrincipal) && ownerPrincipal > 0.01
-    if (hasOwnerPrincipal) return false
-
-    const txs = Array.isArray(investment?.transactions) ? investment.transactions : []
-    const hasOwnerSellTx = txs.some((tx: any) => tx?.type === 'SELL_TO_PARTNER' && tx.personId === ownerPersonId)
-    if (hasOwnerSellTx) return false
-
-    const paidCommission = txs
-      .filter((tx: any) => tx?.type === 'PARTNER_COMMISSION')
-      .reduce((sum: number, tx: any) => {
-        if (ownerPersonId && tx?.personId && tx.personId !== ownerPersonId) return sum
-        const amount = Number(tx?.amount)
-        return sum + (Number.isFinite(amount) ? Math.max(0, amount) : 0)
-      }, 0)
-
-    const commissionEarned = Math.max(0, Number(metrics?.commissionEarned || 0))
-    return paidCommission > 0.01 && commissionEarned > 0.01
+    const commissionState = getOwnerCommissionDealState(investment)
+    return commissionState.isPartnerIssued && commissionState.target > 0.01 && commissionState.pending <= 0.01
   }
 
   const isViewerTransaction = (tx: any) => {
@@ -241,6 +223,8 @@ export function SukukList({ initialSukuk, userRole, ownerPersonId, viewerPersonI
     const percent = Number.isFinite(value) ? value : 0
     return `${percent.toFixed(2)}%`
   }
+
+  const round2 = (n: number) => Math.round((n || 0) * 100) / 100
 
   const getPeriodMonths = (start?: string | Date | null, end?: string | Date | null) => {
     const startDate = toDate(start)
@@ -519,6 +503,94 @@ export function SukukList({ initialSukuk, userRole, ownerPersonId, viewerPersonI
     return round2(Math.max(fromCreatePayoutTx, planned))
   }
 
+  const getOwnerCommissionDealState = (inv: any) => {
+    if (userRole !== 'OWNER') {
+      return { target: 0, received: 0, pending: 0, isPartnerIssued: false, latestReceiptDate: null as Date | null }
+    }
+
+    const transactions = Array.isArray(inv?.transactions) ? inv.transactions : []
+    const invMeta = parseMetadata(inv?.metadata)
+    const plannedRaw = Number(invMeta?.partnerCommissionPlan?.amount ?? 0)
+    const target = round2(Number.isFinite(plannedRaw) ? Math.max(0, plannedRaw) : 0)
+
+    const ownerCommissionTxs = transactions
+      .filter((tx: any) => tx?.type === 'PARTNER_COMMISSION')
+      .filter((tx: any) => {
+        if (ownerPersonId && tx?.personId && tx.personId !== ownerPersonId) return false
+        const meta = parseMetadata(tx?.metadata)
+        return meta?.source === 'PARTNER_CREATE_COMMISSION_PAYOUT'
+      })
+
+    const receivedRaw = ownerCommissionTxs.reduce((sum: number, tx: any) => {
+      const amount = Number(tx?.amount)
+      return sum + (Number.isFinite(amount) ? Math.max(0, amount) : 0)
+    }, 0)
+
+    const latestReceiptDate = ownerCommissionTxs.reduce((latest: Date | null, tx: any) => {
+      const d = toDate(tx?.date)
+      if (!d) return latest
+      if (!latest || d.getTime() > latest.getTime()) return d
+      return latest
+    }, null)
+
+    const received = round2(Math.max(0, target > 0 ? Math.min(target, receivedRaw) : receivedRaw))
+    const pending = round2(Math.max(0, target - received))
+
+    const participantList = Array.isArray(inv?.dealParticipants) ? inv.dealParticipants : []
+    const ownerParticipant = getOwnerParticipant(participantList)
+    const ownerPrincipal = ownerParticipant ? Number(ownerParticipant.investedAmount || 0) : 0
+    const hasOwnerPrincipal = Number.isFinite(ownerPrincipal) && ownerPrincipal > 0.01
+    const hasOwnerSellTx = transactions.some(
+      (tx: any) => tx?.type === 'SELL_TO_PARTNER' && (!ownerPersonId || tx.personId === ownerPersonId)
+    )
+
+    const isPartnerIssued = target > 0.01 && !hasOwnerPrincipal && !hasOwnerSellTx
+
+    return { target, received, pending, isPartnerIssued, latestReceiptDate }
+  }
+
+  const isPartnerIssuedCommissionDeal = (inv: any) => {
+    if (userRole !== 'OWNER') return false
+    return getOwnerCommissionDealState(inv).isPartnerIssued
+  }
+
+  const getOwnerCommissionDealMetrics = (inv: any) => {
+    const commissionState = getOwnerCommissionDealState(inv)
+    const { target, received, pending, latestReceiptDate } = commissionState
+
+    const periodMonths = getPeriodMonths(inv.startDate, inv.maturityDate)
+    const isFullyReceived = pending <= 0.01 && target > 0
+    const referenceDate = isFullyReceived ? latestReceiptDate ?? asOfDate : asOfDate
+    const daysRemaining = getDaysRemaining(inv.maturityDate, referenceDate)
+    const paymentStatus = daysRemaining === null
+      ? 'unknown'
+      : daysRemaining < 0
+        ? 'delayed'
+        : daysRemaining > 0
+          ? 'early'
+          : (isFullyReceived ? 'completed' : 'ontime')
+
+    return {
+      totalInvestment: 0,
+      apr: 0,
+      periodMonths,
+      maturityDate: inv.maturityDate,
+      daysRemaining,
+      fees: 0,
+      netProfit: 0,
+      commissionEarned: target,
+      commissionPaid: 0,
+      totalReceived: received,
+      receivable: pending,
+      currency: inv.account?.currency || '',
+      progress: getProgress(Math.max(0, target), received),
+      paymentStatus,
+      aprAfterFees: 0,
+      isFullyReceived,
+      acquiredAt: inv.startDate ?? null,
+    }
+  }
+
   const getSoldDealMetrics = (inv: any) => {
     const currency = inv.account?.currency || ''
     const transactions = Array.isArray(inv.transactions) ? inv.transactions : []
@@ -691,6 +763,11 @@ export function SukukList({ initialSukuk, userRole, ownerPersonId, viewerPersonI
       }
     }
 
+    const commissionState = userRole === 'OWNER' ? getOwnerCommissionDealState(inv) : null
+    if (commissionState?.isPartnerIssued) {
+      return getOwnerCommissionDealMetrics(inv)
+    }
+
     const endBasis = getLatestPrincipalWithdrawalDate(inv) ?? inv.maturityDate
     const principal = getHistoricalPrincipal(inv, participation)
     const totalInvestment = Number.isFinite(principal) ? principal : 0
@@ -848,12 +925,14 @@ export function SukukList({ initialSukuk, userRole, ownerPersonId, viewerPersonI
 
   const filteredSukuk = list.filter((inv) => {
     const isSoldDeal = userRole === 'OWNER' ? isSoldDealForOwnerView(inv) : false
+    const isPartnerIssuedCommission = userRole === 'OWNER' ? isPartnerIssuedCommissionDeal(inv) : false
 
     if (userRole === 'OWNER' && ownerPersonId) {
       const metrics = isSoldDeal ? getSoldDealMetrics(inv) : getMetrics(inv)
       const isClosedDeal = !isSoldDeal && Number(metrics.receivable || 0) <= 0.01
       const isActiveDeal = !isSoldDeal && !isClosedDeal
 
+      if (ownerView === 'commission' && !isPartnerIssuedCommission) return false
       if (ownerView === 'active' && !isActiveDeal) return false
       if (ownerView === 'closed' && !isClosedDeal) return false
       if (ownerView === 'sold' && !isSoldDeal) return false
@@ -1135,7 +1214,7 @@ export function SukukList({ initialSukuk, userRole, ownerPersonId, viewerPersonI
     const isSoldDealForOwner = isSoldDealForOwnerView(investment)
 
     const metrics = metricsOverride || (isSoldDealForOwner ? getSoldDealMetrics(investment) : getMetrics(investment))
-    const isCommissionOnlyClose = isOwnerCommissionOnlyClose(investment, metrics)
+    const isCommissionOnlyClose = isOwnerCommissionOnlyClose(investment)
 
     // Compute viewer-specific remaining principal and profit
     const currencyLabel = investment?.account?.currency || 'SAR'
@@ -1285,7 +1364,7 @@ export function SukukList({ initialSukuk, userRole, ownerPersonId, viewerPersonI
     try {
       const isSoldDealForOwner = isSoldDealForOwnerView(withdrawTarget.inv)
       const partnerClosed = Boolean(withdrawTarget.inv?.partnerClosed)
-      const isCommissionOnlyClose = isOwnerCommissionOnlyClose(withdrawTarget.inv, withdrawTarget.metrics)
+      const isCommissionOnlyClose = isOwnerCommissionOnlyClose(withdrawTarget.inv)
 
       if (userRole === 'OWNER' && isCommissionOnlyClose) {
         await fetch('/api/notifications/dismiss', {
@@ -1644,6 +1723,17 @@ export function SukukList({ initialSukuk, userRole, ownerPersonId, viewerPersonI
               >
                 Sold
               </button>
+              <button
+                type="button"
+                onClick={() => setOwnerView('commission')}
+                className={`rounded-full border px-3 py-1.5 text-xs font-semibold transition-colors ${
+                  ownerView === 'commission'
+                    ? 'border-blue-600 bg-blue-600 text-white dark:bg-blue-500 dark:text-blue-100'
+                    : 'border-slate-200 bg-white text-slate-700 hover:border-slate-300 dark:border-white/10 dark:bg-slate-900/60 dark:text-slate-200 dark:hover:border-white/20'
+                }`}
+              >
+                Commission
+              </button>
             </div>
           )}
           {(userRole === 'OWNER' || userRole === 'PARTNER') && (
@@ -1987,6 +2077,10 @@ export function SukukList({ initialSukuk, userRole, ownerPersonId, viewerPersonI
                   const participantList = Array.isArray(inv.dealParticipants) ? inv.dealParticipants : []
                   const isSoldDealForOwner = isSoldDealForOwnerView(inv)
                   const partnerClosed = Boolean(inv?.partnerClosed)
+                  const commissionDealState = userRole === 'OWNER' ? getOwnerCommissionDealState(inv) : null
+                  const isPendingCommissionPayout = Boolean(
+                    commissionDealState?.isPartnerIssued && commissionDealState.pending > 0.01
+                  )
 
                   const partnerNames = userRole === 'OWNER'
                     ? participantList
@@ -2115,8 +2209,14 @@ export function SukukList({ initialSukuk, userRole, ownerPersonId, viewerPersonI
                               size="sm"
                               variant="ghost"
                               onClick={() => openWithdrawModal(inv)}
-                              disabled={actionLoading || (isSoldDealForOwner && !partnerClosed)}
-                              title={isSoldDealForOwner && !partnerClosed ? 'Waiting for partner to close' : 'Withdraw'}
+                              disabled={actionLoading || (isSoldDealForOwner && !partnerClosed) || isPendingCommissionPayout}
+                              title={
+                                isSoldDealForOwner && !partnerClosed
+                                  ? 'Waiting for partner to close'
+                                  : isPendingCommissionPayout
+                                    ? 'Waiting for partner commission payout'
+                                    : 'Withdraw'
+                              }
                               aria-label="Withdraw"
                               className="h-8 w-8 px-0 py-0 shrink-0"
                             >
@@ -2431,7 +2531,7 @@ export function SukukList({ initialSukuk, userRole, ownerPersonId, viewerPersonI
             </label>
             {withdrawTarget && (() => {
               const isSoldDealForOwner = isSoldDealForOwnerView(withdrawTarget.inv)
-              const isCommissionOnlyClose = isOwnerCommissionOnlyClose(withdrawTarget.inv, withdrawTarget.metrics)
+              const isCommissionOnlyClose = isOwnerCommissionOnlyClose(withdrawTarget.inv)
               const commissionAmount = Number(withdrawTarget.metrics?.commissionEarned || 0)
               const hasCommission = Number.isFinite(commissionAmount) && commissionAmount > 0.01
               const soldReceiptLabel = hasCommission ? 'Profit + Commission' : 'Profit'
@@ -2570,7 +2670,7 @@ export function SukukList({ initialSukuk, userRole, ownerPersonId, viewerPersonI
             const profitAmount = Number(withdrawForm.profitAmount || 0) || 0
 
             const isSoldDealForOwner = isSoldDealForOwnerView(withdrawTarget.inv)
-            const isCommissionOnlyClose = isOwnerCommissionOnlyClose(withdrawTarget.inv, withdrawTarget.metrics)
+            const isCommissionOnlyClose = isOwnerCommissionOnlyClose(withdrawTarget.inv)
             const partnerClosed = Boolean(withdrawTarget.inv?.partnerClosed)
             const commissionAmount = isSoldDealForOwner
               ? Math.max(0, Number(withdrawTarget.metrics?.commissionEarned || 0))

@@ -280,9 +280,22 @@ export async function POST(
               ? commissionPlan.issuedAt
               : null
             const commissionIssuedAt = commissionIssuedAtRaw ? new Date(commissionIssuedAtRaw) : null
-            const commissionHaulStartDate = commissionIssuedAt && !Number.isNaN(commissionIssuedAt.getTime())
-              ? commissionIssuedAt
-              : date
+            const issuedAtAnchor = commissionIssuedAt && !Number.isNaN(commissionIssuedAt.getTime())
+              ? new Date(
+                  commissionIssuedAt.getFullYear(),
+                  commissionIssuedAt.getMonth(),
+                  commissionIssuedAt.getDate(),
+                )
+              : null
+            const investmentStartRaw = investment.startDate ? new Date(investment.startDate as any) : null
+            const investmentStartAnchor = investmentStartRaw && !Number.isNaN(investmentStartRaw.getTime())
+              ? new Date(
+                  investmentStartRaw.getFullYear(),
+                  investmentStartRaw.getMonth(),
+                  investmentStartRaw.getDate(),
+                )
+              : null
+            const commissionHaulStartDate = investmentStartAnchor || issuedAtAnchor || date
             const commissionMaturityRaw = typeof commissionPlan?.maturityDate === 'string'
               ? commissionPlan.maturityDate
               : null
