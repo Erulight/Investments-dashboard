@@ -7,6 +7,29 @@ import { withdrawFromBuckets } from '@/lib/cashBuckets'
 import { getBucketCashBalance, recomputeCashSetting } from '@/lib/cashBalance'
 import { parseDateInput } from '@/lib/date'
 
+const diffDays = (start: Date, end: Date) => {
+  const s = new Date(start)
+  const e = new Date(end)
+  s.setHours(0, 0, 0, 0)
+  e.setHours(0, 0, 0, 0)
+  return Math.max(0, Math.round((e.getTime() - s.getTime()) / (1000 * 60 * 60 * 24)))
+}
+
+const addDays = (date: Date, days: number) => {
+  const d = new Date(date)
+  d.setDate(d.getDate() + days)
+  return d
+}
+
+const getLastCompletedHawlAnchor = (initialAnchor: Date, referenceDate: Date) => {
+  const start = new Date(initialAnchor.getFullYear(), initialAnchor.getMonth(), initialAnchor.getDate())
+  const ref = new Date(referenceDate.getFullYear(), referenceDate.getMonth(), referenceDate.getDate())
+  const elapsed = diffDays(start, ref)
+  if (elapsed < 354) return start
+  const completedCycles = Math.floor(elapsed / 354)
+  return addDays(start, completedCycles * 354)
+}
+
 const parseMetadata = (value: unknown) => {
   if (!value) return {}
   if (typeof value === 'object') return value as Record<string, unknown>
@@ -302,7 +325,11 @@ export async function POST(req: NextRequest) {
               if (!d || Number.isNaN(d.getTime())) {
                 return null
               }
-              return new Date(d.getFullYear(), d.getMonth(), d.getDate())
+              const bucketHaulStart = new Date(d.getFullYear(), d.getMonth(), d.getDate())
+              // Compute last completed hawl anchor from bucket hawl start to investment start date
+              // This ensures if reward sat idle completing additional hawls, Sukuk inherits the end of last completed hawl
+              const lastCompletedAnchor = getLastCompletedHawlAnchor(bucketHaulStart, startDate)
+              return lastCompletedAnchor
             })
             .filter((d: Date | null): d is Date => Boolean(d))
             .sort((a: Date, b: Date) => a.getTime() - b.getTime())[0] || null
@@ -318,7 +345,10 @@ export async function POST(req: NextRequest) {
               if (!d || Number.isNaN(d.getTime())) {
                 return null
               }
-              return new Date(d.getFullYear(), d.getMonth(), d.getDate())
+              const bucketHaulStart = new Date(d.getFullYear(), d.getMonth(), d.getDate())
+              // Compute last completed hawl anchor from bucket hawl start to investment start date
+              const lastCompletedAnchor = getLastCompletedHawlAnchor(bucketHaulStart, startDate)
+              return lastCompletedAnchor
             })
             .filter((d: Date | null): d is Date => Boolean(d))
             .sort((a: Date, b: Date) => a.getTime() - b.getTime())[0] || null
