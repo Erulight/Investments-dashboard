@@ -147,6 +147,7 @@ export async function POST(
     }
 
     const sellerPersonId = seller.personId
+    const sellerCashScopePersonId = user.role === 'OWNER' ? null : sellerPersonId
 
     if (amount > seller.investedAmount) {
       return NextResponse.json({ error: 'Amount exceeds your principal' }, { status: 400 })
@@ -415,7 +416,7 @@ export async function POST(
             data: {
               accountId: cashAccount.id,
               investmentId: investment.id,
-              personId: sellerPersonId,
+              personId: null,
               type: 'PARTNER_COMMISSION',
               amount: commissionAmount,
               date,
@@ -676,10 +677,10 @@ export async function POST(
           date,
           type: 'SELL_RECEIPT',
           notes: notes || null,
-          personId: null,
+          personId: sellerCashScopePersonId,
         })
 
-        await recomputeCashSetting(tx, null)
+        await recomputeCashSetting(tx, sellerCashScopePersonId)
 
       }
 
