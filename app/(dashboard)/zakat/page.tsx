@@ -5,6 +5,8 @@ import { ZakatPageClient } from '@/components/zakat/ZakatPageClient'
 export const dynamic = 'force-dynamic'
 
 const NISAB_KEY = 'NISAB_VALUE'
+const CASH_BALANCE_KEY = 'CASH_BALANCE'
+const REWARD_EPSILON = 0.01
 
 type BucketRow = {
   id: string
@@ -95,6 +97,42 @@ const parseMetadata = (value: unknown) => {
   } catch {
     return null
   }
+}
+
+const toNonNegativeNumber = (value: unknown) => {
+  const num = Number(value)
+  if (!Number.isFinite(num)) return 0
+  return Math.max(0, num)
+}
+
+const getExpectedSavingsRewardTotal = (metadata: any, paymentEntries: any[]) => {
+  const rewardFromPayments = (Array.isArray(paymentEntries) ? paymentEntries : [])
+    .reduce((sum: number, p: any) => sum + toNonNegativeNumber(p?.reward), 0)
+  const rewardFromMeta = toNonNegativeNumber(metadata?.totalRewardPaid)
+  const rewardFromLegacyConfig = toNonNegativeNumber(metadata?.totalReward)
+
+  const rewardAmountPerMonth = toNonNegativeNumber(metadata?.rewardAmount)
+  const monthlyContribution = toNonNegativeNumber(metadata?.monthlyContribution)
+  const rewardProgram = String(metadata?.rewardProgram || '')
+  const rewardPerMonth = rewardAmountPerMonth > 0
+    ? rewardProgram === 'PERCENTAGE'
+      ? monthlyContribution * (rewardAmountPerMonth / 100)
+      : rewardAmountPerMonth
+    : 0
+
+  const receiptMonth = Math.max(0, Math.floor(toNonNegativeNumber(metadata?.receiptMonth)))
+  const totalMonths = Math.max(0, Math.floor(toNonNegativeNumber(metadata?.totalMonths)))
+  const scheduledRewardMonths = receiptMonth > 0
+    ? receiptMonth
+    : (totalMonths > 0 ? totalMonths : paymentEntries.length)
+  const rewardFromSchedule = rewardPerMonth * scheduledRewardMonths
+
+  return Math.max(
+    rewardFromPayments,
+    rewardFromMeta,
+    rewardFromLegacyConfig,
+    Number.isFinite(rewardFromSchedule) ? Math.max(0, rewardFromSchedule) : 0,
+  )
 }
 
 const getPartnerSukukValueAt = (inv: any, participation: any, asOf: Date) => {
@@ -213,8 +251,36 @@ export default async function ZakatPage() {
   if (user.role === 'OWNER') {
     const savingsInvestments = await prisma.investment.findMany({
       where: { account: { type: 'CIRCLYS' } },
-      select: { id: true, name: true, startDate: true, metadata: true },
+      select: {
+        id: true,
+        name: true,
+        startDate: true,
+        metadata: true,
+        account: { select: { currency: true } },
+      },
     })
+
+    let rewardCashAdjusted = false
+    let cachedCashAccountId: string | null | undefined
+    const ensureCashAccountId = async (currency: string) => {
+      if (cachedCashAccountId !== undefined) return cachedCashAccountId
+      const cashAccount =
+        (await prisma.account.findFirst({
+          where: { type: 'CASH', isActive: true },
+          select: { id: true },
+        })) ??
+        (await prisma.account.create({
+          data: {
+            name: 'Cash Balance',
+            type: 'CASH',
+            currency,
+            description: 'Cash ledger account',
+          },
+          select: { id: true },
+        }))
+      cachedCashAccountId = cashAccount.id
+      return cachedCashAccountId
+    }
 
     for (const inv of savingsInvestments) {
       const metadata = parseMetadata(inv.metadata) || {}
@@ -246,6 +312,155 @@ export default async function ZakatPage() {
         .sort((a: Date, b: Date) => a.getTime() - b.getTime())
 
       const firstContributionDate = firstContributionDateCandidates[0] || null
+
+      const expectedRewardTotal = getExpectedSavingsRewardTotal(metadata, paymentEntries)
+      const hasReceived = Boolean(metadata?.received?.date)
+      const rewardBucketIdFromMeta =
+        typeof metadata?.received?.rewardBucketId === 'string' ? metadata.received.rewardBucketId : null
+
+      if (hasReceived && expectedRewardTotal > REWARD_EPSILON) {
+        const rewardBucket = await prisma.cashBucket.findFirst({
+          where: {
+            personId: null,
+            OR: [
+              ...(rewardBucketIdFromMeta ? [{ id: rewardBucketIdFromMeta }] : []),
+              {
+                label: `Circlys Reward Receipt • ${inv.name}`,
+                movements: {
+                  some: {
+                    investmentId: inv.id,
+                    type: 'CASH_IN',
+                  },
+                },
+              },
+            ],
+          },
+          include: {
+            movements: {
+              where: { type: 'CASH_IN' },
+              select: { amount: true },
+            },
+          },
+        })
+
+        const rewardAnchorDate = firstContributionDate || toDate(inv.startDate) || new Date()
+        const rewardDate = toDate(metadata?.received?.date) || rewardAnchorDate
+        const rewardCurrency = inv.account?.currency || 'SAR'
+
+        let resolvedRewardBucketId = rewardBucket?.id || rewardBucketIdFromMeta
+        let creditedReward = (rewardBucket?.movements || []).reduce(
+          (sum: number, m: any) => sum + toNonNegativeNumber(m?.amount),
+          0,
+        )
+
+        if (!rewardBucket) {
+          const createdRewardBucket = await prisma.cashBucket.create({
+            data: {
+              label: `Circlys Reward Receipt • ${inv.name}`,
+              currency: rewardCurrency,
+              balance: expectedRewardTotal,
+              haulStartDate: rewardAnchorDate,
+              excludeFromZakat: false,
+              personId: null,
+              movements: {
+                create: {
+                  investmentId: inv.id,
+                  amount: expectedRewardTotal,
+                  type: 'CASH_IN',
+                  date: rewardDate,
+                  notes: `Circlys reward receipt • ${inv.name}`,
+                },
+              },
+            },
+            select: { id: true },
+          })
+
+          resolvedRewardBucketId = createdRewardBucket.id
+          creditedReward = expectedRewardTotal
+
+          const cashAccountId = await ensureCashAccountId(rewardCurrency)
+          if (cashAccountId) {
+            await prisma.transaction.create({
+              data: {
+                accountId: cashAccountId,
+                investmentId: inv.id,
+                personId: null,
+                type: 'CASH_IN',
+                amount: expectedRewardTotal,
+                date: rewardDate,
+                description: `Circlys reward receipt • ${inv.name}`,
+              },
+            })
+          }
+          rewardCashAdjusted = true
+        } else {
+          await prisma.cashBucket.update({
+            where: { id: rewardBucket.id },
+            data: {
+              haulStartDate: rewardAnchorDate,
+              excludeFromZakat: false,
+              personId: null,
+            },
+          })
+        }
+
+        const rewardShortfall = Math.max(0, expectedRewardTotal - creditedReward)
+        if (resolvedRewardBucketId && rewardShortfall > REWARD_EPSILON) {
+          await prisma.cashBucket.update({
+            where: { id: resolvedRewardBucketId },
+            data: { balance: { increment: rewardShortfall } },
+          })
+
+          await prisma.cashBucketMovement.create({
+            data: {
+              cashBucketId: resolvedRewardBucketId,
+              investmentId: inv.id,
+              amount: rewardShortfall,
+              type: 'CASH_IN',
+              date: rewardDate,
+              notes: `Circlys reward reconciliation • ${inv.name}`,
+            },
+          })
+
+          const cashAccountId = await ensureCashAccountId(rewardCurrency)
+          if (cashAccountId) {
+            await prisma.transaction.create({
+              data: {
+                accountId: cashAccountId,
+                investmentId: inv.id,
+                personId: null,
+                type: 'CASH_IN',
+                amount: rewardShortfall,
+                date: rewardDate,
+                description: `Circlys reward reconciliation • ${inv.name}`,
+              },
+            })
+          }
+          rewardCashAdjusted = true
+        }
+
+        if (
+          resolvedRewardBucketId &&
+          (
+            rewardBucketIdFromMeta !== resolvedRewardBucketId ||
+            Math.abs(toNonNegativeNumber(metadata?.received?.rewardAmount) - expectedRewardTotal) > REWARD_EPSILON
+          )
+        ) {
+          await prisma.investment.update({
+            where: { id: inv.id },
+            data: {
+              metadata: JSON.stringify({
+                ...metadata,
+                received: {
+                  ...(metadata?.received && typeof metadata.received === 'object' ? metadata.received : {}),
+                  rewardAmount: expectedRewardTotal,
+                  rewardBucketId: resolvedRewardBucketId,
+                },
+              }),
+            },
+          })
+        }
+      }
 
       const receivedBucketId = typeof metadata?.received?.bucketId === 'string' ? metadata.received.bucketId : null
       if (receivedBucketId && firstContributionDate) {
@@ -297,6 +512,25 @@ export default async function ZakatPage() {
           label: { startsWith: `Circlys • ${inv.name} •` },
         },
         data: { excludeFromZakat: true },
+      })
+    }
+
+    if (rewardCashAdjusted) {
+      const cashBucketAgg = await prisma.cashBucket.aggregate({
+        where: { personId: null },
+        _sum: { balance: true },
+      })
+      const cashBucketSumRaw = cashBucketAgg?._sum?.balance
+      const cashBucketSum = Number.isFinite(cashBucketSumRaw as any) ? Number(cashBucketSumRaw) : 0
+
+      await prisma.systemSetting.upsert({
+        where: { key: CASH_BALANCE_KEY },
+        update: { value: cashBucketSum.toString() },
+        create: {
+          key: CASH_BALANCE_KEY,
+          value: cashBucketSum.toString(),
+          description: 'Available cash balance for investments',
+        },
       })
     }
 

@@ -63,6 +63,33 @@ export async function PATCH(
       ...(validated.receiptMonth !== undefined ? { receiptMonth: validated.receiptMonth } : {}),
     }
 
+    const normalizedRewardAmountRaw = Number(nextMeta.rewardAmount || 0)
+    const normalizedRewardAmount = Number.isFinite(normalizedRewardAmountRaw)
+      ? Math.max(0, normalizedRewardAmountRaw)
+      : 0
+    const rawRewardProgram = String(nextMeta.rewardProgram || 'NONE')
+    const normalizedRewardProgram = normalizedRewardAmount > 0 && rawRewardProgram === 'NONE'
+      ? 'FIXED'
+      : rawRewardProgram
+
+    const normalizedMonthlyContributionRaw = Number(nextMeta.monthlyContribution || 0)
+    const normalizedMonthlyContribution = Number.isFinite(normalizedMonthlyContributionRaw)
+      ? Math.max(0, normalizedMonthlyContributionRaw)
+      : 0
+    const normalizedTotalMonths = Math.max(0, Math.floor(Number(nextMeta.totalMonths || 0)))
+    const normalizedReceiptMonth = Math.max(0, Math.floor(Number(nextMeta.receiptMonth || 0)))
+    const scheduledRewardMonths = normalizedReceiptMonth > 0 ? normalizedReceiptMonth : normalizedTotalMonths
+    const rewardPerMonth = normalizedRewardAmount > 0
+      ? normalizedRewardProgram === 'PERCENTAGE'
+        ? normalizedMonthlyContribution * (normalizedRewardAmount / 100)
+        : normalizedRewardAmount
+      : 0
+    const normalizedTotalReward = rewardPerMonth * scheduledRewardMonths
+
+    nextMeta.rewardProgram = normalizedRewardProgram
+    nextMeta.rewardAmount = normalizedRewardAmount
+    nextMeta.totalReward = normalizedTotalReward
+
     const updated = await prisma.investment.update({
       where: { id },
       data: {

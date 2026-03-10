@@ -38,6 +38,23 @@ export async function POST(req: NextRequest) {
       ? [{ personId: user.personId!, investedAmount: 0, sharePercentage: 100, notes: null }]
       : (validatedData.participants || [])
 
+    const monthlyContribution = Number(validatedData.monthlyContribution || 0)
+    const totalMonths = Math.max(0, Math.floor(Number(validatedData.totalMonths || 0)))
+    const rewardAmountRaw = Number(validatedData.rewardAmount || 0)
+    const rewardAmount = Number.isFinite(rewardAmountRaw) ? Math.max(0, rewardAmountRaw) : 0
+    const rawRewardProgram = validatedData.rewardProgram ?? 'NONE'
+    const rewardProgram = rewardAmount > 0 && rawRewardProgram === 'NONE' ? 'FIXED' : rawRewardProgram
+    const scheduledRewardMonths = Math.max(
+      0,
+      Math.floor(Number(validatedData.receiptMonth || totalMonths || 0)),
+    )
+    const rewardPerMonth = rewardAmount > 0
+      ? rewardProgram === 'PERCENTAGE'
+        ? monthlyContribution * (rewardAmount / 100)
+        : rewardAmount
+      : 0
+    const totalReward = rewardPerMonth * scheduledRewardMonths
+
     const investment = await prisma.investment.create({
       data: {
         accountId: validatedData.accountId,
@@ -49,22 +66,17 @@ export async function POST(req: NextRequest) {
         // ROSCA fields in metadata
         metadata: JSON.stringify({
           type: 'ROSCA',
-          monthlyContribution: validatedData.monthlyContribution,
-          totalMonths: validatedData.totalMonths,
+          monthlyContribution,
+          totalMonths,
           bookingFee: validatedData.bookingFee ?? 0,
-          rewardProgram: validatedData.rewardProgram ?? 'NONE',
-          rewardAmount: validatedData.rewardAmount ?? 0,
+          rewardProgram,
+          rewardAmount,
           receiptMonth: validatedData.receiptMonth ?? null,
           monthsPaid: 0,
           currentMonth: 0,
           status: 'ACTIVE',
-          totalPayout: validatedData.monthlyContribution * validatedData.totalMonths,
-          // Add reward to payout if applicable
-          totalReward: validatedData.rewardProgram && validatedData.rewardAmount
-            ? validatedData.rewardProgram === 'PERCENTAGE'
-              ? (validatedData.monthlyContribution * validatedData.totalMonths) * (validatedData.rewardAmount / 100)
-              : validatedData.rewardAmount
-            : 0,
+          totalPayout: monthlyContribution * totalMonths,
+          totalReward,
           payments: {},
           totalPaid: 0,
           totalRewardPaid: 0,

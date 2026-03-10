@@ -69,22 +69,43 @@ export async function POST(
       return NextResponse.json({ error: 'Invalid receive amount' }, { status: 400 })
     }
 
-    const rewardFromPayments = (Object.values(meta?.payments && typeof meta.payments === 'object' ? meta.payments : {}) as any[])
+    const payments: Record<string, any> =
+      meta.payments && typeof meta.payments === 'object' ? meta.payments : {}
+    const paymentEntries = Object.values(payments) as any[]
+
+    const rewardFromPayments = paymentEntries
       .reduce((sum: number, p: any) => sum + (Number(p?.reward) || 0), 0)
     const rewardFromMeta = Number(meta.totalRewardPaid || 0)
+    const rewardFromLegacyConfig = Number(meta.totalReward || 0)
+
+    const rewardAmountRaw = Number(meta.rewardAmount || 0)
+    const monthlyContributionRaw = Number(meta.monthlyContribution || 0)
+    const rewardAmountPerMonth = Number.isFinite(rewardAmountRaw) ? Math.max(0, rewardAmountRaw) : 0
+    const monthlyContribution = Number.isFinite(monthlyContributionRaw) ? Math.max(0, monthlyContributionRaw) : 0
+    const rewardProgram = String(meta.rewardProgram || '')
+    const rewardPerMonth = rewardAmountPerMonth > 0
+      ? rewardProgram === 'PERCENTAGE'
+        ? monthlyContribution * (rewardAmountPerMonth / 100)
+        : rewardAmountPerMonth
+      : 0
+    const receiptMonth = Math.max(0, Math.floor(Number(meta.receiptMonth || 0)))
+    const totalMonths = Math.max(0, Math.floor(Number(meta.totalMonths || 0)))
+    const scheduledRewardMonths = receiptMonth > 0
+      ? receiptMonth
+      : (totalMonths > 0 ? totalMonths : paymentEntries.length)
+    const rewardFromSchedule = rewardPerMonth * scheduledRewardMonths
+
     const configuredTotalReward = Math.max(
-      Number.isFinite(rewardFromMeta) ? rewardFromMeta : 0,
-      Number.isFinite(rewardFromPayments) ? rewardFromPayments : 0,
+      Number.isFinite(rewardFromMeta) ? Math.max(0, rewardFromMeta) : 0,
+      Number.isFinite(rewardFromPayments) ? Math.max(0, rewardFromPayments) : 0,
+      Number.isFinite(rewardFromLegacyConfig) ? Math.max(0, rewardFromLegacyConfig) : 0,
+      Number.isFinite(rewardFromSchedule) ? Math.max(0, rewardFromSchedule) : 0,
     )
 
     const currency = investment.account?.currency || 'SAR'
 
     // NEW RULE 2: Get first contribution date (hawl start)
-    const payments: Record<string, any> =
-      meta.payments && typeof meta.payments === 'object' ? meta.payments : {}
-    
     let firstContributionDate = new Date(investment.startDate)
-    const paymentEntries = Object.values(payments) as any[]
     if (paymentEntries.length > 0) {
       const sortedPayments = paymentEntries.sort((a, b) => {
         const dateA = new Date(a.paidDate || a.dueDate)
