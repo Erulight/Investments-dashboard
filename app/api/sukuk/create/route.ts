@@ -240,7 +240,7 @@ export async function POST(req: NextRequest) {
         availableOnOrBefore: startDate,
         personId: user.role === 'OWNER' ? null : user.personId,
         preferredLabelPrefixes: user.role === 'OWNER'
-          ? ['Savings Receipt •', 'Circlys Reward Receipt •']
+          ? ['Circlys Reward Receipt •', 'Savings Receipt •']
           : undefined,
       })
 
@@ -287,30 +287,43 @@ export async function POST(req: NextRequest) {
           inheritedSavingsHaulStart = null
         }
 
-        // Only inherit from Savings Receipt buckets (ROSCA funds)
-        // Manual cash entries should NOT pass their hawl date to Sukuk
+        // Only inherit from Savings/Reward Receipt buckets (ROSCA funds)
+        // Manual cash entries should NOT pass their hawl date to Sukuk.
+        // If reward funding exists, prefer reward anchor (last completed hawl continuity).
         if (!hasPrincipalReceiptFunding) {
-          inheritedSavingsHaulStart = fundingAllocations
+          const rewardRoscaAnchors = fundingAllocations
             .map((alloc: any) => {
               const label = typeof alloc?.cashBucket?.label === 'string' ? alloc.cashBucket.label : ''
-              const isRoscaReceipt =
-                label.startsWith('Savings Receipt •') ||
-                label.startsWith('Circlys Reward Receipt •')
-              console.log('[SUKUK_CREATE] Checking bucket:', label, 'isROSCA:', isRoscaReceipt)
-              if (!isRoscaReceipt) {
+              const isRewardRoscaReceipt = label.startsWith('Circlys Reward Receipt •')
+              if (!isRewardRoscaReceipt) {
                 return null
               }
               const d = alloc?.cashBucket?.haulStartDate ? new Date(alloc.cashBucket.haulStartDate) : null
               if (!d || Number.isNaN(d.getTime())) {
-                console.log('[SUKUK_CREATE] Invalid date for ROSCA bucket:', d)
                 return null
               }
-              const normalized = new Date(d.getFullYear(), d.getMonth(), d.getDate())
-              console.log('[SUKUK_CREATE] Found valid ROSCA date:', normalized.toISOString().split('T')[0])
-              return normalized
+              return new Date(d.getFullYear(), d.getMonth(), d.getDate())
             })
             .filter((d: Date | null): d is Date => Boolean(d))
             .sort((a: Date, b: Date) => a.getTime() - b.getTime())[0] || null
+
+          const savingsRoscaAnchors = fundingAllocations
+            .map((alloc: any) => {
+              const label = typeof alloc?.cashBucket?.label === 'string' ? alloc.cashBucket.label : ''
+              const isSavingsRoscaReceipt = label.startsWith('Savings Receipt •')
+              if (!isSavingsRoscaReceipt) {
+                return null
+              }
+              const d = alloc?.cashBucket?.haulStartDate ? new Date(alloc.cashBucket.haulStartDate) : null
+              if (!d || Number.isNaN(d.getTime())) {
+                return null
+              }
+              return new Date(d.getFullYear(), d.getMonth(), d.getDate())
+            })
+            .filter((d: Date | null): d is Date => Boolean(d))
+            .sort((a: Date, b: Date) => a.getTime() - b.getTime())[0] || null
+
+          inheritedSavingsHaulStart = rewardRoscaAnchors || savingsRoscaAnchors || null
         }
 
         console.log('[SUKUK_CREATE] Final inherited hawl start:', inheritedSavingsHaulStart?.toISOString().split('T')[0] || 'NONE')

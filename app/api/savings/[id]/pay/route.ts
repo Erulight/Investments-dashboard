@@ -22,10 +22,33 @@ type FundingSource = {
   amount: number
 }
 
+const diffDays = (start: Date, end: Date) => {
+  const s = new Date(start)
+  const e = new Date(end)
+  s.setHours(0, 0, 0, 0)
+  e.setHours(0, 0, 0, 0)
+  return Math.max(0, Math.round((e.getTime() - s.getTime()) / (1000 * 60 * 60 * 24)))
+}
+
+const addDays = (date: Date, days: number) => {
+  const d = new Date(date)
+  d.setDate(d.getDate() + days)
+  return d
+}
+
 const addMonths = (date: Date, months: number) => {
   const d = new Date(date)
   d.setMonth(d.getMonth() + months)
   return d
+}
+
+const getLastCompletedHawlAnchor = (initialAnchor: Date, referenceDate: Date) => {
+  const start = new Date(initialAnchor.getFullYear(), initialAnchor.getMonth(), initialAnchor.getDate())
+  const ref = new Date(referenceDate.getFullYear(), referenceDate.getMonth(), referenceDate.getDate())
+  const elapsed = diffDays(start, ref)
+  if (elapsed < 354) return start
+  const completedCycles = Math.floor(elapsed / 354)
+  return addDays(start, completedCycles * 354)
 }
 
 const getReceiptMonth = (meta: any) => Math.max(0, Math.floor(Number(meta?.receiptMonth || 0)))
@@ -314,6 +337,24 @@ export async function POST(
         ? monthsPaid >= normalizedTotalMonths
         : monthsPaid > 0
     )
+    const nextPaymentEntries = Object.values(nextPayments) as any[]
+    const firstContributionDate = nextPaymentEntries
+      .map((p: any) => {
+        const d = new Date(p?.paidDate || p?.dueDate)
+        return Number.isNaN(d.getTime()) ? null : d
+      })
+      .filter((d: Date | null): d is Date => Boolean(d))
+      .sort((a: Date, b: Date) => a.getTime() - b.getTime())[0]
+      || contributionHaulStart
+    const rewardReceiptDateRaw = normalizedTotalMonths > 0
+      ? addMonths(firstContributionDate, normalizedTotalMonths - 1)
+      : contributionDate
+    const rewardReceiptDate = new Date(
+      rewardReceiptDateRaw.getFullYear(),
+      rewardReceiptDateRaw.getMonth(),
+      rewardReceiptDateRaw.getDate(),
+    )
+    const rewardHawlAnchor = getLastCompletedHawlAnchor(firstContributionDate, rewardReceiptDate)
 
     const nextMeta: any = {
       ...meta,
@@ -327,10 +368,6 @@ export async function POST(
       typeof meta?.received?.rewardBucketId === 'string' ? meta.received.rewardBucketId : null
 
     if (rewardMaturedNow && totalRewardPaid > 0.0001) {
-      const rewardReceiptDate = normalizedTotalMonths > 0
-        ? addMonths(new Date(investment.startDate), normalizedTotalMonths - 1)
-        : contributionDate
-
       const settledRewardBucketId = await prisma.$transaction(async (tx: any) => {
         const byId = resolvedRewardBucketId
           ? await tx.cashBucket.findUnique({
@@ -358,7 +395,7 @@ export async function POST(
             label: `Circlys Reward Receipt • ${investment.name}`,
             currency,
             balance: 0,
-            haulStartDate: contributionHaulStart,
+            haulStartDate: rewardHawlAnchor,
             excludeFromZakat: false,
             personId: null,
           },
@@ -368,7 +405,7 @@ export async function POST(
         await tx.cashBucket.update({
           where: { id: rewardBucket.id },
           data: {
-            haulStartDate: contributionHaulStart,
+            haulStartDate: rewardHawlAnchor,
             excludeFromZakat: false,
             personId: null,
           },

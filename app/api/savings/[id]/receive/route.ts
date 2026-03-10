@@ -221,7 +221,7 @@ export async function POST(
         : 0
       const rewardNewCashCredit = Math.max(0, rewardReceiptAmount - legacyRewardBalance)
       const rewardReceiptDateRaw = totalMonths > 0
-        ? addMonths(new Date(investment.startDate), totalMonths - 1)
+        ? addMonths(firstContributionDate, totalMonths - 1)
         : receiveDate
       const rewardReceiptDate = new Date(
         rewardReceiptDateRaw.getFullYear(),

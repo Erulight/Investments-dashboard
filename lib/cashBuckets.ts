@@ -132,8 +132,11 @@ export const withdrawFromBuckets = async (
   if (Array.isArray(preferredLabelPrefixes) && preferredLabelPrefixes.length > 0) {
     const prefixes = preferredLabelPrefixes.filter((p) => typeof p === 'string' && p.length > 0)
     if (prefixes.length > 0) {
-      const priorityFor = (label?: string | null) =>
-        prefixes.some((prefix) => (label || '').startsWith(prefix)) ? 0 : 1
+      const priorityFor = (label?: string | null) => {
+        const normalized = label || ''
+        const preferredIndex = prefixes.findIndex((prefix) => normalized.startsWith(prefix))
+        return preferredIndex >= 0 ? preferredIndex : prefixes.length
+      }
       buckets.sort((a: any, b: any) => {
         const pa = priorityFor(a.label)
         const pb = priorityFor(b.label)
