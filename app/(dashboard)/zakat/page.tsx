@@ -48,6 +48,12 @@ const addDays = (date: Date, days: number) => {
   return next
 }
 
+const addMonths = (date: Date, months: number) => {
+  const next = new Date(date)
+  next.setMonth(next.getMonth() + months)
+  return next
+}
+
 const diffDaysFloor = (start: Date, end: Date) => {
   const startTime = start.getTime()
   const endTime = end.getTime()
@@ -325,8 +331,24 @@ export default async function ZakatPage() {
       const hasReceived = Boolean(metadata?.received?.date)
       const rewardBucketIdFromMeta =
         typeof metadata?.received?.rewardBucketId === 'string' ? metadata.received.rewardBucketId : null
+      const normalizedTotalMonths = Math.max(0, Math.floor(toNonNegativeNumber(metadata?.totalMonths)))
+      const paidMonthsFromEntries = paymentEntries
+        .filter((p: any) => typeof p?.bucketId === 'string' && p.bucketId.length > 0)
+        .length
+      const paidMonthsFromMeta = Math.max(0, Math.floor(toNonNegativeNumber(metadata?.monthsPaid)))
+      const paidMonths = Math.max(paidMonthsFromEntries, paidMonthsFromMeta)
+      const rewardMatured = hasReceived && (
+        normalizedTotalMonths > 0
+          ? paidMonths >= normalizedTotalMonths
+          : paidMonths > 0
+      )
+      const rewardAnchorDate = firstContributionDate || toDate(inv.startDate) || new Date()
+      const rewardDate = normalizedTotalMonths > 0
+        ? addMonths(rewardAnchorDate, normalizedTotalMonths - 1)
+        : (toDate(metadata?.received?.date) || rewardAnchorDate)
+      const rewardCurrency = inv.account?.currency || 'SAR'
 
-      if (hasReceived && expectedRewardTotal > REWARD_EPSILON) {
+      if (rewardMatured && expectedRewardTotal > REWARD_EPSILON) {
         const rewardBucket = await prisma.cashBucket.findFirst({
           where: {
             personId: null,
@@ -350,10 +372,6 @@ export default async function ZakatPage() {
             },
           },
         })
-
-        const rewardAnchorDate = firstContributionDate || toDate(inv.startDate) || new Date()
-        const rewardDate = toDate(metadata?.received?.date) || rewardAnchorDate
-        const rewardCurrency = inv.account?.currency || 'SAR'
 
         let resolvedRewardBucketId = rewardBucket?.id || rewardBucketIdFromMeta
         let creditedReward = (rewardBucket?.movements || []).reduce(
@@ -463,6 +481,54 @@ export default async function ZakatPage() {
                   ...(metadata?.received && typeof metadata.received === 'object' ? metadata.received : {}),
                   rewardAmount: expectedRewardTotal,
                   rewardBucketId: resolvedRewardBucketId,
+                },
+              }),
+            },
+          })
+        }
+      } else if (hasReceived && expectedRewardTotal > REWARD_EPSILON) {
+        if (rewardBucketIdFromMeta) {
+          await prisma.cashBucket.updateMany({
+            where: { id: rewardBucketIdFromMeta },
+            data: {
+              haulStartDate: rewardAnchorDate,
+              excludeFromZakat: true,
+              personId: null,
+            },
+          })
+        }
+
+        await prisma.cashBucket.updateMany({
+          where: {
+            personId: null,
+            label: `Circlys Reward Receipt • ${inv.name}`,
+            movements: {
+              some: {
+                investmentId: inv.id,
+                type: 'CASH_IN',
+              },
+            },
+          },
+          data: {
+            haulStartDate: rewardAnchorDate,
+            excludeFromZakat: true,
+            personId: null,
+          },
+        })
+
+        if (
+          rewardBucketIdFromMeta ||
+          toNonNegativeNumber(metadata?.received?.rewardAmount) > REWARD_EPSILON
+        ) {
+          await prisma.investment.update({
+            where: { id: inv.id },
+            data: {
+              metadata: JSON.stringify({
+                ...metadata,
+                received: {
+                  ...(metadata?.received && typeof metadata.received === 'object' ? metadata.received : {}),
+                  rewardAmount: 0,
+                  rewardBucketId: null,
                 },
               }),
             },
