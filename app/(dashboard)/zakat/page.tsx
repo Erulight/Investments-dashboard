@@ -802,15 +802,19 @@ export default async function ZakatPage() {
         })
       }
 
-      // Keep profit/reward hawl aligned with the same inherited anchor used by principal
-      // (ROSCA first-contribution date when available, otherwise normal Sukuk fallback).
+      const sukukStartDate = toDate(sukukInv.startDate)
+      const profitHawlStart = sukukStartDate && !Number.isNaN(sukukStartDate.getTime())
+        ? new Date(sukukStartDate.getFullYear(), sukukStartDate.getMonth(), sukukStartDate.getDate())
+        : fallbackDay
+
+      // Profit remains anchored to Sukuk start date.
       await prisma.cashBucket.updateMany({
         where: {
           personId: null,
           label: { startsWith: 'Profit •' },
           movements: { some: { investmentId: sukukInv.id } },
         },
-        data: { haulStartDate: hawlStart },
+        data: { haulStartDate: profitHawlStart },
       })
     }
 
@@ -1507,14 +1511,14 @@ export default async function ZakatPage() {
           const isPrincipalReceiptMovement = movementType === 'WITHDRAW_PRINCIPAL' || movementType === 'ROLLBACK_PRINCIPAL'
           const isProfitReceiptMovement = movementType === 'WITHDRAW_PROFIT' || (isProfitBucket && movementType === 'CASH_IN')
 
-          // For principal/profit receipts from ROSCA-funded Sukuk, use ROSCA first contribution date.
-          // Otherwise fallback to investment start date.
+          // Principal receipts from ROSCA-funded Sukuk inherit ROSCA first contribution date.
+          // Profit receipts always use Sukuk start date.
           const eligibilityAnchor = (isCommissionBucket
             ? bucketStart
             : (isPrincipalReceiptMovement
               ? (user.role === 'PARTNER' ? bucketStart : ownerSukukAnchor)
               : (isProfitReceiptMovement
-                ? (user.role === 'PARTNER' ? bucketStart : ownerSukukAnchor)
+                ? (user.role === 'PARTNER' ? bucketStart : start)
                 : (user.role === 'PARTNER' ? bucketStart : ownerSukukAnchor))))
           const eligibilityStart = startOfDay(eligibilityAnchor)
           const duration = diffDaysFloor(eligibilityStart, day)
