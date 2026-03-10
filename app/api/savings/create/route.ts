@@ -44,10 +44,7 @@ export async function POST(req: NextRequest) {
     const rewardAmount = Number.isFinite(rewardAmountRaw) ? Math.max(0, rewardAmountRaw) : 0
     const rawRewardProgram = validatedData.rewardProgram ?? 'NONE'
     const rewardProgram = rewardAmount > 0 && rawRewardProgram === 'NONE' ? 'FIXED' : rawRewardProgram
-    const scheduledRewardMonths = Math.max(
-      0,
-      Math.floor(Number(validatedData.receiptMonth || totalMonths || 0)),
-    )
+    const scheduledRewardMonths = totalMonths
     const rewardPerMonth = rewardAmount > 0
       ? rewardProgram === 'PERCENTAGE'
         ? monthlyContribution * (rewardAmount / 100)

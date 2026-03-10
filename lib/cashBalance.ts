@@ -7,9 +7,14 @@ export const getBucketScopeWhere = (personId: string | null) => {
   if (personId) {
     return {
       personId,
-      NOT: [
-        { label: { startsWith: 'Debt •' } },
-        { label: 'Partner Commission' },
+      OR: [
+        { label: null },
+        {
+          AND: [
+            { NOT: { label: { startsWith: 'Debt •' } } },
+            { NOT: { label: 'Partner Commission' } },
+          ],
+        },
       ],
     } as any
   }

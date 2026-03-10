@@ -535,6 +535,18 @@ export function CirclysClient({ initialInvestments, userRole }: CirclysClientPro
               const totalMonths = Number(meta.totalMonths || 0)
               const startDate = new Date(expandedInvestment.startDate)
               const payments: Record<string, any> = meta.payments && typeof meta.payments === 'object' ? meta.payments : {}
+              const rewardAmountRaw = Number(meta.rewardAmount || 0)
+              const rewardAmount = Number.isFinite(rewardAmountRaw) ? Math.max(0, rewardAmountRaw) : 0
+              const rewardProgram = String(meta.rewardProgram || 'NONE')
+              const monthlyContributionRaw = Number(meta.monthlyContribution || 0)
+              const monthlyContribution = Number.isFinite(monthlyContributionRaw)
+                ? Math.max(0, monthlyContributionRaw)
+                : 0
+              const configuredRewardPerMonth = rewardAmount > 0
+                ? rewardProgram === 'PERCENTAGE'
+                  ? monthlyContribution * (rewardAmount / 100)
+                  : rewardAmount
+                : 0
               const receiptMo = Number(meta.receiptMonth || 0)
               const hasReceived = Boolean(meta.received?.date)
               const receiveAmt = Number(meta.monthlyContribution || 0) * totalMonths
@@ -666,7 +678,11 @@ export function CirclysClient({ initialInvestments, userRole }: CirclysClientPro
                           const loading = payLoadingKey === key
                           const defaultAmount = meta.monthlyContribution ? String(meta.monthlyContribution) : ''
                           const amountValue = payAmountByKey[key] ?? (isPaid ? String(r.payment.amount || '') : defaultAmount)
-                          const rewardValue = payRewardByKey[key] ?? (isPaid ? String(r.payment.reward || 0) : '0')
+                          const rewardValue = payRewardByKey[key] ?? (
+                            isPaid
+                              ? String(r.payment.reward || 0)
+                              : String(configuredRewardPerMonth)
+                          )
                           const isReceiptRow = receiptMo > 0 && (r.monthIndex + 1) === receiptMo
                           const isPostReceiptRow = hasReceived && receiptMo > 0 && (r.monthIndex + 1) > receiptMo
                           const isLockedPreReceiptAfterReceive = hasReceived && receiptMo > 0 && (r.monthIndex + 1) <= receiptMo

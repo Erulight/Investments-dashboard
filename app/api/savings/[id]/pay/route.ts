@@ -69,7 +69,7 @@ export async function POST(
 
     const monthIndex = Number(body.monthIndex)
     const amount = Number(body.amount)
-    const reward = body.reward !== undefined ? Number(body.reward) : 0
+    const rewardInput = body.reward !== undefined ? Number(body.reward) : null
 
     if (!Number.isInteger(monthIndex) || monthIndex < 0) {
       return NextResponse.json({ error: 'Invalid monthIndex' }, { status: 400 })
@@ -79,7 +79,7 @@ export async function POST(
       return NextResponse.json({ error: 'Invalid amount' }, { status: 400 })
     }
 
-    if (!Number.isFinite(reward) || reward < 0) {
+    if (rewardInput !== null && (!Number.isFinite(rewardInput) || rewardInput < 0)) {
       return NextResponse.json({ error: 'Invalid reward' }, { status: 400 })
     }
 
@@ -90,6 +90,19 @@ export async function POST(
         return {}
       }
     })()
+
+    const rewardAmountRaw = Number(meta.rewardAmount || 0)
+    const configuredRewardAmount = Number.isFinite(rewardAmountRaw) ? Math.max(0, rewardAmountRaw) : 0
+    const rewardProgram = String(meta.rewardProgram || 'NONE')
+    const monthlyContributionRaw = Number(meta.monthlyContribution || 0)
+    const monthlyContribution = Number.isFinite(monthlyContributionRaw)
+      ? Math.max(0, monthlyContributionRaw)
+      : 0
+    const configuredRewardPerMonth = configuredRewardAmount > 0
+      ? rewardProgram === 'PERCENTAGE'
+        ? monthlyContribution * (configuredRewardAmount / 100)
+        : configuredRewardAmount
+      : 0
 
     const receiptMonth = getReceiptMonth(meta)
     const hasReceived = Boolean(meta?.received?.date)
@@ -128,7 +141,7 @@ export async function POST(
 
     // Determine if this is a post-receipt month (deducts from cash instead of creating a new bucket)
     const isPostReceipt = hasReceived && receiptMonth > 0 && (monthIndex + 1) > receiptMonth
-    const rewardForPayment = reward
+    const rewardForPayment = rewardInput !== null ? rewardInput : configuredRewardPerMonth
 
     // Snapshot before making changes to savings plan
     await createSnapshot(prisma as any, {
@@ -141,15 +154,12 @@ export async function POST(
 
     let bucketId: string
     let postReceiptFundingSources: FundingSource[] = []
-    let postReceiptRewardBucketId: string | null = null
 
     if (isPostReceipt) {
       // Post-receipt: withdraw contribution from existing cash balance
       const contributionDeduct = amount
       const postReceiptResult = await prisma.$transaction(async (tx: any) => {
         const paybackNote = `Circlys payback • ${investment.name} • Month ${monthIndex + 1}`
-        const postReceiptRewardNote = `Circlys post-receipt reward • ${investment.name} • Month ${monthIndex + 1}`
-        let rewardBucketId: string | null = null
 
         const fundingSources = await withdrawFromBuckets(tx, {
           amount: contributionDeduct,
@@ -183,61 +193,6 @@ export async function POST(
           },
         })
 
-        if (rewardForPayment > 0.0001) {
-          const rewardBucketIdFromMeta =
-            typeof meta?.received?.rewardBucketId === 'string' ? meta.received.rewardBucketId : null
-          const existingRewardBucket = rewardBucketIdFromMeta
-            ? await tx.cashBucket.findUnique({ where: { id: rewardBucketIdFromMeta }, select: { id: true } })
-            : null
-
-          const rewardBucket = existingRewardBucket ?? await tx.cashBucket.create({
-            data: {
-              label: `Circlys Reward Receipt • ${investment.name}`,
-              currency,
-              balance: 0,
-              haulStartDate: contributionHaulStart,
-              excludeFromZakat: false,
-              personId: null,
-            },
-            select: { id: true },
-          })
-
-          rewardBucketId = rewardBucket.id
-
-          await tx.cashBucket.update({
-            where: { id: rewardBucketId },
-            data: {
-              balance: { increment: rewardForPayment },
-              haulStartDate: contributionHaulStart,
-              excludeFromZakat: false,
-              personId: null,
-            },
-          })
-
-          await tx.cashBucketMovement.create({
-            data: {
-              cashBucketId: rewardBucketId,
-              investmentId: investment.id,
-              amount: rewardForPayment,
-              type: 'CASH_IN',
-              date: contributionDate,
-              notes: postReceiptRewardNote,
-            },
-          })
-
-          await tx.transaction.create({
-            data: {
-              accountId: cashAccount.id,
-              investmentId: investment.id,
-              personId: null,
-              type: 'CASH_IN',
-              amount: rewardForPayment,
-              date: contributionDate,
-              description: postReceiptRewardNote,
-            },
-          })
-        }
-
         await recomputeCashSetting(tx, null)
 
         return {
@@ -250,12 +205,10 @@ export async function POST(
               return { cashBucketId, amount }
             })
             .filter((x: FundingSource | null): x is FundingSource => Boolean(x)),
-          rewardBucketId,
         }
       })
 
       postReceiptFundingSources = postReceiptResult.fundingSources
-      postReceiptRewardBucketId = postReceiptResult.rewardBucketId || null
 
       // Use a placeholder bucket ID to mark as paid without a real bucket
       bucketId = `post-receipt-${investment.id}-${monthIndex}`
@@ -313,11 +266,11 @@ export async function POST(
                   date: contributionDate,
                   notes: `Month ${monthIndex + 1}`,
                 },
-                ...(reward > 0
+                ...(rewardForPayment > 0
                   ? [
                       {
                         investmentId: investment.id,
-                        amount: reward,
+                        amount: rewardForPayment,
                         type: 'SAVINGS_REWARD',
                         date: contributionDate,
                         notes: `Month ${monthIndex + 1}`,
@@ -349,13 +302,18 @@ export async function POST(
         bucketId,
         postReceipt: isPostReceipt || false,
         ...(isPostReceipt ? { fundingSources: postReceiptFundingSources } : {}),
-        ...(isPostReceipt && postReceiptRewardBucketId ? { rewardBucketId: postReceiptRewardBucketId } : {}),
       },
     }
 
     const totalPaid = Object.values(nextPayments).reduce((sum: number, p: any) => sum + (Number(p.amount) || 0), 0)
     const totalRewardPaid = Object.values(nextPayments).reduce((sum: number, p: any) => sum + (Number(p.reward) || 0), 0)
     const monthsPaid = Object.keys(nextPayments).length
+    const normalizedTotalMonths = Math.max(0, Math.floor(Number(meta.totalMonths || 0)))
+    const rewardMaturedNow = hasReceived && (
+      normalizedTotalMonths > 0
+        ? monthsPaid >= normalizedTotalMonths
+        : monthsPaid > 0
+    )
 
     const nextMeta: any = {
       ...meta,
@@ -365,13 +323,121 @@ export async function POST(
       totalRewardPaid,
     }
 
-    if (hasReceived && isPostReceipt && rewardForPayment > 0.0001) {
+    let resolvedRewardBucketId =
+      typeof meta?.received?.rewardBucketId === 'string' ? meta.received.rewardBucketId : null
+
+    if (rewardMaturedNow && totalRewardPaid > 0.0001) {
+      const rewardReceiptDate = normalizedTotalMonths > 0
+        ? addMonths(new Date(investment.startDate), normalizedTotalMonths - 1)
+        : contributionDate
+
+      const settledRewardBucketId = await prisma.$transaction(async (tx: any) => {
+        const byId = resolvedRewardBucketId
+          ? await tx.cashBucket.findUnique({
+              where: { id: resolvedRewardBucketId },
+              select: { id: true },
+            })
+          : null
+
+        const existingRewardBucket = byId ?? await tx.cashBucket.findFirst({
+          where: {
+            personId: null,
+            label: `Circlys Reward Receipt • ${investment.name}`,
+            movements: {
+              some: {
+                investmentId: investment.id,
+                type: 'CASH_IN',
+              },
+            },
+          },
+          select: { id: true },
+        })
+
+        const rewardBucket = existingRewardBucket ?? await tx.cashBucket.create({
+          data: {
+            label: `Circlys Reward Receipt • ${investment.name}`,
+            currency,
+            balance: 0,
+            haulStartDate: contributionHaulStart,
+            excludeFromZakat: false,
+            personId: null,
+          },
+          select: { id: true },
+        })
+
+        await tx.cashBucket.update({
+          where: { id: rewardBucket.id },
+          data: {
+            haulStartDate: contributionHaulStart,
+            excludeFromZakat: false,
+            personId: null,
+          },
+        })
+
+        const credited = await tx.cashBucketMovement.aggregate({
+          where: {
+            cashBucketId: rewardBucket.id,
+            investmentId: investment.id,
+            type: 'CASH_IN',
+          },
+          _sum: { amount: true },
+        })
+
+        const creditedReward = Math.max(0, Number(credited?._sum?.amount || 0))
+        const rewardShortfall = Math.max(0, totalRewardPaid - creditedReward)
+
+        if (rewardShortfall > 0.0001) {
+          await tx.cashBucket.update({
+            where: { id: rewardBucket.id },
+            data: { balance: { increment: rewardShortfall } },
+          })
+
+          await tx.cashBucketMovement.create({
+            data: {
+              cashBucketId: rewardBucket.id,
+              investmentId: investment.id,
+              amount: rewardShortfall,
+              type: 'CASH_IN',
+              date: rewardReceiptDate,
+              notes: `Circlys reward receipt • ${investment.name}`,
+            },
+          })
+
+          const cashAccount =
+            (await tx.account.findFirst({ where: { type: 'CASH', isActive: true } })) ??
+            (await tx.account.create({
+              data: { name: 'Cash Balance', type: 'CASH', currency, description: 'Cash ledger account' },
+            }))
+
+          await tx.transaction.create({
+            data: {
+              accountId: cashAccount.id,
+              investmentId: investment.id,
+              personId: null,
+              type: 'CASH_IN',
+              amount: rewardShortfall,
+              date: rewardReceiptDate,
+              description: `Circlys reward receipt • ${investment.name}`,
+            },
+          })
+
+          await recomputeCashSetting(tx, null)
+        }
+
+        return rewardBucket.id
+      })
+
+      resolvedRewardBucketId = settledRewardBucketId
+    }
+
+    if (hasReceived) {
       const previousReceived = meta?.received && typeof meta.received === 'object' ? meta.received : {}
-      const previousReceivedReward = Number(previousReceived?.rewardAmount || 0)
+      const previousRewardBucketId =
+        typeof previousReceived?.rewardBucketId === 'string' ? previousReceived.rewardBucketId : null
       nextMeta.received = {
         ...previousReceived,
-        rewardAmount: Math.max(0, previousReceivedReward + rewardForPayment),
-        ...(postReceiptRewardBucketId ? { rewardBucketId: postReceiptRewardBucketId } : {}),
+        rewardAmount: rewardMaturedNow ? Math.max(0, totalRewardPaid) : 0,
+        rewardBucketId: rewardMaturedNow ? (resolvedRewardBucketId || previousRewardBucketId) : previousRewardBucketId,
       }
     }
 
@@ -509,6 +575,13 @@ export async function DELETE(
     const paymentRewardBucketId = typeof existing?.rewardBucketId === 'string' ? existing.rewardBucketId : null
     const receivedRewardBucketId = typeof meta?.received?.rewardBucketId === 'string' ? meta.received.rewardBucketId : null
     const rewardBucketIdForUndo = paymentRewardBucketId || receivedRewardBucketId
+    const normalizedTotalMonths = Math.max(0, Math.floor(Number(meta.totalMonths || 0)))
+    const monthsPaidBeforeUndo = Object.keys(payments).length
+    const rewardWasMatureBeforeUndo = hasReceived && (
+      normalizedTotalMonths > 0
+        ? monthsPaidBeforeUndo >= normalizedTotalMonths
+        : monthsPaidBeforeUndo > 0
+    )
 
     if (hasReceived && receiptMonth <= 0) {
       return NextResponse.json(
@@ -582,13 +655,10 @@ export async function DELETE(
           })
         }
 
-        if (rewardForUndo > 0.0001) {
-          if (!rewardBucketIdForUndo) {
-            throw new Error('POST_RECEIPT_REWARD_BUCKET_MISSING')
-          }
-
+        const shouldReverseReward = rewardForUndo > 0.0001 && rewardWasMatureBeforeUndo && Boolean(rewardBucketIdForUndo)
+        if (shouldReverseReward) {
           const rewardBucket = await tx.cashBucket.findUnique({
-            where: { id: rewardBucketIdForUndo },
+            where: { id: rewardBucketIdForUndo as string },
             select: { id: true, balance: true },
           })
 
@@ -602,13 +672,13 @@ export async function DELETE(
           }
 
           await tx.cashBucket.update({
-            where: { id: rewardBucketIdForUndo },
+            where: { id: rewardBucketIdForUndo as string },
             data: { balance: { decrement: rewardForUndo } },
           })
 
           await tx.cashBucketMovement.create({
             data: {
-              cashBucketId: rewardBucketIdForUndo,
+              cashBucketId: rewardBucketIdForUndo as string,
               investmentId: investment.id,
               amount: -rewardForUndo,
               type: 'CASH_OUT',
@@ -641,7 +711,7 @@ export async function DELETE(
           })
         }
 
-        if (rewardForUndo > 0.0001) {
+        if (rewardForUndo > 0.0001 && rewardWasMatureBeforeUndo && rewardBucketIdForUndo) {
           await tx.transaction.create({
             data: {
               accountId: cashAccount.id,
@@ -717,6 +787,11 @@ export async function DELETE(
       0
     )
     const monthsPaid = Object.keys(nextPayments).length
+    const rewardMaturedAfterUndo = hasReceived && (
+      normalizedTotalMonths > 0
+        ? monthsPaid >= normalizedTotalMonths
+        : monthsPaid > 0
+    )
 
     const nextMeta: any = {
       ...meta,
@@ -726,13 +801,16 @@ export async function DELETE(
       totalRewardPaid,
     }
 
-    if (hasReceived && isPostReceipt && rewardForUndo > 0.0001) {
+    if (hasReceived) {
       const previousReceived = meta?.received && typeof meta.received === 'object' ? meta.received : {}
-      const previousReceivedReward = Number(previousReceived?.rewardAmount || 0)
+      const previousRewardBucketId =
+        typeof previousReceived?.rewardBucketId === 'string' ? previousReceived.rewardBucketId : null
       nextMeta.received = {
         ...previousReceived,
-        rewardAmount: Math.max(0, previousReceivedReward - rewardForUndo),
-        ...(rewardBucketIdForUndo ? { rewardBucketId: rewardBucketIdForUndo } : {}),
+        rewardAmount: rewardMaturedAfterUndo ? Math.max(0, totalRewardPaid) : 0,
+        rewardBucketId: rewardMaturedAfterUndo
+          ? (rewardBucketIdForUndo || previousRewardBucketId)
+          : previousRewardBucketId,
       }
     }
 

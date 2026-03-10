@@ -13,16 +13,13 @@ const diffDays = (start: Date, end: Date) => {
   return Math.max(0, Math.round((e.getTime() - s.getTime()) / (1000 * 60 * 60 * 24)))
 }
 
-const getReceiptMonth = (meta: any) => Math.max(0, Math.floor(Number(meta?.receiptMonth || 0)))
-
-const isRewardEligiblePayment = (payment: any, receiptMonth: number) => {
-  if (!payment || payment.postReceipt === true) return false
-  const paymentMonth = Number(payment?.monthIndex)
-  if (Number.isInteger(paymentMonth) && receiptMonth > 0 && (paymentMonth + 1) > receiptMonth) {
-    return false
-  }
-  return true
+const addMonths = (date: Date, months: number) => {
+  const d = new Date(date)
+  d.setMonth(d.getMonth() + months)
+  return d
 }
+
+const getReceiptMonth = (meta: any) => Math.max(0, Math.floor(Number(meta?.receiptMonth || 0)))
 
 /**
  * POST  — Receive the ROSCA payout for a Circlys plan.
@@ -103,10 +100,7 @@ export async function POST(
     }
 
     const rewardFromPayments = paymentEntries
-      .reduce((sum: number, p: any) => {
-        if (!isRewardEligiblePayment(p, receiptMonth)) return sum
-        return sum + (Number(p?.reward) || 0)
-      }, 0)
+      .reduce((sum: number, p: any) => sum + Math.max(0, Number(p?.reward) || 0), 0)
     const rewardFromMeta = Number(meta.totalRewardPaid || 0)
     const rewardFromLegacyConfig = Number(meta.totalReward || 0)
 
@@ -120,18 +114,32 @@ export async function POST(
         ? monthlyContribution * (rewardAmountPerMonth / 100)
         : rewardAmountPerMonth
       : 0
-    const totalMonths = Math.max(0, Math.floor(Number(meta.totalMonths || 0)))
-    const scheduledRewardMonths = receiptMonth > 0
-      ? receiptMonth
-      : (totalMonths > 0 ? totalMonths : paymentEntries.length)
+    const paidMonthsFromEntries = paymentEntries
+      .filter((p: any) => typeof p?.bucketId === 'string' && p.bucketId.length > 0)
+      .length
+    const paidMonthsFromMeta = Math.max(0, Math.floor(Number(meta.monthsPaid || 0)))
+    const totalMonths = configuredTotalMonths
+    const scheduledRewardMonths = Math.max(paidMonthsFromEntries, paidMonthsFromMeta, receiptMonth)
+    const paidMonthsSoFar = Math.max(paidMonthsFromEntries, paidMonthsFromMeta)
+    const rewardMaturedAtReceive = totalMonths > 0
+      ? paidMonthsSoFar >= totalMonths
+      : paidMonthsSoFar > 0
     const rewardFromSchedule = rewardPerMonth * scheduledRewardMonths
+    const normalizedLegacyReward = Number.isFinite(rewardFromLegacyConfig)
+      ? Math.max(0, rewardFromLegacyConfig)
+      : 0
+    const rewardFromLegacyCapped = rewardPerMonth > 0 && rewardFromSchedule > 0
+      ? Math.min(normalizedLegacyReward, Math.max(0, rewardFromSchedule))
+      : normalizedLegacyReward
 
     const configuredTotalReward = Math.max(
       Number.isFinite(rewardFromMeta) ? Math.max(0, rewardFromMeta) : 0,
       Number.isFinite(rewardFromPayments) ? Math.max(0, rewardFromPayments) : 0,
-      Number.isFinite(rewardFromLegacyConfig) ? Math.max(0, rewardFromLegacyConfig) : 0,
+      rewardFromLegacyCapped,
       Number.isFinite(rewardFromSchedule) ? Math.max(0, rewardFromSchedule) : 0,
     )
+
+    const expectedRewardAtReceive = rewardMaturedAtReceive ? configuredTotalReward : 0
 
     const currency = investment.account?.currency || 'SAR'
 
@@ -192,9 +200,14 @@ export async function POST(
         0,
       )
 
-      const rewardTargetAmount = Math.max(0, configuredTotalReward)
-      const rewardReceiptAmount = Math.max(rewardTargetAmount, legacyRewardBalance)
+      const rewardTargetAmount = Math.max(0, expectedRewardAtReceive)
+      const rewardReceiptAmount = rewardMaturedAtReceive
+        ? Math.max(rewardTargetAmount, legacyRewardBalance)
+        : 0
       const rewardNewCashCredit = Math.max(0, rewardReceiptAmount - legacyRewardBalance)
+      const rewardReceiptDate = totalMonths > 0
+        ? addMonths(new Date(investment.startDate), totalMonths - 1)
+        : receiveDate
 
       let rewardBucketId: string | null = null
 
@@ -208,25 +221,27 @@ export async function POST(
           },
         })
 
-        for (const legacy of legacyRewardBuckets) {
-          const legacyBalance = Math.max(0, Number(legacy.balance) || 0)
-          if (legacyBalance <= 0) continue
+        if (rewardReceiptAmount > 0) {
+          for (const legacy of legacyRewardBuckets) {
+            const legacyBalance = Math.max(0, Number(legacy.balance) || 0)
+            if (legacyBalance <= 0) continue
 
-          await tx.cashBucket.update({
-            where: { id: legacy.id },
-            data: { balance: { decrement: legacyBalance } },
-          })
+            await tx.cashBucket.update({
+              where: { id: legacy.id },
+              data: { balance: { decrement: legacyBalance } },
+            })
 
-          await tx.cashBucketMovement.create({
-            data: {
-              cashBucketId: legacy.id,
-              investmentId: investment.id,
-              amount: -legacyBalance,
-              type: 'CASH_OUT',
-              date: receiveDate,
-              notes: `Consolidated into Circlys reward receipt • ${investment.name}`,
-            },
-          })
+            await tx.cashBucketMovement.create({
+              data: {
+                cashBucketId: legacy.id,
+                investmentId: investment.id,
+                amount: -legacyBalance,
+                type: 'CASH_OUT',
+                date: rewardReceiptDate,
+                notes: `Consolidated into Circlys reward receipt • ${investment.name}`,
+              },
+            })
+          }
         }
       }
 
@@ -244,7 +259,7 @@ export async function POST(
                 investmentId: investment.id,
                 amount: rewardReceiptAmount,
                 type: 'CASH_IN',
-                date: receiveDate,
+                date: rewardReceiptDate,
                 notes: `Circlys reward receipt • ${investment.name}`,
               },
             },
@@ -295,7 +310,7 @@ export async function POST(
             personId: null,
             type: 'CASH_IN',
             amount: rewardNewCashCredit,
-            date: receiveDate,
+            date: rewardReceiptDate,
             description: `Circlys reward receipt • ${investment.name}`,
           },
         })
@@ -329,7 +344,7 @@ export async function POST(
       type: 'SAVINGS_RECEIPT',
       investmentId: investment.id,
       amount: receiveAmount,
-      rewardAmount: configuredTotalReward,
+      rewardAmount: expectedRewardAtReceive,
       receiptMonth: meta.receiptMonth,
       daysHeld,
       zakatDueImmediately,
