@@ -2,9 +2,9 @@ import { NextRequest, NextResponse } from 'next/server'
 import bcrypt from 'bcryptjs'
 import { prisma } from '@/lib/db'
 import { requireAuth } from '@/lib/rbac'
+import { recomputeCashSetting } from '@/lib/cashBalance'
 
 const RESET_CONFIRM_TEXT = 'RESET PARTNER'
-const CASH_BALANCE_KEY = 'CASH_BALANCE'
 
 export async function POST(req: NextRequest) {
   try {
@@ -40,7 +40,7 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: 'Partner not found' }, { status: 404 })
     }
 
-    const result = await prisma.$transaction(async (tx) => {
+    const result = await prisma.$transaction(async (tx: any) => {
       if (rebuildZakatBuckets) {
         let updated = 0
         const buckets = await tx.cashBucket.findMany({
@@ -71,7 +71,7 @@ export async function POST(req: NextRequest) {
 
         for (const b of buckets) {
           const invFromAlloc = b.allocations?.[0]?.investmentId || null
-          const invFromMove = b.movements?.find((m) => typeof m.investmentId === 'string')?.investmentId || null
+          const invFromMove = b.movements?.find((m: any) => typeof m.investmentId === 'string')?.investmentId || null
           const investmentId = invFromAlloc || invFromMove
           if (!investmentId) continue
 
@@ -104,7 +104,7 @@ export async function POST(req: NextRequest) {
         where: { personId: partnerPersonId } as any,
         select: { id: true },
       })
-      const bucketIds = buckets.map((b) => b.id)
+      const bucketIds = buckets.map((b: any) => b.id)
 
       if (bucketIds.length > 0) {
         await tx.cashBucketMovement.deleteMany({
@@ -124,19 +124,7 @@ export async function POST(req: NextRequest) {
         where: { personId: partnerPersonId } as any,
       })
 
-      const key = `${CASH_BALANCE_KEY}:${partnerPersonId}`
-      const setting = await tx.systemSetting.findUnique({ where: { key } })
-      if (setting) {
-        await tx.systemSetting.update({ where: { key }, data: { value: '0' } })
-      } else {
-        await tx.systemSetting.create({
-          data: {
-            key,
-            value: '0',
-            description: 'Available cash balance for investments',
-          },
-        })
-      }
+      await recomputeCashSetting(tx, partnerPersonId)
 
       return { mode: 'RESET_PARTNER' }
     })

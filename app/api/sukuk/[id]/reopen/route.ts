@@ -3,39 +3,9 @@ import { prisma } from '@/lib/db'
 import { requireAuth } from '@/lib/rbac'
 import { logAudit } from '@/lib/audit'
 import { createSnapshot } from '@/lib/snapshot'
+import { recomputeCashSetting } from '@/lib/cashBalance'
 
 const RECEIPT_TYPES = ['WITHDRAW_PROFIT', 'WITHDRAW_PRINCIPAL', 'ROLLBACK_PRINCIPAL'] as const
-const CASH_BALANCE_KEY = 'CASH_BALANCE'
-
-const recomputeCashSetting = async (tx: any, personId: string | null) => {
-  const key = personId ? `${CASH_BALANCE_KEY}:${personId}` : CASH_BALANCE_KEY
-  const where = personId
-    ? {
-        personId,
-        NOT: [
-          { label: { startsWith: 'Debt •' } },
-          { label: 'Partner Commission' },
-        ],
-      }
-    : { personId: null }
-
-  const agg = await tx.cashBucket.aggregate({
-    where: where as any,
-    _sum: { balance: true },
-  })
-  const raw = agg?._sum?.balance
-  const total = Number.isFinite(raw as any) ? Number(raw) : 0
-
-  await tx.systemSetting.upsert({
-    where: { key },
-    update: { value: total.toString() },
-    create: {
-      key,
-      value: total.toString(),
-      description: 'Available cash balance for investments',
-    },
-  })
-}
 
 export async function POST(
   req: NextRequest,

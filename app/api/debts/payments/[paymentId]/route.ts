@@ -32,13 +32,13 @@ export async function DELETE(
       })
 
       if (!payment) {
-        return NextResponse.json({ error: 'Payment not found' }, { status: 404 })
+        throw new Error('DEBT_PAYMENT_NOT_FOUND')
       }
 
       const debt = payment.debt
       const amount = Math.abs(Number(payment.amount) || 0)
       if (!Number.isFinite(amount) || amount <= 0) {
-        return NextResponse.json({ error: 'Invalid payment amount' }, { status: 400 })
+        throw new Error('INVALID_DEBT_PAYMENT_AMOUNT')
       }
 
       const currency = debt.cashBucket?.currency || 'SAR'
@@ -100,10 +100,19 @@ export async function DELETE(
       return { success: true, debt: updated }
     })
 
-    if (result instanceof NextResponse) return result
     return NextResponse.json(result)
   } catch (error) {
     console.error('Debt undo payment error:', error)
+
+    if (error instanceof Error) {
+      if (error.message === 'DEBT_PAYMENT_NOT_FOUND') {
+        return NextResponse.json({ error: 'Payment not found' }, { status: 404 })
+      }
+      if (error.message === 'INVALID_DEBT_PAYMENT_AMOUNT') {
+        return NextResponse.json({ error: 'Invalid payment amount' }, { status: 400 })
+      }
+    }
+
     return NextResponse.json(
       { error: error instanceof Error ? error.message : 'Failed to undo payment' },
       { status: 500 }

@@ -4,8 +4,7 @@ import { requireAuth } from '@/lib/rbac'
 import { createAuditLog } from '@/lib/audit'
 import { createSnapshot } from '@/lib/snapshot'
 import { creditBucketsForReceipt } from '@/lib/cashBuckets'
-
-const CASH_BALANCE_KEY = 'CASH_BALANCE'
+import { recomputeCashSetting } from '@/lib/cashBalance'
 
 const parseMetadata = (value: unknown) => {
   if (!value) return null
@@ -22,25 +21,6 @@ const round2 = (value: number) => {
   const n = Number(value)
   if (!Number.isFinite(n)) return 0
   return Math.round(n * 100) / 100
-}
-
-const recomputeOwnerCashSetting = async (tx: any) => {
-  const cashBucketAgg = await tx.cashBucket.aggregate({
-    where: { personId: null },
-    _sum: { balance: true },
-  })
-  const cashBucketSumRaw = cashBucketAgg?._sum?.balance
-  const cashBucketSum = Number.isFinite(cashBucketSumRaw as any) ? Number(cashBucketSumRaw) : 0
-
-  await tx.systemSetting.upsert({
-    where: { key: CASH_BALANCE_KEY },
-    update: { value: cashBucketSum.toString() },
-    create: {
-      key: CASH_BALANCE_KEY,
-      value: cashBucketSum.toString(),
-      description: 'Available cash balance for investments',
-    },
-  })
 }
 
 export async function POST(
@@ -212,7 +192,7 @@ export async function POST(
           personId: null,
         })
 
-        await recomputeOwnerCashSetting(tx)
+        await recomputeCashSetting(tx, null)
 
         // Create cash account if needed
         const cashAccount = await tx.account.findFirst({

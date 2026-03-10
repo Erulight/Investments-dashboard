@@ -1,10 +1,10 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { prisma } from '@/lib/db'
-import type { Prisma } from '@prisma/client'
 import { requireModuleAccess } from '@/lib/rbac'
 import { createSukukSchema } from '@/lib/validation'
 import { logAudit } from '@/lib/audit'
 import { withdrawFromBuckets } from '@/lib/cashBuckets'
+import { getBucketCashBalance, recomputeCashSetting } from '@/lib/cashBalance'
 import { parseDateInput } from '@/lib/date'
 
 const parseMetadata = (value: unknown) => {
@@ -135,10 +135,8 @@ export async function POST(req: NextRequest) {
     }
     
     // Create the Sukuk investment with participants in a transaction
-    const sukuk = await prisma.$transaction(async (tx: Prisma.TransactionClient) => {
-      const cashBalanceKey = user.role === 'OWNER'
-        ? 'CASH_BALANCE'
-        : `CASH_BALANCE:${user.personId!}`
+    const sukuk = await prisma.$transaction(async (tx: any) => {
+      const scopePersonId = user.role === 'OWNER' ? null : user.personId!
 
       // CRITICAL FIX: Calculate cash balance AS OF the deal start date
       // This prevents creating deals before cash actually existed
@@ -192,30 +190,9 @@ export async function POST(req: NextRequest) {
         throw new Error(`INSUFFICIENT_CASH_AT_DATE:${startDate.toISOString().split('T')[0]}:${cashAtStartDate.toFixed(2)}:${data.principalAmount.toFixed(2)}`)
       }
 
-      // Now check current cash for the deduction
-      const cashSetting = await tx.systemSetting.findUnique({
-        where: { key: cashBalanceKey },
-      })
-      const currentCashRaw = cashSetting ? Number(cashSetting.value) : 0
-      let currentCash = Number.isFinite(currentCashRaw) ? currentCashRaw : 0
-      let nextCash = currentCash - data.principalAmount
-
-      if (nextCash < 0) {
-        const currentBucketAgg = await tx.cashBucket.aggregate({
-          where: (user.role === 'OWNER'
-            ? { personId: null }
-            : { personId: user.personId }) as any,
-          _sum: { balance: true },
-        })
-        const currentBucketSumRaw = currentBucketAgg?._sum?.balance
-        const currentBucketSum = Number.isFinite(currentBucketSumRaw as any) ? Number(currentBucketSumRaw) : 0
-        if (currentBucketSum > currentCash + 0.0001) {
-          currentCash = currentBucketSum
-          nextCash = currentCash - data.principalAmount
-        }
-      }
-
-      if (nextCash < 0) {
+      // Check current bucket-backed cash for deduction.
+      const currentCash = await getBucketCashBalance(tx, scopePersonId)
+      if (currentCash - data.principalAmount < -0.0001) {
         throw new Error('INSUFFICIENT_CASH')
       }
 
@@ -265,25 +242,7 @@ export async function POST(req: NextRequest) {
         preferredLabelPrefixes: user.role === 'OWNER' ? ['Savings Receipt •'] : undefined,
       })
 
-      // Recalculate cash balance from buckets (ledger-derived)
-      const cashBucketSumAgg = await tx.cashBucket.aggregate({
-        where: (user.role === 'OWNER'
-          ? { personId: null }
-          : { personId: user.personId }) as any,
-        _sum: { balance: true },
-      })
-      const cashBucketSumRaw = cashBucketSumAgg?._sum?.balance
-      const cashBucketSum = Number.isFinite(cashBucketSumRaw as any) ? Number(cashBucketSumRaw) : 0
-
-      await tx.systemSetting.upsert({
-        where: { key: cashBalanceKey },
-        update: { value: cashBucketSum.toString() },
-        create: {
-          key: cashBalanceKey,
-          value: cashBucketSum.toString(),
-          description: 'Available cash balance for investments',
-        },
-      })
+      await recomputeCashSetting(tx, scopePersonId)
 
       let inheritedSavingsHaulStart: Date | null = null
       try {

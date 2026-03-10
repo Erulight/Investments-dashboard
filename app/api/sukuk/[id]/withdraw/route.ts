@@ -4,9 +4,8 @@ import { requireAuth } from '@/lib/rbac'
 import { logAudit } from '@/lib/audit'
 import { creditBucketsForReceipt } from '@/lib/cashBuckets'
 import { createCashBucket } from '@/lib/cashBuckets'
+import { recomputeCashSetting } from '@/lib/cashBalance'
 import { createSnapshot } from '@/lib/snapshot'
-
-const CASH_BALANCE_KEY = 'CASH_BALANCE'
 
 const parseMetadata = (value: unknown) => {
   if (!value) return null
@@ -188,9 +187,6 @@ export async function POST(
         })
       }
 
-      const scopeKey = user.role === 'OWNER' ? 'OWNER' : user.personId!
-      const cashBalanceKey = user.role === 'OWNER' ? CASH_BALANCE_KEY : `${CASH_BALANCE_KEY}:${scopeKey}`
-
       if (user.role === 'PARTNER') {
         try {
           const partnerPersonId = user.personId!
@@ -343,22 +339,7 @@ export async function POST(
                     personId: null,
                   })
 
-                  const ownerBucketAgg = await tx.cashBucket.aggregate({
-                    where: { personId: null },
-                    _sum: { balance: true },
-                  })
-                  const ownerBucketSumRaw = ownerBucketAgg?._sum?.balance
-                  const ownerBucketSum = Number.isFinite(ownerBucketSumRaw as any) ? Number(ownerBucketSumRaw) : 0
-
-                  await tx.systemSetting.upsert({
-                    where: { key: CASH_BALANCE_KEY },
-                    update: { value: ownerBucketSum.toString() },
-                    create: {
-                      key: CASH_BALANCE_KEY,
-                      value: ownerBucketSum.toString(),
-                      description: 'Available cash balance for investments',
-                    },
-                  })
+                  await recomputeCashSetting(tx, null)
 
                   await tx.transaction.create({
                     data: {
@@ -443,25 +424,7 @@ export async function POST(
         }
       }
 
-      // Recalculate cash balance from buckets AFTER receipt buckets are credited.
-      const cashBucketAgg = await tx.cashBucket.aggregate({
-        where: (user.role === 'OWNER'
-          ? { personId: null }
-          : { personId: user.personId }) as any,
-        _sum: { balance: true },
-      })
-      const cashBucketSumRaw = cashBucketAgg?._sum?.balance
-      const cashBucketSum = Number.isFinite(cashBucketSumRaw as any) ? Number(cashBucketSumRaw) : 0
-
-      await tx.systemSetting.upsert({
-        where: { key: cashBalanceKey },
-        update: { value: cashBucketSum.toString() },
-        create: {
-          key: cashBalanceKey,
-          value: cashBucketSum.toString(),
-          description: 'Available cash balance for investments',
-        },
-      })
+      await recomputeCashSetting(tx, user.role === 'OWNER' ? null : (user.personId || null))
 
       const cashAccount = await tx.account.findFirst({
         where: { type: 'CASH', isActive: true },

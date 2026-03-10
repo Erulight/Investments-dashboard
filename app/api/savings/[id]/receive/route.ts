@@ -3,8 +3,7 @@ import { getCurrentUser } from '@/lib/auth'
 import { prisma } from '@/lib/db'
 import { requireModuleAccess } from '@/lib/rbac'
 import { createAuditLog } from '@/lib/audit'
-
-const CASH_BALANCE_KEY = 'CASH_BALANCE'
+import { recomputeCashSetting } from '@/lib/cashBalance'
 
 const diffDays = (start: Date, end: Date) => {
   const s = new Date(start)
@@ -267,23 +266,7 @@ export async function POST(
         })
       }
 
-      // Recalculate system cash balance from buckets to avoid double counting
-      const cashBucketAgg = await tx.cashBucket.aggregate({
-        where: { personId: null },
-        _sum: { balance: true },
-      })
-      const cashBucketSumRaw = cashBucketAgg?._sum?.balance
-      const cashBucketSum = Number.isFinite(cashBucketSumRaw as any) ? Number(cashBucketSumRaw) : 0
-
-      await tx.systemSetting.upsert({
-        where: { key: CASH_BALANCE_KEY },
-        update: { value: cashBucketSum.toString() },
-        create: {
-          key: CASH_BALANCE_KEY,
-          value: cashBucketSum.toString(),
-          description: 'Available cash balance for investments',
-        },
-      })
+      await recomputeCashSetting(tx, null)
 
       // Record a transaction in the cash ledger
       const cashAccount =
@@ -513,23 +496,7 @@ export async function DELETE(
         })
       }
 
-      // Recalculate system cash balance from buckets after undo
-      const cashBucketAgg = await tx.cashBucket.aggregate({
-        where: { personId: null },
-        _sum: { balance: true },
-      })
-      const cashBucketSumRaw = cashBucketAgg?._sum?.balance
-      const cashBucketSum = Number.isFinite(cashBucketSumRaw as any) ? Number(cashBucketSumRaw) : 0
-
-      await tx.systemSetting.upsert({
-        where: { key: CASH_BALANCE_KEY },
-        update: { value: cashBucketSum.toString() },
-        create: {
-          key: CASH_BALANCE_KEY,
-          value: cashBucketSum.toString(),
-          description: 'Available cash balance for investments',
-        },
-      })
+      await recomputeCashSetting(tx, null)
 
       // Delete the ledger transaction
       const cashAccount = await tx.account.findFirst({ where: { type: 'CASH', isActive: true } })

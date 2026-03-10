@@ -53,22 +53,22 @@ export async function POST(
       })
 
       if (!debt) {
-        return NextResponse.json({ error: 'Debt not found' }, { status: 404 })
+        throw new Error('DEBT_NOT_FOUND')
       }
       if (debt.isArchived) {
-        return NextResponse.json({ error: 'Cannot pay an archived debt' }, { status: 400 })
+        throw new Error('DEBT_ARCHIVED')
       }
 
       const borrowedAt = new Date(debt.borrowedAt)
       const borrowedDay = new Date(borrowedAt.getFullYear(), borrowedAt.getMonth(), borrowedAt.getDate())
       if (paidDay.getTime() < borrowedDay.getTime()) {
-        return NextResponse.json({ error: 'Payment date cannot be before borrowed date' }, { status: 400 })
+        throw new Error('PAYMENT_BEFORE_BORROWED_DATE')
       }
 
       const totalPaidBefore = debt.payments.reduce((s: number, p: any) => s + (Number(p.amount) || 0), 0)
       const outstandingBefore = Math.max(0, Number(debt.amount) - totalPaidBefore)
       if (amount > outstandingBefore + 0.000001) {
-        return NextResponse.json({ error: 'Payment exceeds outstanding amount' }, { status: 400 })
+        throw new Error('PAYMENT_EXCEEDS_OUTSTANDING')
       }
 
       const currency = debt.cashBucket?.currency || 'SAR'
@@ -118,10 +118,24 @@ export async function POST(
       return { success: true, debt: updated, payment }
     })
 
-    if (result instanceof NextResponse) return result
     return NextResponse.json(result)
   } catch (error) {
     console.error('Debt pay error:', error)
+
+    if (error instanceof Error) {
+      if (error.message === 'DEBT_NOT_FOUND') {
+        return NextResponse.json({ error: 'Debt not found' }, { status: 404 })
+      }
+      if (error.message === 'DEBT_ARCHIVED') {
+        return NextResponse.json({ error: 'Cannot pay an archived debt' }, { status: 400 })
+      }
+      if (error.message === 'PAYMENT_BEFORE_BORROWED_DATE') {
+        return NextResponse.json({ error: 'Payment date cannot be before borrowed date' }, { status: 400 })
+      }
+      if (error.message === 'PAYMENT_EXCEEDS_OUTSTANDING') {
+        return NextResponse.json({ error: 'Payment exceeds outstanding amount' }, { status: 400 })
+      }
+    }
 
     if (error instanceof Error && error.message === 'INSUFFICIENT_CASH') {
       return NextResponse.json({ error: 'Insufficient cash balance' }, { status: 400 })

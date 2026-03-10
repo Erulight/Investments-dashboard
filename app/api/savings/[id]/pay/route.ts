@@ -4,9 +4,8 @@ import { prisma } from '@/lib/db'
 import { requireModuleAccess } from '@/lib/rbac'
 import { createAuditLog } from '@/lib/audit'
 import { createCashBucket, withdrawFromBuckets } from '@/lib/cashBuckets'
+import { recomputeCashSetting } from '@/lib/cashBalance'
 import { createSnapshot } from '@/lib/snapshot'
-
-const CASH_BALANCE_KEY = 'CASH_BALANCE'
 
 type PayBody = {
   monthIndex: number
@@ -239,22 +238,7 @@ export async function POST(
           })
         }
 
-        const cashBucketAgg = await tx.cashBucket.aggregate({
-          where: { personId: null },
-          _sum: { balance: true },
-        })
-        const cashBucketSumRaw = cashBucketAgg?._sum?.balance
-        const cashBucketSum = Number.isFinite(cashBucketSumRaw as any) ? Number(cashBucketSumRaw) : 0
-
-        await tx.systemSetting.upsert({
-          where: { key: CASH_BALANCE_KEY },
-          update: { value: cashBucketSum.toString() },
-          create: {
-            key: CASH_BALANCE_KEY,
-            value: cashBucketSum.toString(),
-            description: 'Available cash balance for investments',
-          },
-        })
+        await recomputeCashSetting(tx, null)
 
         return {
           fundingSources: (Array.isArray(fundingSources) ? fundingSources : [])
@@ -346,22 +330,7 @@ export async function POST(
           select: { id: true, label: true, currency: true, haulStartDate: true, balance: true },
         })
 
-        const cashBucketAgg = await tx.cashBucket.aggregate({
-          where: { personId: null },
-          _sum: { balance: true },
-        })
-        const cashBucketSumRaw = cashBucketAgg?._sum?.balance
-        const cashBucketSum = Number.isFinite(cashBucketSumRaw as any) ? Number(cashBucketSumRaw) : 0
-
-        await tx.systemSetting.upsert({
-          where: { key: CASH_BALANCE_KEY },
-          update: { value: cashBucketSum.toString() },
-          create: {
-            key: CASH_BALANCE_KEY,
-            value: cashBucketSum.toString(),
-            description: 'Available cash balance for investments',
-          },
-        })
+        await recomputeCashSetting(tx, null)
 
         return bucket
       })
@@ -649,22 +618,7 @@ export async function DELETE(
           })
         }
 
-        const cashBucketAgg = await tx.cashBucket.aggregate({
-          where: { personId: null },
-          _sum: { balance: true },
-        })
-        const cashBucketSumRaw = cashBucketAgg?._sum?.balance
-        const cashBucketSum = Number.isFinite(cashBucketSumRaw as any) ? Number(cashBucketSumRaw) : 0
-
-        await tx.systemSetting.upsert({
-          where: { key: CASH_BALANCE_KEY },
-          update: { value: cashBucketSum.toString() },
-          create: {
-            key: CASH_BALANCE_KEY,
-            value: Math.max(0, cashBucketSum).toString(),
-            description: 'Available cash balance for investments',
-          },
-        })
+        await recomputeCashSetting(tx, null)
 
         // Record transaction in Cash Ledger for visibility
         const cashAccount =
@@ -725,22 +679,7 @@ export async function DELETE(
           })
         }
 
-        const cashBucketAgg = await tx.cashBucket.aggregate({
-          where: { personId: null },
-          _sum: { balance: true },
-        })
-        const cashBucketSumRaw = cashBucketAgg?._sum?.balance
-        const cashBucketSum = Number.isFinite(cashBucketSumRaw as any) ? Number(cashBucketSumRaw) : 0
-
-        await tx.systemSetting.upsert({
-          where: { key: CASH_BALANCE_KEY },
-          update: { value: cashBucketSum.toString() },
-          create: {
-            key: CASH_BALANCE_KEY,
-            value: Math.max(0, cashBucketSum).toString(),
-            description: 'Available cash balance for investments',
-          },
-        })
+        await recomputeCashSetting(tx, null)
 
         // Record transaction in Cash Ledger for visibility
         const cashAccount =

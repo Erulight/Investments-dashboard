@@ -28,7 +28,7 @@ export async function POST(req: NextRequest) {
         },
       })
       if (!bucket) {
-        return NextResponse.json({ error: 'Bucket not found' }, { status: 404 })
+        throw new Error('ZAKAT_BUCKET_NOT_FOUND')
       }
 
       const targetMovement = movementId
@@ -41,7 +41,7 @@ export async function POST(req: NextRequest) {
           })
 
       if (!targetMovement) {
-        return NextResponse.json({ error: 'No zakat payment found to rollback' }, { status: 404 })
+        throw new Error('ZAKAT_PAYMENT_NOT_FOUND')
       }
 
       const amount = Math.abs(targetMovement.amount)
@@ -163,13 +163,19 @@ export async function POST(req: NextRequest) {
       return { success: true }
     })
 
-    if (result instanceof NextResponse) {
-      return result
-    }
-
     return NextResponse.json(result)
   } catch (error) {
     console.error('Zakat rollback error:', error)
+
+    if (error instanceof Error) {
+      if (error.message === 'ZAKAT_BUCKET_NOT_FOUND') {
+        return NextResponse.json({ error: 'Bucket not found' }, { status: 404 })
+      }
+      if (error.message === 'ZAKAT_PAYMENT_NOT_FOUND') {
+        return NextResponse.json({ error: 'No zakat payment found to rollback' }, { status: 404 })
+      }
+    }
+
     let statusCode = 500
     if (error instanceof Error) {
       if (error.message === 'Unauthorized') {

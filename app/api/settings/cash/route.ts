@@ -27,15 +27,7 @@ export async function GET() {
     const settingValue = Number(setting?.value || 0)
 
     if (!setting || Math.abs(settingValue - bucketCash) > 0.0001) {
-      await prisma.systemSetting.upsert({
-        where: { key: CASH_BALANCE_KEY },
-        update: { value: bucketCash.toString() },
-        create: {
-          key: CASH_BALANCE_KEY,
-          value: bucketCash.toString(),
-          description: 'Available cash balance for investments',
-        },
-      })
+      await recomputeCashSetting(prisma, null)
     }
 
     return NextResponse.json({

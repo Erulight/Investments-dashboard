@@ -3,12 +3,10 @@ import { getCurrentUser } from '@/lib/auth'
 import { prisma } from '@/lib/db'
 import { requireModuleAccess } from '@/lib/rbac'
 import { createAuditLog } from '@/lib/audit'
-import type { Prisma } from '@prisma/client'
 import { withdrawFromBuckets } from '@/lib/cashBuckets'
+import { recomputeCashSetting } from '@/lib/cashBalance'
 
-const CASH_BALANCE_KEY = 'CASH_BALANCE'
-
-const getCashAccount = async (tx: Prisma.TransactionClient, currency = 'SAR') => {
+const getCashAccount = async (tx: any, currency = 'SAR') => {
   const existing = await tx.account.findFirst({
     where: { type: 'CASH', isActive: true },
   })
@@ -89,7 +87,7 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: 'Invalid SIP portfolio' }, { status: 400 })
     }
 
-    const updated = await prisma.$transaction(async (tx: Prisma.TransactionClient) => {
+    const updated = await prisma.$transaction(async (tx: any) => {
       const currency = sip.account?.currency || 'SAR'
       const notes = `SIP Zakat Payment • ${sip.name}`
 
@@ -103,27 +101,7 @@ export async function POST(request: Request) {
         availableOnOrBefore: date,
       })
 
-      const cashSetting = await tx.systemSetting.findUnique({ where: { key: CASH_BALANCE_KEY } })
-      const currentCash = cashSetting ? Number(cashSetting.value) : 0
-      const nextCash = currentCash - amount
-      if (nextCash < 0) {
-        throw new Error('INSUFFICIENT_CASH')
-      }
-
-      if (cashSetting) {
-        await tx.systemSetting.update({
-          where: { key: CASH_BALANCE_KEY },
-          data: { value: nextCash.toString() },
-        })
-      } else {
-        await tx.systemSetting.create({
-          data: {
-            key: CASH_BALANCE_KEY,
-            value: nextCash.toString(),
-            description: 'Available cash balance for investments',
-          },
-        })
-      }
+      await recomputeCashSetting(tx, user.role === 'OWNER' ? null : (user.personId || null))
 
       const cashAccount = await getCashAccount(tx, currency)
       await tx.transaction.create({

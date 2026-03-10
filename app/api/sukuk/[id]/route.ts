@@ -3,7 +3,6 @@ import { prisma } from '@/lib/db'
 import { requireAuth } from '@/lib/rbac'
 import { updateSukukSchema } from '@/lib/validation'
 import { logAudit } from '@/lib/audit'
-import type { Prisma } from '@prisma/client'
 import { creditBucketsForReceipt, withdrawFromBuckets } from '@/lib/cashBuckets'
 import { recomputeCashSetting } from '@/lib/cashBalance'
 import { parseDateInput } from '@/lib/date'
@@ -20,7 +19,7 @@ const parseMetadata = (value: unknown) => {
   }
 }
 
-const getCashAccount = async (tx: Prisma.TransactionClient, currency = 'SAR') => {
+const getCashAccount = async (tx: any, currency = 'SAR') => {
   const existing = await tx.account.findFirst({
     where: { type: 'CASH', isActive: true },
   })
@@ -71,7 +70,7 @@ export async function GET(
     // Apply RBAC: Partners can only view their own participations
     if (user.role === 'PARTNER' && user.personId) {
       const hasParticipation = sukuk.dealParticipants.some(
-        (p) => p.personId === user.personId
+        (p: any) => p.personId === user.personId
       )
       
       if (!hasParticipation) {
@@ -83,7 +82,7 @@ export async function GET(
       
       // Filter to show only their participation
       const myParticipation = sukuk.dealParticipants.find(
-        (p) => p.personId === user.personId
+        (p: any) => p.personId === user.personId
       )
       
       return NextResponse.json({
@@ -154,9 +153,37 @@ export async function PUT(
     const totalReceivedDelta = data.totalReceived !== undefined
       ? data.totalReceived - existingSukuk.totalReceived
       : 0
+
+    const startDate = data.startDate !== undefined
+      ? (typeof data.startDate === 'string'
+          ? (parseDateInput(data.startDate) ?? new Date(data.startDate))
+          : new Date(data.startDate))
+      : existingSukuk.startDate
+    const adjustmentDate = data.adjustmentDate !== undefined
+      ? (typeof data.adjustmentDate === 'string'
+          ? (parseDateInput(data.adjustmentDate) ?? new Date(data.adjustmentDate))
+          : new Date(data.adjustmentDate as any))
+      : new Date()
+    const maturityDate = data.maturityDate !== undefined
+      ? (data.maturityDate
+          ? (typeof data.maturityDate === 'string'
+              ? (parseDateInput(data.maturityDate) ?? new Date(data.maturityDate))
+              : new Date(data.maturityDate))
+          : null)
+      : existingSukuk.maturityDate
+
+    if (data.startDate !== undefined && Number.isNaN(startDate.getTime())) {
+      return NextResponse.json({ error: 'Invalid startDate' }, { status: 400 })
+    }
+    if (data.adjustmentDate !== undefined && Number.isNaN(adjustmentDate.getTime())) {
+      return NextResponse.json({ error: 'Invalid adjustmentDate' }, { status: 400 })
+    }
+    if (data.maturityDate !== undefined && maturityDate && Number.isNaN(maturityDate.getTime())) {
+      return NextResponse.json({ error: 'Invalid maturityDate' }, { status: 400 })
+    }
     
     // Update the Sukuk in a transaction
-    const updatedSukuk = await prisma.$transaction(async (tx) => {
+    const updatedSukuk = await prisma.$transaction(async (tx: any) => {
       // Prepare update data
       const updateData: any = {}
       
@@ -165,33 +192,6 @@ export async function PUT(
       if (data.category !== undefined) updateData.category = data.category
       if (data.principalAmount !== undefined) updateData.principalAmount = data.principalAmount
       if (data.currentValue !== undefined) updateData.currentValue = data.currentValue
-      const startDate = data.startDate !== undefined
-        ? (typeof data.startDate === 'string'
-            ? (parseDateInput(data.startDate) ?? new Date(data.startDate))
-            : new Date(data.startDate))
-        : existingSukuk.startDate
-      const adjustmentDate = data.adjustmentDate !== undefined
-        ? (typeof data.adjustmentDate === 'string'
-            ? (parseDateInput(data.adjustmentDate) ?? new Date(data.adjustmentDate))
-            : new Date(data.adjustmentDate as any))
-        : new Date()
-      const maturityDate = data.maturityDate !== undefined
-        ? (data.maturityDate
-            ? (typeof data.maturityDate === 'string'
-                ? (parseDateInput(data.maturityDate) ?? new Date(data.maturityDate))
-                : new Date(data.maturityDate))
-            : null)
-        : existingSukuk.maturityDate
-
-      if (data.startDate !== undefined && Number.isNaN(startDate.getTime())) {
-        return NextResponse.json({ error: 'Invalid startDate' }, { status: 400 })
-      }
-      if (data.adjustmentDate !== undefined && Number.isNaN(adjustmentDate.getTime())) {
-        return NextResponse.json({ error: 'Invalid adjustmentDate' }, { status: 400 })
-      }
-      if (data.maturityDate !== undefined && maturityDate && Number.isNaN(maturityDate.getTime())) {
-        return NextResponse.json({ error: 'Invalid maturityDate' }, { status: 400 })
-      }
       if (data.startDate !== undefined) updateData.startDate = startDate
       if (data.maturityDate !== undefined) updateData.maturityDate = maturityDate
 
@@ -374,7 +374,7 @@ export async function DELETE(
     }
     
     // Delete the sukuk and reverse cash/bucket effects
-    await prisma.$transaction(async (tx) => {
+    await prisma.$transaction(async (tx: any) => {
       const affectedPartnerIds = new Set<string>()
 
       // Create snapshot before delete
@@ -469,7 +469,7 @@ export async function DELETE(
             where: {
               investmentId: null,
               type: 'CASH_IN',
-              OR: commissionTxs.map((t) => ({
+              OR: commissionTxs.map((t: any) => ({
                 amount: t.amount,
                 date: t.date,
               })),
@@ -566,7 +566,7 @@ export async function DELETE(
         await tx.cashBucketMovement.deleteMany({
           where: {
             id: {
-              in: commissionMovements.map((m) => m.id),
+              in: commissionMovements.map((m: any) => m.id),
             },
           },
         })

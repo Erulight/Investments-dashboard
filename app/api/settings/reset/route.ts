@@ -2,9 +2,9 @@ import { NextRequest, NextResponse } from 'next/server'
 import bcrypt from 'bcryptjs'
 import { prisma } from '@/lib/db'
 import { requireAuth } from '@/lib/rbac'
+import { recomputeCashSetting } from '@/lib/cashBalance'
 
 const RESET_CONFIRM_TEXT = 'RESET'
-const CASH_BALANCE_KEY = 'CASH_BALANCE'
 
 export async function POST(req: NextRequest) {
   try {
@@ -29,7 +29,7 @@ export async function POST(req: NextRequest) {
       )
     }
 
-    await prisma.$transaction(async (tx) => {
+    await prisma.$transaction(async (tx: any) => {
       await tx.cashBucketMovement.deleteMany({})
       await tx.investmentBucketAllocation.deleteMany({})
       await tx.cashBucket.deleteMany({})
@@ -40,23 +40,7 @@ export async function POST(req: NextRequest) {
       await tx.investment.deleteMany({})
       await tx.valuation.deleteMany({})
 
-      const setting = await tx.systemSetting.findUnique({
-        where: { key: CASH_BALANCE_KEY },
-      })
-      if (setting) {
-        await tx.systemSetting.update({
-          where: { key: CASH_BALANCE_KEY },
-          data: { value: '0' },
-        })
-      } else {
-        await tx.systemSetting.create({
-          data: {
-            key: CASH_BALANCE_KEY,
-            value: '0',
-            description: 'Available cash balance for investments',
-          },
-        })
-      }
+      await recomputeCashSetting(tx, null)
     })
 
     return NextResponse.json({ success: true })

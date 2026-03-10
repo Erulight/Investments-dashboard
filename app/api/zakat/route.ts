@@ -73,10 +73,10 @@ export async function POST(req: NextRequest) {
         },
       })
       if (!bucket) {
-        return NextResponse.json({ error: 'Bucket not found' }, { status: 404 })
+        throw new Error('ZAKAT_BUCKET_NOT_FOUND')
       }
       if (bucket.balance < amount) {
-        return NextResponse.json({ error: 'Bucket balance is too low' }, { status: 400 })
+        throw new Error('ZAKAT_BUCKET_BALANCE_LOW')
       }
 
       const rowMarker = `ZAKAT_ROW=${rowId}`
@@ -88,7 +88,7 @@ export async function POST(req: NextRequest) {
         },
       })
       if (existingRowPayment) {
-        return NextResponse.json({ error: 'Zakat is already paid for this row' }, { status: 400 })
+        throw new Error('ZAKAT_ROW_ALREADY_PAID')
       }
 
       await tx.cashBucket.update({
@@ -164,13 +164,21 @@ export async function POST(req: NextRequest) {
       return { success: true }
     })
 
-    if (result instanceof NextResponse) {
-      return result
-    }
-
     return NextResponse.json(result)
   } catch (error) {
     console.error('Zakat payment error:', error)
+
+    if (error instanceof Error) {
+      if (error.message === 'ZAKAT_BUCKET_NOT_FOUND') {
+        return NextResponse.json({ error: 'Bucket not found' }, { status: 404 })
+      }
+      if (error.message === 'ZAKAT_BUCKET_BALANCE_LOW') {
+        return NextResponse.json({ error: 'Bucket balance is too low' }, { status: 400 })
+      }
+      if (error.message === 'ZAKAT_ROW_ALREADY_PAID') {
+        return NextResponse.json({ error: 'Zakat is already paid for this row' }, { status: 400 })
+      }
+    }
 
     let statusCode = 500
     if (error instanceof Error) {
