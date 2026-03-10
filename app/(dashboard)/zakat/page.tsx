@@ -594,7 +594,8 @@ export default async function ZakatPage() {
     }
 
     // For every Sukuk investment owned by the owner, determine correct hawl start:
-    // - Prefer real funding allocations from Savings Receipt buckets (ROSCA-funded)
+    // - Prefer real funding allocations from ROSCA buckets
+    //   (Savings Receipt and Circlys Reward Receipt buckets)
     // - Else prefer allocations from Sukuk principal receipt buckets (recycled principal)
     // - Fallback to CASH_INVEST/start date for manual cash funding
     // Persist anchor in metadata and keep receipt suppression only for fully depleted receipts.
@@ -618,10 +619,12 @@ export default async function ZakatPage() {
       ? await prisma.investmentBucketAllocation.findMany({
           where: {
             investmentId: { in: allSukukInvestments.map((inv: any) => inv.id) },
-            principalAllocated: { gt: 0 },
             cashBucket: {
               personId: null,
-              label: { startsWith: 'Savings Receipt •' },
+              OR: [
+                { label: { startsWith: 'Savings Receipt •' } },
+                { label: { startsWith: 'Circlys Reward Receipt •' } },
+              ],
             },
           } as any,
           select: {
@@ -638,11 +641,37 @@ export default async function ZakatPage() {
         })
       : []
 
+    const allSukukInvestOutFundingAnchors = allSukukInvestments.length
+      ? await prisma.cashBucketMovement.findMany({
+          where: {
+            investmentId: { in: allSukukInvestments.map((inv: any) => inv.id) },
+            type: 'INVEST_OUT',
+            cashBucket: {
+              personId: null,
+              OR: [
+                { label: { startsWith: 'Savings Receipt •' } },
+                { label: { startsWith: 'Circlys Reward Receipt •' } },
+                { label: { startsWith: 'Sukuk Principal •' } },
+                { label: { endsWith: ' Principal Receipt' } },
+              ],
+            },
+          },
+          select: {
+            investmentId: true,
+            cashBucket: {
+              select: {
+                label: true,
+                haulStartDate: true,
+              },
+            },
+          },
+        })
+      : []
+
     const allSukukPrincipalReceiptAllocations = allSukukInvestments.length
       ? await prisma.investmentBucketAllocation.findMany({
           where: {
             investmentId: { in: allSukukInvestments.map((inv: any) => inv.id) },
-            principalAllocated: { gt: 0 },
             cashBucket: {
               personId: null,
               OR: [
@@ -682,6 +711,37 @@ export default async function ZakatPage() {
       principalReceiptAllocationsByInvestmentId.set(investmentId, list)
     }
 
+    const roscaInvestOutAnchorsByInvestmentId = new Map<string, Date[]>()
+    const principalInvestOutAnchorsByInvestmentId = new Map<string, Date[]>()
+    for (const movement of allSukukInvestOutFundingAnchors) {
+      const investmentId = typeof movement?.investmentId === 'string' ? movement.investmentId : null
+      if (!investmentId) continue
+
+      const label = typeof movement?.cashBucket?.label === 'string' ? movement.cashBucket.label : ''
+      const rawAnchor = toDate(movement?.cashBucket?.haulStartDate)
+      if (!rawAnchor || Number.isNaN(rawAnchor.getTime())) continue
+      const anchor = new Date(rawAnchor.getFullYear(), rawAnchor.getMonth(), rawAnchor.getDate())
+
+      const isRoscaFunding =
+        label.startsWith('Savings Receipt •') ||
+        label.startsWith('Circlys Reward Receipt •')
+      const isPrincipalFunding =
+        label.startsWith('Sukuk Principal •') ||
+        label.endsWith(' Principal Receipt')
+
+      if (isRoscaFunding) {
+        const list = roscaInvestOutAnchorsByInvestmentId.get(investmentId) || []
+        list.push(anchor)
+        roscaInvestOutAnchorsByInvestmentId.set(investmentId, list)
+      }
+
+      if (isPrincipalFunding) {
+        const list = principalInvestOutAnchorsByInvestmentId.get(investmentId) || []
+        list.push(anchor)
+        principalInvestOutAnchorsByInvestmentId.set(investmentId, list)
+      }
+    }
+
     const sukukInvestedReceiptIds = new Set<string>()
 
     for (const sukukInv of allSukukInvestments) {
@@ -694,20 +754,34 @@ export default async function ZakatPage() {
 
       const roscaAllocations = roscaAllocationsByInvestmentId.get(sukukInv.id) || []
       const principalReceiptAllocations = principalReceiptAllocationsByInvestmentId.get(sukukInv.id) || []
-      const roscaAnchors = roscaAllocations
+      const roscaAnchorFromAllocations = roscaAllocations
         .map((alloc: any) => toDate(alloc?.cashBucket?.haulStartDate))
         .filter((d: Date | null): d is Date => Boolean(d && !Number.isNaN(d.getTime())))
         .map((d: Date) => new Date(d.getFullYear(), d.getMonth(), d.getDate()))
+      const roscaAnchorFromInvestOut = roscaInvestOutAnchorsByInvestmentId.get(sukukInv.id) || []
+      const roscaAnchors = [...roscaAnchorFromAllocations, ...roscaAnchorFromInvestOut]
         .sort((a: Date, b: Date) => a.getTime() - b.getTime())
 
-      const principalReceiptAnchors = principalReceiptAllocations
+      const principalAnchorFromAllocations = principalReceiptAllocations
         .map((alloc: any) => toDate(alloc?.cashBucket?.haulStartDate))
         .filter((d: Date | null): d is Date => Boolean(d && !Number.isNaN(d.getTime())))
         .map((d: Date) => new Date(d.getFullYear(), d.getMonth(), d.getDate()))
+      const principalAnchorFromInvestOut = principalInvestOutAnchorsByInvestmentId.get(sukukInv.id) || []
+      const principalReceiptAnchors = [...principalAnchorFromAllocations, ...principalAnchorFromInvestOut]
         .sort((a: Date, b: Date) => a.getTime() - b.getTime())
+
+      const existingMeta = parseMetadata(sukukInv.metadata) || {}
+      const existingSavingsAnchorRaw = toDate(existingMeta?.savingsHaulStartDate)
+      const existingSavingsAnchor = existingSavingsAnchorRaw && !Number.isNaN(existingSavingsAnchorRaw.getTime())
+        ? new Date(
+            existingSavingsAnchorRaw.getFullYear(),
+            existingSavingsAnchorRaw.getMonth(),
+            existingSavingsAnchorRaw.getDate(),
+          )
+        : null
 
       // Prefer ROSCA anchors, then recycled principal anchors, then fallback to Sukuk cash-invest/start date.
-      const hawlStart = roscaAnchors[0] || principalReceiptAnchors[0] || fallbackDay
+      const hawlStart = roscaAnchors[0] || principalReceiptAnchors[0] || existingSavingsAnchor || fallbackDay
 
       for (const alloc of roscaAllocations) {
         const bucketId = typeof alloc?.cashBucketId === 'string' ? alloc.cashBucketId : null
@@ -721,7 +795,6 @@ export default async function ZakatPage() {
 
       // Persist hawl start in investment metadata
       const hawlIso = hawlStart.toISOString().split('T')[0]
-      const existingMeta = parseMetadata(sukukInv.metadata) || {}
       if (existingMeta?.savingsHaulStartDate !== hawlIso) {
         await prisma.investment.update({
           where: { id: sukukInv.id },

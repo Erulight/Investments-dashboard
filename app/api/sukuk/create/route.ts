@@ -291,7 +291,9 @@ export async function POST(req: NextRequest) {
           inheritedSavingsHaulStart = fundingAllocations
             .map((alloc: any) => {
               const label = typeof alloc?.cashBucket?.label === 'string' ? alloc.cashBucket.label : ''
-              const isRoscaReceipt = label.startsWith('Savings Receipt •')
+              const isRoscaReceipt =
+                label.startsWith('Savings Receipt •') ||
+                label.startsWith('Circlys Reward Receipt •')
               console.log('[SUKUK_CREATE] Checking bucket:', label, 'isROSCA:', isRoscaReceipt)
               if (!isRoscaReceipt) {
                 return null
