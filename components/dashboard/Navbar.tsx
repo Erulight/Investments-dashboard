@@ -44,9 +44,16 @@ const navigation: NavItem[] = [
       { name: 'Savings', href: '/savings', module: 'savings', icon: '💰' },
     ]
   },
-  { name: 'Import', href: '/import', module: 'import', icon: '📥' },
-  { name: 'Users', href: '/users', roles: ['OWNER'], icon: '👥' },
-  { name: 'Settings', href: '/settings', module: 'settings', icon: '⚙️' },
+  { 
+    name: 'Settings', 
+    href: '/settings', 
+    icon: '⚙️',
+    children: [
+      { name: 'Users', href: '/users', roles: ['OWNER'], icon: '👥' },
+      { name: 'Import', href: '/import', module: 'import', icon: '📥' },
+      { name: 'General', href: '/settings', module: 'settings', icon: '⚙️' },
+    ]
+  },
 ]
 
 const parsePermissionMap = (permissionsRaw?: string | null): PermissionMap => {
