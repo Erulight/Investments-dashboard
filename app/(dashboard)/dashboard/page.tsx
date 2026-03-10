@@ -8,6 +8,7 @@ import { DashboardCharts } from '@/components/dashboard/DashboardCharts'
 import { PremiumStatsGrid } from '@/components/dashboard/PremiumStatsGrid'
 import { AnimatedCard } from '@/components/ui/AnimatedCard'
 import { TradingChartOverlay } from '@/components/dashboard/TradingChartOverlay'
+import { CASH_BALANCE_KEY, getBucketCashBalance } from '@/lib/cashBalance'
 
 export const dynamic = 'force-dynamic'
 
@@ -27,28 +28,6 @@ export default async function DashboardPage({
   const selectedYear = Number.isFinite(parsedYear) ? parsedYear : new Date().getFullYear()
   const yearStart = new Date(selectedYear, 0, 1)
   const yearEnd = new Date(selectedYear + 1, 0, 1)
-
-  const getBucketScopeWhere = (personId: string | null) => {
-    if (personId) {
-      return {
-        personId,
-        NOT: [
-          { label: { startsWith: 'Debt •' } },
-          { label: 'Partner Commission' },
-        ],
-      } as any
-    }
-    return { personId: null } as any
-  }
-
-  const getBucketCashBalance = async (personId: string | null) => {
-    const agg = await prisma.cashBucket.aggregate({
-      where: getBucketScopeWhere(personId),
-      _sum: { balance: true },
-    })
-    const value = Number(agg?._sum?.balance || 0)
-    return Number.isFinite(value) ? value : 0
-  }
 
   const getOutstandingDebtsAt = async (atExclusive: Date) => {
     if (user.role !== 'OWNER') return 0
@@ -84,7 +63,7 @@ export default async function DashboardPage({
 
   const ownerCashSetting =
     user.role === 'OWNER'
-      ? await prisma.systemSetting.findUnique({ where: { key: 'CASH_BALANCE' } })
+      ? await prisma.systemSetting.findUnique({ where: { key: CASH_BALANCE_KEY } })
       : null
   const ownerCashSettingValue = Number(ownerCashSetting?.value || 0)
 
@@ -93,7 +72,7 @@ export default async function DashboardPage({
     : ({ personId: null } as any)
 
   const ownerBucketCash = user.role === 'OWNER'
-    ? await getBucketCashBalance(null)
+    ? await getBucketCashBalance(prisma, null)
     : 0
 
   const allCashTxSum =
@@ -130,7 +109,7 @@ export default async function DashboardPage({
     : 0
 
   if (user.role === 'PARTNER' && user.personId) {
-    const bucketSum = await getBucketCashBalance(user.personId)
+    const bucketSum = await getBucketCashBalance(prisma, user.personId)
     cashBalance = Number.isFinite(bucketSum) ? bucketSum : 0
     cashSettingDelta = 0
   }

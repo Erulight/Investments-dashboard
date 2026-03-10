@@ -1,8 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { prisma } from '@/lib/db'
 import { requireAuth } from '@/lib/rbac'
-
-const CASH_BALANCE_KEY = 'CASH_BALANCE'
+import { getBucketCashBalance } from '@/lib/cashBalance'
 
 const parseMetadata = (value: unknown) => {
   if (!value) return null
@@ -53,26 +52,10 @@ export async function GET(req: NextRequest) {
       dateRange = { gte: start, lt: end }
     }
 
-    const scopeKey = user.role === 'OWNER' ? 'OWNER' : user.personId!
-    const cashBalanceKey = user.role === 'OWNER' ? CASH_BALANCE_KEY : `${CASH_BALANCE_KEY}:${scopeKey}`
-
-    let resolvedCashBalance = 0
-    if (user.role === 'PARTNER') {
-      const agg = await prisma.cashBucket.aggregate({
-        where: {
-          personId: user.personId,
-          NOT: [
-            { label: { startsWith: 'Debt •' } },
-            { label: 'Partner Commission' },
-          ],
-        } as any,
-        _sum: { balance: true },
-      })
-      resolvedCashBalance = agg._sum.balance || 0
-    } else {
-      const setting = await prisma.systemSetting.findUnique({ where: { key: cashBalanceKey } })
-      resolvedCashBalance = setting ? Number(setting.value) : 0
-    }
+    const resolvedCashBalance = await getBucketCashBalance(
+      prisma,
+      user.role === 'OWNER' ? null : user.personId
+    )
 
     const cashAccount = await prisma.account.findFirst({
       where: { type: 'CASH', isActive: true },

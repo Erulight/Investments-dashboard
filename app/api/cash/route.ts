@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { prisma } from '@/lib/db'
 import { requireAuth } from '@/lib/rbac'
 import { createCashBucket, withdrawFromBuckets } from '@/lib/cashBuckets'
-import { getBucketCashBalance, recomputeCashSetting } from '@/lib/cashBalance'
+import { CASH_BALANCE_KEY, getBucketCashBalance, recomputeCashSetting } from '@/lib/cashBalance'
 
 const getCashAccount = async (tx: any, currency = 'SAR') => {
   const existing = await tx.account.findFirst({
@@ -87,7 +87,7 @@ export async function GET(req: NextRequest) {
       })
     }
 
-    const ownerSetting = await prisma.systemSetting.findUnique({ where: { key: 'CASH_BALANCE' } })
+    const ownerSetting = await prisma.systemSetting.findUnique({ where: { key: CASH_BALANCE_KEY } })
     const ownerSettingValue = Number(ownerSetting?.value || 0)
     const ownerBucketBalance = await getBucketCashBalance(prisma, null)
 
