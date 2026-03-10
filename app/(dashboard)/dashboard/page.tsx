@@ -621,7 +621,7 @@ export default async function DashboardPage({
         }
 
         const txs = Array.isArray(inv.transactions) ? inv.transactions : []
-        const received = txs
+        const profitWithdrawn = txs
           .filter((tx: any) => tx?.type === 'WITHDRAW_PROFIT')
           .filter((tx: any) => {
             if (ownerPersonId && tx?.personId !== ownerPersonId && tx?.personId != null) return false
@@ -629,7 +629,22 @@ export default async function DashboardPage({
             return !Number.isNaN(d.getTime()) && d.getTime() <= now.getTime()
           })
           .reduce((s: number, tx: any) => s + Math.max(0, Number(tx?.amount) || 0), 0)
-        return sum + received
+        
+        // Also count profit from principal withdrawals (when deal closes with profit)
+        const principal = getOwnerSukukPrincipal(inv)
+        const principalWithdrawn = txs
+          .filter((tx: any) => tx?.type === 'WITHDRAW_PRINCIPAL')
+          .filter((tx: any) => {
+            if (ownerPersonId && tx?.personId !== ownerPersonId && tx?.personId != null) return false
+            const d = tx?.date instanceof Date ? tx.date : new Date(tx?.date)
+            return !Number.isNaN(d.getTime()) && d.getTime() <= now.getTime()
+          })
+          .reduce((s: number, tx: any) => s + Math.max(0, Number(tx?.amount) || 0), 0)
+        
+        // If principal withdrawn > principal invested, the difference is profit received
+        const profitFromPrincipalWithdrawal = Math.max(0, principalWithdrawn - principal)
+        
+        return sum + profitWithdrawn + profitFromPrincipalWithdrawal
       }, 0)
 
     const commissionSourceSukuk = owned
