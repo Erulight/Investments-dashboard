@@ -282,7 +282,6 @@ export async function POST(req: NextRequest) {
                 id: true,
                 label: true,
                 haulStartDate: true,
-                metadata: true,
               },
             },
           },
@@ -322,29 +321,7 @@ export async function POST(req: NextRequest) {
               if (!isRewardRoscaReceipt) {
                 return null
               }
-              
-              // Try to parse bucket metadata for rewardHawlAnchor (first contribution + completed cycles)
-              let bucketMeta: any = {}
-              try {
-                const metaRaw = alloc?.cashBucket?.metadata
-                if (typeof metaRaw === 'string') {
-                  bucketMeta = JSON.parse(metaRaw)
-                } else if (metaRaw && typeof metaRaw === 'object') {
-                  bucketMeta = metaRaw
-                }
-              } catch {
-                bucketMeta = {}
-              }
-              
-              // If bucket has rewardHawlAnchor in metadata, use that as base for continuity
-              const anchorFromMeta = bucketMeta?.rewardHawlAnchor 
-                ? new Date(bucketMeta.rewardHawlAnchor)
-                : null
-              
-              const d = anchorFromMeta && !Number.isNaN(anchorFromMeta.getTime())
-                ? anchorFromMeta
-                : (alloc?.cashBucket?.haulStartDate ? new Date(alloc.cashBucket.haulStartDate) : null)
-                
+              const d = alloc?.cashBucket?.haulStartDate ? new Date(alloc.cashBucket.haulStartDate) : null
               if (!d || Number.isNaN(d.getTime())) {
                 return null
               }
@@ -364,28 +341,7 @@ export async function POST(req: NextRequest) {
               if (!isSavingsRoscaReceipt) {
                 return null
               }
-              
-              // Try to parse bucket metadata for anchor tracking
-              let bucketMeta: any = {}
-              try {
-                const metaRaw = alloc?.cashBucket?.metadata
-                if (typeof metaRaw === 'string') {
-                  bucketMeta = JSON.parse(metaRaw)
-                } else if (metaRaw && typeof metaRaw === 'object') {
-                  bucketMeta = metaRaw
-                }
-              } catch {
-                bucketMeta = {}
-              }
-              
-              const anchorFromMeta = bucketMeta?.rewardHawlAnchor 
-                ? new Date(bucketMeta.rewardHawlAnchor)
-                : null
-              
-              const d = anchorFromMeta && !Number.isNaN(anchorFromMeta.getTime())
-                ? anchorFromMeta
-                : (alloc?.cashBucket?.haulStartDate ? new Date(alloc.cashBucket.haulStartDate) : null)
-                
+              const d = alloc?.cashBucket?.haulStartDate ? new Date(alloc.cashBucket.haulStartDate) : null
               if (!d || Number.isNaN(d.getTime())) {
                 return null
               }

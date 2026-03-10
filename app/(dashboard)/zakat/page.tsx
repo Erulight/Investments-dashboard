@@ -907,14 +907,21 @@ export default async function ZakatPage() {
           )
         : null
 
-      // Prefer reward continuity (last completed hawl anchor), then normal savings receipt anchor,
-      // then recycled principal anchors, then fallback to Sukuk cash-invest/start date.
-      const hawlStart =
+      const sukukStartRaw = toDate(sukukInv.startDate)
+      const sukukStartDay = sukukStartRaw && !Number.isNaN(sukukStartRaw.getTime())
+        ? new Date(sukukStartRaw.getFullYear(), sukukStartRaw.getMonth(), sukukStartRaw.getDate())
+        : fallbackDay
+
+      // Prefer reward continuity, then savings receipt, then recycled principal, then fallback.
+      // Normalize to the end of the last completed hawl at Sukuk start so idle cycles are preserved
+      // and continuity is not reset back to the original first-contribution anchor.
+      const baseHawlStart =
         rewardRoscaAnchors[0] ||
         savingsRoscaAnchors[0] ||
         principalReceiptAnchors[0] ||
         existingSavingsAnchor ||
         fallbackDay
+      const hawlStart = getLastCompletedHawlAnchor(baseHawlStart, sukukStartDay)
 
       for (const alloc of roscaAllocations) {
         const bucketId = typeof alloc?.cashBucketId === 'string' ? alloc.cashBucketId : null
@@ -935,10 +942,7 @@ export default async function ZakatPage() {
         })
       }
 
-      const sukukStartDate = toDate(sukukInv.startDate)
-      const profitHawlStart = sukukStartDate && !Number.isNaN(sukukStartDate.getTime())
-        ? new Date(sukukStartDate.getFullYear(), sukukStartDate.getMonth(), sukukStartDate.getDate())
-        : fallbackDay
+      const profitHawlStart = sukukStartDay
 
       // Profit remains anchored to Sukuk start date.
       await prisma.cashBucket.updateMany({

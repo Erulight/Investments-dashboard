@@ -621,7 +621,7 @@ export default async function DashboardPage({
         }
 
         const txs = Array.isArray(inv.transactions) ? inv.transactions : []
-        const profitWithdrawn = txs
+        const receivedFromProfitTx = txs
           .filter((tx: any) => tx?.type === 'WITHDRAW_PROFIT')
           .filter((tx: any) => {
             if (ownerPersonId && tx?.personId !== ownerPersonId && tx?.personId != null) return false
@@ -629,22 +629,28 @@ export default async function DashboardPage({
             return !Number.isNaN(d.getTime()) && d.getTime() <= now.getTime()
           })
           .reduce((s: number, tx: any) => s + Math.max(0, Number(tx?.amount) || 0), 0)
-        
-        // Also count profit from principal withdrawals (when deal closes with profit)
-        const principal = getOwnerSukukPrincipal(inv)
-        const principalWithdrawn = txs
+
+        // Legacy fallback: some old records may have profit encoded on principal withdrawals.
+        const receivedFromLegacyPrincipalTx = txs
           .filter((tx: any) => tx?.type === 'WITHDRAW_PRINCIPAL')
           .filter((tx: any) => {
             if (ownerPersonId && tx?.personId !== ownerPersonId && tx?.personId != null) return false
             const d = tx?.date instanceof Date ? tx.date : new Date(tx?.date)
             return !Number.isNaN(d.getTime()) && d.getTime() <= now.getTime()
           })
-          .reduce((s: number, tx: any) => s + Math.max(0, Number(tx?.amount) || 0), 0)
-        
-        // If principal withdrawn > principal invested, the difference is profit received
-        const profitFromPrincipalWithdrawal = Math.max(0, principalWithdrawn - principal)
-        
-        return sum + profitWithdrawn + profitFromPrincipalWithdrawal
+          .reduce((s: number, tx: any) => {
+            const meta = parseMetadata(tx?.metadata)
+            if (meta?.source !== 'PROFIT') return s
+            return s + Math.max(0, Number(tx?.amount) || 0)
+          }, 0)
+
+        const totalReceivedRaw = Number(inv.totalReceived)
+        const receivedFromInvestmentField = Number.isFinite(totalReceivedRaw)
+          ? Math.max(0, totalReceivedRaw)
+          : 0
+
+        const received = Math.max(receivedFromProfitTx, receivedFromInvestmentField) + receivedFromLegacyPrincipalTx
+        return sum + received
       }, 0)
 
     const commissionSourceSukuk = owned

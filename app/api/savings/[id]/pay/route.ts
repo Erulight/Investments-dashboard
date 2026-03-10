@@ -395,13 +395,8 @@ export async function POST(
             label: `Circlys Reward Receipt • ${investment.name}`,
             currency,
             balance: 0,
-            haulStartDate: rewardReceiptDate,
+            haulStartDate: rewardHawlAnchor,
             excludeFromZakat: false,
-            personId: null,
-            metadata: JSON.stringify({
-              firstContributionDate: firstContributionDate.toISOString().split('T')[0],
-              rewardHawlAnchor: rewardHawlAnchor.toISOString().split('T')[0],
-            }),
           },
           select: { id: true },
         })
@@ -409,13 +404,8 @@ export async function POST(
         await tx.cashBucket.update({
           where: { id: rewardBucket.id },
           data: {
-            haulStartDate: rewardReceiptDate,
+            haulStartDate: rewardHawlAnchor,
             excludeFromZakat: false,
-            personId: null,
-            metadata: JSON.stringify({
-              firstContributionDate: firstContributionDate.toISOString().split('T')[0],
-              rewardHawlAnchor: rewardHawlAnchor.toISOString().split('T')[0],
-            }),
           },
         })
 

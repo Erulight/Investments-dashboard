@@ -186,7 +186,6 @@ export async function POST(
           balance: receiveAmount,
           haulStartDate: firstContributionDate,
           excludeFromZakat: false,
-          personId: null,
           movements: {
             create: {
               investmentId: investment.id,
@@ -272,13 +271,8 @@ export async function POST(
             label: `Circlys Reward Receipt • ${investment.name}`,
             currency,
             balance: rewardReceiptAmount,
-            haulStartDate: rewardReceiptDate,
+            haulStartDate: rewardHawlAnchor,
             excludeFromZakat: false,
-            personId: null,
-            metadata: JSON.stringify({
-              firstContributionDate: firstContributionDate.toISOString().split('T')[0],
-              rewardHawlAnchor: rewardHawlAnchor.toISOString().split('T')[0],
-            }),
             movements: {
               create: {
                 investmentId: investment.id,
