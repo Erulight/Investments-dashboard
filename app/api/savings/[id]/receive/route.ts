@@ -13,10 +13,25 @@ const diffDays = (start: Date, end: Date) => {
   return Math.max(0, Math.round((e.getTime() - s.getTime()) / (1000 * 60 * 60 * 24)))
 }
 
+const addDays = (date: Date, days: number) => {
+  const d = new Date(date)
+  d.setDate(d.getDate() + days)
+  return d
+}
+
 const addMonths = (date: Date, months: number) => {
   const d = new Date(date)
   d.setMonth(d.getMonth() + months)
   return d
+}
+
+const getLastCompletedHawlAnchor = (initialAnchor: Date, referenceDate: Date) => {
+  const start = new Date(initialAnchor.getFullYear(), initialAnchor.getMonth(), initialAnchor.getDate())
+  const ref = new Date(referenceDate.getFullYear(), referenceDate.getMonth(), referenceDate.getDate())
+  const elapsed = diffDays(start, ref)
+  if (elapsed < 354) return start
+  const completedCycles = Math.floor(elapsed / 354)
+  return addDays(start, completedCycles * 354)
 }
 
 const getReceiptMonth = (meta: any) => Math.max(0, Math.floor(Number(meta?.receiptMonth || 0)))
@@ -205,9 +220,15 @@ export async function POST(
         ? Math.max(rewardTargetAmount, legacyRewardBalance)
         : 0
       const rewardNewCashCredit = Math.max(0, rewardReceiptAmount - legacyRewardBalance)
-      const rewardReceiptDate = totalMonths > 0
+      const rewardReceiptDateRaw = totalMonths > 0
         ? addMonths(new Date(investment.startDate), totalMonths - 1)
         : receiveDate
+      const rewardReceiptDate = new Date(
+        rewardReceiptDateRaw.getFullYear(),
+        rewardReceiptDateRaw.getMonth(),
+        rewardReceiptDateRaw.getDate(),
+      )
+      const rewardHawlAnchor = getLastCompletedHawlAnchor(firstContributionDate, rewardReceiptDate)
 
       let rewardBucketId: string | null = null
 
@@ -251,7 +272,7 @@ export async function POST(
             label: `Circlys Reward Receipt • ${investment.name}`,
             currency,
             balance: rewardReceiptAmount,
-            haulStartDate: firstContributionDate,
+            haulStartDate: rewardHawlAnchor,
             excludeFromZakat: false,
             personId: null,
             movements: {

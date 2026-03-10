@@ -239,7 +239,9 @@ export async function POST(req: NextRequest) {
         allocateToInvestment: true,
         availableOnOrBefore: startDate,
         personId: user.role === 'OWNER' ? null : user.personId,
-        preferredLabelPrefixes: user.role === 'OWNER' ? ['Savings Receipt •'] : undefined,
+        preferredLabelPrefixes: user.role === 'OWNER'
+          ? ['Savings Receipt •', 'Circlys Reward Receipt •']
+          : undefined,
       })
 
       await recomputeCashSetting(tx, scopePersonId)

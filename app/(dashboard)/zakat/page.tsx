@@ -63,6 +63,15 @@ const diffDaysFloor = (start: Date, end: Date) => {
   return Math.floor(diffMs / (1000 * 60 * 60 * 24))
 }
 
+const getLastCompletedHawlAnchor = (initialAnchor: Date, referenceDate: Date) => {
+  const start = new Date(initialAnchor.getFullYear(), initialAnchor.getMonth(), initialAnchor.getDate())
+  const ref = new Date(referenceDate.getFullYear(), referenceDate.getMonth(), referenceDate.getDate())
+  const elapsed = diffDaysFloor(start, ref)
+  if (elapsed < 354) return start
+  const completedCycles = Math.floor(elapsed / 354)
+  return addDays(start, completedCycles * 354)
+}
+
 const receiptTypes = new Set([
   'WITHDRAW_PROFIT',
   'WITHDRAW_PRINCIPAL',
@@ -342,10 +351,16 @@ export default async function ZakatPage() {
           ? paidMonths >= normalizedTotalMonths
           : paidMonths > 0
       )
-      const rewardAnchorDate = firstContributionDate || toDate(inv.startDate) || new Date()
-      const rewardDate = normalizedTotalMonths > 0
-        ? addMonths(rewardAnchorDate, normalizedTotalMonths - 1)
-        : (toDate(metadata?.received?.date) || rewardAnchorDate)
+      const rewardSeedAnchor = firstContributionDate || toDate(inv.startDate) || new Date()
+      const rewardDateRaw = normalizedTotalMonths > 0
+        ? addMonths(rewardSeedAnchor, normalizedTotalMonths - 1)
+        : (toDate(metadata?.received?.date) || rewardSeedAnchor)
+      const rewardDate = new Date(
+        rewardDateRaw.getFullYear(),
+        rewardDateRaw.getMonth(),
+        rewardDateRaw.getDate(),
+      )
+      const rewardAnchorDate = getLastCompletedHawlAnchor(rewardSeedAnchor, rewardDate)
       const rewardCurrency = inv.account?.currency || 'SAR'
 
       if (rewardMatured && expectedRewardTotal > REWARD_EPSILON) {
