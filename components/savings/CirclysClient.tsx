@@ -1,6 +1,6 @@
 'use client'
 
-import { useMemo, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import type { ChangeEvent, MouseEvent } from 'react'
 import { Card, CardHeader, CardTitle, CardContent } from '@/components/ui/Card'
 import { Table, TableHeader, TableBody, TableFooter, TableRow, TableHead, TableCell } from '@/components/ui/Table'
@@ -63,6 +63,16 @@ export function CirclysClient({ initialInvestments, userRole }: CirclysClientPro
   // Checkbox selection for stats
   const [selectedIds, setSelectedIds] = useState<Set<string>>(() => new Set(initialInvestments.map((i: any) => i.id)))
 
+  const [animatedStats, setAnimatedStats] = useState(() => ({
+    totalSaved: 0,
+    totalReward: 0,
+    totalValue: 0,
+    rewardPct: 0,
+    avgValuePerPlan: 0,
+    completionRate: 0,
+  }))
+  const animatedStatsRef = useRef(animatedStats)
+
   const years = useMemo(() => {
     const s = new Set(investments.map((i: any) => getStartYear(i)))
     return Array.from(s).sort()
@@ -100,15 +110,76 @@ export function CirclysClient({ initialInvestments, userRole }: CirclysClientPro
   const stats = useMemo(() => {
     const list = filteredInvestments.filter((i: any) => selectedIds.has(i.id))
     let totalSaved = 0, totalReward = 0
+    let completedCount = 0
+    let receivedCount = 0
     list.forEach((inv: any) => {
       const meta = parseRoscaMetadata(inv)
       totalSaved += Number(meta.totalPaid) || 0
       totalReward += Number(meta.totalRewardPaid) || 0
+
+      const totalMo = Number(meta.totalMonths || 0)
+      const monthsPaid = Number(meta.monthsPaid || 0)
+      if (totalMo > 0 && monthsPaid >= totalMo) completedCount += 1
+      if (meta?.received?.date) receivedCount += 1
     })
     const totalValue = totalSaved + totalReward
+    const count = list.length
     const rewardPct = totalSaved > 0 ? (totalReward / totalSaved) * 100 : 0
-    return { totalSaved, totalReward, totalValue, rewardPct, count: list.length }
+    const avgValuePerPlan = count > 0 ? (totalValue / count) : 0
+    const completionRate = count > 0 ? (completedCount / count) * 100 : 0
+    return { totalSaved, totalReward, totalValue, rewardPct, count, completedCount, receivedCount, avgValuePerPlan, completionRate }
   }, [filteredInvestments, selectedIds])
+
+  useEffect(() => {
+    const from = animatedStatsRef.current
+    const to = {
+      totalSaved: stats.totalSaved,
+      totalReward: stats.totalReward,
+      totalValue: stats.totalValue,
+      rewardPct: stats.rewardPct,
+      avgValuePerPlan: stats.avgValuePerPlan,
+      completionRate: stats.completionRate,
+    }
+
+    let frameId = 0
+    const duration = 700
+    const start = performance.now()
+
+    const tick = (now: number) => {
+      const t = Math.min(1, (now - start) / duration)
+      const eased = 1 - Math.pow(1 - t, 3)
+
+      const next = {
+        totalSaved: from.totalSaved + ((to.totalSaved - from.totalSaved) * eased),
+        totalReward: from.totalReward + ((to.totalReward - from.totalReward) * eased),
+        totalValue: from.totalValue + ((to.totalValue - from.totalValue) * eased),
+        rewardPct: from.rewardPct + ((to.rewardPct - from.rewardPct) * eased),
+        avgValuePerPlan: from.avgValuePerPlan + ((to.avgValuePerPlan - from.avgValuePerPlan) * eased),
+        completionRate: from.completionRate + ((to.completionRate - from.completionRate) * eased),
+      }
+
+      setAnimatedStats(next)
+
+      if (t < 1) {
+        frameId = requestAnimationFrame(tick)
+      } else {
+        animatedStatsRef.current = to
+      }
+    }
+
+    frameId = requestAnimationFrame(tick)
+
+    return () => {
+      if (frameId) cancelAnimationFrame(frameId)
+    }
+  }, [
+    stats.totalSaved,
+    stats.totalReward,
+    stats.totalValue,
+    stats.rewardPct,
+    stats.avgValuePerPlan,
+    stats.completionRate,
+  ])
 
   const toggleSelected = (id: string) => {
     setSelectedIds(prev => {
@@ -231,25 +302,48 @@ export function CirclysClient({ initialInvestments, userRole }: CirclysClientPro
 
         {/* Stats */}
         <div className="grid grid-cols-2 lg:grid-cols-5 gap-3">
-          <div className="bg-white/5 backdrop-blur rounded-xl p-4 border border-white/10">
+          <div className="bg-white/5 backdrop-blur rounded-xl p-4 border border-white/10 transition-transform duration-300 hover:-translate-y-0.5">
             <p className="text-[11px] text-slate-400 uppercase tracking-wider mb-1">Total Saved</p>
-            <p className="text-xl font-bold">SAR {fmt(stats.totalSaved)}</p>
+            <p className="text-xl font-bold">SAR {fmt(animatedStats.totalSaved)}</p>
           </div>
-          <div className="bg-white/5 backdrop-blur rounded-xl p-4 border border-white/10">
+          <div className="bg-white/5 backdrop-blur rounded-xl p-4 border border-white/10 transition-transform duration-300 hover:-translate-y-0.5">
             <p className="text-[11px] text-slate-400 uppercase tracking-wider mb-1">Total Reward</p>
-            <p className="text-xl font-bold text-emerald-400">SAR {fmt(stats.totalReward)}</p>
+            <p className="text-xl font-bold text-emerald-400">SAR {fmt(animatedStats.totalReward)}</p>
           </div>
-          <div className="bg-white/5 backdrop-blur rounded-xl p-4 border border-white/10">
+          <div className="bg-white/5 backdrop-blur rounded-xl p-4 border border-white/10 transition-transform duration-300 hover:-translate-y-0.5">
             <p className="text-[11px] text-slate-400 uppercase tracking-wider mb-1">Current Value</p>
-            <p className="text-xl font-bold">SAR {fmt(stats.totalValue)}</p>
+            <p className="text-xl font-bold">SAR {fmt(animatedStats.totalValue)}</p>
           </div>
-          <div className="bg-white/5 backdrop-blur rounded-xl p-4 border border-white/10">
+          <div className="bg-white/5 backdrop-blur rounded-xl p-4 border border-white/10 transition-transform duration-300 hover:-translate-y-0.5">
             <p className="text-[11px] text-slate-400 uppercase tracking-wider mb-1">Reward %</p>
-            <p className="text-xl font-bold text-emerald-400">{stats.rewardPct.toFixed(1)}%</p>
+            <p className="text-xl font-bold text-emerald-400">{animatedStats.rewardPct.toFixed(1)}%</p>
           </div>
-          <div className="bg-white/5 backdrop-blur rounded-xl p-4 border border-white/10">
+          <div className="bg-white/5 backdrop-blur rounded-xl p-4 border border-white/10 transition-transform duration-300 hover:-translate-y-0.5">
             <p className="text-[11px] text-slate-400 uppercase tracking-wider mb-1">Plans Selected</p>
             <p className="text-xl font-bold">{stats.count} / {filteredInvestments.length}</p>
+          </div>
+        </div>
+
+        <div className="mt-3 grid grid-cols-1 lg:grid-cols-3 gap-3">
+          <div className="rounded-xl border border-white/10 bg-white/5 px-4 py-3">
+            <p className="text-[11px] text-slate-400 uppercase tracking-wider mb-1">Avg Value / Plan</p>
+            <p className="text-lg font-semibold text-slate-100">SAR {fmt(animatedStats.avgValuePerPlan)}</p>
+          </div>
+          <div className="rounded-xl border border-white/10 bg-white/5 px-4 py-3">
+            <p className="text-[11px] text-slate-400 uppercase tracking-wider mb-1">Received Plans</p>
+            <p className="text-lg font-semibold text-blue-300">{stats.receivedCount} / {stats.count}</p>
+          </div>
+          <div className="rounded-xl border border-white/10 bg-white/5 px-4 py-3">
+            <div className="flex items-center justify-between gap-2 mb-1">
+              <p className="text-[11px] text-slate-400 uppercase tracking-wider">Completion Rate</p>
+              <p className="text-sm font-semibold text-emerald-300">{animatedStats.completionRate.toFixed(0)}%</p>
+            </div>
+            <div className="h-1.5 w-full rounded-full bg-white/10 overflow-hidden">
+              <div
+                className="h-full rounded-full bg-emerald-400 transition-all duration-700"
+                style={{ width: `${Math.min(100, Math.max(0, animatedStats.completionRate))}%` }}
+              />
+            </div>
           </div>
         </div>
       </div>
@@ -593,7 +687,7 @@ export function CirclysClient({ initialInvestments, userRole }: CirclysClientPro
                                   <span className="ml-1.5 px-1.5 py-0.5 text-[10px] font-bold bg-blue-100 text-blue-700 rounded">RECEIPT</span>
                                 )}
                                 {isPostReceiptRow && !isReceiptRow && (
-                                  <span className="ml-1.5 px-1.5 py-0.5 text-[10px] font-medium bg-orange-100 text-orange-600 rounded">from cash</span>
+                                  <span className="ml-1.5 px-1.5 py-0.5 text-[10px] font-medium bg-orange-100 text-orange-600 rounded">cash + reward</span>
                                 )}
                               </td>
                               <td className="py-2 pr-3 whitespace-nowrap text-gray-500 tabular-nums">
@@ -617,7 +711,7 @@ export function CirclysClient({ initialInvestments, userRole }: CirclysClientPro
                                   type="number"
                                   step="0.01"
                                   min="0"
-                                  disabled={isPaid || userRole !== 'OWNER' || isLockedPreReceiptAfterReceive || isPostReceiptRow}
+                                  disabled={isPaid || userRole !== 'OWNER' || isLockedPreReceiptAfterReceive}
                                   value={rewardValue}
                                   onChange={(e: ChangeEvent<HTMLInputElement>) =>
                                     setPayRewardByKey((prev: Record<string, string>) => ({ ...prev, [key]: e.target.value }))
