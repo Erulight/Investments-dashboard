@@ -977,9 +977,14 @@ export default async function ZakatPage() {
                 OR: [
                   {
                     personId: user.personId,
-                    NOT: [
-                      { label: 'Partner Commission' },
-                      { label: { startsWith: 'Debt •' } },
+                    OR: [
+                      { label: null },
+                      {
+                        AND: [
+                          { NOT: { label: 'Partner Commission' } },
+                          { NOT: { label: { startsWith: 'Debt •' } } },
+                        ],
+                      },
                     ],
                   },
                   {
@@ -1627,6 +1632,7 @@ export default async function ZakatPage() {
       // In ROSCA scenarios, manual funding cash-ins can create standalone
       // General Cash idle rows that double-count against the Savings Receipt row.
       if (
+        user.role === 'OWNER' &&
         hasAnySavingsReceiptBucket &&
         !isSavingsReceiptBucket &&
         !isImmediateReceiptBucket &&
