@@ -272,7 +272,7 @@ export async function POST(
             label: `Circlys Reward Receipt • ${investment.name}`,
             currency,
             balance: rewardReceiptAmount,
-            haulStartDate: rewardHawlAnchor,
+            haulStartDate: rewardReceiptDate,
             excludeFromZakat: false,
             personId: null,
             movements: {

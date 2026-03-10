@@ -975,40 +975,13 @@ export default async function ZakatPage() {
             ]
           : [
               {
+                personId: user.personId,
                 OR: [
+                  { label: null },
                   {
-                    personId: user.personId,
-                    OR: [
-                      { label: null },
-                      {
-                        AND: [
-                          { NOT: { label: 'Partner Commission' } },
-                          { NOT: { label: { startsWith: 'Debt •' } } },
-                        ],
-                      },
-                    ],
-                  },
-                  {
-                    personId: null,
-                    OR: [
-                      { label: { startsWith: 'Sukuk Principal •' } },
-                      { label: { startsWith: 'Profit •' } },
-                      { label: { startsWith: 'Savings Receipt •' } },
-                      { label: { startsWith: 'Circlys Reward Receipt •' } },
-                      { label: { endsWith: ' Principal Receipt' } },
-                    ],
-                    movements: {
-                      some: {
-                        investment: {
-                          dealParticipants: {
-                            some: { personId: user.personId! },
-                          },
-                        },
-                      },
-                    },
-                    NOT: [
-                      { label: 'Partner Commission' },
-                      { label: { startsWith: 'Debt •' } },
+                    AND: [
+                      { NOT: { label: 'Partner Commission' } },
+                      { NOT: { label: { startsWith: 'Debt •' } } },
                     ],
                   },
                 ],
