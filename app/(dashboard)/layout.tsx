@@ -52,14 +52,14 @@ export default async function DashboardLayout({
   })()
 
   return (
-    <div className="min-h-screen bg-[#0a1628] text-foreground">
+    <div className="min-h-screen text-foreground relative">
       <GlobalRefreshIndicator />
       <Navbar
         user={{ name: user.name, email: user.email, role: user.role as 'OWNER' | 'PARTNER', permissions: user.permissions }}
         activeAccountTypes={activeAccountTypes.map((a) => a.type)}
         notifications={notifications}
       />
-      <main className="w-full max-w-none px-4 sm:px-6 lg:px-8 pt-8 pb-6">
+      <main className="w-full max-w-none px-4 sm:px-6 lg:px-8 pt-8 pb-6 relative z-10">
         {children}
       </main>
     </div>

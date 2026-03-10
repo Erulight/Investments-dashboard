@@ -28,9 +28,11 @@ export default function RootLayout({
           }}
         />
       </head>
-      <body className="bg-background text-foreground">
+      <body className="glass-background text-foreground">
         <AutoRefresher />
-        {children}
+        <div className="relative z-10">
+          {children}
+        </div>
       </body>
     </html>
   )
