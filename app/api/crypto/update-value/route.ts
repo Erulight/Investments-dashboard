@@ -31,9 +31,10 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: 'Invalid date' }, { status: 400 })
     }
 
+    const selectedDay = new Date(at.getFullYear(), at.getMonth(), at.getDate())
     const now = new Date()
-    const maxFutureMs = 36 * 60 * 60 * 1000
-    if (at.getTime() > now.getTime() + maxFutureMs) {
+    const todayDay = new Date(now.getFullYear(), now.getMonth(), now.getDate())
+    if (selectedDay.getTime() > todayDay.getTime()) {
       return NextResponse.json({ error: 'Date cannot be in the future' }, { status: 400 })
     }
 
@@ -44,6 +45,16 @@ export async function POST(request: Request) {
 
     if (!inv) {
       return NextResponse.json({ error: 'Crypto portfolio not found' }, { status: 404 })
+    }
+
+    const portfolioStartAt = new Date(inv.startDate)
+    const portfolioStartDay = new Date(
+      portfolioStartAt.getFullYear(),
+      portfolioStartAt.getMonth(),
+      portfolioStartAt.getDate(),
+    )
+    if (!Number.isNaN(portfolioStartDay.getTime()) && selectedDay.getTime() < portfolioStartDay.getTime()) {
+      return NextResponse.json({ error: 'Date cannot be before portfolio start date' }, { status: 400 })
     }
 
     const metadata = (() => {

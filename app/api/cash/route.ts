@@ -2,47 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { prisma } from '@/lib/db'
 import { requireAuth } from '@/lib/rbac'
 import { createCashBucket, withdrawFromBuckets } from '@/lib/cashBuckets'
-
-const CASH_BALANCE_KEY = 'CASH_BALANCE'
-
-const getBucketScopeWhere = (personId: string | null) => {
-  if (personId) {
-    return {
-      personId,
-      NOT: [
-        { label: { startsWith: 'Debt •' } },
-        { label: 'Partner Commission' },
-      ],
-    } as any
-  }
-  return { personId: null } as any
-}
-
-const getBucketCashBalance = async (db: any, personId: string | null) => {
-  const agg = await db.cashBucket.aggregate({
-    where: getBucketScopeWhere(personId),
-    _sum: { balance: true },
-  })
-  const value = Number(agg?._sum?.balance || 0)
-  return Number.isFinite(value) ? value : 0
-}
-
-const recomputeCashSetting = async (tx: any, personId: string | null) => {
-  const key = personId ? `${CASH_BALANCE_KEY}:${personId}` : CASH_BALANCE_KEY
-  const balance = await getBucketCashBalance(tx, personId)
-
-  await tx.systemSetting.upsert({
-    where: { key },
-    update: { value: balance.toString() },
-    create: {
-      key,
-      value: balance.toString(),
-      description: 'Available cash balance for investments',
-    },
-  })
-
-  return balance
-}
+import { getBucketCashBalance, recomputeCashSetting } from '@/lib/cashBalance'
 
 const getCashAccount = async (tx: any, currency = 'SAR') => {
   const existing = await tx.account.findFirst({
@@ -127,7 +87,7 @@ export async function GET(req: NextRequest) {
       })
     }
 
-    const ownerSetting = await prisma.systemSetting.findUnique({ where: { key: CASH_BALANCE_KEY } })
+    const ownerSetting = await prisma.systemSetting.findUnique({ where: { key: 'CASH_BALANCE' } })
     const ownerSettingValue = Number(ownerSetting?.value || 0)
     const ownerBucketBalance = await getBucketCashBalance(prisma, null)
 

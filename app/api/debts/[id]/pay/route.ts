@@ -1,12 +1,10 @@
 import { NextRequest, NextResponse } from 'next/server'
-import type { Prisma } from '@prisma/client'
 import { prisma } from '@/lib/db'
 import { requireAuth } from '@/lib/rbac'
 import { withdrawFromBuckets } from '@/lib/cashBuckets'
+import { recomputeCashSetting } from '@/lib/cashBalance'
 
-const CASH_BALANCE_KEY = 'CASH_BALANCE'
-
-const getCashAccount = async (tx: Prisma.TransactionClient, currency = 'SAR') => {
+const getCashAccount = async (tx: any, currency = 'SAR') => {
   const existing = await tx.account.findFirst({ where: { type: 'CASH', isActive: true } })
   if (existing) return existing
   return tx.account.create({
@@ -38,8 +36,14 @@ export async function POST(
     if (Number.isNaN(paidAt.getTime())) {
       return NextResponse.json({ error: 'Invalid paidAt' }, { status: 400 })
     }
+    const today = new Date()
+    const paidDay = new Date(paidAt.getFullYear(), paidAt.getMonth(), paidAt.getDate())
+    const todayDay = new Date(today.getFullYear(), today.getMonth(), today.getDate())
+    if (paidDay.getTime() > todayDay.getTime()) {
+      return NextResponse.json({ error: 'Payment date cannot be in the future' }, { status: 400 })
+    }
 
-    const result = await prisma.$transaction(async (tx: Prisma.TransactionClient) => {
+    const result = await prisma.$transaction(async (tx: any) => {
       const debt = await tx.debt.findUnique({
         where: { id },
         include: {
@@ -51,8 +55,17 @@ export async function POST(
       if (!debt) {
         return NextResponse.json({ error: 'Debt not found' }, { status: 404 })
       }
+      if (debt.isArchived) {
+        return NextResponse.json({ error: 'Cannot pay an archived debt' }, { status: 400 })
+      }
 
-      const totalPaidBefore = debt.payments.reduce((s, p) => s + (Number(p.amount) || 0), 0)
+      const borrowedAt = new Date(debt.borrowedAt)
+      const borrowedDay = new Date(borrowedAt.getFullYear(), borrowedAt.getMonth(), borrowedAt.getDate())
+      if (paidDay.getTime() < borrowedDay.getTime()) {
+        return NextResponse.json({ error: 'Payment date cannot be before borrowed date' }, { status: 400 })
+      }
+
+      const totalPaidBefore = debt.payments.reduce((s: number, p: any) => s + (Number(p.amount) || 0), 0)
       const outstandingBefore = Math.max(0, Number(debt.amount) - totalPaidBefore)
       if (amount > outstandingBefore + 0.000001) {
         return NextResponse.json({ error: 'Payment exceeds outstanding amount' }, { status: 400 })
@@ -68,28 +81,6 @@ export async function POST(
         notes: `Debt payment • ${debt.lenderName}`,
         availableOnOrBefore: paidAt,
       })
-
-      const setting = await tx.systemSetting.findUnique({ where: { key: CASH_BALANCE_KEY } })
-      const currentCash = setting ? Number(setting.value) : 0
-      const nextCash = currentCash - amount
-      if (nextCash < 0) {
-        throw new Error('INSUFFICIENT_CASH')
-      }
-
-      if (setting) {
-        await tx.systemSetting.update({
-          where: { key: CASH_BALANCE_KEY },
-          data: { value: nextCash.toString() },
-        })
-      } else {
-        await tx.systemSetting.create({
-          data: {
-            key: CASH_BALANCE_KEY,
-            value: nextCash.toString(),
-            description: 'Available cash balance for investments',
-          },
-        })
-      }
 
       const payment = await tx.debtPayment.create({
         data: {
@@ -114,13 +105,7 @@ export async function POST(
         },
       })
 
-      const totalPaidAfter = totalPaidBefore + amount
-      const outstandingAfter = Math.max(0, Number(debt.amount) - totalPaidAfter)
-      const fullyPaid = outstandingAfter <= 0.000001
-
-      // FIX 2: Do NOT flip debt buckets to zakatable when fully paid
-      // Debt-originated cash is never zakatable regardless of repayment status
-      // Owner surplus cash after repayment will be captured by other personal buckets naturally
+      await recomputeCashSetting(tx, null)
 
       const updated = await tx.debt.findUnique({
         where: { id: debt.id },

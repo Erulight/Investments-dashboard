@@ -25,9 +25,11 @@ interface NavItem extends NavChild {
   children?: NavChild[]
 }
 
+type PermissionMap = Record<string, boolean>
+
 const navigation: NavItem[] = [
   { name: 'Dashboard', href: '/dashboard', icon: '📊' },
-  { name: 'Cash Ledger', href: '/cash-ledger', roles: ['OWNER', 'PARTNER'], icon: '�' },
+  { name: 'Cash Ledger', href: '/cash-ledger', roles: ['OWNER', 'PARTNER'], icon: '💵' },
   { name: 'Debts', href: '/debts', roles: ['OWNER'], icon: '💳' },
   { name: 'Zakat', href: '/zakat', module: 'zakat', icon: '🕌' },
   { 
@@ -47,7 +49,23 @@ const navigation: NavItem[] = [
   { name: 'Settings', href: '/settings', module: 'settings', icon: '⚙️' },
 ]
 
-function hasAccess(user: UserMini, item: NavChild) {
+const parsePermissionMap = (permissionsRaw?: string | null): PermissionMap => {
+  if (!permissionsRaw) return {}
+  try {
+    const parsed = JSON.parse(permissionsRaw)
+    if (!parsed || typeof parsed !== 'object') return {}
+    return Object.entries(parsed).reduce((acc, [key, value]) => {
+      if (typeof value === 'boolean') {
+        acc[key] = value
+      }
+      return acc
+    }, {} as PermissionMap)
+  } catch {
+    return {}
+  }
+}
+
+function hasAccess(user: UserMini, item: NavChild, permissionMap: PermissionMap) {
   // Check role-based access
   if (item.roles && !item.roles.includes(user.role)) {
     return false
@@ -62,18 +80,9 @@ function hasAccess(user: UserMini, item: NavChild) {
   if (!item.module) {
     return true
   }
-  
+
   // Check module permission
-  if (!user.permissions) {
-    return false
-  }
-  
-  try {
-    const permissions = JSON.parse(user.permissions)
-    return permissions[item.module] === true
-  } catch {
-    return false
-  }
+  return permissionMap[item.module] === true
 }
 
 interface NotificationItem {
@@ -100,6 +109,8 @@ export function Navbar({ user, activeAccountTypes, notifications }: NavbarProps)
   const [notificationsOpen, setNotificationsOpen] = useState(false)
   const [dismissLoading, setDismissLoading] = useState<string | null>(null)
   const [notifError, setNotifError] = useState('')
+
+  const permissionMap = useMemo(() => parsePermissionMap(user.permissions), [user.permissions])
 
   useEffect(() => {
     if (typeof document === 'undefined') return
@@ -159,11 +170,11 @@ export function Navbar({ user, activeAccountTypes, notifications }: NavbarProps)
   }
 
   const filteredNav: NavItem[] = navigation
-    .filter((item) => hasAccess(user, item))
+    .filter((item) => hasAccess(user, item, permissionMap))
     .map((item): NavItem | null => {
       if (item.children) {
         const filteredChildren = item.children
-          .filter((child) => hasAccess(user, child))
+          .filter((child) => hasAccess(user, child, permissionMap))
           .filter((child) => isActiveInvestmentType(child))
 
         if (filteredChildren.length === 0) {

@@ -7,6 +7,7 @@ import { Card, CardHeader, CardTitle, CardContent } from '@/components/ui/Card'
 import { Button } from '@/components/ui/Button'
 import { Modal } from '@/components/sukuk/SukukModal'
 import { DateInput } from '@/components/ui/DateInput'
+import { AnimatedCard } from '@/components/ui/AnimatedCard'
 import { formatDateInput, toIsoDateInput } from '@/lib/date'
 
 type ReceiptEntry = {
@@ -15,6 +16,8 @@ type ReceiptEntry = {
   type: string
   investmentName?: string | null
 }
+
+const EPSILON = 0.000001
 
 type BucketRow = {
   id: string
@@ -345,6 +348,12 @@ export function ZakatDashboard({
   
   const totalDue = filteredBuckets.reduce((sum, b) => sum + b.zakatDue, 0)
   const totalBalance = sumUniqueBucketBalances(filteredBuckets)
+  const dueRowsCount = filteredBuckets.filter((b) => Number(b.zakatDue) > EPSILON).length
+  const paidRowsCount = filteredBuckets.filter((b) => b.isPaid).length
+  const haulCompletedCount = filteredBuckets.filter((b) => b.haulCompleted).length
+  const paymentCoveragePct = filteredBuckets.length > 0
+    ? (paidRowsCount / filteredBuckets.length) * 100
+    : 0
 
   const hijriSummaries = useMemo(() => {
     const map = new Map<number, { year: number; start: Date; endExclusive: Date; endInclusive: Date; due: number; total: number; rows: BucketRow[] }>()
@@ -400,7 +409,8 @@ export function ZakatDashboard({
           throw new Error(data.error || 'Failed to pay zakat')
         }
       }
-      window.location.reload()
+      window.dispatchEvent(new CustomEvent('zakat-payment-made'))
+      router.refresh()
     } catch (err) {
       setPayAllError(err instanceof Error ? err.message : 'Failed to pay all')
     } finally {
@@ -444,6 +454,23 @@ export function ZakatDashboard({
       setPayError('Invalid payment date format')
       return
     }
+
+    if (amount > Number(payTarget.zakatDue) + EPSILON) {
+      setPayError('Payment exceeds zakat due for this row')
+      return
+    }
+
+    const todayIso = new Date().toISOString().slice(0, 10)
+    if (isoDate > todayIso) {
+      setPayError('Payment date cannot be in the future')
+      return
+    }
+
+    if (payTarget.haulCompleteDate && isoDate < payTarget.haulCompleteDate) {
+      setPayError('Payment date cannot be before haul end date')
+      return
+    }
+
     setPayLoading(true)
     setPayError('')
     try {
@@ -541,24 +568,24 @@ export function ZakatDashboard({
 
       <div className="space-y-2">
         <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-          {hijriSummaries.map(s => {
+          {hijriSummaries.map((s, index) => {
             const allPaid = s.due <= 0.000001
             const windowText = `${isoDay(s.start)} → ${isoDay(s.endInclusive)}`
             return (
-              <Card key={s.year}>
-                <CardContent className="py-3 px-4">
+              <AnimatedCard key={s.year} index={index} className="border border-slate-200 dark:border-white/10" hover={false}>
+                <CardContent className="py-3 px-4 bg-white dark:bg-slate-900/60 rounded-lg">
                   <div className="flex items-start justify-between gap-3">
                     <div>
-                      <div className="text-sm font-semibold text-gray-900">{s.year} AH</div>
-                      <div className="text-[11px] text-gray-500 mt-0.5">{windowText}</div>
+                      <div className="text-sm font-semibold text-slate-900 dark:text-slate-100">{s.year} AH</div>
+                      <div className="text-[11px] text-slate-500 dark:text-slate-400 mt-0.5">{windowText}</div>
                     </div>
                     <div className="text-right">
-                      <div className="text-[11px] text-gray-500">Due</div>
+                      <div className="text-[11px] text-slate-500 dark:text-slate-400">Due</div>
                       <div className={`text-lg font-bold tabular-nums ${allPaid ? 'text-emerald-700' : 'text-amber-700'}`}>SAR {fmt(Math.max(0, s.due))}</div>
                     </div>
                   </div>
                   <div className="mt-2 flex items-center justify-between">
-                    <div className="text-[11px] text-gray-500">{s.rows.length} item{s.rows.length !== 1 ? 's' : ''}</div>
+                    <div className="text-[11px] text-slate-500 dark:text-slate-400">{s.rows.length} item{s.rows.length !== 1 ? 's' : ''}</div>
                     {allPaid ? (
                       <div className="text-xs font-semibold text-emerald-700">Paid</div>
                     ) : (
@@ -572,7 +599,7 @@ export function ZakatDashboard({
                     )}
                   </div>
                 </CardContent>
-              </Card>
+              </AnimatedCard>
             )
           })}
         </div>
@@ -583,31 +610,31 @@ export function ZakatDashboard({
         )}
       </div>
       {/* Summary row */}
-      <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
-        <Card>
-          <CardContent className="py-3 px-4">
-            <div className="text-xs text-gray-500">Total Zakat Due</div>
-            <div className="text-lg font-bold text-emerald-700">SAR {fmt(totalDue)}</div>
-          </CardContent>
-        </Card>
-        <Card>
-          <CardContent className="py-3 px-4">
-            <div className="text-xs text-gray-500">Total Balance</div>
-            <div className="text-lg font-bold text-gray-900">SAR {fmt(totalBalance)}</div>
-          </CardContent>
-        </Card>
-        <Card>
-          <CardContent className="py-3 px-4">
-            <div className="text-xs text-gray-500">Buckets</div>
-            <div className="text-lg font-bold text-gray-900">{filteredBuckets.length}</div>
-          </CardContent>
-        </Card>
-        <Card>
-          <CardContent className="py-3 px-4">
-            <div className="text-xs text-gray-500">Sources</div>
-            <div className="text-lg font-bold text-gray-900">{sourceGroups.length}</div>
-          </CardContent>
-        </Card>
+      <div className="grid grid-cols-2 lg:grid-cols-6 gap-3">
+        <AnimatedCard index={0} className="border border-slate-200 dark:border-white/10 p-3" hover={false}>
+          <div className="text-xs text-slate-500 dark:text-slate-400">Total Zakat Due</div>
+          <div className="text-lg font-bold text-emerald-700">SAR {fmt(totalDue)}</div>
+        </AnimatedCard>
+        <AnimatedCard index={1} className="border border-slate-200 dark:border-white/10 p-3" hover={false}>
+          <div className="text-xs text-slate-500 dark:text-slate-400">Total Balance</div>
+          <div className="text-lg font-bold text-slate-900 dark:text-slate-100">SAR {fmt(totalBalance)}</div>
+        </AnimatedCard>
+        <AnimatedCard index={2} className="border border-slate-200 dark:border-white/10 p-3" hover={false}>
+          <div className="text-xs text-slate-500 dark:text-slate-400">Due Rows</div>
+          <div className="text-lg font-bold text-amber-700 dark:text-amber-300">{dueRowsCount}</div>
+        </AnimatedCard>
+        <AnimatedCard index={3} className="border border-slate-200 dark:border-white/10 p-3" hover={false}>
+          <div className="text-xs text-slate-500 dark:text-slate-400">Paid Rows</div>
+          <div className="text-lg font-bold text-emerald-700 dark:text-emerald-300">{paidRowsCount}</div>
+        </AnimatedCard>
+        <AnimatedCard index={4} className="border border-slate-200 dark:border-white/10 p-3" hover={false}>
+          <div className="text-xs text-slate-500 dark:text-slate-400">Haul Complete</div>
+          <div className="text-lg font-bold text-slate-900 dark:text-slate-100">{haulCompletedCount}</div>
+        </AnimatedCard>
+        <AnimatedCard index={5} className="border border-slate-200 dark:border-white/10 p-3" hover={false}>
+          <div className="text-xs text-slate-500 dark:text-slate-400">Payment Coverage</div>
+          <div className="text-lg font-bold text-slate-900 dark:text-slate-100">{paymentCoveragePct.toFixed(1)}%</div>
+        </AnimatedCard>
       </div>
 
       {/* Year Tabs */}

@@ -1,12 +1,10 @@
 import { NextRequest, NextResponse } from 'next/server'
-import type { Prisma } from '@prisma/client'
 import { prisma } from '@/lib/db'
 import { requireAuth } from '@/lib/rbac'
 import { logAudit } from '@/lib/audit'
+import { recomputeCashSetting } from '@/lib/cashBalance'
 
-const CASH_BALANCE_KEY = 'CASH_BALANCE'
-
-const getCashAccount = async (tx: Prisma.TransactionClient, currency = 'SAR') => {
+const getCashAccount = async (tx: any, currency = 'SAR') => {
   const existing = await tx.account.findFirst({
     where: { type: 'CASH', isActive: true },
   })
@@ -45,8 +43,27 @@ export async function POST(req: NextRequest) {
     if (!Number.isFinite(amount) || amount <= 0) {
       return NextResponse.json({ error: 'Amount must be greater than 0' }, { status: 400 })
     }
+    if (Number.isNaN(date.getTime())) {
+      return NextResponse.json({ error: 'Invalid payment date' }, { status: 400 })
+    }
+    if (periodEndRaw && (!periodEnd || Number.isNaN(periodEnd.getTime()))) {
+      return NextResponse.json({ error: 'Invalid period end date' }, { status: 400 })
+    }
 
-    const result = await prisma.$transaction(async (tx) => {
+    const today = new Date()
+    const paymentDay = new Date(date.getFullYear(), date.getMonth(), date.getDate())
+    const todayDay = new Date(today.getFullYear(), today.getMonth(), today.getDate())
+    if (paymentDay.getTime() > todayDay.getTime()) {
+      return NextResponse.json({ error: 'Payment date cannot be in the future' }, { status: 400 })
+    }
+    const periodEndDay = periodEnd
+      ? new Date(periodEnd.getFullYear(), periodEnd.getMonth(), periodEnd.getDate())
+      : null
+    if (periodEndDay && paymentDay.getTime() < periodEndDay.getTime()) {
+      return NextResponse.json({ error: 'Payment date cannot be before period end date' }, { status: 400 })
+    }
+
+    const result = await prisma.$transaction(async (tx: any) => {
       const bucket = await tx.cashBucket.findFirst({
         where: {
           id: bucketId,
@@ -62,6 +79,18 @@ export async function POST(req: NextRequest) {
         return NextResponse.json({ error: 'Bucket balance is too low' }, { status: 400 })
       }
 
+      const rowMarker = `ZAKAT_ROW=${rowId}`
+      const existingRowPayment = await tx.cashBucketMovement.findFirst({
+        where: {
+          cashBucketId: bucketId,
+          type: 'ZAKAT_PAID',
+          notes: { contains: rowMarker },
+        },
+      })
+      if (existingRowPayment) {
+        return NextResponse.json({ error: 'Zakat is already paid for this row' }, { status: 400 })
+      }
+
       await tx.cashBucket.update({
         where: { id: bucketId },
         data: {
@@ -69,7 +98,6 @@ export async function POST(req: NextRequest) {
         },
       })
 
-      const rowMarker = `ZAKAT_ROW=${rowId}`
       const combinedNotes = notes ? `${notes} | ${rowMarker}` : rowMarker
 
       const movement = await tx.cashBucketMovement.create({
@@ -83,6 +111,8 @@ export async function POST(req: NextRequest) {
       })
 
       if (user.role === 'PARTNER') {
+        await recomputeCashSetting(tx, user.personId || null)
+
         await logAudit(tx, {
           userId: user.id,
           action: 'UPDATE',
@@ -98,43 +128,7 @@ export async function POST(req: NextRequest) {
         return { success: true }
       }
 
-      const cashSetting = await tx.systemSetting.findUnique({
-        where: { key: CASH_BALANCE_KEY },
-      })
-      const currentCashRaw = cashSetting ? Number(cashSetting.value) : 0
-      let currentCash = Number.isFinite(currentCashRaw) ? currentCashRaw : 0
-      let nextCash = currentCash - amount
-
-      if (nextCash < 0) {
-        const bucketAgg = await tx.cashBucket.aggregate({
-          _sum: { balance: true },
-        })
-        const bucketSumRaw = bucketAgg?._sum?.balance
-        const bucketSum = Number.isFinite(bucketSumRaw as any) ? Number(bucketSumRaw) : 0
-        if (bucketSum > currentCash + 0.0001) {
-          currentCash = bucketSum
-          nextCash = currentCash - amount
-        }
-      }
-
-      if (nextCash < -0.000001) {
-        throw new Error('INSUFFICIENT_CASH')
-      }
-
-      if (cashSetting) {
-        await tx.systemSetting.update({
-          where: { key: CASH_BALANCE_KEY },
-          data: { value: nextCash.toString() },
-        })
-      } else {
-        await tx.systemSetting.create({
-          data: {
-            key: CASH_BALANCE_KEY,
-            value: nextCash.toString(),
-            description: 'Available cash balance for investments',
-          },
-        })
-      }
+      await recomputeCashSetting(tx, null)
 
       const cashAccount = await getCashAccount(tx, bucket.currency)
 

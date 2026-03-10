@@ -1,11 +1,12 @@
 import { getCurrentUser } from '@/lib/auth'
 import { prisma } from '@/lib/db'
+import { requireModuleAccess } from '@/lib/rbac'
 import { ZakatPageClient } from '@/components/zakat/ZakatPageClient'
+import { recomputeCashSetting } from '@/lib/cashBalance'
 
 export const dynamic = 'force-dynamic'
 
 const NISAB_KEY = 'NISAB_VALUE'
-const CASH_BALANCE_KEY = 'CASH_BALANCE'
 const REWARD_EPSILON = 0.01
 
 type BucketRow = {
@@ -214,6 +215,7 @@ const getPartnerSukukValueAt = (inv: any, participation: any, asOf: Date) => {
 }
 
 export default async function ZakatPage() {
+  await requireModuleAccess('zakat')
   const user = await getCurrentUser()
   if (!user) {
     return null
@@ -517,22 +519,7 @@ export default async function ZakatPage() {
     }
 
     if (rewardCashAdjusted) {
-      const cashBucketAgg = await prisma.cashBucket.aggregate({
-        where: { personId: null },
-        _sum: { balance: true },
-      })
-      const cashBucketSumRaw = cashBucketAgg?._sum?.balance
-      const cashBucketSum = Number.isFinite(cashBucketSumRaw as any) ? Number(cashBucketSumRaw) : 0
-
-      await prisma.systemSetting.upsert({
-        where: { key: CASH_BALANCE_KEY },
-        update: { value: cashBucketSum.toString() },
-        create: {
-          key: CASH_BALANCE_KEY,
-          value: cashBucketSum.toString(),
-          description: 'Available cash balance for investments',
-        },
-      })
+      await recomputeCashSetting(prisma, null)
     }
 
     // For every Sukuk investment owned by the owner, determine correct hawl start:

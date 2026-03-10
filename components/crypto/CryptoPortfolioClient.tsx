@@ -2,6 +2,7 @@
 
 import { useMemo, useState, type ChangeEvent, type FormEvent } from 'react'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/Card'
+import { AnimatedCard } from '@/components/ui/AnimatedCard'
 
 interface Investment {
   id: string
@@ -60,6 +61,15 @@ const addDays = (date: Date, days: number) => {
   return next
 }
 
+const toDayKey = (value: string | Date) => {
+  const d = value instanceof Date ? value : new Date(value)
+  if (Number.isNaN(d.getTime())) return ''
+  const yyyy = d.getFullYear()
+  const mm = String(d.getMonth() + 1).padStart(2, '0')
+  const dd = String(d.getDate()).padStart(2, '0')
+  return `${yyyy}-${mm}-${dd}`
+}
+
 function LineChart({ points }: { points: { at: Date; value: number }[] }) {
   const width = 820
   const height = 240
@@ -113,6 +123,7 @@ export function CryptoPortfolioClient({ investment }: { investment: Investment }
   const [showValueForm, setShowValueForm] = useState(false)
   const [showDepositForm, setShowDepositForm] = useState(false)
   const [isLoading, setIsLoading] = useState(false)
+  const [actionError, setActionError] = useState('')
   const [valueForm, setValueForm] = useState<{ date: string; currentValue: string }>({
     date: new Date().toISOString().split('T')[0],
     currentValue: '',
@@ -216,8 +227,28 @@ export function CryptoPortfolioClient({ investment }: { investment: Investment }
 
   const paidTotal = useMemo(() => zakatPayments.reduce((s, p) => s + safeNumber(p.amount, 0), 0), [zakatPayments])
   const zakatRemaining = Math.max(0, zakatDue - paidTotal)
+  const todayDayKey = toDayKey(new Date())
+  const portfolioStartDayKey = toDayKey(inv.startDate)
+  const haulProgressPct = useMemo(() => {
+    const start = new Date(haulStartAt.getFullYear(), haulStartAt.getMonth(), haulStartAt.getDate()).getTime()
+    const end = new Date(haulCompleteAt.getFullYear(), haulCompleteAt.getMonth(), haulCompleteAt.getDate()).getTime()
+    const now = new Date()
+    const today = new Date(now.getFullYear(), now.getMonth(), now.getDate()).getTime()
+
+    if (!Number.isFinite(start) || !Number.isFinite(end) || end <= start) return haulCompleted ? 100 : 0
+    const raw = ((Math.min(today, end) - start) / (end - start)) * 100
+    return Math.max(0, Math.min(100, raw))
+  }, [haulStartAt, haulCompleteAt, haulCompleted])
+  const daysToHaulComplete = useMemo(() => {
+    const now = new Date()
+    const today = new Date(now.getFullYear(), now.getMonth(), now.getDate()).getTime()
+    const end = new Date(haulCompleteAt.getFullYear(), haulCompleteAt.getMonth(), haulCompleteAt.getDate()).getTime()
+    if (!Number.isFinite(end)) return 0
+    return Math.max(0, Math.ceil((end - today) / (1000 * 60 * 60 * 24)))
+  }, [haulCompleteAt])
 
   const openValueModal = () => {
+    setActionError('')
     const defaultDate = (points.at(-1)?.at || new Date()).toISOString().split('T')[0]
     setValueForm({
       date: defaultDate,
@@ -227,6 +258,7 @@ export function CryptoPortfolioClient({ investment }: { investment: Investment }
   }
 
   const openDepositModal = () => {
+    setActionError('')
     setDepositForm({
       date: new Date().toISOString().split('T')[0],
       amount: '',
@@ -236,9 +268,26 @@ export function CryptoPortfolioClient({ investment }: { investment: Investment }
 
   const handleSubmitCurrentValue = async (e: FormEvent) => {
     e.preventDefault()
+    setActionError('')
 
     const value = parseFloat(valueForm.currentValue)
     if (!Number.isFinite(value) || value < 0) {
+      setActionError('Current value must be 0 or greater')
+      return
+    }
+
+    if (!valueForm.date) {
+      setActionError('Value update date is required')
+      return
+    }
+
+    if (valueForm.date > todayDayKey) {
+      setActionError('Value update date cannot be in the future')
+      return
+    }
+
+    if (portfolioStartDayKey && valueForm.date < portfolioStartDayKey) {
+      setActionError('Value update date cannot be before portfolio start date')
       return
     }
 
@@ -260,7 +309,7 @@ export function CryptoPortfolioClient({ investment }: { investment: Investment }
       setShowValueForm(false)
     } catch (error) {
       console.error('Update value error:', error)
-      alert(error instanceof Error ? error.message : 'Failed to update current value')
+      setActionError(error instanceof Error ? error.message : 'Failed to update current value')
     } finally {
       setIsLoading(false)
     }
@@ -269,6 +318,7 @@ export function CryptoPortfolioClient({ investment }: { investment: Investment }
   const handleDeleteValueUpdate = async (at: string) => {
     const ok = confirm('Delete this monthly update?')
     if (!ok) return
+    setActionError('')
 
     setIsLoading(true)
     try {
@@ -287,7 +337,7 @@ export function CryptoPortfolioClient({ investment }: { investment: Investment }
       setInv(updated)
     } catch (error) {
       console.error('Delete update error:', error)
-      alert(error instanceof Error ? error.message : 'Failed to delete update')
+      setActionError(error instanceof Error ? error.message : 'Failed to delete update')
     } finally {
       setIsLoading(false)
     }
@@ -296,6 +346,7 @@ export function CryptoPortfolioClient({ investment }: { investment: Investment }
   const handleResetPortfolio = async () => {
     const ok = confirm('Reset crypto portfolio invested/current values to 0?')
     if (!ok) return
+    setActionError('')
 
     setIsLoading(true)
     try {
@@ -314,7 +365,7 @@ export function CryptoPortfolioClient({ investment }: { investment: Investment }
       setInv(updated)
     } catch (error) {
       console.error('Reset portfolio error:', error)
-      alert(error instanceof Error ? error.message : 'Failed to reset portfolio')
+      setActionError(error instanceof Error ? error.message : 'Failed to reset portfolio')
     } finally {
       setIsLoading(false)
     }
@@ -323,6 +374,7 @@ export function CryptoPortfolioClient({ investment }: { investment: Investment }
   const handleSetCurrencySar = async () => {
     const ok = confirm('Set CRYPTO account currency to SAR?')
     if (!ok) return
+    setActionError('')
 
     setIsLoading(true)
     try {
@@ -341,7 +393,7 @@ export function CryptoPortfolioClient({ investment }: { investment: Investment }
       setInv((prev: Investment) => ({ ...prev, account: { ...prev.account, currency: updatedAccount.currency } }))
     } catch (error) {
       console.error('Set currency error:', error)
-      alert(error instanceof Error ? error.message : 'Failed to set currency')
+      setActionError(error instanceof Error ? error.message : 'Failed to set currency')
     } finally {
       setIsLoading(false)
     }
@@ -349,9 +401,26 @@ export function CryptoPortfolioClient({ investment }: { investment: Investment }
 
   const handleSubmitDeposit = async (e: FormEvent) => {
     e.preventDefault()
+    setActionError('')
 
     const amount = parseFloat(depositForm.amount)
     if (!Number.isFinite(amount) || amount <= 0) {
+      setActionError('Deposit amount must be greater than 0')
+      return
+    }
+
+    if (!depositForm.date) {
+      setActionError('Deposit date is required')
+      return
+    }
+
+    if (depositForm.date > todayDayKey) {
+      setActionError('Deposit date cannot be in the future')
+      return
+    }
+
+    if (portfolioStartDayKey && depositForm.date < portfolioStartDayKey) {
+      setActionError('Deposit date cannot be before portfolio start date')
       return
     }
 
@@ -373,15 +442,22 @@ export function CryptoPortfolioClient({ investment }: { investment: Investment }
       setShowDepositForm(false)
     } catch (error) {
       console.error('Deposit error:', error)
-      alert(error instanceof Error ? error.message : 'Failed to deposit')
+      setActionError(error instanceof Error ? error.message : 'Failed to deposit')
     } finally {
       setIsLoading(false)
     }
   }
 
   const handlePayZakat = async () => {
-    if (!haulCompleted) return
-    if (zakatRemaining <= 0) return
+    setActionError('')
+    if (!haulCompleted) {
+      setActionError('Haul is not complete yet')
+      return
+    }
+    if (zakatRemaining <= 0) {
+      setActionError('No zakat remaining to pay')
+      return
+    }
 
     const ok = confirm(`Pay zakat of ${formatCurrency(zakatRemaining, inv.account.currency)}?`)
     if (!ok) return
@@ -410,7 +486,7 @@ export function CryptoPortfolioClient({ investment }: { investment: Investment }
       setInv(updated)
     } catch (error) {
       console.error('Pay zakat error:', error)
-      alert(error instanceof Error ? error.message : 'Failed to pay zakat')
+      setActionError(error instanceof Error ? error.message : 'Failed to pay zakat')
     } finally {
       setIsLoading(false)
     }
@@ -456,22 +532,22 @@ export function CryptoPortfolioClient({ investment }: { investment: Investment }
           </div>
         </div>
 
-        <div className="grid grid-cols-1 md:grid-cols-4 gap-3">
-          <div className="bg-white/5 rounded-lg p-3 border border-white/10">
+        <div className="grid grid-cols-2 lg:grid-cols-6 gap-3">
+          <AnimatedCard index={0} className="bg-white/5 rounded-lg p-3 border border-white/10" hover={false}>
             <p className="text-[11px] text-slate-400 uppercase tracking-wider">Current Value</p>
             <p className="text-lg font-bold mt-0.5">{formatCurrency(currentValue, inv.account.currency)}</p>
-          </div>
-          <div className="bg-white/5 rounded-lg p-3 border border-white/10">
+          </AnimatedCard>
+          <AnimatedCard index={1} className="bg-white/5 rounded-lg p-3 border border-white/10" hover={false}>
             <p className="text-[11px] text-slate-400 uppercase tracking-wider">Invested</p>
             <p className="text-lg font-bold mt-0.5">{formatCurrency(investedAmount, inv.account.currency)}</p>
-          </div>
-          <div className="bg-white/5 rounded-lg p-3 border border-white/10">
+          </AnimatedCard>
+          <AnimatedCard index={2} className="bg-white/5 rounded-lg p-3 border border-white/10" hover={false}>
             <p className="text-[11px] text-slate-400 uppercase tracking-wider">Profit</p>
             <p className={`text-lg font-bold mt-0.5 ${profit >= 0 ? 'text-emerald-300' : 'text-red-300'}`}>
               {profit >= 0 ? '+' : '-'}{formatCurrency(Math.abs(profit), inv.account.currency)}
             </p>
-          </div>
-          <div className="bg-white/5 rounded-lg p-3 border border-white/10">
+          </AnimatedCard>
+          <AnimatedCard index={3} className="bg-white/5 rounded-lg p-3 border border-white/10" hover={false}>
             <p className="text-[11px] text-slate-400 uppercase tracking-wider">Monthly Growth</p>
             <p className="text-lg font-bold mt-0.5">
               {monthlyGrowth ? (
@@ -483,9 +559,24 @@ export function CryptoPortfolioClient({ investment }: { investment: Investment }
                 <span className="text-slate-300">—</span>
               )}
             </p>
-          </div>
+          </AnimatedCard>
+          <AnimatedCard index={4} className="bg-white/5 rounded-lg p-3 border border-white/10" hover={false}>
+            <p className="text-[11px] text-slate-400 uppercase tracking-wider">Zakat Paid</p>
+            <p className="text-lg font-bold mt-0.5 text-emerald-300">{formatCurrency(paidTotal, inv.account.currency)}</p>
+          </AnimatedCard>
+          <AnimatedCard index={5} className="bg-white/5 rounded-lg p-3 border border-white/10" hover={false}>
+            <p className="text-[11px] text-slate-400 uppercase tracking-wider">Zakat Remaining</p>
+            <p className="text-lg font-bold mt-0.5 text-amber-300">{formatCurrency(zakatRemaining, inv.account.currency)}</p>
+          </AnimatedCard>
         </div>
       </div>
+
+      {actionError && (
+        <div className="rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700 dark:border-red-500/30 dark:bg-red-500/10 dark:text-red-300">
+          {actionError}
+        </div>
+      )}
+
       <Card>
         <CardHeader>
           <div className="flex items-center justify-between">
@@ -603,10 +694,24 @@ export function CryptoPortfolioClient({ investment }: { investment: Investment }
           </div>
         </CardHeader>
         <CardContent>
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+          <div className="mb-4">
+            <div className="flex items-center justify-between text-xs text-slate-500 mb-1.5">
+              <span>Haul Progress</span>
+              <span>{haulProgressPct.toFixed(1)}%</span>
+            </div>
+            <div className="h-2 rounded-full bg-slate-200 overflow-hidden">
+              <div
+                className="h-full rounded-full bg-gradient-to-r from-emerald-500 to-cyan-500"
+                style={{ width: `${haulProgressPct}%` }}
+              />
+            </div>
+          </div>
+
+          <div className="grid grid-cols-1 md:grid-cols-4 gap-3">
             <div className="rounded-lg border border-gray-200 p-3">
               <p className="text-[11px] text-gray-500 uppercase tracking-wider">Haul Status</p>
               <p className="text-sm font-semibold text-gray-900 mt-0.5">{haulCompleted ? 'Complete' : 'Not complete yet'}</p>
+              {!haulCompleted && <p className="text-[11px] text-slate-500 mt-1">~{daysToHaulComplete} day(s) remaining</p>}
             </div>
             <div className="rounded-lg border border-gray-200 p-3">
               <p className="text-[11px] text-gray-500 uppercase tracking-wider">Zakat Due</p>
@@ -615,6 +720,10 @@ export function CryptoPortfolioClient({ investment }: { investment: Investment }
             <div className="rounded-lg border border-gray-200 p-3">
               <p className="text-[11px] text-gray-500 uppercase tracking-wider">Remaining</p>
               <p className="text-sm font-semibold text-gray-900 mt-0.5">{formatCurrency(zakatRemaining, inv.account.currency)}</p>
+            </div>
+            <div className="rounded-lg border border-gray-200 p-3">
+              <p className="text-[11px] text-gray-500 uppercase tracking-wider">Payments</p>
+              <p className="text-sm font-semibold text-gray-900 mt-0.5">{zakatPayments.length}</p>
             </div>
           </div>
         </CardContent>
@@ -640,6 +749,8 @@ export function CryptoPortfolioClient({ investment }: { investment: Investment }
                     setValueForm((prev: { date: string; currentValue: string }) => ({ ...prev, date: e.target.value }))
                   }
                   className="w-full rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm text-slate-900 shadow-sm transition-colors focus:border-emerald-500 focus:outline-none focus:ring-2 focus:ring-emerald-500/20 dark:border-white/10 dark:bg-slate-900/60 dark:text-slate-100"
+                  min={portfolioStartDayKey || undefined}
+                  max={todayDayKey || undefined}
                   required
                 />
               </div>
@@ -700,6 +811,8 @@ export function CryptoPortfolioClient({ investment }: { investment: Investment }
                     setDepositForm((prev: { date: string; amount: string }) => ({ ...prev, date: e.target.value }))
                   }
                   className="w-full rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm text-slate-900 shadow-sm transition-colors focus:border-emerald-500 focus:outline-none focus:ring-2 focus:ring-emerald-500/20 dark:border-white/10 dark:bg-slate-900/60 dark:text-slate-100"
+                  min={portfolioStartDayKey || undefined}
+                  max={todayDayKey || undefined}
                   required
                 />
               </div>

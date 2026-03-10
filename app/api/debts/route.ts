@@ -1,12 +1,10 @@
 import { NextRequest, NextResponse } from 'next/server'
-import type { Prisma } from '@prisma/client'
 import { prisma } from '@/lib/db'
 import { requireAuth } from '@/lib/rbac'
 import { createCashBucket } from '@/lib/cashBuckets'
+import { recomputeCashSetting } from '@/lib/cashBalance'
 
-const CASH_BALANCE_KEY = 'CASH_BALANCE'
-
-const getCashAccount = async (tx: Prisma.TransactionClient, currency = 'SAR') => {
+const getCashAccount = async (tx: any, currency = 'SAR') => {
   const existing = await tx.account.findFirst({ where: { type: 'CASH', isActive: true } })
   if (existing) return existing
   return tx.account.create({
@@ -73,28 +71,30 @@ export async function POST(req: NextRequest) {
     if (!Number.isFinite(amount) || amount <= 0) {
       return NextResponse.json({ error: 'Amount must be greater than 0' }, { status: 400 })
     }
+    if (Number.isNaN(borrowedAt.getTime())) {
+      return NextResponse.json({ error: 'Invalid borrowed date' }, { status: 400 })
+    }
+    if (Number.isNaN(haulStartDate.getTime())) {
+      return NextResponse.json({ error: 'Invalid haul start date' }, { status: 400 })
+    }
 
-    const result = await prisma.$transaction(async (tx: Prisma.TransactionClient) => {
+    const today = new Date()
+    const borrowedDay = new Date(borrowedAt.getFullYear(), borrowedAt.getMonth(), borrowedAt.getDate())
+    const haulStartDay = new Date(haulStartDate.getFullYear(), haulStartDate.getMonth(), haulStartDate.getDate())
+    const todayDay = new Date(today.getFullYear(), today.getMonth(), today.getDate())
+
+    if (borrowedDay.getTime() > todayDay.getTime()) {
+      return NextResponse.json({ error: 'Borrowed date cannot be in the future' }, { status: 400 })
+    }
+    if (haulStartDay.getTime() > todayDay.getTime()) {
+      return NextResponse.json({ error: 'Haul start date cannot be in the future' }, { status: 400 })
+    }
+    if (haulStartDay.getTime() > borrowedDay.getTime()) {
+      return NextResponse.json({ error: 'Haul start date cannot be after borrowed date' }, { status: 400 })
+    }
+
+    const result = await prisma.$transaction(async (tx: any) => {
       const cashAccount = await getCashAccount(tx, currency)
-
-      const setting = await tx.systemSetting.findUnique({ where: { key: CASH_BALANCE_KEY } })
-      const currentCash = setting ? Number(setting.value) : 0
-      const nextCash = currentCash + amount
-
-      if (setting) {
-        await tx.systemSetting.update({
-          where: { key: CASH_BALANCE_KEY },
-          data: { value: nextCash.toString() },
-        })
-      } else {
-        await tx.systemSetting.create({
-          data: {
-            key: CASH_BALANCE_KEY,
-            value: nextCash.toString(),
-            description: 'Available cash balance for investments',
-          },
-        })
-      }
 
       const bucket = await createCashBucket(tx, {
         amount,
@@ -142,6 +142,8 @@ export async function POST(req: NextRequest) {
           metadata: JSON.stringify({ debtId: debt.id, lenderName, cashBucketId: bucket.id }),
         },
       })
+
+      await recomputeCashSetting(tx, null)
 
       return debt
     })

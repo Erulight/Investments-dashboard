@@ -5,6 +5,7 @@ import { updateSukukSchema } from '@/lib/validation'
 import { logAudit } from '@/lib/audit'
 import type { Prisma } from '@prisma/client'
 import { creditBucketsForReceipt, withdrawFromBuckets } from '@/lib/cashBuckets'
+import { recomputeCashSetting } from '@/lib/cashBalance'
 import { parseDateInput } from '@/lib/date'
 import { createSnapshot } from '@/lib/snapshot'
 
@@ -17,38 +18,6 @@ const parseMetadata = (value: unknown) => {
   } catch {
     return null
   }
-}
-
-const CASH_BALANCE_KEY = 'CASH_BALANCE'
-
-const recomputeCashSetting = async (tx: Prisma.TransactionClient, personId: string | null) => {
-  const key = personId ? `${CASH_BALANCE_KEY}:${personId}` : CASH_BALANCE_KEY
-  const where = personId
-    ? {
-        personId,
-        NOT: [
-          { label: { startsWith: 'Debt •' } },
-          { label: 'Partner Commission' },
-        ],
-      }
-    : { personId: null }
-
-  const agg = await tx.cashBucket.aggregate({
-    where: where as any,
-    _sum: { balance: true },
-  })
-  const raw = agg?._sum?.balance
-  const total = Number.isFinite(raw as any) ? Number(raw) : 0
-
-  await tx.systemSetting.upsert({
-    where: { key },
-    update: { value: total.toString() },
-    create: {
-      key,
-      value: total.toString(),
-      description: 'Available cash balance for investments',
-    },
-  })
 }
 
 const getCashAccount = async (tx: Prisma.TransactionClient, currency = 'SAR') => {
@@ -251,44 +220,6 @@ export async function PUT(
       if (data.metadata !== undefined) updateData.metadata = data.metadata
 
       if (principalDelta !== 0) {
-        const cashSetting = await tx.systemSetting.findUnique({
-          where: { key: 'CASH_BALANCE' },
-        })
-        const currentCashRaw = cashSetting ? Number(cashSetting.value) : 0
-        let currentCash = Number.isFinite(currentCashRaw) ? currentCashRaw : 0
-        let nextCash = currentCash - principalDelta
-
-        if (principalDelta > 0 && nextCash < 0) {
-          const bucketAgg = await tx.cashBucket.aggregate({
-            _sum: { balance: true },
-          })
-          const bucketSumRaw = bucketAgg?._sum?.balance
-          const bucketSum = Number.isFinite(bucketSumRaw as any) ? Number(bucketSumRaw) : 0
-          if (bucketSum > currentCash + 0.0001) {
-            currentCash = bucketSum
-            nextCash = currentCash - principalDelta
-          }
-        }
-
-        if (principalDelta > 0 && nextCash < 0) {
-          throw new Error('INSUFFICIENT_CASH')
-        }
-
-        if (cashSetting) {
-          await tx.systemSetting.update({
-            where: { key: 'CASH_BALANCE' },
-            data: { value: nextCash.toString() },
-          })
-        } else {
-          await tx.systemSetting.create({
-            data: {
-              key: 'CASH_BALANCE',
-              value: nextCash.toString(),
-              description: 'Available cash balance for investments',
-            },
-          })
-        }
-
         const accountId = updateData.accountId ?? existingSukuk.accountId
         const account = await tx.account.findUnique({
           where: { id: accountId },
@@ -316,6 +247,8 @@ export async function PUT(
             notes: 'Principal decrease',
           })
         }
+
+        await recomputeCashSetting(tx, null)
 
         await tx.transaction.create({
           data: {

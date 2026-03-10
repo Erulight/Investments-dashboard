@@ -3,12 +3,10 @@ import { getCurrentUser } from '@/lib/auth'
 import { prisma } from '@/lib/db'
 import { requireModuleAccess } from '@/lib/rbac'
 import { createAuditLog } from '@/lib/audit'
-import type { Prisma } from '@prisma/client'
 import { withdrawFromBuckets } from '@/lib/cashBuckets'
+import { recomputeCashSetting } from '@/lib/cashBalance'
 
-const CASH_BALANCE_KEY = 'CASH_BALANCE'
-
-const getCashAccount = async (tx: Prisma.TransactionClient, currency = 'SAR') => {
+const getCashAccount = async (tx: any, currency = 'SAR') => {
   const existing = await tx.account.findFirst({
     where: { type: 'CASH', isActive: true },
   })
@@ -53,6 +51,13 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: 'Invalid date' }, { status: 400 })
     }
 
+    const selectedDay = new Date(date.getFullYear(), date.getMonth(), date.getDate())
+    const today = new Date()
+    const todayDay = new Date(today.getFullYear(), today.getMonth(), today.getDate())
+    if (selectedDay.getTime() > todayDay.getTime()) {
+      return NextResponse.json({ error: 'Deposit date cannot be in the future' }, { status: 400 })
+    }
+
     const inv = await prisma.investment.findUnique({
       where: { id: cryptoId },
       include: { account: true },
@@ -74,8 +79,17 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: 'Invalid crypto portfolio' }, { status: 400 })
     }
 
-    // Strict validation: ensure cash was actually available on or before the selected date,
-    // not just available today in CASH_BALANCE.
+    const portfolioStartAt = new Date(inv.startDate)
+    const portfolioStartDay = new Date(
+      portfolioStartAt.getFullYear(),
+      portfolioStartAt.getMonth(),
+      portfolioStartAt.getDate(),
+    )
+    if (!Number.isNaN(portfolioStartDay.getTime()) && selectedDay.getTime() < portfolioStartDay.getTime()) {
+      return NextResponse.json({ error: 'Deposit date cannot be before portfolio start date' }, { status: 400 })
+    }
+
+    // Strict validation: ensure cash was actually available on or before the selected date.
     const currency = inv.account?.currency || 'SAR'
     const eligibleBuckets = await prisma.cashBucket.findMany({
       where: {
@@ -105,7 +119,7 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: 'Insufficient cash available for selected date' }, { status: 400 })
     }
 
-    const updated = await prisma.$transaction(async (tx: Prisma.TransactionClient) => {
+    const updated = await prisma.$transaction(async (tx: any) => {
       const notes = `Crypto Deposit • ${inv.name}`
 
       await withdrawFromBuckets(tx, {
@@ -118,27 +132,7 @@ export async function POST(request: Request) {
         availableOnOrBefore: date,
       })
 
-      const setting = await tx.systemSetting.findUnique({ where: { key: CASH_BALANCE_KEY } })
-      const currentCash = setting ? Number(setting.value) : 0
-      const nextCash = currentCash - amount
-      if (nextCash < 0) {
-        throw new Error('INSUFFICIENT_CASH')
-      }
-
-      if (setting) {
-        await tx.systemSetting.update({
-          where: { key: CASH_BALANCE_KEY },
-          data: { value: nextCash.toString() },
-        })
-      } else {
-        await tx.systemSetting.create({
-          data: {
-            key: CASH_BALANCE_KEY,
-            value: nextCash.toString(),
-            description: 'Available cash balance for investments',
-          },
-        })
-      }
+      await recomputeCashSetting(tx, null)
 
       const cashAccount = await getCashAccount(tx, currency)
       await tx.transaction.create({

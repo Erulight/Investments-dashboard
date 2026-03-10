@@ -3,12 +3,10 @@ import { getCurrentUser } from '@/lib/auth'
 import { prisma } from '@/lib/db'
 import { requireModuleAccess } from '@/lib/rbac'
 import { createAuditLog } from '@/lib/audit'
-import type { Prisma } from '@prisma/client'
 import { withdrawFromBuckets } from '@/lib/cashBuckets'
+import { recomputeCashSetting } from '@/lib/cashBalance'
 
-const CASH_BALANCE_KEY = 'CASH_BALANCE'
-
-const getCashAccount = async (tx: Prisma.TransactionClient, currency = 'SAR') => {
+const getCashAccount = async (tx: any, currency = 'SAR') => {
   const existing = await tx.account.findFirst({
     where: { type: 'CASH', isActive: true },
   })
@@ -68,6 +66,24 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: 'Invalid periodEndAt' }, { status: 400 })
     }
 
+    const paymentDay = new Date(date.getFullYear(), date.getMonth(), date.getDate())
+    const today = new Date()
+    const todayDay = new Date(today.getFullYear(), today.getMonth(), today.getDate())
+    if (paymentDay.getTime() > todayDay.getTime()) {
+      return NextResponse.json({ error: 'Payment date cannot be in the future' }, { status: 400 })
+    }
+
+    if (periodStartAt && periodEndAt && periodStartAt.getTime() > periodEndAt.getTime()) {
+      return NextResponse.json({ error: 'periodStartAt cannot be after periodEndAt' }, { status: 400 })
+    }
+
+    if (periodEndAt) {
+      const periodEndDay = new Date(periodEndAt.getFullYear(), periodEndAt.getMonth(), periodEndAt.getDate())
+      if (paymentDay.getTime() < periodEndDay.getTime()) {
+        return NextResponse.json({ error: 'Payment date cannot be before period end date' }, { status: 400 })
+      }
+    }
+
     const inv = await prisma.investment.findUnique({
       where: { id: cryptoId },
       include: { account: true },
@@ -89,7 +105,12 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: 'Invalid crypto portfolio' }, { status: 400 })
     }
 
-    const updated = await prisma.$transaction(async (tx: Prisma.TransactionClient) => {
+    const previousPayments = Array.isArray(metadata.zakatPayments) ? metadata.zakatPayments : []
+    if (previousPayments.some((payment: any) => payment?.periodKey === periodKey)) {
+      return NextResponse.json({ error: 'Zakat is already paid for this period' }, { status: 400 })
+    }
+
+    const updated = await prisma.$transaction(async (tx: any) => {
       const currency = inv.account?.currency || 'SAR'
       const notes = `Crypto Zakat Payment • ${inv.name}`
 
@@ -103,27 +124,7 @@ export async function POST(request: Request) {
         availableOnOrBefore: date,
       })
 
-      const cashSetting = await tx.systemSetting.findUnique({ where: { key: CASH_BALANCE_KEY } })
-      const currentCash = cashSetting ? Number(cashSetting.value) : 0
-      const nextCash = currentCash - amount
-      if (nextCash < 0) {
-        throw new Error('INSUFFICIENT_CASH')
-      }
-
-      if (cashSetting) {
-        await tx.systemSetting.update({
-          where: { key: CASH_BALANCE_KEY },
-          data: { value: nextCash.toString() },
-        })
-      } else {
-        await tx.systemSetting.create({
-          data: {
-            key: CASH_BALANCE_KEY,
-            value: nextCash.toString(),
-            description: 'Available cash balance for investments',
-          },
-        })
-      }
+      await recomputeCashSetting(tx, null)
 
       const cashAccount = await getCashAccount(tx, currency)
       await tx.transaction.create({
@@ -144,9 +145,8 @@ export async function POST(request: Request) {
         },
       })
 
-      const prevPayments = Array.isArray(metadata.zakatPayments) ? metadata.zakatPayments : []
       const nextPayments = [
-        ...prevPayments,
+        ...previousPayments,
         {
           id: crypto.randomUUID(),
           periodKey,

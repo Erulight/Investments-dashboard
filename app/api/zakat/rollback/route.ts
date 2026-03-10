@@ -2,8 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { prisma } from '@/lib/db'
 import { requireAuth } from '@/lib/rbac'
 import { logAudit } from '@/lib/audit'
-
-const CASH_BALANCE_KEY = 'CASH_BALANCE'
+import { recomputeCashSetting } from '@/lib/cashBalance'
 
 export async function POST(req: NextRequest) {
   try {
@@ -19,7 +18,7 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: 'Bucket is required' }, { status: 400 })
     }
 
-    const result = await prisma.$transaction(async (tx) => {
+    const result = await prisma.$transaction(async (tx: any) => {
       const bucket = await tx.cashBucket.findFirst({
         where: {
           id: bucketId,
@@ -71,6 +70,8 @@ export async function POST(req: NextRequest) {
           },
         })
 
+        await recomputeCashSetting(tx, user.personId || null)
+
         await logAudit(tx, {
           userId: user.id,
           action: 'UPDATE',
@@ -87,40 +88,50 @@ export async function POST(req: NextRequest) {
         return { success: true }
       }
 
-      const cashSetting = await tx.systemSetting.findUnique({
-        where: { key: CASH_BALANCE_KEY },
-      })
-      const currentCash = cashSetting ? Number(cashSetting.value) : 0
-      const nextCash = currentCash + amount
-
-      if (cashSetting) {
-        await tx.systemSetting.update({
-          where: { key: CASH_BALANCE_KEY },
-          data: { value: nextCash.toString() },
-        })
-      } else {
-        await tx.systemSetting.create({
-          data: {
-            key: CASH_BALANCE_KEY,
-            value: nextCash.toString(),
-            description: 'Available cash balance for investments',
-          },
-        })
-      }
-
-      const dayStart = new Date(targetMovement.date.getFullYear(), targetMovement.date.getMonth(), targetMovement.date.getDate())
-      const dayEnd = new Date(targetMovement.date.getFullYear(), targetMovement.date.getMonth(), targetMovement.date.getDate() + 1)
-
-      await tx.transaction.deleteMany({
+      const movementMarker = `"movementId":"${targetMovement.id}"`
+      let linkedLedgerTx = await tx.transaction.findFirst({
         where: {
           type: 'ZAKAT_PAID',
           amount: -amount,
-          OR: [
-            { metadata: { contains: targetMovement.id } },
-            { date: { gte: dayStart, lt: dayEnd } },
-          ],
+          personId: null,
+          metadata: { contains: movementMarker },
         },
+        orderBy: [{ date: 'desc' }],
       })
+
+      if (!linkedLedgerTx) {
+        const bucketMarker = `"bucketId":"${bucketId}"`
+        const paymentDayStart = new Date(
+          targetMovement.date.getFullYear(),
+          targetMovement.date.getMonth(),
+          targetMovement.date.getDate(),
+        )
+        const paymentDayEnd = new Date(
+          targetMovement.date.getFullYear(),
+          targetMovement.date.getMonth(),
+          targetMovement.date.getDate() + 1,
+        )
+
+        linkedLedgerTx = await tx.transaction.findFirst({
+          where: {
+            type: 'ZAKAT_PAID',
+            amount: -amount,
+            personId: null,
+            metadata: { contains: bucketMarker },
+            date: {
+              gte: paymentDayStart,
+              lt: paymentDayEnd,
+            },
+          },
+          orderBy: [{ date: 'desc' }],
+        })
+      }
+
+      if (linkedLedgerTx) {
+        await tx.transaction.delete({
+          where: { id: linkedLedgerTx.id },
+        })
+      }
 
       const remainingPayment = await tx.cashBucketMovement.findFirst({
         where: { cashBucketId: bucketId, type: 'ZAKAT_PAID' },
@@ -133,6 +144,8 @@ export async function POST(req: NextRequest) {
           lastZakatPaidDate: remainingPayment ? remainingPayment.date : null,
         },
       })
+
+      await recomputeCashSetting(tx, null)
 
       await logAudit(tx, {
         userId: user.id,

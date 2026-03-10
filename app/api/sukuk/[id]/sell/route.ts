@@ -5,9 +5,8 @@ import { logAudit } from '@/lib/audit'
 import { creditBucketsForReceipt } from '@/lib/cashBuckets'
 import { createCashBucket } from '@/lib/cashBuckets'
 import { withdrawFromBuckets } from '@/lib/cashBuckets'
+import { getBucketCashBalance, recomputeCashSetting } from '@/lib/cashBalance'
 import { createSnapshot } from '@/lib/snapshot'
-
-const CASH_BALANCE_KEY = 'CASH_BALANCE'
 
 const parseMetadata = (value: unknown) => {
   if (!value) return null
@@ -18,45 +17,6 @@ const parseMetadata = (value: unknown) => {
   } catch {
     return null
   }
-}
-
-const getBucketScopeWhere = (personId: string | null) => {
-  if (personId) {
-    return {
-      personId,
-      NOT: [
-        { label: { startsWith: 'Debt •' } },
-        { label: 'Partner Commission' },
-      ],
-    } as any
-  }
-  return { personId: null } as any
-}
-
-const getBucketCashBalance = async (db: any, personId: string | null) => {
-  const agg = await db.cashBucket.aggregate({
-    where: getBucketScopeWhere(personId),
-    _sum: { balance: true },
-  })
-  const value = Number(agg?._sum?.balance || 0)
-  return Number.isFinite(value) ? value : 0
-}
-
-const recomputeCashSetting = async (tx: any, personId: string | null) => {
-  const key = personId ? `${CASH_BALANCE_KEY}:${personId}` : CASH_BALANCE_KEY
-  const balance = await getBucketCashBalance(tx, personId)
-
-  await tx.systemSetting.upsert({
-    where: { key },
-    update: { value: balance.toString() },
-    create: {
-      key,
-      value: balance.toString(),
-      description: 'Available cash balance for investments',
-    },
-  })
-
-  return balance
 }
 
 export async function POST(

@@ -6,6 +6,7 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/Card'
 import { Button } from '@/components/ui/Button'
 import { DateInput } from '@/components/ui/DateInput'
 import { Modal } from '@/components/sukuk/SukukModal'
+import { AnimatedCard } from '@/components/ui/AnimatedCard'
 import { formatDateInput, toIsoDateInput } from '@/lib/date'
 
 type CashBucketInfo = {
@@ -39,6 +40,14 @@ type Debt = {
 
 const fmt = (n: number) => n.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })
 const fmtDate = (d: string) => new Date(d).toLocaleDateString('en-CA')
+const toDayKey = (value: string | Date) => {
+  const d = value instanceof Date ? value : new Date(value)
+  if (Number.isNaN(d.getTime())) return ''
+  const yyyy = d.getFullYear()
+  const mm = String(d.getMonth() + 1).padStart(2, '0')
+  const dd = String(d.getDate()).padStart(2, '0')
+  return `${yyyy}-${mm}-${dd}`
+}
 const fieldClassName = 'rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm text-slate-900 placeholder:text-slate-400 shadow-sm transition-colors focus:border-emerald-500 focus:outline-none focus:ring-2 focus:ring-emerald-500/20 dark:border-white/10 dark:bg-slate-900/60 dark:text-slate-100 dark:placeholder:text-slate-500 dark:focus:border-emerald-400 dark:focus:ring-emerald-400/20'
 
 export function DebtsClient() {
@@ -92,7 +101,15 @@ export function DebtsClient() {
     const totalBorrowed = debts.reduce((s, d) => s + (Number(d.amount) || 0), 0)
     const totalPaid = debts.reduce((s, d) => s + d.payments.reduce((p, x) => p + (Number(x.amount) || 0), 0), 0)
     const totalOutstanding = Math.max(0, totalBorrowed - totalPaid)
-    return { totalBorrowed, totalPaid, totalOutstanding }
+    const settledCount = debts.filter((d) => {
+      const paid = d.payments.reduce((sum, payment) => sum + (Number(payment.amount) || 0), 0)
+      return Math.max(0, Number(d.amount) - paid) <= 0.000001
+    }).length
+    const activeCount = debts.length - settledCount
+    const avgDebtSize = debts.length > 0 ? totalBorrowed / debts.length : 0
+    const coveragePct = totalBorrowed > 0 ? (totalPaid / totalBorrowed) * 100 : 0
+
+    return { totalBorrowed, totalPaid, totalOutstanding, settledCount, activeCount, avgDebtSize, coveragePct }
   }, [debts])
 
   const onCreate = async () => {
@@ -104,6 +121,7 @@ export function DebtsClient() {
       if (!createForm.lenderName.trim()) throw new Error('Lender name is required')
       if (!Number.isFinite(amount) || amount <= 0) throw new Error('Amount must be greater than 0')
       if (!borrowedAt) throw new Error('Invalid date')
+      if (borrowedAt > toDayKey(new Date())) throw new Error('Borrowed date cannot be in the future')
 
       const res = await fetch('/api/debts', {
         method: 'POST',
@@ -164,9 +182,11 @@ export function DebtsClient() {
   }
 
   const openPay = (debt: Debt) => {
+    const totalPaid = debt.payments.reduce((sum, p) => sum + (Number(p.amount) || 0), 0)
+    const outstanding = Math.max(0, Number(debt.amount) - totalPaid)
     setPayTarget(debt)
     setPayError('')
-    setPayForm({ amount: '', paidAt: formatDateInput(new Date()), notes: '' })
+    setPayForm({ amount: outstanding > 0 ? outstanding.toFixed(2) : '', paidAt: formatDateInput(new Date()), notes: '' })
   }
 
   const closePay = () => {
@@ -183,6 +203,18 @@ export function DebtsClient() {
       const paidAt = toIsoDateInput(payForm.paidAt)
       if (!Number.isFinite(amount) || amount <= 0) throw new Error('Amount must be greater than 0')
       if (!paidAt) throw new Error('Invalid date')
+      if (paidAt > toDayKey(new Date())) throw new Error('Payment date cannot be in the future')
+
+      const totalPaid = payTarget.payments.reduce((sum, p) => sum + (Number(p.amount) || 0), 0)
+      const outstanding = Math.max(0, Number(payTarget.amount) - totalPaid)
+      if (amount > outstanding + 0.000001) {
+        throw new Error('Payment exceeds outstanding amount')
+      }
+
+      const borrowedDay = toDayKey(payTarget.borrowedAt)
+      if (borrowedDay && paidAt < borrowedDay) {
+        throw new Error('Payment date cannot be before borrowed date')
+      }
 
       const res = await fetch(`/api/debts/${payTarget.id}/pay`, {
         method: 'POST',
@@ -193,8 +225,8 @@ export function DebtsClient() {
       if (!res.ok) throw new Error(json.error || 'Failed to record payment')
 
       setPayTarget(null)
-      window.location.reload()
       await load()
+      router.refresh()
     } catch (e) {
       setPayError(e instanceof Error ? e.message : 'Failed to record payment')
     } finally {
@@ -258,6 +290,15 @@ export function DebtsClient() {
       if (!editForm.lenderName.trim()) throw new Error('Lender name is required')
       if (!Number.isFinite(amount) || amount <= 0) throw new Error('Amount must be greater than 0')
       if (!borrowedAt) throw new Error('Invalid date')
+      if (borrowedAt > toDayKey(new Date())) throw new Error('Borrowed date cannot be in the future')
+
+      if (editTarget.payments.length > 0) {
+        const originalAmount = Number(editTarget.amount) || 0
+        const originalBorrowedDay = toDayKey(editTarget.borrowedAt)
+        if (Math.abs(amount - originalAmount) > 0.000001 || borrowedAt !== originalBorrowedDay) {
+          throw new Error('Cannot change amount or borrowed date after payments are recorded')
+        }
+      }
 
       const res = await fetch(`/api/debts/${editTarget.id}`, {
         method: 'PUT',
@@ -296,19 +337,31 @@ export function DebtsClient() {
       <div className="bg-gradient-to-r from-slate-800 to-slate-900 rounded-xl shadow-md p-6 text-white">
         <h1 className="text-2xl font-bold">Debts</h1>
         <p className="text-sm text-slate-400 mt-1">Record external debts, partial payments, and track outstanding balances.</p>
-        <div className="flex items-center gap-8 mt-4">
-          <div>
+        <div className="grid grid-cols-2 lg:grid-cols-6 gap-3 mt-4">
+          <AnimatedCard index={0} className="bg-white/5 border border-white/10 p-3" hover={false}>
             <div className="text-[11px] text-slate-400 uppercase tracking-wider">Borrowed</div>
-            <div className="text-xl font-bold tabular-nums">SAR {fmt(totals.totalBorrowed)}</div>
-          </div>
-          <div>
+            <div className="text-lg font-bold tabular-nums">SAR {fmt(totals.totalBorrowed)}</div>
+          </AnimatedCard>
+          <AnimatedCard index={1} className="bg-white/5 border border-white/10 p-3" hover={false}>
             <div className="text-[11px] text-slate-400 uppercase tracking-wider">Paid</div>
-            <div className="text-xl font-bold tabular-nums">SAR {fmt(totals.totalPaid)}</div>
-          </div>
-          <div>
+            <div className="text-lg font-bold tabular-nums text-emerald-300">SAR {fmt(totals.totalPaid)}</div>
+          </AnimatedCard>
+          <AnimatedCard index={2} className="bg-white/5 border border-white/10 p-3" hover={false}>
             <div className="text-[11px] text-slate-400 uppercase tracking-wider">Outstanding</div>
-            <div className="text-xl font-bold tabular-nums">SAR {fmt(totals.totalOutstanding)}</div>
-          </div>
+            <div className="text-lg font-bold tabular-nums text-rose-300">SAR {fmt(totals.totalOutstanding)}</div>
+          </AnimatedCard>
+          <AnimatedCard index={3} className="bg-white/5 border border-white/10 p-3" hover={false}>
+            <div className="text-[11px] text-slate-400 uppercase tracking-wider">Coverage</div>
+            <div className="text-lg font-bold tabular-nums">{totals.coveragePct.toFixed(1)}%</div>
+          </AnimatedCard>
+          <AnimatedCard index={4} className="bg-white/5 border border-white/10 p-3" hover={false}>
+            <div className="text-[11px] text-slate-400 uppercase tracking-wider">Active Debts</div>
+            <div className="text-lg font-bold tabular-nums">{totals.activeCount}</div>
+          </AnimatedCard>
+          <AnimatedCard index={5} className="bg-white/5 border border-white/10 p-3" hover={false}>
+            <div className="text-[11px] text-slate-400 uppercase tracking-wider">Avg Ticket</div>
+            <div className="text-lg font-bold tabular-nums">SAR {fmt(totals.avgDebtSize)}</div>
+          </AnimatedCard>
         </div>
       </div>
 

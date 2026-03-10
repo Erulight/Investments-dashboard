@@ -2,8 +2,8 @@ import { NextRequest, NextResponse } from 'next/server'
 import { prisma } from '@/lib/db'
 import { requireAuth } from '@/lib/rbac'
 import { logAudit } from '@/lib/audit'
-import { creditBucketsForReceipt } from '@/lib/cashBuckets'
-import { createCashBucket } from '@/lib/cashBuckets'
+import { creditBucketsForReceipt, createCashBucket } from '@/lib/cashBuckets'
+import { recomputeCashSetting } from '@/lib/cashBalance'
 
 const toDate = (value?: string | Date | null) => {
   if (!value) return null
@@ -52,6 +52,13 @@ export async function POST(
       return NextResponse.json({ error: 'Invalid date' }, { status: 400 })
     }
 
+    const today = new Date()
+    const rollbackDay = new Date(date.getFullYear(), date.getMonth(), date.getDate())
+    const todayDay = new Date(today.getFullYear(), today.getMonth(), today.getDate())
+    if (rollbackDay.getTime() > todayDay.getTime()) {
+      return NextResponse.json({ error: 'Rollback date cannot be in the future' }, { status: 400 })
+    }
+
     const investment = await prisma.investment.findUnique({
       where: { id },
       include: {
@@ -62,6 +69,18 @@ export async function POST(
 
     if (!investment) {
       return NextResponse.json({ error: 'Sukuk not found' }, { status: 404 })
+    }
+
+    const investmentStartAt = toDate(investment.startDate)
+    if (investmentStartAt) {
+      const startDay = new Date(
+        investmentStartAt.getFullYear(),
+        investmentStartAt.getMonth(),
+        investmentStartAt.getDate(),
+      )
+      if (rollbackDay.getTime() < startDay.getTime()) {
+        return NextResponse.json({ error: 'Rollback date cannot be before investment start date' }, { status: 400 })
+      }
     }
 
     if (user.role === 'PARTNER') {
@@ -98,27 +117,6 @@ export async function POST(
         },
       })
 
-      const cashSetting = await tx.systemSetting.findUnique({
-        where: { key: 'CASH_BALANCE' },
-      })
-      const currentCash = cashSetting ? Number(cashSetting.value) : 0
-      const nextCash = currentCash + remainingPrincipal
-
-      if (cashSetting) {
-        await tx.systemSetting.update({
-          where: { key: 'CASH_BALANCE' },
-          data: { value: nextCash.toString() },
-        })
-      } else {
-        await tx.systemSetting.create({
-          data: {
-            key: 'CASH_BALANCE',
-            value: nextCash.toString(),
-            description: 'Available cash balance for investments',
-          },
-        })
-      }
-
       if (user.role === 'PARTNER') {
         const participants = Array.isArray(investment.dealParticipants)
           ? investment.dealParticipants
@@ -148,6 +146,8 @@ export async function POST(
           notes: notes || null,
         })
       }
+
+      await recomputeCashSetting(tx, user.role === 'PARTNER' ? (user.personId || null) : null)
 
       const cashAccount = await tx.account.findFirst({
         where: { type: 'CASH', isActive: true },

@@ -3,11 +3,9 @@ import { getCurrentUser } from '@/lib/auth'
 import { prisma } from '@/lib/db'
 import { requireModuleAccess } from '@/lib/rbac'
 import { createAuditLog } from '@/lib/audit'
-import type { Prisma } from '@prisma/client'
+import { recomputeCashSetting } from '@/lib/cashBalance'
 
-const CASH_BALANCE_KEY = 'CASH_BALANCE'
-
-const getCashAccount = async (tx: Prisma.TransactionClient, currency = 'SAR') => {
+const getCashAccount = async (tx: any, currency = 'SAR') => {
   const existing = await tx.account.findFirst({
     where: { type: 'CASH', isActive: true },
   })
@@ -66,7 +64,7 @@ export async function POST(request: Request) {
     const currency = inv.account?.currency || 'SAR'
     const nowIso = new Date().toISOString()
 
-    const updated = await prisma.$transaction(async (tx: Prisma.TransactionClient) => {
+    const updated = await prisma.$transaction(async (tx: any) => {
       const investOutMovements = await tx.cashBucketMovement.findMany({
         where: {
           investmentId: cryptoId,
@@ -103,24 +101,7 @@ export async function POST(request: Request) {
           },
         })
 
-        const setting = await tx.systemSetting.findUnique({ where: { key: CASH_BALANCE_KEY } })
-        const currentCash = setting ? Number(setting.value) : 0
-        const nextCash = currentCash + refundTotal
-
-        if (setting) {
-          await tx.systemSetting.update({
-            where: { key: CASH_BALANCE_KEY },
-            data: { value: nextCash.toString() },
-          })
-        } else {
-          await tx.systemSetting.create({
-            data: {
-              key: CASH_BALANCE_KEY,
-              value: nextCash.toString(),
-              description: 'Available cash balance for investments',
-            },
-          })
-        }
+        await recomputeCashSetting(tx, null)
 
         const cashAccount = await getCashAccount(tx, currency)
         await tx.transaction.create({
