@@ -1,12 +1,50 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { prisma } from '@/lib/db'
-import type { Prisma } from '@prisma/client'
 import { requireAuth } from '@/lib/rbac'
 import { createCashBucket, withdrawFromBuckets } from '@/lib/cashBuckets'
 
 const CASH_BALANCE_KEY = 'CASH_BALANCE'
 
-const getCashAccount = async (tx: Prisma.TransactionClient, currency = 'SAR') => {
+const getBucketScopeWhere = (personId: string | null) => {
+  if (personId) {
+    return {
+      personId,
+      NOT: [
+        { label: { startsWith: 'Debt •' } },
+        { label: 'Partner Commission' },
+      ],
+    } as any
+  }
+  return { personId: null } as any
+}
+
+const getBucketCashBalance = async (db: any, personId: string | null) => {
+  const agg = await db.cashBucket.aggregate({
+    where: getBucketScopeWhere(personId),
+    _sum: { balance: true },
+  })
+  const value = Number(agg?._sum?.balance || 0)
+  return Number.isFinite(value) ? value : 0
+}
+
+const recomputeCashSetting = async (tx: any, personId: string | null) => {
+  const key = personId ? `${CASH_BALANCE_KEY}:${personId}` : CASH_BALANCE_KEY
+  const balance = await getBucketCashBalance(tx, personId)
+
+  await tx.systemSetting.upsert({
+    where: { key },
+    update: { value: balance.toString() },
+    create: {
+      key,
+      value: balance.toString(),
+      description: 'Available cash balance for investments',
+    },
+  })
+
+  return balance
+}
+
+const getCashAccount = async (tx: any, currency = 'SAR') => {
   const existing = await tx.account.findFirst({
     where: { type: 'CASH', isActive: true },
   })
@@ -34,32 +72,14 @@ export async function GET(req: NextRequest) {
     const yearStart = new Date(selectedYear, 0, 1)
     const yearEnd = new Date(selectedYear + 1, 0, 1)
 
-    const scopeKey = user.role === 'OWNER' ? 'OWNER' : user.personId!
-    const cashBalanceKey = user.role === 'OWNER' ? CASH_BALANCE_KEY : `${CASH_BALANCE_KEY}:${scopeKey}`
-
     const cashAccount = await prisma.account.findFirst({
       where: { type: 'CASH', isActive: true },
     })
 
-    const setting = await prisma.systemSetting.findUnique({
-      where: { key: cashBalanceKey },
-    })
-    const currentCash = setting ? Number(setting.value) : 0
-
-    // For partners, the person-scoped CASH_BALANCE:<personId> setting is the source of truth.
-    // Transaction history may be incomplete for older flows, which would make derived balances incorrect.
+    // For partners, cash buckets are the source of truth.
+    // Transaction history can be incomplete in older flows, so settings are treated as derived values.
     if (user.role === 'PARTNER') {
-      const bucketAgg = await prisma.cashBucket.aggregate({
-        where: {
-          personId: user.personId,
-          NOT: [
-            { label: { startsWith: 'Debt •' } },
-            { label: 'Partner Commission' },
-          ],
-        } as any,
-        _sum: { balance: true },
-      })
-      const bucketSum = bucketAgg._sum.balance || 0
+      const bucketSum = await getBucketCashBalance(prisma, user.personId)
 
       const buckets = await prisma.cashBucket.findMany({
         where: {
@@ -98,36 +118,38 @@ export async function GET(req: NextRequest) {
         : []
 
       return NextResponse.json({
-        cashBalance: Number.isFinite(bucketSum) ? bucketSum : 0,
-        cashAtStart: Number.isFinite(bucketSum) ? bucketSum : 0,
-        cashAtEnd: Number.isFinite(bucketSum) ? bucketSum : 0,
+        cashBalance: bucketSum,
+        cashAtStart: bucketSum,
+        cashAtEnd: bucketSum,
         transactions,
         buckets,
         selectedYear,
       })
     }
 
-    const txScope = user.role === 'OWNER'
-      ? ({ personId: null } as any)
-      : ({ personId: user.personId } as any)
+    const ownerSetting = await prisma.systemSetting.findUnique({ where: { key: CASH_BALANCE_KEY } })
+    const ownerSettingValue = Number(ownerSetting?.value || 0)
+    const ownerBucketBalance = await getBucketCashBalance(prisma, null)
+
+    const ownerTxScope = user.personId
+      ? ({ OR: [{ personId: null }, { personId: user.personId }] } as any)
+      : ({ personId: null } as any)
 
     const allCashTxSum = cashAccount
       ? (
           await prisma.transaction.aggregate({
-            where: { accountId: cashAccount.id, ...txScope },
+            where: { accountId: cashAccount.id, ...ownerTxScope },
             _sum: { amount: true },
           })
         )._sum.amount || 0
       : 0
 
-    const offset = Number.isFinite(currentCash)
-      ? currentCash - (Number.isFinite(allCashTxSum) ? allCashTxSum : 0)
-      : 0
+    const offset = ownerBucketBalance - (Number.isFinite(allCashTxSum) ? allCashTxSum : 0)
 
     const cashAtStart = cashAccount
       ? (
           await prisma.transaction.aggregate({
-            where: { accountId: cashAccount.id, date: { lt: yearStart }, ...txScope },
+            where: { accountId: cashAccount.id, date: { lt: yearStart }, ...ownerTxScope },
             _sum: { amount: true },
           })
         )._sum.amount || 0
@@ -136,18 +158,18 @@ export async function GET(req: NextRequest) {
     const cashAtEnd = cashAccount
       ? (
           await prisma.transaction.aggregate({
-            where: { accountId: cashAccount.id, date: { lt: yearEnd }, ...txScope },
+            where: { accountId: cashAccount.id, date: { lt: yearEnd }, ...ownerTxScope },
             _sum: { amount: true },
           })
         )._sum.amount || 0
       : 0
 
-    const cashBalance = offset + (Number.isFinite(cashAtEnd) ? cashAtEnd : 0)
+    const cashBalance = ownerBucketBalance
 
     const buckets = await prisma.cashBucket.findMany({
       where: {
         balance: { gt: 0 },
-        ...(user.role === 'OWNER' ? ({ personId: null } as any) : ({ personId: user.personId } as any)),
+        personId: null,
       },
       orderBy: { haulStartDate: 'asc' },
       select: {
@@ -164,7 +186,7 @@ export async function GET(req: NextRequest) {
       ? await prisma.transaction.findMany({
           where: {
             accountId: cashAccount.id,
-            ...(user.role === 'OWNER' ? { personId: null } : { personId: user.personId }),
+            ...ownerTxScope,
             date: { gte: yearStart, lt: yearEnd },
           },
           orderBy: { date: 'desc' },
@@ -176,6 +198,9 @@ export async function GET(req: NextRequest) {
       cashBalance: Number.isFinite(cashBalance) ? cashBalance : 0,
       cashAtStart: offset + (Number.isFinite(cashAtStart) ? cashAtStart : 0),
       cashAtEnd: Number.isFinite(cashBalance) ? cashBalance : 0,
+      settingDelta: Number.isFinite(ownerSettingValue)
+        ? ownerSettingValue - ownerBucketBalance
+        : 0,
       transactions,
       buckets,
       selectedYear,
@@ -210,36 +235,28 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: 'Amount must be greater than 0' }, { status: 400 })
     }
 
-    const scopeKey = user.role === 'OWNER' ? 'OWNER' : user.personId!
-    const cashBalanceKey = user.role === 'OWNER' ? CASH_BALANCE_KEY : `${CASH_BALANCE_KEY}:${scopeKey}`
+    if (Number.isNaN(date.getTime())) {
+      return NextResponse.json({ error: 'Invalid date' }, { status: 400 })
+    }
 
-    const result = await prisma.$transaction(async (tx) => {
+    if (Number.isNaN(haulStartDate.getTime())) {
+      return NextResponse.json({ error: 'Invalid haul start date' }, { status: 400 })
+    }
+
+    const today = new Date()
+    if (date.getTime() > today.getTime()) {
+      return NextResponse.json({ error: 'Date cannot be in the future' }, { status: 400 })
+    }
+
+    if (direction === 'IN' && haulStartDate.getTime() > date.getTime()) {
+      return NextResponse.json({ error: 'Haul start date cannot be after entry date' }, { status: 400 })
+    }
+
+    const scopePersonId = user.role === 'OWNER' ? null : user.personId!
+
+    const result = await prisma.$transaction(async (tx: any) => {
       const cashAccount = await getCashAccount(tx, currency)
-      const setting = await tx.systemSetting.findUnique({
-        where: { key: cashBalanceKey },
-      })
-      const currentCash = setting ? Number(setting.value) : 0
       const delta = direction === 'IN' ? amount : -amount
-      const nextCash = currentCash + delta
-
-      if (nextCash < 0) {
-        throw new Error('INSUFFICIENT_CASH')
-      }
-
-      if (setting) {
-        await tx.systemSetting.update({
-          where: { key: cashBalanceKey },
-          data: { value: nextCash.toString() },
-        })
-      } else {
-        await tx.systemSetting.create({
-          data: {
-            key: cashBalanceKey,
-            value: nextCash.toString(),
-            description: 'Available cash balance for investments',
-          },
-        })
-      }
 
       if (direction === 'IN') {
         await createCashBucket(tx, {
@@ -250,7 +267,7 @@ export async function POST(req: NextRequest) {
           date,
           notes,
           type: 'CASH_IN',
-          personId: user.role === 'OWNER' ? null : user.personId,
+          personId: scopePersonId,
         })
       } else {
         await withdrawFromBuckets(tx, {
@@ -260,7 +277,7 @@ export async function POST(req: NextRequest) {
           type: 'CASH_OUT',
           notes,
           availableOnOrBefore: date,
-          personId: user.role === 'OWNER' ? null : user.personId,
+          personId: scopePersonId,
         })
       }
 
@@ -268,7 +285,7 @@ export async function POST(req: NextRequest) {
         data: {
           accountId: cashAccount.id,
           investmentId: null,
-          personId: user.role === 'OWNER' ? null : user.personId,
+          personId: scopePersonId,
           type: direction === 'IN' ? 'CASH_IN' : 'CASH_OUT',
           amount: delta,
           date,
@@ -276,7 +293,7 @@ export async function POST(req: NextRequest) {
         },
       })
 
-      return nextCash
+      return recomputeCashSetting(tx, scopePersonId)
     })
 
     return NextResponse.json({ cashBalance: result })

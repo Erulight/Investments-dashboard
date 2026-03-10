@@ -7,6 +7,8 @@ import { createCashBucket } from '@/lib/cashBuckets'
 import { withdrawFromBuckets } from '@/lib/cashBuckets'
 import { createSnapshot } from '@/lib/snapshot'
 
+const CASH_BALANCE_KEY = 'CASH_BALANCE'
+
 const parseMetadata = (value: unknown) => {
   if (!value) return null
   if (typeof value === 'object') return value as any
@@ -16,6 +18,45 @@ const parseMetadata = (value: unknown) => {
   } catch {
     return null
   }
+}
+
+const getBucketScopeWhere = (personId: string | null) => {
+  if (personId) {
+    return {
+      personId,
+      NOT: [
+        { label: { startsWith: 'Debt •' } },
+        { label: 'Partner Commission' },
+      ],
+    } as any
+  }
+  return { personId: null } as any
+}
+
+const getBucketCashBalance = async (db: any, personId: string | null) => {
+  const agg = await db.cashBucket.aggregate({
+    where: getBucketScopeWhere(personId),
+    _sum: { balance: true },
+  })
+  const value = Number(agg?._sum?.balance || 0)
+  return Number.isFinite(value) ? value : 0
+}
+
+const recomputeCashSetting = async (tx: any, personId: string | null) => {
+  const key = personId ? `${CASH_BALANCE_KEY}:${personId}` : CASH_BALANCE_KEY
+  const balance = await getBucketCashBalance(tx, personId)
+
+  await tx.systemSetting.upsert({
+    where: { key },
+    update: { value: balance.toString() },
+    create: {
+      key,
+      value: balance.toString(),
+      description: 'Available cash balance for investments',
+    },
+  })
+
+  return balance
 }
 
 export async function POST(
@@ -302,29 +343,9 @@ export async function POST(
       // Buyer must fund the purchase from their own cash buckets/balance.
       // This is partner-scoped and does not touch the owner's global CASH_BALANCE.
       if (paymentMode === 'CASH' && salePrice > 0) {
-        const buyerCashKey = `CASH_BALANCE:${buyerPersonId}`
-        const buyerSetting = await tx.systemSetting.findUnique({ where: { key: buyerCashKey } })
-        const buyerCurrentRaw = buyerSetting ? Number(buyerSetting.value) : 0
-        const buyerCurrent = Number.isFinite(buyerCurrentRaw) ? buyerCurrentRaw : 0
-        const buyerNext = buyerCurrent - salePrice
-
-        if (buyerNext < -0.0001) {
+        const buyerAvailable = await getBucketCashBalance(tx, buyerPersonId)
+        if (buyerAvailable + 0.0001 < salePrice) {
           throw new Error('INSUFFICIENT_CASH')
-        }
-
-        if (buyerSetting) {
-          await tx.systemSetting.update({
-            where: { key: buyerCashKey },
-            data: { value: buyerNext.toString() },
-          })
-        } else {
-          await tx.systemSetting.create({
-            data: {
-              key: buyerCashKey,
-              value: buyerNext.toString(),
-              description: 'Available cash balance for investments',
-            },
-          })
         }
 
         await withdrawFromBuckets(tx, {
@@ -360,6 +381,8 @@ export async function POST(
             },
           })
         }
+
+        await recomputeCashSetting(tx, buyerPersonId)
       }
 
       if (paymentMode === 'SETTLE_DEBT' && salePrice > 0) {
@@ -408,26 +431,20 @@ export async function POST(
 
       // Commission always goes to owner cash regardless of payment mode
       if (commissionAmount > 0 && !isReturnToOwner) {
-        const cashSetting = await tx.systemSetting.findUnique({
-          where: { key: 'CASH_BALANCE' },
+        await createCashBucket(tx, {
+          amount: commissionAmount,
+          haulStartDate: date,
+          currency: investment.account?.currency || 'SAR',
+          label: 'Partner Commission',
+          date,
+          notes: notes || `Commission from selling ${investment.name}`,
+          investmentId: investment.id,
+          type: 'CASH_IN',
+          personId: null,
+          excludeFromZakat: false,
         })
-        const currentCash = cashSetting ? Number(cashSetting.value) : 0
-        const nextCash = currentCash + commissionAmount
 
-        if (cashSetting) {
-          await tx.systemSetting.update({
-            where: { key: 'CASH_BALANCE' },
-            data: { value: nextCash.toString() },
-          })
-        } else {
-          await tx.systemSetting.create({
-            data: {
-              key: 'CASH_BALANCE',
-              value: nextCash.toString(),
-              description: 'Available cash balance for investments',
-            },
-          })
-        }
+        await recomputeCashSetting(tx, null)
 
         const cashAccount = await tx.account.findFirst({
           where: { type: 'CASH', isActive: true },
@@ -692,27 +709,6 @@ export async function POST(
       })
 
       if (paymentMode === 'CASH' && !isReturnToOwner) {
-        const cashSetting = await tx.systemSetting.findUnique({
-          where: { key: 'CASH_BALANCE' },
-        })
-        const currentCash = cashSetting ? Number(cashSetting.value) : 0
-        const nextCash = currentCash + salePrice + accruedProfitAtSale
-
-        if (cashSetting) {
-          await tx.systemSetting.update({
-            where: { key: 'CASH_BALANCE' },
-            data: { value: nextCash.toString() },
-          })
-        } else {
-          await tx.systemSetting.create({
-            data: {
-              key: 'CASH_BALANCE',
-              value: nextCash.toString(),
-              description: 'Available cash balance for investments',
-            },
-          })
-        }
-
         await creditBucketsForReceipt(tx, {
           investmentId: investment.id,
           amount: salePrice + accruedProfitAtSale,
@@ -722,6 +718,8 @@ export async function POST(
           notes: notes || null,
           personId: null,
         })
+
+        await recomputeCashSetting(tx, null)
 
       }
 

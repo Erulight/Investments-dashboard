@@ -1,12 +1,50 @@
 import { NextRequest, NextResponse } from 'next/server'
-import type { Prisma } from '@prisma/client'
 import { prisma } from '@/lib/db'
 import { requireAuth } from '@/lib/rbac'
 import { createCashBucket, withdrawFromBuckets } from '@/lib/cashBuckets'
 
 const CASH_BALANCE_KEY = 'CASH_BALANCE'
 
-const getCashAccount = async (tx: Prisma.TransactionClient, currency = 'SAR') => {
+const getBucketScopeWhere = (personId: string | null) => {
+  if (personId) {
+    return {
+      personId,
+      NOT: [
+        { label: { startsWith: 'Debt •' } },
+        { label: 'Partner Commission' },
+      ],
+    } as any
+  }
+  return { personId: null } as any
+}
+
+const getBucketCashBalance = async (db: any, personId: string | null) => {
+  const agg = await db.cashBucket.aggregate({
+    where: getBucketScopeWhere(personId),
+    _sum: { balance: true },
+  })
+  const value = Number(agg?._sum?.balance || 0)
+  return Number.isFinite(value) ? value : 0
+}
+
+const recomputeCashSetting = async (tx: any, personId: string | null) => {
+  const key = personId ? `${CASH_BALANCE_KEY}:${personId}` : CASH_BALANCE_KEY
+  const balance = await getBucketCashBalance(tx, personId)
+
+  await tx.systemSetting.upsert({
+    where: { key },
+    update: { value: balance.toString() },
+    create: {
+      key,
+      value: balance.toString(),
+      description: 'Available cash balance for investments',
+    },
+  })
+
+  return balance
+}
+
+const getCashAccount = async (tx: any, currency = 'SAR') => {
   const existing = await tx.account.findFirst({
     where: { type: 'CASH', isActive: true },
   })
@@ -52,6 +90,10 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: 'partnerPersonId is required' }, { status: 400 })
     }
 
+    if (user.personId && partnerPersonId === user.personId) {
+      return NextResponse.json({ error: 'Cannot transfer cash with your own profile' }, { status: 400 })
+    }
+
     if (user.role === 'PARTNER' && user.personId && partnerPersonId !== user.personId && direction === 'FROM_PARTNER') {
       return NextResponse.json({ error: 'Partners can only transfer from their own balance' }, { status: 403 })
     }
@@ -65,6 +107,11 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: 'Invalid transfer date' }, { status: 400 })
     }
 
+    const today = new Date()
+    if (transferDate.getTime() > today.getTime()) {
+      return NextResponse.json({ error: 'Transfer date cannot be in the future' }, { status: 400 })
+    }
+
     const amount = Math.abs(rawAmount)
 
     const partner = await prisma.person.findUnique({ where: { id: partnerPersonId } })
@@ -74,33 +121,11 @@ export async function POST(req: NextRequest) {
 
     const currency = 'SAR'
 
-    const result = await prisma.$transaction(async (tx) => {
+    const result = await prisma.$transaction(async (tx: any) => {
       const cashAccount = await getCashAccount(tx, currency)
 
       if (direction === 'TO_PARTNER') {
         // Owner sends cash to partner
-        const ownerSetting = await tx.systemSetting.findUnique({ where: { key: CASH_BALANCE_KEY } })
-        const ownerCurrent = ownerSetting ? Number(ownerSetting.value) : 0
-        const ownerNext = ownerCurrent - amount
-        if (ownerNext < 0) {
-          throw new Error('INSUFFICIENT_CASH_OWNER')
-        }
-
-        if (ownerSetting) {
-          await tx.systemSetting.update({
-            where: { key: CASH_BALANCE_KEY },
-            data: { value: ownerNext.toString() },
-          })
-        } else {
-          await tx.systemSetting.create({
-            data: {
-              key: CASH_BALANCE_KEY,
-              value: ownerNext.toString(),
-              description: 'Available cash balance for investments',
-            },
-          })
-        }
-
         // Withdraw from owner buckets so Zakat and buckets stay consistent
         await withdrawFromBuckets(tx, {
           amount,
@@ -124,27 +149,6 @@ export async function POST(req: NextRequest) {
             description: notes || `↗ Transfer to ${partner.name}`,
           },
         })
-
-        // Partner balance setting CASH_BALANCE:<partnerPersonId>
-        const partnerKey = `${CASH_BALANCE_KEY}:${partnerPersonId}`
-        const partnerSetting = await tx.systemSetting.findUnique({ where: { key: partnerKey } })
-        const partnerCurrent = partnerSetting ? Number(partnerSetting.value) : 0
-        const partnerNext = partnerCurrent + amount
-
-        if (partnerSetting) {
-          await tx.systemSetting.update({
-            where: { key: partnerKey },
-            data: { value: partnerNext.toString() },
-          })
-        } else {
-          await tx.systemSetting.create({
-            data: {
-              key: partnerKey,
-              value: partnerNext.toString(),
-              description: `Available cash balance for partner ${partner.name}`,
-            },
-          })
-        }
 
         // Partner bucket: Transfer from Owner
         await createCashBucket(tx, {
@@ -172,36 +176,16 @@ export async function POST(req: NextRequest) {
           },
         })
 
+        const ownerCashBalance = await recomputeCashSetting(tx, null)
+        const partnerCashBalance = await recomputeCashSetting(tx, partnerPersonId)
+
         return {
-          ownerCashBalance: ownerNext,
-          partnerCashBalance: partnerNext,
+          ownerCashBalance,
+          partnerCashBalance,
         }
       }
 
       // FROM_PARTNER: partner sends cash to owner (can be initiated by owner or partner)
-      const partnerKey = `${CASH_BALANCE_KEY}:${partnerPersonId}`
-      const partnerSetting = await tx.systemSetting.findUnique({ where: { key: partnerKey } })
-      const partnerCurrent = partnerSetting ? Number(partnerSetting.value) : 0
-      const partnerNext = partnerCurrent - amount
-      if (partnerNext < 0) {
-        throw new Error('INSUFFICIENT_CASH_PARTNER')
-      }
-
-      if (partnerSetting) {
-        await tx.systemSetting.update({
-          where: { key: partnerKey },
-          data: { value: partnerNext.toString() },
-        })
-      } else {
-        await tx.systemSetting.create({
-          data: {
-            key: partnerKey,
-            value: partnerNext.toString(),
-            description: `Available cash balance for partner ${partner.name}`,
-          },
-        })
-      }
-
       // Withdraw from partner buckets
       await withdrawFromBuckets(tx, {
         amount,
@@ -225,26 +209,6 @@ export async function POST(req: NextRequest) {
           description: notes || '↗ Transfer to Owner',
         },
       })
-
-      // Owner cash balance
-      const ownerSetting = await tx.systemSetting.findUnique({ where: { key: CASH_BALANCE_KEY } })
-      const ownerCurrent = ownerSetting ? Number(ownerSetting.value) : 0
-      const ownerNext = ownerCurrent + amount
-
-      if (ownerSetting) {
-        await tx.systemSetting.update({
-          where: { key: CASH_BALANCE_KEY },
-          data: { value: ownerNext.toString() },
-        })
-      } else {
-        await tx.systemSetting.create({
-          data: {
-            key: CASH_BALANCE_KEY,
-            value: ownerNext.toString(),
-            description: 'Available cash balance for investments',
-          },
-        })
-      }
 
       // Owner bucket: Transfer from Partner
       await createCashBucket(tx, {
@@ -272,9 +236,12 @@ export async function POST(req: NextRequest) {
         },
       })
 
+      const ownerCashBalance = await recomputeCashSetting(tx, null)
+      const partnerCashBalance = await recomputeCashSetting(tx, partnerPersonId)
+
       return {
-        ownerCashBalance: ownerNext,
-        partnerCashBalance: partnerNext,
+        ownerCashBalance,
+        partnerCashBalance,
       }
     })
 
@@ -282,6 +249,12 @@ export async function POST(req: NextRequest) {
   } catch (error) {
     console.error('Cash transfer error:', error)
     if (error instanceof Error) {
+      if (error.message === 'INSUFFICIENT_CASH') {
+        return NextResponse.json(
+          { error: 'Insufficient cash balance for this transfer' },
+          { status: 400 },
+        )
+      }
       if (error.message === 'INSUFFICIENT_CASH_OWNER') {
         return NextResponse.json(
           { error: 'Owner has insufficient cash balance' },

@@ -6,6 +6,7 @@ import { PremiumCashBalanceCard } from './PremiumCashBalanceCard'
 interface StatsData {
   portfolioValue: number
   cashBalance: number
+  cashSettingDelta?: number
   totalInvested: number
   totalProfit: number
   portfolioTrend?: number
@@ -22,6 +23,7 @@ interface StatsData {
 export function PremiumStatsGrid({
   portfolioValue,
   cashBalance,
+  cashSettingDelta,
   totalInvested,
   totalProfit,
   portfolioTrend,
@@ -51,9 +53,11 @@ export function PremiumStatsGrid({
 
       <PremiumCashBalanceCard
         initialCash={cashBalance}
+        settingDelta={cashSettingDelta}
         trend={cashTrend}
         sparklineData={cashSparkline}
         index={1}
+        role={role}
       />
       
       <PremiumStatsCard

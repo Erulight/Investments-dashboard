@@ -3,7 +3,6 @@ import { Card, CardHeader, CardTitle, CardContent } from '@/components/ui/Card'
 import { prisma } from '@/lib/db'
 import { DEMO_INVESTMENT_NAMES } from '@/lib/demo'
 import { YearFilter } from '@/components/dashboard/YearFilter'
-import { CashBalanceCard } from '@/components/dashboard/CashBalanceCard'
 import { ReportButton } from '@/components/dashboard/ReportButton'
 import { DashboardCharts } from '@/components/dashboard/DashboardCharts'
 import { PremiumStatsGrid } from '@/components/dashboard/PremiumStatsGrid'
@@ -28,6 +27,28 @@ export default async function DashboardPage({
   const selectedYear = Number.isFinite(parsedYear) ? parsedYear : new Date().getFullYear()
   const yearStart = new Date(selectedYear, 0, 1)
   const yearEnd = new Date(selectedYear + 1, 0, 1)
+
+  const getBucketScopeWhere = (personId: string | null) => {
+    if (personId) {
+      return {
+        personId,
+        NOT: [
+          { label: { startsWith: 'Debt •' } },
+          { label: 'Partner Commission' },
+        ],
+      } as any
+    }
+    return { personId: null } as any
+  }
+
+  const getBucketCashBalance = async (personId: string | null) => {
+    const agg = await prisma.cashBucket.aggregate({
+      where: getBucketScopeWhere(personId),
+      _sum: { balance: true },
+    })
+    const value = Number(agg?._sum?.balance || 0)
+    return Number.isFinite(value) ? value : 0
+  }
 
   const getOutstandingDebtsAt = async (atExclusive: Date) => {
     if (user.role !== 'OWNER') return 0
@@ -61,33 +82,40 @@ export default async function DashboardPage({
 
   const cashAccount = await prisma.account.findFirst({ where: { type: 'CASH', isActive: true } })
 
-  const cashSetting =
+  const ownerCashSetting =
     user.role === 'OWNER'
       ? await prisma.systemSetting.findUnique({ where: { key: 'CASH_BALANCE' } })
       : null
+  const ownerCashSettingValue = Number(ownerCashSetting?.value || 0)
 
-  const currentCash = user.role === 'OWNER' ? Number(cashSetting?.value || 0) : 0
+  const ownerTxScope = user.personId
+    ? ({ OR: [{ personId: null }, { personId: user.personId }] } as any)
+    : ({ personId: null } as any)
+
+  const ownerBucketCash = user.role === 'OWNER'
+    ? await getBucketCashBalance(null)
+    : 0
 
   const allCashTxSum =
     user.role === 'OWNER' && cashAccount
       ? (
           await prisma.transaction.aggregate({
-            where: { accountId: cashAccount.id },
+            where: { accountId: cashAccount.id, ...ownerTxScope },
             _sum: { amount: true },
           })
         )._sum.amount || 0
       : 0
 
   const cashOffset =
-    user.role === 'OWNER' && Number.isFinite(currentCash)
-      ? currentCash - (Number.isFinite(allCashTxSum) ? allCashTxSum : 0)
+    user.role === 'OWNER'
+      ? ownerBucketCash - (Number.isFinite(allCashTxSum) ? allCashTxSum : 0)
       : 0
 
   const cashAt = async (atExclusive: Date) => {
     if (user.role !== 'OWNER' || !cashAccount) return 0
     const sum = (
       await prisma.transaction.aggregate({
-        where: { accountId: cashAccount.id, date: { lt: atExclusive } },
+        where: { accountId: cashAccount.id, date: { lt: atExclusive }, ...ownerTxScope },
         _sum: { amount: true },
       })
     )._sum.amount || 0
@@ -96,21 +124,15 @@ export default async function DashboardPage({
 
   const cashAtStart = await cashAt(yearStart)
   const cashAtEnd = await cashAt(yearEnd)
-  let cashBalance = cashAtEnd
+  let cashBalance = user.role === 'OWNER' ? ownerBucketCash : cashAtEnd
+  let cashSettingDelta = user.role === 'OWNER' && Number.isFinite(ownerCashSettingValue)
+    ? ownerCashSettingValue - ownerBucketCash
+    : 0
 
   if (user.role === 'PARTNER' && user.personId) {
-    const bucketAgg = await prisma.cashBucket.aggregate({
-      where: {
-        personId: user.personId,
-        NOT: [
-          { label: { startsWith: 'Debt •' } },
-          { label: 'Partner Commission' },
-        ],
-      } as any,
-      _sum: { balance: true },
-    })
-    const bucketSum = Number(bucketAgg._sum.balance || 0)
+    const bucketSum = await getBucketCashBalance(user.personId)
     cashBalance = Number.isFinite(bucketSum) ? bucketSum : 0
+    cashSettingDelta = 0
   }
 
   if (dashboardDebug && user.role === 'OWNER') {
@@ -120,6 +142,7 @@ export default async function DashboardPage({
     console.log('[DASHBOARD_DEBUG] cashAtStart', cashAtStart)
     console.log('[DASHBOARD_DEBUG] cashAtEnd', cashAtEnd)
     console.log('[DASHBOARD_DEBUG] cashBalance', cashBalance)
+    console.log('[DASHBOARD_DEBUG] cashSettingDelta', cashSettingDelta)
   }
 
   let totalInvested = 0
@@ -449,6 +472,7 @@ export default async function DashboardPage({
       if (inv?.account?.type !== 'SUKUK') return false
       const participants = Array.isArray(inv.dealParticipants) ? inv.dealParticipants : []
       if (participants.length === 0) return false
+      if (!hasOwnerSellTx(inv)) return false
       const ownerPosition = getOwnerPosition(inv)
       return !ownerPosition || Number(ownerPosition.investedAmount || 0) <= 0
     }
@@ -857,6 +881,7 @@ export default async function DashboardPage({
       const txs = await prisma.transaction.findMany({
         where: {
           accountId: cashAccount.id,
+          ...ownerTxScope,
           date: { gte: yearStart, lt: yearEnd },
           type: {
             in: ['WITHDRAW_PROFIT', 'SELL_PROFIT_ACCRUED', 'PARTNER_COMMISSION'],
@@ -938,7 +963,7 @@ export default async function DashboardPage({
     }
 
     const scope = user.role === 'OWNER'
-      ? {}
+      ? ownerTxScope
       : ({ personId: user.personId } as any)
 
     const txs = await prisma.transaction.findMany({
@@ -983,11 +1008,41 @@ export default async function DashboardPage({
     return points
   })()
 
+  const liquiditySharePct = displayedValue > 0
+    ? Math.min(100, Math.max(0, (cashBalance / displayedValue) * 100))
+    : 0
+
+  const avgMonthlyCashflow = monthlyCashflow.length > 0
+    ? monthlyCashflow.reduce((sum, point) => sum + (Number(point.value) || 0), 0) / monthlyCashflow.length
+    : 0
+
+  const avgMonthlyOutflow = (() => {
+    const negatives = monthlyCashflow
+      .map((point) => Number(point.value) || 0)
+      .filter((value) => value < 0)
+      .map((value) => Math.abs(value))
+    if (negatives.length === 0) return 0
+    return negatives.reduce((sum, value) => sum + value, 0) / negatives.length
+  })()
+
+  const cashRunwayMonths = avgMonthlyOutflow > 0
+    ? cashBalance / avgMonthlyOutflow
+    : null
+
+  const topTypeConcentrationPct = (() => {
+    if (!Array.isArray(typeBreakdowns) || typeBreakdowns.length === 0) return 0
+    const total = typeBreakdowns.reduce((sum, item) => sum + (Number(item.value) || 0), 0)
+    if (total <= 0) return 0
+    const top = Math.max(...typeBreakdowns.map((item) => Number(item.value) || 0), 0)
+    return (top / total) * 100
+  })()
+
   const activity = await (async () => {
     const take = 12
     if (user.role === 'OWNER') {
       const txs = await prisma.transaction.findMany({
         where: {
+          ...ownerTxScope,
           date: { lt: yearEnd },
           OR: [
             { investment: { name: { notIn: DEMO_INVESTMENT_NAMES } } },
@@ -1081,6 +1136,7 @@ export default async function DashboardPage({
       <PremiumStatsGrid
         portfolioValue={displayedValue}
         cashBalance={cashBalance}
+        cashSettingDelta={cashSettingDelta}
         totalInvested={totalInvested}
         totalProfit={totalProfit}
         portfolioTrend={portfolioTrend}
@@ -1089,6 +1145,62 @@ export default async function DashboardPage({
         cashSparkline={cashSparkline}
         role={user.role as 'OWNER' | 'PARTNER'}
       />
+
+      <div className={`grid gap-3 ${user.role === 'OWNER' ? 'grid-cols-2 lg:grid-cols-5' : 'grid-cols-2 lg:grid-cols-3'}`}>
+        <AnimatedCard index={2}>
+          <div className="p-5">
+            <p className="text-xs font-medium text-slate-400 uppercase tracking-wider">Liquidity Share</p>
+            <div className="text-2xl font-bold text-cyan-400 mt-2 tabular-nums">{liquiditySharePct.toFixed(1)}%</div>
+            <p className="text-xs text-slate-500 mt-1">Cash / Total Portfolio</p>
+          </div>
+        </AnimatedCard>
+
+        <AnimatedCard index={3}>
+          <div className="p-5">
+            <p className="text-xs font-medium text-slate-400 uppercase tracking-wider">Avg Monthly Cashflow</p>
+            <div className={`text-2xl font-bold mt-2 tabular-nums ${avgMonthlyCashflow >= 0 ? 'text-emerald-400' : 'text-red-400'}`}>
+              SAR {round2(Math.abs(avgMonthlyCashflow)).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+            </div>
+            <p className="text-xs text-slate-500 mt-1">{avgMonthlyCashflow >= 0 ? 'Net inflow trend' : 'Net outflow trend'}</p>
+          </div>
+        </AnimatedCard>
+
+        <AnimatedCard index={4}>
+          <div className="p-5">
+            <p className="text-xs font-medium text-slate-400 uppercase tracking-wider">Cash Runway</p>
+            <div className="text-2xl font-bold text-indigo-400 mt-2 tabular-nums">
+              {cashRunwayMonths === null ? 'Stable' : `${round2(cashRunwayMonths).toFixed(1)}m`}
+            </div>
+            <p className="text-xs text-slate-500 mt-1">Based on average monthly outflow</p>
+          </div>
+        </AnimatedCard>
+
+        {user.role === 'OWNER' && (
+          <AnimatedCard index={5}>
+            <div className="p-5">
+              <p className="text-xs font-medium text-slate-400 uppercase tracking-wider">Cash Sync Health</p>
+              <div className={`text-2xl font-bold mt-2 tabular-nums ${Math.abs(cashSettingDelta) > 0.01 ? 'text-amber-400' : 'text-emerald-400'}`}>
+                {Math.abs(cashSettingDelta) > 0.01
+                  ? `${cashSettingDelta > 0 ? '+' : ''}${round2(cashSettingDelta).toFixed(2)}`
+                  : 'Synced'}
+              </div>
+              <p className="text-xs text-slate-500 mt-1">Setting vs bucket balance drift</p>
+            </div>
+          </AnimatedCard>
+        )}
+
+        {user.role === 'OWNER' && (
+          <AnimatedCard index={6}>
+            <div className="p-5">
+              <p className="text-xs font-medium text-slate-400 uppercase tracking-wider">Top Allocation Concentration</p>
+              <div className={`text-2xl font-bold mt-2 tabular-nums ${topTypeConcentrationPct > 60 ? 'text-amber-400' : 'text-emerald-400'}`}>
+                {topTypeConcentrationPct.toFixed(1)}%
+              </div>
+              <p className="text-xs text-slate-500 mt-1">Largest asset class share</p>
+            </div>
+          </AnimatedCard>
+        )}
+      </div>
 
 
       {user.role === 'PARTNER' && user.personId && (
