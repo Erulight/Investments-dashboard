@@ -240,6 +240,7 @@ export async function POST(
       let canonicalApr: number | undefined
       let canonicalFees: number | undefined
       let partnerParticipantId: string | null = null
+      let unmatchedPrincipalRestore = 0
       
       // Roll back receipt bucket balances and restore allocation principal.
       for (const movement of receiptMovements) {
@@ -265,6 +266,9 @@ export async function POST(
         }
 
         if (movement.type !== 'WITHDRAW_PROFIT') {
+          const principalRestore = Math.max(0, movementAmount)
+          if (principalRestore <= 0) continue
+
           const allocation = await tx.investmentBucketAllocation.findUnique({
             where: {
               investmentId_cashBucketId: {
@@ -274,13 +278,88 @@ export async function POST(
             },
           })
           if (allocation) {
+            const currentRemaining = Math.max(0, Number(allocation.principalRemaining || 0))
+            const allocatedCapRaw = Number(allocation.principalAllocated || 0)
+            const allocatedCap = Number.isFinite(allocatedCapRaw) && allocatedCapRaw > 0
+              ? allocatedCapRaw
+              : currentRemaining
+            const nextRemaining = allocatedCap > 0
+              ? Math.min(allocatedCap, currentRemaining + principalRestore)
+              : currentRemaining + principalRestore
+
             await tx.investmentBucketAllocation.update({
               where: { id: allocation.id },
               data: {
-                principalRemaining: allocation.principalRemaining + Math.max(0, movementAmount),
+                principalRemaining: nextRemaining,
               },
             })
+
+            const restoredOnMatched = Math.max(0, nextRemaining - currentRemaining)
+            const carryRestore = Math.max(0, principalRestore - restoredOnMatched)
+            if (carryRestore > 0.0001) {
+              unmatchedPrincipalRestore += carryRestore
+            }
+          } else {
+            unmatchedPrincipalRestore += principalRestore
           }
+        }
+      }
+
+      if (unmatchedPrincipalRestore > 0.0001) {
+        const scopedAllocations = await tx.investmentBucketAllocation.findMany({
+          where: {
+            investmentId: id,
+            ...(user.role === 'PARTNER'
+              ? { cashBucket: { personId: user.personId } }
+              : { cashBucket: { OR: [{ personId: null }, { personId: user.personId || null }] } }),
+          } as any,
+          orderBy: { createdAt: 'asc' },
+          select: {
+            id: true,
+            principalAllocated: true,
+            principalRemaining: true,
+          },
+        })
+
+        let remainingToRestore = unmatchedPrincipalRestore
+
+        for (const alloc of scopedAllocations) {
+          if (remainingToRestore <= 0.0001) break
+
+          const currentRemaining = Math.max(0, Number(alloc.principalRemaining || 0))
+          const allocatedCapRaw = Number(alloc.principalAllocated || 0)
+          const allocatedCap = Number.isFinite(allocatedCapRaw) && allocatedCapRaw > 0
+            ? allocatedCapRaw
+            : currentRemaining
+          const room = Math.max(0, allocatedCap - currentRemaining)
+          if (room <= 0.0001) continue
+
+          const addBack = Math.min(room, remainingToRestore)
+          await tx.investmentBucketAllocation.update({
+            where: { id: alloc.id },
+            data: {
+              principalRemaining: currentRemaining + addBack,
+            },
+          })
+          remainingToRestore = Math.max(0, remainingToRestore - addBack)
+        }
+
+        if (remainingToRestore > 0.0001 && scopedAllocations.length > 0) {
+          const first = scopedAllocations[0]
+          const currentRemaining = Math.max(0, Number(first.principalRemaining || 0))
+          const currentAllocated = Math.max(0, Number(first.principalAllocated || 0))
+          await tx.investmentBucketAllocation.update({
+            where: { id: first.id },
+            data: {
+              principalAllocated: currentAllocated + remainingToRestore,
+              principalRemaining: currentRemaining + remainingToRestore,
+            },
+          })
+          remainingToRestore = 0
+        }
+
+        if (remainingToRestore > 0.0001) {
+          throw new Error('REOPEN_ALLOCATION_RESTORE_FAILED')
         }
       }
 
@@ -547,6 +626,9 @@ export async function POST(
       } else if (err.message === 'REOPEN_CASH_MISMATCH') {
         statusCode = 400
         errorMessage = 'Cannot reopen because receipt cash was already consumed from its bucket'
+      } else if (err.message === 'REOPEN_ALLOCATION_RESTORE_FAILED') {
+        statusCode = 409
+        errorMessage = 'Cannot reopen because principal allocations could not be restored safely'
       } else if (err.message.startsWith('REOPEN_BLOCKED_RECEIPT_USED')) {
         statusCode = 409
         const rawTargets = err.message.split(':').slice(1).join(':')

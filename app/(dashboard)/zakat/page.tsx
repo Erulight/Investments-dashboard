@@ -271,6 +271,96 @@ export default async function ZakatPage() {
   const scopeKey = user.role === 'OWNER' ? 'OWNER' : user.personId!
   const nisabMetKey = `NISAB_MET_SINCE:${scopeKey}`
 
+  if (user.role === 'PARTNER' && user.personId) {
+    const cashAccount = await prisma.account.findFirst({
+      where: { type: 'CASH', isActive: true },
+      select: { id: true, currency: true },
+    })
+
+    const partnerBuckets = await prisma.cashBucket.findMany({
+      where: {
+        personId: user.personId,
+        OR: [
+          { label: null },
+          {
+            AND: [
+              { NOT: { label: { startsWith: 'Debt •' } } },
+              { NOT: { label: 'Partner Commission' } },
+            ],
+          },
+        ],
+      } as any,
+      select: { balance: true },
+    })
+
+    const partnerBucketBalance = partnerBuckets.reduce((sum: number, b: any) => {
+      const balance = Number(b?.balance)
+      return sum + (Number.isFinite(balance) ? Math.max(0, balance) : 0)
+    }, 0)
+
+    if (partnerBucketBalance <= 0.0001) {
+      const cashSetting = await prisma.systemSetting.findUnique({
+        where: { key: `CASH_BALANCE:${user.personId}` },
+        select: { value: true },
+      })
+      const settingBalance = Math.max(0, Number(cashSetting?.value || 0))
+
+      let txNetBalance = 0
+      let firstPositiveTxDate: Date | null = null
+      if (cashAccount?.id) {
+        const txScope = {
+          accountId: cashAccount.id,
+          personId: user.personId,
+          NOT: { type: 'PARTNER_COMMISSION' },
+        } as any
+
+        const txAgg = await prisma.transaction.aggregate({
+          where: txScope,
+          _sum: { amount: true },
+        })
+        txNetBalance = Math.max(0, Number(txAgg?._sum?.amount || 0))
+
+        const firstPositiveTx = await prisma.transaction.findFirst({
+          where: { ...txScope, amount: { gt: 0 } },
+          orderBy: { date: 'asc' },
+          select: { date: true },
+        })
+        firstPositiveTxDate = firstPositiveTx?.date ? new Date(firstPositiveTx.date) : null
+      }
+
+      const recoverAmount = Math.max(settingBalance, txNetBalance)
+      if (recoverAmount > 0.0001) {
+        const anchorRaw =
+          firstPositiveTxDate && !Number.isNaN(firstPositiveTxDate.getTime())
+            ? firstPositiveTxDate
+            : new Date()
+        const anchorDate = new Date(anchorRaw.getFullYear(), anchorRaw.getMonth(), anchorRaw.getDate())
+
+        await prisma.cashBucket.create({
+          data: {
+            label: 'Partner Legacy Cash Sync',
+            currency: cashAccount?.currency || 'SAR',
+            balance: recoverAmount,
+            haulStartDate: anchorDate,
+            excludeFromZakat: false,
+            personId: user.personId,
+            movements: {
+              create: {
+                investmentId: null,
+                amount: recoverAmount,
+                type: 'CASH_IN',
+                date: anchorDate,
+                notes: 'Auto-synced from legacy partner cash records',
+              },
+            },
+          } as any,
+        })
+
+        await recomputeCashSetting(prisma, user.personId)
+      }
+    }
+  }
+
   if (user.role === 'OWNER') {
     const savingsInvestments = await prisma.investment.findMany({
       where: { account: { type: 'CIRCLYS' } },
