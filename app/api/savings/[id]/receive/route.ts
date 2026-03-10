@@ -14,6 +14,17 @@ const diffDays = (start: Date, end: Date) => {
   return Math.max(0, Math.round((e.getTime() - s.getTime()) / (1000 * 60 * 60 * 24)))
 }
 
+const getReceiptMonth = (meta: any) => Math.max(0, Math.floor(Number(meta?.receiptMonth || 0)))
+
+const isRewardEligiblePayment = (payment: any, receiptMonth: number) => {
+  if (!payment || payment.postReceipt === true) return false
+  const paymentMonth = Number(payment?.monthIndex)
+  if (Number.isInteger(paymentMonth) && receiptMonth > 0 && (paymentMonth + 1) > receiptMonth) {
+    return false
+  }
+  return true
+}
+
 /**
  * POST  — Receive the ROSCA payout for a Circlys plan.
  *         NEW RULE: Savings zakat is based on receipt date and first contribution date.
@@ -55,8 +66,14 @@ export async function POST(
       try { return JSON.parse(investment.metadata || '{}') } catch { return {} }
     })()
 
-    if (!meta.receiptMonth) {
+    const receiptMonth = getReceiptMonth(meta)
+    if (receiptMonth <= 0) {
       return NextResponse.json({ error: 'No receipt month configured for this plan' }, { status: 400 })
+    }
+
+    const configuredTotalMonths = Math.max(0, Math.floor(Number(meta.totalMonths || 0)))
+    if (configuredTotalMonths > 0 && receiptMonth > configuredTotalMonths) {
+      return NextResponse.json({ error: 'Invalid receipt month configuration' }, { status: 400 })
     }
 
     if (meta.received?.date) {
@@ -73,8 +90,24 @@ export async function POST(
       meta.payments && typeof meta.payments === 'object' ? meta.payments : {}
     const paymentEntries = Object.values(payments) as any[]
 
+    const missingPreReceiptMonths = Array.from({ length: receiptMonth }, (_, i) => i)
+      .filter((monthIdx) => !payments[String(monthIdx)]?.bucketId)
+      .map((monthIdx) => monthIdx + 1)
+
+    if (missingPreReceiptMonths.length > 0) {
+      return NextResponse.json(
+        {
+          error: `Cannot receive before all months up to receipt month are paid. Missing months: ${missingPreReceiptMonths.join(', ')}`,
+        },
+        { status: 409 },
+      )
+    }
+
     const rewardFromPayments = paymentEntries
-      .reduce((sum: number, p: any) => sum + (Number(p?.reward) || 0), 0)
+      .reduce((sum: number, p: any) => {
+        if (!isRewardEligiblePayment(p, receiptMonth)) return sum
+        return sum + (Number(p?.reward) || 0)
+      }, 0)
     const rewardFromMeta = Number(meta.totalRewardPaid || 0)
     const rewardFromLegacyConfig = Number(meta.totalReward || 0)
 
@@ -88,7 +121,6 @@ export async function POST(
         ? monthlyContribution * (rewardAmountPerMonth / 100)
         : rewardAmountPerMonth
       : 0
-    const receiptMonth = Math.max(0, Math.floor(Number(meta.receiptMonth || 0)))
     const totalMonths = Math.max(0, Math.floor(Number(meta.totalMonths || 0)))
     const scheduledRewardMonths = receiptMonth > 0
       ? receiptMonth
@@ -376,6 +408,23 @@ export async function DELETE(
       try { return JSON.parse(investment.metadata || '{}') } catch { return {} }
     })()
 
+    const payments: Record<string, any> =
+      meta.payments && typeof meta.payments === 'object' ? meta.payments : {}
+    const postReceiptPaidMonths = (Object.values(payments) as any[])
+      .filter((p: any) => p?.postReceipt === true && typeof p?.bucketId === 'string' && p.bucketId.length > 0)
+      .map((p: any) => Number(p?.monthIndex))
+      .filter((idx: number) => Number.isInteger(idx))
+      .map((idx: number) => idx + 1)
+
+    if (postReceiptPaidMonths.length > 0) {
+      return NextResponse.json(
+        {
+          error: `Cannot undo receive while post-receipt months are still paid. Undo these months first: ${postReceiptPaidMonths.join(', ')}`,
+        },
+        { status: 409 },
+      )
+    }
+
     if (!meta.received?.date) {
       return NextResponse.json({ error: 'No receipt to undo' }, { status: 400 })
     }
@@ -452,8 +501,6 @@ export async function DELETE(
       }
 
       // Restore monthly contribution buckets to be zakat-eligible again
-      const payments: Record<string, any> =
-        meta.payments && typeof meta.payments === 'object' ? meta.payments : {}
       const paymentEntries = Object.values(payments) as any[]
       const contributionBucketIds = paymentEntries
         .map((p: any) => p.bucketId)

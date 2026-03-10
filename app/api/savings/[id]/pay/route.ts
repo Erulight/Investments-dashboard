@@ -18,10 +18,31 @@ type UnpayBody = {
   monthIndex: number
 }
 
+type FundingSource = {
+  cashBucketId: string
+  amount: number
+}
+
 const addMonths = (date: Date, months: number) => {
   const d = new Date(date)
   d.setMonth(d.getMonth() + months)
   return d
+}
+
+const getReceiptMonth = (meta: any) => Math.max(0, Math.floor(Number(meta?.receiptMonth || 0)))
+
+const isPreReceiptMonthIndex = (receiptMonth: number, monthIndex: number) => {
+  if (receiptMonth <= 0) return true
+  return (monthIndex + 1) <= receiptMonth
+}
+
+const isRewardEligiblePayment = (payment: any, receiptMonth: number) => {
+  if (!payment || payment.postReceipt === true) return false
+  const paymentMonth = Number(payment?.monthIndex)
+  if (Number.isInteger(paymentMonth) && receiptMonth > 0 && (paymentMonth + 1) > receiptMonth) {
+    return false
+  }
+  return true
 }
 
 export async function POST(
@@ -80,6 +101,9 @@ export async function POST(
       }
     })()
 
+    const receiptMonth = getReceiptMonth(meta)
+    const hasReceived = Boolean(meta?.received?.date)
+
     const totalMonths = Number(meta.totalMonths || 0)
     if (totalMonths > 0 && monthIndex >= totalMonths) {
       return NextResponse.json({ error: 'monthIndex exceeds plan totalMonths' }, { status: 400 })
@@ -88,6 +112,20 @@ export async function POST(
     const payments: Record<string, any> = meta.payments && typeof meta.payments === 'object' ? meta.payments : {}
     if (payments[String(monthIndex)]?.bucketId) {
       return NextResponse.json({ error: 'This month is already paid' }, { status: 400 })
+    }
+
+    if (hasReceived && receiptMonth <= 0) {
+      return NextResponse.json(
+        { error: 'Invalid receipt configuration. Undo receive and configure receipt month first.' },
+        { status: 409 },
+      )
+    }
+
+    if (hasReceived && isPreReceiptMonthIndex(receiptMonth, monthIndex)) {
+      return NextResponse.json(
+        { error: 'Cannot modify months at or before receipt month after receive. Undo receive first.' },
+        { status: 409 },
+      )
     }
 
     const dueDate = addMonths(new Date(investment.startDate), monthIndex)
@@ -99,10 +137,14 @@ export async function POST(
     const contributionHaulStart = Number.isNaN(startAnchorRaw.getTime()) ? contributionDate : startAnchorRaw
 
     // Determine if this is a post-receipt month (deducts from cash instead of creating a new bucket)
-    const isPostReceipt =
-      meta.received?.date &&
-      meta.receiptMonth &&
-      (monthIndex + 1) > Number(meta.receiptMonth)
+    const isPostReceipt = hasReceived && receiptMonth > 0 && (monthIndex + 1) > receiptMonth
+    if (isPostReceipt && reward > 0.0001) {
+      return NextResponse.json(
+        { error: 'Reward is only allowed up to the receipt month' },
+        { status: 400 },
+      )
+    }
+    const rewardForPayment = isPostReceipt ? 0 : reward
 
     // Snapshot before making changes to savings plan
     await createSnapshot(prisma as any, {
@@ -114,18 +156,20 @@ export async function POST(
     })
 
     let bucketId: string
+    let postReceiptFundingSources: FundingSource[] = []
 
     if (isPostReceipt) {
       // Post-receipt: withdraw contribution from existing cash balance
       const contributionDeduct = amount
-      await prisma.$transaction(async (tx: any) => {
-        await withdrawFromBuckets(tx, {
+      const postReceiptResult = await prisma.$transaction(async (tx: any) => {
+        const paybackNote = `Circlys payback • ${investment.name} • Month ${monthIndex + 1}`
+        const fundingSources = await withdrawFromBuckets(tx, {
           amount: contributionDeduct,
           currency,
           date: contributionDate,
           type: 'CASH_OUT',
           investmentId: investment.id,
-          notes: `Circlys payback • ${investment.name} • Month ${monthIndex + 1}`,
+          notes: paybackNote,
           // Allow funding from currently available cash even when recording past-due months.
           availableOnOrBefore: fundingCutoff,
           // Do not fund paybacks from the Savings Receipt bucket.
@@ -147,7 +191,7 @@ export async function POST(
             type: 'CASH_OUT',
             amount: -contributionDeduct,
             date: contributionDate,
-            description: `Circlys payback • ${investment.name} • Month ${monthIndex + 1}`,
+            description: paybackNote,
           },
         })
 
@@ -168,8 +212,20 @@ export async function POST(
           },
         })
 
-        return null
+        return {
+          fundingSources: (Array.isArray(fundingSources) ? fundingSources : [])
+            .map((f: any) => {
+              const cashBucketId = typeof f?.cashBucketId === 'string' ? f.cashBucketId : null
+              const amountRaw = Number(f?.amount || 0)
+              const amount = Number.isFinite(amountRaw) ? Math.max(0, amountRaw) : 0
+              if (!cashBucketId || amount <= 0) return null
+              return { cashBucketId, amount }
+            })
+            .filter((x: FundingSource | null): x is FundingSource => Boolean(x)),
+        }
       })
+
+      postReceiptFundingSources = postReceiptResult.fundingSources
 
       // Use a placeholder bucket ID to mark as paid without a real bucket
       bucketId = `post-receipt-${investment.id}-${monthIndex}`
@@ -274,14 +330,18 @@ export async function POST(
         dueDate: dueDate.toISOString(),
         paidDate: dueDate.toISOString(),
         amount,
-        reward,
+        reward: rewardForPayment,
         bucketId,
         postReceipt: isPostReceipt || false,
+        ...(isPostReceipt ? { fundingSources: postReceiptFundingSources } : {}),
       },
     }
 
     const totalPaid = Object.values(nextPayments).reduce((sum: number, p: any) => sum + (Number(p.amount) || 0), 0)
-    const totalRewardPaid = Object.values(nextPayments).reduce((sum: number, p: any) => sum + (Number(p.reward) || 0), 0)
+    const totalRewardPaid = Object.values(nextPayments).reduce((sum: number, p: any) => {
+      if (!isRewardEligiblePayment(p, receiptMonth)) return sum
+      return sum + (Number(p.reward) || 0)
+    }, 0)
     const monthsPaid = Object.keys(nextPayments).length
 
     const updated = await prisma.investment.update({
@@ -316,7 +376,7 @@ export async function POST(
       investmentId: investment.id,
       monthIndex,
       amount,
-      reward,
+      reward: rewardForPayment,
     })
 
     return NextResponse.json({ investment: updated, bucketId })
@@ -414,43 +474,76 @@ export async function DELETE(
     const dueDate = addMonths(new Date(investment.startDate), monthIndex)
     const startAnchorRaw = new Date(investment.startDate)
     const contributionHaulStart = Number.isNaN(startAnchorRaw.getTime()) ? dueDate : startAnchorRaw
+    const receiptMonth = getReceiptMonth(meta)
+    const hasReceived = Boolean(meta?.received?.date)
+    const isPreReceiptMonth = isPreReceiptMonthIndex(receiptMonth, monthIndex)
+
+    if (hasReceived && receiptMonth <= 0) {
+      return NextResponse.json(
+        { error: 'Invalid receipt configuration. Undo receive and configure receipt month first.' },
+        { status: 409 },
+      )
+    }
+
+    if (hasReceived && isPreReceiptMonth) {
+      return NextResponse.json(
+        { error: 'Cannot undo months at or before receipt month after receive. Undo receive first.' },
+        { status: 409 },
+      )
+    }
+
+    if (isPostReceipt && !hasReceived) {
+      return NextResponse.json(
+        { error: 'Invalid month state. Cannot undo post-receipt payment before receive.' },
+        { status: 409 },
+      )
+    }
 
     if (isPostReceipt) {
-      // Reverse: re-credit the cash that was withdrawn
+      // Reverse: re-credit the exact funding buckets when available.
       await prisma.$transaction(async (tx: any) => {
-        // Find the bucket that the receipt went into and credit it back
-        const receivedBucketId = meta.received?.bucketId
-        let creditedToBucket = false
-        if (receivedBucketId) {
-          const bucket = await tx.cashBucket.findUnique({ where: { id: receivedBucketId } })
-          if (bucket) {
+        const paybackUndoNote = `Undo Circlys payback • ${investment.name} • Month ${monthIndex + 1}`
+        const fundingSources = Array.isArray(existing?.fundingSources) ? existing.fundingSources : []
+        let remainingToRestore = Math.max(0, contributionAmount)
+
+        for (const source of fundingSources) {
+          const sourceBucketId = typeof source?.cashBucketId === 'string' ? source.cashBucketId : null
+          const sourceAmountRaw = Number(source?.amount || 0)
+          const sourceAmount = Number.isFinite(sourceAmountRaw) ? Math.max(0, sourceAmountRaw) : 0
+          if (!sourceBucketId || sourceAmount <= 0 || remainingToRestore <= 0) continue
+
+          const restoreAmount = Math.min(remainingToRestore, sourceAmount)
+          const bucket = await tx.cashBucket.findUnique({ where: { id: sourceBucketId } })
+          if (!bucket) continue
+
+          if (restoreAmount > 0) {
             await tx.cashBucket.update({
-              where: { id: receivedBucketId },
-              data: { balance: { increment: contributionAmount } },
+              where: { id: sourceBucketId },
+              data: { balance: { increment: restoreAmount } },
             })
             await tx.cashBucketMovement.create({
               data: {
-                cashBucketId: receivedBucketId,
+                cashBucketId: sourceBucketId,
                 investmentId: investment.id,
-                amount: contributionAmount,
+                amount: restoreAmount,
                 type: 'CASH_IN',
                 date: dueDate,
-                notes: `Undo Circlys payback • Month ${monthIndex + 1}`,
+                notes: paybackUndoNote,
               },
             })
-            creditedToBucket = true
+            remainingToRestore -= restoreAmount
           }
         }
 
-        // Fallback: if receipt bucket no longer exists, restore to a normal cash bucket.
-        if (!creditedToBucket && contributionAmount > 0) {
+        // Fallback for legacy payments (without fundingSources) or deleted source buckets.
+        if (remainingToRestore > 0.0001) {
           await createCashBucket(tx, {
-            amount: contributionAmount,
+            amount: remainingToRestore,
             haulStartDate: dueDate,
             currency: investment.account?.currency || 'SAR',
             label: 'General Cash',
             date: dueDate,
-            notes: `Undo Circlys payback • ${investment.name} • Month ${monthIndex + 1}`,
+            notes: paybackUndoNote,
             investmentId: investment.id,
             type: 'CASH_IN',
           })
@@ -489,7 +582,7 @@ export async function DELETE(
               type: 'CASH_IN',
               amount: contributionAmount,
               date: dueDate,
-              description: `Undo Circlys payback • ${investment.name} • Month ${monthIndex + 1}`,
+              description: paybackUndoNote,
             },
           })
         }
@@ -567,7 +660,10 @@ export async function DELETE(
       0
     )
     const totalRewardPaid = Object.values(nextPayments).reduce(
-      (sum: number, p: any) => sum + (Number(p.reward) || 0),
+      (sum: number, p: any) => {
+        if (!isRewardEligiblePayment(p, receiptMonth)) return sum
+        return sum + (Number(p.reward) || 0)
+      },
       0
     )
     const monthsPaid = Object.keys(nextPayments).length

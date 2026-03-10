@@ -7,6 +7,37 @@ import { createSnapshot } from '@/lib/snapshot'
 // Trivial change to trigger redeploy: added explicit logging below
 
 const RECEIPT_TYPES = ['WITHDRAW_PROFIT', 'WITHDRAW_PRINCIPAL', 'ROLLBACK_PRINCIPAL'] as const
+const CASH_BALANCE_KEY = 'CASH_BALANCE'
+
+const recomputeCashSetting = async (tx: any, personId: string | null) => {
+  const key = personId ? `${CASH_BALANCE_KEY}:${personId}` : CASH_BALANCE_KEY
+  const where = personId
+    ? {
+        personId,
+        NOT: [
+          { label: { startsWith: 'Debt •' } },
+          { label: 'Partner Commission' },
+        ],
+      }
+    : { personId: null }
+
+  const agg = await tx.cashBucket.aggregate({
+    where: where as any,
+    _sum: { balance: true },
+  })
+  const raw = agg?._sum?.balance
+  const total = Number.isFinite(raw as any) ? Number(raw) : 0
+
+  await tx.systemSetting.upsert({
+    where: { key },
+    update: { value: total.toString() },
+    create: {
+      key,
+      value: total.toString(),
+      description: 'Available cash balance for investments',
+    },
+  })
+}
 
 export async function POST(
   req: NextRequest,
@@ -248,38 +279,31 @@ export async function POST(
       let partnerCanonicalProfit: number | null = null
       let canonicalApr: number | undefined
       let canonicalFees: number | undefined
-
-      const cashBalanceKey = user.role === 'PARTNER'
-        ? `CASH_BALANCE:${user.personId}`
-        : 'CASH_BALANCE'
-
-      const cashSetting = await tx.systemSetting.findUnique({
-        where: { key: cashBalanceKey },
-      })
-
-      let currentCash = cashSetting ? Number(cashSetting.value) : 0
-      if (!Number.isFinite(currentCash)) currentCash = 0
-
-      // For partners, compute cash from their bucket balances so we don't rely on stale settings.
-      if (user.role === 'PARTNER') {
-        const agg = await tx.cashBucket.aggregate({
-          where: {
-            personId: user.personId,
-            NOT: [
-              { label: { startsWith: 'Debt •' } },
-              { label: 'Partner Commission' },
-            ],
-          } as any,
-          _sum: { balance: true },
-        })
-        const sum = agg._sum.balance || 0
-        currentCash = Number.isFinite(sum) ? sum : 0
-      }
-
-      // Don't manually adjust cash balance here - we'll recalculate from buckets after deletion
+      let partnerParticipantId: string | null = null
       
-      // Restore allocations for principal withdrawals (don't touch bucket balances yet)
+      // Roll back receipt bucket balances and restore allocation principal.
       for (const movement of receiptMovements) {
+        const movementAmount = Number(movement?.amount || 0)
+        const bucketId = typeof movement?.cashBucketId === 'string' ? movement.cashBucketId : null
+
+        if (bucketId && Number.isFinite(movementAmount) && movementAmount !== 0) {
+          const bucket = await tx.cashBucket.findUnique({
+            where: { id: bucketId },
+            select: { id: true, balance: true },
+          })
+
+          if (bucket) {
+            const nextBalance = Number(bucket.balance || 0) - movementAmount
+            if (nextBalance < -0.0001) {
+              throw new Error('REOPEN_CASH_MISMATCH')
+            }
+            await tx.cashBucket.update({
+              where: { id: bucket.id },
+              data: { balance: nextBalance },
+            })
+          }
+        }
+
         if (movement.type !== 'WITHDRAW_PROFIT') {
           const allocation = await tx.investmentBucketAllocation.findUnique({
             where: {
@@ -293,7 +317,7 @@ export async function POST(
             await tx.investmentBucketAllocation.update({
               where: { id: allocation.id },
               data: {
-                principalRemaining: allocation.principalRemaining + movement.amount,
+                principalRemaining: allocation.principalRemaining + Math.max(0, movementAmount),
               },
             })
           }
@@ -326,22 +350,10 @@ export async function POST(
         })
       }
 
-      // Recalculate cash balance from all buckets instead of setting to 0
-      const allBuckets = await tx.cashBucket.findMany({
-        where: { personId: null },
-        select: { balance: true },
-      })
-      const totalCashFromBuckets = allBuckets.reduce((sum: number, b: any) => sum + Number(b.balance || 0), 0)
-
-      await tx.systemSetting.upsert({
-        where: { key: 'CASH_BALANCE' },
-        update: { value: totalCashFromBuckets.toString() },
-        create: {
-          key: 'CASH_BALANCE',
-          value: totalCashFromBuckets.toString(),
-          description: 'Available cash balance for investments',
-        },
-      })
+      await recomputeCashSetting(tx, null)
+      if (user.role === 'PARTNER' && user.personId) {
+        await recomputeCashSetting(tx, user.personId)
+      }
 
 
       // For partners, restore their deal participant and allocation from canonical SELL_TO_PARTNER metadata
@@ -372,9 +384,21 @@ export async function POST(
         const originalPrincipal = Number(
           meta?.principalTransferred ?? snap?.principalAmount ?? 0,
         )
-        const originalProfit = Number(
-          snap?.receivableAmount ?? meta?.partnerGrossProfit ?? 0,
+        const originalProfitFromPartnerMetaRaw = Number(
+          meta?.partnerGrossProfit ?? meta?.partnerNetReceivable ?? 0,
         )
+        const originalProfitFromPartnerMeta = Number.isFinite(originalProfitFromPartnerMetaRaw)
+          ? Math.max(0, originalProfitFromPartnerMetaRaw)
+          : 0
+
+        const originalProfitFromSnapshotRaw = Number(snap?.receivableAmount ?? 0)
+        const originalProfitFromSnapshot = Number.isFinite(originalProfitFromSnapshotRaw)
+          ? Math.max(0, originalProfitFromSnapshotRaw)
+          : 0
+
+        const originalProfit = originalProfitFromPartnerMeta > 0
+          ? originalProfitFromPartnerMeta
+          : originalProfitFromSnapshot
 
         const originalApr = Number(
           snap?.interestRate ?? meta?.originalInterestRate ?? 0,
@@ -408,6 +432,7 @@ export async function POST(
         const partnerParticipant = await tx.dealParticipant.findFirst({
           where: { investmentId: id, personId: user.personId },
         })
+        partnerParticipantId = partnerParticipant?.id || null
 
         console.log('PARTNER PARTICIPANT before restore', partnerParticipant)
 
@@ -417,8 +442,6 @@ export async function POST(
             data: {
               investedAmount: canonicalPrincipal,
               currentValue: canonicalPrincipal,
-              profit: canonicalProfit,
-              receivable: canonicalProfit,
             },
           })
         }
@@ -521,6 +544,18 @@ export async function POST(
         return 0
       })()
 
+      if (user.role === 'PARTNER' && partnerParticipantId) {
+        const partnerProfitCap = Math.max(0, Math.round(receivableAmountValue * 100) / 100)
+        partnerCanonicalProfit = partnerProfitCap
+        await tx.dealParticipant.update({
+          where: { id: partnerParticipantId },
+          data: {
+            profit: partnerProfitCap,
+            receivable: partnerProfitCap,
+          },
+        })
+      }
+
       console.log('REOPEN INVESTMENT UPDATE DATA:', {
         principalAmount: principalAmountValue,
         receivableAmount: receivableAmountValue,
@@ -569,6 +604,9 @@ export async function POST(
         statusCode = 401
       } else if (err.message === 'Forbidden') {
         statusCode = 403
+      } else if (err.message === 'REOPEN_CASH_MISMATCH') {
+        statusCode = 400
+        errorMessage = 'Cannot reopen because receipt cash was already consumed from its bucket'
       } else if (err.message.startsWith('REOPEN_BLOCKED_RECEIPT_USED')) {
         statusCode = 409
         const rawTargets = err.message.split(':').slice(1).join(':')

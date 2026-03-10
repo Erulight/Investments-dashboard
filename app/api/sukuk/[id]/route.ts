@@ -19,6 +19,38 @@ const parseMetadata = (value: unknown) => {
   }
 }
 
+const CASH_BALANCE_KEY = 'CASH_BALANCE'
+
+const recomputeCashSetting = async (tx: Prisma.TransactionClient, personId: string | null) => {
+  const key = personId ? `${CASH_BALANCE_KEY}:${personId}` : CASH_BALANCE_KEY
+  const where = personId
+    ? {
+        personId,
+        NOT: [
+          { label: { startsWith: 'Debt •' } },
+          { label: 'Partner Commission' },
+        ],
+      }
+    : { personId: null }
+
+  const agg = await tx.cashBucket.aggregate({
+    where: where as any,
+    _sum: { balance: true },
+  })
+  const raw = agg?._sum?.balance
+  const total = Number.isFinite(raw as any) ? Number(raw) : 0
+
+  await tx.systemSetting.upsert({
+    where: { key },
+    update: { value: total.toString() },
+    create: {
+      key,
+      value: total.toString(),
+      description: 'Available cash balance for investments',
+    },
+  })
+}
+
 const getCashAccount = async (tx: Prisma.TransactionClient, currency = 'SAR') => {
   const existing = await tx.account.findFirst({
     where: { type: 'CASH', isActive: true },
@@ -410,6 +442,8 @@ export async function DELETE(
     
     // Delete the sukuk and reverse cash/bucket effects
     await prisma.$transaction(async (tx) => {
+      const affectedPartnerIds = new Set<string>()
+
       // Create snapshot before delete
       await createSnapshot(tx, {
         label: `Before: Delete ${existingSukuk.name}`,
@@ -529,6 +563,9 @@ export async function DELETE(
           where: { id: movement.cashBucketId },
         })
         if (bucket) {
+          if (typeof bucket.personId === 'string' && bucket.personId.length > 0) {
+            affectedPartnerIds.add(bucket.personId)
+          }
           const nextBalance = bucket.balance - movement.amount
           if (nextBalance < -0.0001) {
             throw new Error('INSUFFICIENT_CASH')
@@ -540,25 +577,56 @@ export async function DELETE(
         }
       }
 
+      const partnerPrincipalAllocations = await tx.investmentBucketAllocation.findMany({
+        where: {
+          investmentId: id,
+          principalRemaining: { gt: 0 },
+          cashBucket: {
+            personId: { not: null },
+            label: `Sukuk Principal • ${existingSukuk.name}`,
+          },
+        } as any,
+        select: {
+          cashBucketId: true,
+          principalRemaining: true,
+          cashBucket: {
+            select: {
+              balance: true,
+              personId: true,
+            },
+          },
+        },
+      })
+
+      for (const alloc of partnerPrincipalAllocations) {
+        const partnerPersonId = typeof alloc.cashBucket?.personId === 'string'
+          ? alloc.cashBucket.personId
+          : null
+        if (partnerPersonId) {
+          affectedPartnerIds.add(partnerPersonId)
+        }
+
+        const principalRemainingRaw = Number(alloc.principalRemaining || 0)
+        const principalRemaining = Number.isFinite(principalRemainingRaw)
+          ? Math.max(0, principalRemainingRaw)
+          : 0
+
+        const bucketBalanceRaw = Number(alloc.cashBucket?.balance || 0)
+        const bucketBalance = Number.isFinite(bucketBalanceRaw)
+          ? Math.max(0, bucketBalanceRaw)
+          : 0
+
+        const refundAmount = Math.max(0, principalRemaining - bucketBalance)
+        if (refundAmount <= 0.0001) continue
+
+        await tx.cashBucket.update({
+          where: { id: alloc.cashBucketId },
+          data: { balance: { increment: refundAmount } },
+        })
+      }
+
       await tx.cashBucketMovement.deleteMany({
         where: { investmentId: id },
-      })
-
-      // Recalculate cash balance from all buckets after deletion
-      const allBuckets = await tx.cashBucket.findMany({
-        where: { personId: null },
-        select: { balance: true },
-      })
-      const totalCashFromBuckets = allBuckets.reduce((sum: number, b: any) => sum + Number(b.balance || 0), 0)
-
-      await tx.systemSetting.upsert({
-        where: { key: 'CASH_BALANCE' },
-        update: { value: totalCashFromBuckets.toString() },
-        create: {
-          key: 'CASH_BALANCE',
-          value: totalCashFromBuckets.toString(),
-          description: 'Available cash balance for investments',
-        },
       })
 
       if (commissionMovements.length > 0) {
@@ -582,6 +650,11 @@ export async function DELETE(
       await tx.investmentBucketAllocation.deleteMany({
         where: { investmentId: id },
       })
+
+      await recomputeCashSetting(tx, null)
+      for (const partnerId of affectedPartnerIds) {
+        await recomputeCashSetting(tx, partnerId)
+      }
 
       await tx.transaction.deleteMany({
         where: {

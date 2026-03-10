@@ -105,9 +105,23 @@ const toNonNegativeNumber = (value: unknown) => {
   return Math.max(0, num)
 }
 
+const isRewardEligibleSavingsPayment = (payment: any, receiptMonth: number) => {
+  if (!payment || payment.postReceipt === true) return false
+  const paymentMonth = Number(payment?.monthIndex)
+  if (Number.isInteger(paymentMonth) && receiptMonth > 0 && (paymentMonth + 1) > receiptMonth) {
+    return false
+  }
+  return true
+}
+
 const getExpectedSavingsRewardTotal = (metadata: any, paymentEntries: any[]) => {
-  const rewardFromPayments = (Array.isArray(paymentEntries) ? paymentEntries : [])
-    .reduce((sum: number, p: any) => sum + toNonNegativeNumber(p?.reward), 0)
+  const receiptMonth = Math.max(0, Math.floor(toNonNegativeNumber(metadata?.receiptMonth)))
+  const normalizedEntries = (Array.isArray(paymentEntries) ? paymentEntries : [])
+  const rewardFromPayments = normalizedEntries
+    .reduce((sum: number, p: any) => {
+      if (!isRewardEligibleSavingsPayment(p, receiptMonth)) return sum
+      return sum + toNonNegativeNumber(p?.reward)
+    }, 0)
   const rewardFromMeta = toNonNegativeNumber(metadata?.totalRewardPaid)
   const rewardFromLegacyConfig = toNonNegativeNumber(metadata?.totalReward)
 
@@ -120,11 +134,13 @@ const getExpectedSavingsRewardTotal = (metadata: any, paymentEntries: any[]) => 
       : rewardAmountPerMonth
     : 0
 
-  const receiptMonth = Math.max(0, Math.floor(toNonNegativeNumber(metadata?.receiptMonth)))
   const totalMonths = Math.max(0, Math.floor(toNonNegativeNumber(metadata?.totalMonths)))
+  const eligiblePaymentCount = normalizedEntries
+    .filter((p: any) => isRewardEligibleSavingsPayment(p, receiptMonth))
+    .length
   const scheduledRewardMonths = receiptMonth > 0
     ? receiptMonth
-    : (totalMonths > 0 ? totalMonths : paymentEntries.length)
+    : (totalMonths > 0 ? totalMonths : eligiblePaymentCount)
   const rewardFromSchedule = rewardPerMonth * scheduledRewardMonths
 
   return Math.max(

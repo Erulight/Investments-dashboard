@@ -575,6 +575,7 @@ export function CirclysClient({ initialInvestments, userRole }: CirclysClientPro
                           const rewardValue = payRewardByKey[key] ?? (isPaid ? String(r.payment.reward || 0) : '0')
                           const isReceiptRow = receiptMo > 0 && (r.monthIndex + 1) === receiptMo
                           const isPostReceiptRow = hasReceived && receiptMo > 0 && (r.monthIndex + 1) > receiptMo
+                          const isLockedPreReceiptAfterReceive = hasReceived && receiptMo > 0 && (r.monthIndex + 1) <= receiptMo
                           const isPostReceiptPaid = r.payment?.postReceipt === true
 
                           return (
@@ -603,7 +604,7 @@ export function CirclysClient({ initialInvestments, userRole }: CirclysClientPro
                                   type="number"
                                   step="0.01"
                                   min="0"
-                                  disabled={isPaid || userRole !== 'OWNER'}
+                                  disabled={isPaid || userRole !== 'OWNER' || isLockedPreReceiptAfterReceive}
                                   value={amountValue}
                                   onChange={(e: ChangeEvent<HTMLInputElement>) =>
                                     setPayAmountByKey((prev: Record<string, string>) => ({ ...prev, [key]: e.target.value }))
@@ -616,7 +617,7 @@ export function CirclysClient({ initialInvestments, userRole }: CirclysClientPro
                                   type="number"
                                   step="0.01"
                                   min="0"
-                                  disabled={isPaid || userRole !== 'OWNER'}
+                                  disabled={isPaid || userRole !== 'OWNER' || isLockedPreReceiptAfterReceive || isPostReceiptRow}
                                   value={rewardValue}
                                   onChange={(e: ChangeEvent<HTMLInputElement>) =>
                                     setPayRewardByKey((prev: Record<string, string>) => ({ ...prev, [key]: e.target.value }))
@@ -638,8 +639,9 @@ export function CirclysClient({ initialInvestments, userRole }: CirclysClientPro
                                 {isPaid ? (
                                   userRole === 'OWNER' ? (
                                     <button
-                                      disabled={loading}
+                                      disabled={loading || isLockedPreReceiptAfterReceive}
                                       className="rounded px-2.5 py-1 text-xs font-medium text-slate-600 transition-colors hover:bg-slate-200 disabled:opacity-50 dark:bg-white/10 dark:text-slate-300 dark:hover:bg-white/15 bg-slate-100"
+                                      title={isLockedPreReceiptAfterReceive ? 'Undo receive first to modify this month' : 'Undo'}
                                       onClick={async () => {
                                         setPayErrorByKey((prev: Record<string, string>) => {
                                           const next = { ...prev }; delete next[key]; return next
@@ -666,19 +668,20 @@ export function CirclysClient({ initialInvestments, userRole }: CirclysClientPro
                                         } finally { setPayLoadingKey(null) }
                                       }}
                                     >
-                                      {loading ? '...' : 'Undo'}
+                                      {loading ? '...' : isLockedPreReceiptAfterReceive ? 'Locked' : 'Undo'}
                                     </button>
                                   ) : (
                                     <span className="text-xs text-gray-400">Paid</span>
                                   )
                                 ) : userRole === 'OWNER' ? (
                                   <button
-                                    disabled={loading}
+                                    disabled={loading || isLockedPreReceiptAfterReceive}
                                     className={`px-2.5 py-1 text-xs font-medium rounded transition-colors disabled:opacity-50 ${
                                       isPostReceiptRow
                                         ? 'text-white bg-orange-600 hover:bg-orange-700'
                                         : 'text-white bg-slate-800 hover:bg-slate-700'
                                     }`}
+                                    title={isLockedPreReceiptAfterReceive ? 'Undo receive first to modify this month' : (isPostReceiptRow ? 'Pay from cash' : 'Pay')}
                                     onClick={async () => {
                                       setPayErrorByKey((prev: Record<string, string>) => {
                                         const next = { ...prev }; delete next[key]; return next
@@ -705,7 +708,7 @@ export function CirclysClient({ initialInvestments, userRole }: CirclysClientPro
                                       } finally { setPayLoadingKey(null) }
                                     }}
                                   >
-                                    {loading ? '...' : isPostReceiptRow ? 'Pay (cash)' : 'Pay'}
+                                    {loading ? '...' : isLockedPreReceiptAfterReceive ? 'Locked' : (isPostReceiptRow ? 'Pay (cash)' : 'Pay')}
                                   </button>
                                 ) : (
                                   <span className="text-xs text-gray-400">—</span>
