@@ -9,6 +9,9 @@ import { PremiumStatsGrid } from '@/components/dashboard/PremiumStatsGrid'
 import { AnimatedCard } from '@/components/ui/AnimatedCard'
 import { TradingChartOverlay } from '@/components/dashboard/TradingChartOverlay'
 import { CASH_BALANCE_KEY, getBucketCashBalance } from '@/lib/cashBalance'
+import { PageTransition } from '@/components/animations/PageTransition'
+import { AnimatedList, AnimatedListItem } from '@/components/animations/AnimatedList'
+import { AnimatedStatCard } from '@/components/animations/AnimatedCard'
 
 export const dynamic = 'force-dynamic'
 
@@ -1096,10 +1099,10 @@ export default async function DashboardPage({
   const portfolioTrend = user.role === 'OWNER' ? yearlyValueChange.pct : yearlyReturnPercentage
 
   return (
-    <div className="space-y-6 animate-fade-in">
+    <PageTransition className="space-y-4">
       <TradingChartOverlay />
       {/* Header */}
-      <div className="bg-gradient-to-r from-slate-800/80 to-slate-900/80 backdrop-blur-sm rounded-xl shadow-md p-6 text-white border border-slate-700/50">
+      <AnimatedStatCard index={0} className="bg-gradient-to-r from-slate-800/80 to-slate-900/80 backdrop-blur-sm rounded-xl shadow-md p-6 text-white border border-slate-700/50">
         <div className="flex items-center justify-between">
           <div>
             <h1 className="text-2xl font-bold">Welcome back, {user.name}</h1>
@@ -1110,7 +1113,7 @@ export default async function DashboardPage({
             <YearFilter selectedYear={selectedYear} />
           </div>
         </div>
-      </div>
+      </AnimatedStatCard>
 
       {/* Premium Stats Grid */}
       <PremiumStatsGrid
@@ -1313,20 +1316,21 @@ export default async function DashboardPage({
       )}
 
       {activity.length > 0 && (
-        <Card className="border border-slate-700/40 bg-slate-900/40">
+        <AnimatedStatCard index={11} className="border border-slate-700/40 bg-slate-900/40 rounded-xl shadow-md overflow-hidden">
           <CardHeader>
             <CardTitle className="text-sm font-bold text-slate-200">Recent Activity</CardTitle>
           </CardHeader>
           <CardContent>
-            <div className="space-y-2">
-              {activity.slice(0, 8).map((entry: any) => {
+            <AnimatedList className="space-y-2">
+              {activity.slice(0, 8).map((entry: any, idx: number) => {
                 const amount = Number(entry?.amount || 0)
                 const isIn = amount >= 0
                 const d = new Date(entry?.date)
                 const dateLabel = Number.isNaN(d.getTime()) ? '—' : d.toLocaleDateString('en-CA')
                 return (
-                  <div
+                  <AnimatedListItem
                     key={entry.id}
+                    index={idx}
                     className="flex items-center justify-between rounded-lg border border-slate-700/40 bg-slate-800/30 px-3 py-2"
                   >
                     <div className="min-w-0">
@@ -1343,27 +1347,27 @@ export default async function DashboardPage({
                     <div className={`ml-3 shrink-0 text-sm font-semibold tabular-nums ${isIn ? 'text-emerald-400' : 'text-rose-400'}`}>
                       {isIn ? '+' : '-'}SAR {Math.abs(amount).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
                     </div>
-                  </div>
+                  </AnimatedListItem>
                 )
               })}
-            </div>
+            </AnimatedList>
           </CardContent>
-        </Card>
+        </AnimatedStatCard>
       )}
 
       {/* Per-Type Breakdown */}
       {typeBreakdowns.length > 0 && (
-        <Card className="border border-slate-700/40 bg-slate-900/40">
+        <AnimatedStatCard index={12} className="border border-slate-700/40 bg-slate-900/40 rounded-xl shadow-md overflow-hidden">
           <CardHeader>
             <CardTitle className="text-sm font-bold text-slate-200">Balance by Investment Type</CardTitle>
           </CardHeader>
           <CardContent>
-            <div className="space-y-2">
-              {typeBreakdowns.map((tb) => {
+            <AnimatedList className="space-y-2">
+              {typeBreakdowns.map((tb, idx) => {
                 const returnPct = tb.invested > 0 ? ((tb.value - tb.invested) / tb.invested * 100) : 0
                 const sharePct = totalTypeValue > 0 ? (tb.value / totalTypeValue) * 100 : 0
                 return (
-                  <div key={tb.type} className="rounded-lg border border-slate-700/40 bg-slate-800/30 p-3">
+                  <AnimatedListItem key={tb.type} index={idx} className="rounded-lg border border-slate-700/40 bg-slate-800/30 p-3">
                     <div className="flex items-center justify-between">
                       <div className="flex items-center gap-3">
                         <span className="text-sm font-semibold text-slate-100">{tb.type}</span>
@@ -1395,13 +1399,13 @@ export default async function DashboardPage({
                         </div>
                       </div>
                     </div>
-                  </div>
+                  </AnimatedListItem>
                 )
               })}
-            </div>
+            </AnimatedList>
           </CardContent>
-        </Card>
+        </AnimatedStatCard>
       )}
-    </div>
+    </PageTransition>
   )
 }
