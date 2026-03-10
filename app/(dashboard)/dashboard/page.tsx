@@ -1029,12 +1029,13 @@ export default async function DashboardPage({
     ? cashBalance / avgMonthlyOutflow
     : null
 
+  const totalTypeValue = typeBreakdowns.reduce((sum, item) => sum + (Number(item.value) || 0), 0)
+
   const topTypeConcentrationPct = (() => {
     if (!Array.isArray(typeBreakdowns) || typeBreakdowns.length === 0) return 0
-    const total = typeBreakdowns.reduce((sum, item) => sum + (Number(item.value) || 0), 0)
-    if (total <= 0) return 0
+    if (totalTypeValue <= 0) return 0
     const top = Math.max(...typeBreakdowns.map((item) => Number(item.value) || 0), 0)
-    return (top / total) * 100
+    return (top / totalTypeValue) * 100
   })()
 
   const activity = await (async () => {
@@ -1332,34 +1333,85 @@ export default async function DashboardPage({
         />
       )}
 
+      {activity.length > 0 && (
+        <Card className="border border-slate-700/40 bg-slate-900/40">
+          <CardHeader>
+            <CardTitle className="text-sm font-bold text-slate-200">Recent Activity</CardTitle>
+          </CardHeader>
+          <CardContent>
+            <div className="space-y-2">
+              {activity.slice(0, 8).map((entry: any) => {
+                const amount = Number(entry?.amount || 0)
+                const isIn = amount >= 0
+                const d = new Date(entry?.date)
+                const dateLabel = Number.isNaN(d.getTime()) ? '—' : d.toLocaleDateString('en-CA')
+                return (
+                  <div
+                    key={entry.id}
+                    className="flex items-center justify-between rounded-lg border border-slate-700/40 bg-slate-800/30 px-3 py-2"
+                  >
+                    <div className="min-w-0">
+                      <div className="flex items-center gap-2">
+                        <span className="text-[10px] rounded-full bg-slate-700/70 px-2 py-0.5 text-slate-300 uppercase tracking-wider">
+                          {String(entry.type || 'TX').replace(/_/g, ' ')}
+                        </span>
+                        <span className="text-[11px] text-slate-400">{dateLabel}</span>
+                      </div>
+                      <p className="mt-1 truncate text-xs text-slate-300">
+                        {entry.investmentName || entry.description || 'Cash transaction'}
+                      </p>
+                    </div>
+                    <div className={`ml-3 shrink-0 text-sm font-semibold tabular-nums ${isIn ? 'text-emerald-400' : 'text-rose-400'}`}>
+                      {isIn ? '+' : '-'}SAR {Math.abs(amount).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                    </div>
+                  </div>
+                )
+              })}
+            </div>
+          </CardContent>
+        </Card>
+      )}
+
       {/* Per-Type Breakdown */}
       {typeBreakdowns.length > 0 && (
-        <Card>
+        <Card className="border border-slate-700/40 bg-slate-900/40">
           <CardHeader>
-            <CardTitle className="text-sm font-bold text-gray-800">Balance by Investment Type</CardTitle>
+            <CardTitle className="text-sm font-bold text-slate-200">Balance by Investment Type</CardTitle>
           </CardHeader>
           <CardContent>
             <div className="space-y-2">
               {typeBreakdowns.map((tb) => {
                 const returnPct = tb.invested > 0 ? ((tb.value - tb.invested) / tb.invested * 100) : 0
+                const sharePct = totalTypeValue > 0 ? (tb.value / totalTypeValue) * 100 : 0
                 return (
-                  <div key={tb.type} className="flex items-center justify-between p-3 bg-gray-50 rounded-lg">
-                    <div className="flex items-center gap-3">
-                      <span className="text-sm font-semibold text-gray-900">{tb.type}</span>
-                      <span className="text-[11px] text-gray-400">{tb.count} deal{tb.count !== 1 ? 's' : ''}</span>
-                    </div>
-                    <div className="flex items-center gap-6">
-                      <div className="text-right">
-                        <div className="text-xs text-gray-400">Invested</div>
-                        <div className="text-sm font-medium text-gray-700 dark:text-slate-200 tabular-nums">SAR {tb.invested.toLocaleString()}</div>
+                  <div key={tb.type} className="rounded-lg border border-slate-700/40 bg-slate-800/30 p-3">
+                    <div className="flex items-center justify-between">
+                      <div className="flex items-center gap-3">
+                        <span className="text-sm font-semibold text-slate-100">{tb.type}</span>
+                        <span className="text-[11px] text-slate-400">{tb.count} deal{tb.count !== 1 ? 's' : ''}</span>
                       </div>
+                      <div className="text-[11px] text-slate-400 tabular-nums">{sharePct.toFixed(1)}% share</div>
+                    </div>
+
+                    <div className="mt-2 h-1.5 w-full rounded-full bg-slate-700/60">
+                      <div
+                        className="h-1.5 rounded-full bg-gradient-to-r from-cyan-400 to-sky-500 transition-all duration-700"
+                        style={{ width: `${Math.max(2, Math.min(100, sharePct))}%` }}
+                      />
+                    </div>
+
+                    <div className="mt-3 flex items-center gap-6">
                       <div className="text-right">
-                        <div className="text-xs text-gray-400">Value</div>
-                        <div className="text-sm font-bold text-gray-900 tabular-nums">SAR {tb.value.toLocaleString()}</div>
+                        <div className="text-xs text-slate-400">Invested</div>
+                        <div className="text-sm font-medium text-slate-200 tabular-nums">SAR {tb.invested.toLocaleString()}</div>
                       </div>
                       <div className="text-right min-w-[60px]">
-                        <div className="text-xs text-gray-400">Return</div>
-                        <div className={`text-sm font-semibold tabular-nums ${returnPct >= 0 ? 'text-emerald-600' : 'text-red-600'}`}>
+                        <div className="text-xs text-slate-400">Value</div>
+                        <div className="text-sm font-bold text-slate-100 tabular-nums">SAR {tb.value.toLocaleString()}</div>
+                      </div>
+                      <div className="text-right min-w-[60px]">
+                        <div className="text-xs text-slate-400">Return</div>
+                        <div className={`text-sm font-semibold tabular-nums ${returnPct >= 0 ? 'text-emerald-400' : 'text-rose-400'}`}>
                           {returnPct >= 0 ? '+' : ''}{returnPct.toFixed(1)}%
                         </div>
                       </div>

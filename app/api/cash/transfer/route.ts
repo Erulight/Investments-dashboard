@@ -90,7 +90,7 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: 'partnerPersonId is required' }, { status: 400 })
     }
 
-    if (user.personId && partnerPersonId === user.personId) {
+    if (user.role === 'OWNER' && user.personId && partnerPersonId === user.personId) {
       return NextResponse.json({ error: 'Cannot transfer cash with your own profile' }, { status: 400 })
     }
 
