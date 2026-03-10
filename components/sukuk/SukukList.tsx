@@ -2,7 +2,7 @@
 
 import { useEffect, useMemo, useState } from 'react'
 import type { ReactNode } from 'react'
-import { useRouter, useSearchParams } from 'next/navigation'
+import { useSearchParams } from 'next/navigation'
 import { Table, TableHeader, TableBody, TableFooter, TableRow, TableHead, TableCell } from '@/components/ui/Table'
 import { Button } from '@/components/ui/Button'
 import { Modal } from './SukukModal'
@@ -61,28 +61,6 @@ interface SukukListProps {
 }
 
 export function SukukList({ initialSukuk, userRole, ownerPersonId, viewerPersonId }: SukukListProps) {
-  const router = useRouter()
-
-  if (typeof window !== 'undefined') {
-    const anyRouter = router as any
-    if (!anyRouter.__debugPatched) {
-      anyRouter.__debugPatched = true
-      if (typeof anyRouter.push === 'function') {
-        const originalPush = anyRouter.push.bind(anyRouter)
-        anyRouter.push = (...args: any[]) => {
-          console.log('router.push called from SukukList:', ...args)
-          return originalPush(...args)
-        }
-      }
-      if (typeof anyRouter.replace === 'function') {
-        const originalReplace = anyRouter.replace.bind(anyRouter)
-        anyRouter.replace = (...args: any[]) => {
-          console.log('router.replace called from SukukList:', ...args)
-          return originalReplace(...args)
-        }
-      }
-    }
-  }
   const searchParams = useSearchParams()
   const [sukuk, setSukuk] = useState<any[]>(
     Array.isArray(initialSukuk) ? initialSukuk : []
@@ -137,6 +115,8 @@ export function SukukList({ initialSukuk, userRole, ownerPersonId, viewerPersonI
     days: [] as string[],
     statuses: [] as string[],
   })
+  const [searchTerm, setSearchTerm] = useState('')
+  const [actionableOnly, setActionableOnly] = useState(false)
   const [filtersOpen, setFiltersOpen] = useState(false)
   const [filterTab, setFilterTab] = useState<'platforms' | 'terms' | 'statuses' | 'dates'>('platforms')
   const [ownerView, setOwnerView] = useState<'all' | 'active' | 'closed' | 'sold'>('all')
@@ -361,16 +341,6 @@ export function SukukList({ initialSukuk, userRole, ownerPersonId, viewerPersonI
 
     const resolvedOwnerPersonId = buyMeta?.sellerPersonId || meta?.sellerPersonId || ownerPersonId
 
-    console.log('RETURN TO OWNER START', {
-      investmentId: investment.id,
-      partnerInvestedAmount: myParticipation?.investedAmount,
-      ownerPersonId: resolvedOwnerPersonId,
-      sellTx: sellTx?.id,
-      buyTx: buyTx?.id,
-      meta,
-      buyMeta,
-    })
-
     if (!resolvedOwnerPersonId) {
       setActionError('Owner profile is missing')
       return
@@ -438,18 +408,15 @@ export function SukukList({ initialSukuk, userRole, ownerPersonId, viewerPersonI
       })
 
       const data = await res.json()
-      console.log('RETURN TO OWNER RESPONSE', res.status, data)
 
       if (!res.ok) {
-        alert(`Failed: ${data.error || 'Unknown error'}`)
         setActionError(data.error || 'Failed to return Sukuk')
         return
       }
 
       window.location.reload()
     } catch (err) {
-      console.error('RETURN TO OWNER ERROR', err)
-      alert(`Error: ${String(err)}`)
+      console.error('Return to owner error:', err)
       setActionError('Failed to return Sukuk')
     } finally {
       setActionLoading(false)
@@ -840,9 +807,12 @@ export function SukukList({ initialSukuk, userRole, ownerPersonId, viewerPersonI
       days: [],
       statuses: [],
     })
+    setSearchTerm('')
+    setActionableOnly(false)
   }
 
   const activeFilterCount = Object.values(filters).reduce((sum, list) => sum + list.length, 0)
+  const appliedFilterCount = activeFilterCount + (searchTerm.trim() ? 1 : 0) + (actionableOnly ? 1 : 0)
 
   const filterOptions = list.reduce<{
     platforms: Set<string>
@@ -877,14 +847,9 @@ export function SukukList({ initialSukuk, userRole, ownerPersonId, viewerPersonI
   )
 
   const filteredSukuk = list.filter((inv) => {
+    const isSoldDeal = userRole === 'OWNER' ? isSoldDealForOwnerView(inv) : false
+
     if (userRole === 'OWNER' && ownerPersonId) {
-      const participantList = Array.isArray(inv.dealParticipants) ? inv.dealParticipants : []
-      const ownerParticipant = getOwnerParticipant(participantList)
-      
-      // Sold for owner when participants exist and owner has no principal left
-      // (either owner row is missing, or investedAmount is 0)
-      const isSoldDeal = participantList.length > 0
-        && (!ownerParticipant || Number(ownerParticipant.investedAmount || 0) <= 0)
       const metrics = isSoldDeal ? getSoldDealMetrics(inv) : getMetrics(inv)
       const isClosedDeal = !isSoldDeal && Number(metrics.receivable || 0) <= 0.01
       const isActiveDeal = !isSoldDeal && !isClosedDeal
@@ -896,7 +861,22 @@ export function SukukList({ initialSukuk, userRole, ownerPersonId, viewerPersonI
         // show all
       }
     }
-    const metrics = getMetrics(inv)
+    const metrics = isSoldDeal ? getSoldDealMetrics(inv) : getMetrics(inv)
+
+    const search = searchTerm.trim().toLowerCase()
+    if (search) {
+      const text = [inv.name, inv.account?.name, inv.category]
+        .filter(Boolean)
+        .join(' ')
+        .toLowerCase()
+      if (!text.includes(search)) return false
+    }
+
+    if (actionableOnly) {
+      const actionable = Number(metrics.totalInvestment || 0) > 0.01 || Number(metrics.receivable || 0) > 0.01
+      if (!actionable) return false
+    }
+
     const platform = inv.account?.name || ''
     const maturityDate = toDate(inv.maturityDate)
     const year = maturityDate ? String(maturityDate.getFullYear()) : null
@@ -934,12 +914,18 @@ export function SukukList({ initialSukuk, userRole, ownerPersonId, viewerPersonI
         received: metrics.receivable <= 0,
         nearClose: metrics.daysRemaining !== null && metrics.daysRemaining > 0 && metrics.daysRemaining <= 30,
         closing: metrics.daysRemaining !== null && metrics.daysRemaining <= 0,
+        delayed: metrics.paymentStatus === 'delayed',
+        early: metrics.paymentStatus === 'early',
+        sold: isSoldDeal,
       }
       const matches = filters.statuses.some((status) => {
         if (status === 'receivable') return statusChecks.receivable
         if (status === 'received') return statusChecks.received
         if (status === 'nearClose') return statusChecks.nearClose
         if (status === 'closing') return statusChecks.closing
+        if (status === 'delayed') return statusChecks.delayed
+        if (status === 'early') return statusChecks.early
+        if (status === 'sold') return statusChecks.sold
         return false
       })
       if (!matches) return false
@@ -950,11 +936,7 @@ export function SukukList({ initialSukuk, userRole, ownerPersonId, viewerPersonI
 
   const rows = useMemo(() => {
     return filteredSukuk.map((inv: any) => {
-      const participantList = Array.isArray(inv.dealParticipants) ? inv.dealParticipants : []
-      const ownerParticipant = getOwnerParticipant(participantList)
-      const isSoldForOwner = userRole === 'OWNER' && ownerPersonId
-        ? (participantList.length > 0 && (!ownerParticipant || Number(ownerParticipant.investedAmount || 0) <= 0))
-        : false
+      const isSoldForOwner = isSoldDealForOwnerView(inv)
 
       const metrics = isSoldForOwner ? getSoldDealMetrics(inv) : getMetrics(inv)
 
@@ -1226,8 +1208,46 @@ export function SukukList({ initialSukuk, userRole, ownerPersonId, viewerPersonI
 
   const openSellModal = async (investment: any) => {
     setActionError('')
+
+    const participantList = Array.isArray(investment?.dealParticipants) ? investment.dealParticipants : []
+    const isSoldForOwner = isSoldDealForOwnerView(investment)
+    let availablePrincipal = 0
+
+    if (userRole === 'OWNER') {
+      if (isSoldForOwner) {
+        setActionError('Cannot sell this deal because owner principal is already 0.')
+        return
+      }
+
+      const ownerParticipant = getOwnerParticipant(participantList)
+      const ownerPrincipalRaw = ownerParticipant
+        ? Number(ownerParticipant?.investedAmount ?? 0)
+        : (participantList.length === 0 ? Number(investment?.principalAmount ?? 0) : 0)
+      availablePrincipal = Number.isFinite(ownerPrincipalRaw) ? Math.max(0, ownerPrincipalRaw) : 0
+    } else {
+      const myParticipation = investment?.myParticipation
+        || (viewerPersonId ? participantList.find((p: any) => p?.personId === viewerPersonId) : null)
+      const myPrincipalRaw = Number(myParticipation?.investedAmount ?? 0)
+      availablePrincipal = Number.isFinite(myPrincipalRaw) ? Math.max(0, myPrincipalRaw) : 0
+    }
+
+    if (availablePrincipal <= 0.01) {
+      setActionError('No principal available to sell for this deal.')
+      return
+    }
+
     setSellTarget(investment)
-    resetSellForm()
+    setSellForm({
+      buyerPersonId: '',
+      amount: availablePrincipal.toFixed(2),
+      salePrice: availablePrincipal.toFixed(2),
+      paymentMode: 'CASH',
+      debtId: '',
+      commissionType: 'FIXED',
+      commissionValue: '',
+      date: formatDateInput(new Date()),
+      notes: '',
+    })
     if (partners.length === 0) {
       try {
         const res = await fetch('/api/partners')
@@ -1408,17 +1428,64 @@ export function SukukList({ initialSukuk, userRole, ownerPersonId, viewerPersonI
         return
       }
 
+      if (userRole === 'OWNER' && isSoldDealForOwnerView(sellTarget)) {
+        setActionError('Cannot sell this deal because owner principal is already 0.')
+        setActionLoading(false)
+        return
+      }
+
+      const principalAmount = Number(sellForm.amount)
+      if (!Number.isFinite(principalAmount) || principalAmount <= 0) {
+        setActionError('Please enter a valid principal amount to sell')
+        setActionLoading(false)
+        return
+      }
+
+      const salePriceValue = sellForm.paymentMode === 'SETTLE_DEBT'
+        ? principalAmount
+        : (sellForm.salePrice ? Number(sellForm.salePrice) : principalAmount)
+
+      if (!Number.isFinite(salePriceValue) || salePriceValue < 0) {
+        setActionError('Sale price must be 0 or more')
+        setActionLoading(false)
+        return
+      }
+
+      if (sellForm.paymentMode === 'SETTLE_DEBT' && salePriceValue <= 0) {
+        setActionError('Settlement amount must be greater than 0')
+        setActionLoading(false)
+        return
+      }
+
+      const participantList = Array.isArray(sellTarget?.dealParticipants) ? sellTarget.dealParticipants : []
+      const availablePrincipal = (() => {
+        if (userRole === 'OWNER') {
+          const ownerParticipant = getOwnerParticipant(participantList)
+          const ownerPrincipalRaw = ownerParticipant
+            ? Number(ownerParticipant?.investedAmount ?? 0)
+            : (participantList.length === 0 ? Number(sellTarget?.principalAmount ?? 0) : 0)
+          return Number.isFinite(ownerPrincipalRaw) ? Math.max(0, ownerPrincipalRaw) : 0
+        }
+
+        const myParticipation = sellTarget?.myParticipation
+          || (viewerPersonId ? participantList.find((p: any) => p?.personId === viewerPersonId) : null)
+        const myPrincipalRaw = Number(myParticipation?.investedAmount ?? 0)
+        return Number.isFinite(myPrincipalRaw) ? Math.max(0, myPrincipalRaw) : 0
+      })()
+
+      if (principalAmount > availablePrincipal + 0.01) {
+        setActionError('Amount exceeds available principal for this deal')
+        setActionLoading(false)
+        return
+      }
+
       const res = await fetch(`/api/sukuk/${sellTarget.id}/sell`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           buyerPersonId: sellForm.buyerPersonId,
-          amount: parseFloat(sellForm.amount),
-          salePrice: sellForm.paymentMode === 'SETTLE_DEBT'
-            ? parseFloat(sellForm.amount)
-            : sellForm.salePrice
-              ? parseFloat(sellForm.salePrice)
-              : undefined,
+          amount: principalAmount,
+          salePrice: salePriceValue,
           paymentMode: sellForm.paymentMode,
           debtId: sellForm.paymentMode === 'SETTLE_DEBT' ? sellForm.debtId : undefined,
           commissionType: sellForm.commissionType,
@@ -1606,7 +1673,14 @@ export function SukukList({ initialSukuk, userRole, ownerPersonId, viewerPersonI
         <>
           <div className="mb-3 rounded-xl border border-slate-200 bg-white p-3 dark:border-white/10 dark:bg-slate-900/60">
             <div className="flex flex-wrap items-center justify-between gap-3">
-              <div className="flex items-center gap-3">
+              <div className="flex flex-wrap items-center gap-3">
+                <input
+                  type="text"
+                  value={searchTerm}
+                  onChange={(e) => setSearchTerm(e.target.value)}
+                  placeholder="Search deal or platform"
+                  className="w-52 rounded-lg border border-slate-200 bg-white px-3 py-1.5 text-xs text-slate-700 placeholder:text-slate-400 focus:border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-500/20 dark:border-white/10 dark:bg-slate-900/60 dark:text-slate-200 dark:placeholder:text-slate-500"
+                />
                 <Button
                   variant="ghost"
                   size="sm"
@@ -1614,8 +1688,17 @@ export function SukukList({ initialSukuk, userRole, ownerPersonId, viewerPersonI
                 >
                   {filtersOpen ? 'Hide Filters' : 'Show Filters'}
                 </Button>
+                <label className="inline-flex items-center gap-1 text-xs text-slate-500 dark:text-slate-400">
+                  <input
+                    type="checkbox"
+                    checked={actionableOnly}
+                    onChange={(e) => setActionableOnly(e.target.checked)}
+                    className="h-3 w-3 rounded border-slate-300 text-emerald-600 focus:ring-emerald-500 dark:border-white/10 dark:bg-slate-900"
+                  />
+                  Actionable only
+                </label>
                 <span className="text-xs text-slate-500 dark:text-slate-400">
-                  {activeFilterCount} active
+                  {appliedFilterCount} active
                 </span>
               </div>
               <Button variant="ghost" size="sm" onClick={clearFilters}>
@@ -1687,6 +1770,9 @@ export function SukukList({ initialSukuk, userRole, ownerPersonId, viewerPersonI
                         { key: 'received', label: 'Received' },
                         { key: 'nearClose', label: 'Near Close' },
                         { key: 'closing', label: 'Closing' },
+                        { key: 'delayed', label: 'Delayed' },
+                        { key: 'early', label: 'Early' },
+                        { key: 'sold', label: 'Sold' },
                       ].map((status) => (
                         <label key={status.key} className="flex items-center gap-1">
                           <input
@@ -1909,6 +1995,8 @@ export function SukukList({ initialSukuk, userRole, ownerPersonId, viewerPersonI
                         .filter(Boolean)
                     : []
                   const soldToLabel = partnerNames.length > 0 ? `Sold to: ${partnerNames.join(', ')}` : ''
+                  const canSell = Number(metrics.totalInvestment || 0) > 0.01 && !(userRole === 'OWNER' && isSoldDealForOwner)
+                  const canPartnerReceiveClose = Number(metrics.totalInvestment || 0) > 0.01 || Number(metrics.receivable || 0) > 0.01
 
                   return (
                     <TableRow
@@ -2027,8 +2115,8 @@ export function SukukList({ initialSukuk, userRole, ownerPersonId, viewerPersonI
                               size="sm"
                               variant="ghost"
                               onClick={() => openWithdrawModal(inv)}
-                              disabled={actionLoading}
-                              title="Withdraw"
+                              disabled={actionLoading || (isSoldDealForOwner && !partnerClosed)}
+                              title={isSoldDealForOwner && !partnerClosed ? 'Waiting for partner to close' : 'Withdraw'}
                               aria-label="Withdraw"
                               className="h-8 w-8 px-0 py-0 shrink-0"
                             >
@@ -2051,8 +2139,8 @@ export function SukukList({ initialSukuk, userRole, ownerPersonId, viewerPersonI
                               size="sm"
                               variant="ghost"
                               onClick={() => openSellModal(inv)}
-                              disabled={actionLoading}
-                              title="Sell"
+                              disabled={actionLoading || !canSell}
+                              title={canSell ? 'Sell' : 'No principal available to sell'}
                               aria-label="Sell"
                               className="h-8 w-8 px-0 py-0 shrink-0"
                             >
@@ -2081,8 +2169,8 @@ export function SukukList({ initialSukuk, userRole, ownerPersonId, viewerPersonI
                               size="sm"
                               variant="secondary"
                               onClick={() => handleReceiveAndClose(inv, metrics)}
-                              disabled={actionLoading}
-                              title="Receive & Close"
+                              disabled={actionLoading || !canPartnerReceiveClose}
+                              title={canPartnerReceiveClose ? 'Receive & Close' : 'Nothing left to close'}
                               aria-label="Receive & Close"
                               className="h-8 w-8 px-0 py-0 shrink-0"
                             >

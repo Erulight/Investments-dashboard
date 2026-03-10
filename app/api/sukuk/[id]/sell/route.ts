@@ -59,6 +59,9 @@ export async function POST(
     if (paymentMode === 'SETTLE_DEBT' && !debtId) {
       return NextResponse.json({ error: 'Debt is required for settlement' }, { status: 400 })
     }
+    if (paymentMode === 'SETTLE_DEBT' && salePrice <= 0) {
+      return NextResponse.json({ error: 'Settlement amount must be greater than 0' }, { status: 400 })
+    }
     if (!Number.isFinite(commissionValueRaw) || commissionValueRaw < 0) {
       return NextResponse.json({ error: 'Commission must be 0 or more' }, { status: 400 })
     }
@@ -168,6 +171,23 @@ export async function POST(
       return NextResponse.json({ error: 'Sukuk maturity date is required for selling' }, { status: 400 })
     }
     const saleDate = new Date(date)
+
+    const startDay = startOfDay(startDate)
+    const maturityDay = startOfDay(maturityDate)
+    const saleDay = startOfDay(saleDate)
+    const todayDay = startOfDay(new Date())
+
+    if (saleDay.getTime() > todayDay.getTime()) {
+      return NextResponse.json({ error: 'Sale date cannot be in the future' }, { status: 400 })
+    }
+
+    if (saleDay.getTime() < startDay.getTime()) {
+      return NextResponse.json({ error: 'Sale date cannot be before investment start date' }, { status: 400 })
+    }
+
+    if (saleDay.getTime() > maturityDay.getTime()) {
+      return NextResponse.json({ error: 'Sale date cannot be after maturity date' }, { status: 409 })
+    }
 
     // Inclusive day counting:
     // - Total days includes both start and maturity day.

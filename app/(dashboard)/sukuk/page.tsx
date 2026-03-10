@@ -3,7 +3,7 @@ import { getCurrentUser } from '@/lib/auth'
 import { prisma } from '@/lib/db'
 import { SukukList } from '@/components/sukuk/SukukList'
 import { requireModuleAccess } from '@/lib/rbac'
-import { AnimatedCard } from '@/components/ui/AnimatedCard'
+import { SukukStatsHeader } from '@/components/sukuk/SukukStatsHeader'
 
 export const dynamic = 'force-dynamic'
 export const revalidate = 0
@@ -150,6 +150,22 @@ export default async function InvestmentsPage() {
     const n = Number(value)
     if (!Number.isFinite(n)) return 0
     return Math.round(n * 100) / 100
+  }
+
+  const isViewerTransaction = (tx: any) => {
+    if (user.role === 'OWNER') {
+      if (tx?.personId == null) return true
+      return user.personId ? tx.personId === user.personId : false
+    }
+    if (user.personId) return tx?.personId === user.personId
+    return true
+  }
+
+  const getViewerPrincipal = (inv: any) => {
+    const participationPrincipalRaw = Number(inv?.myParticipation?.investedAmount)
+    if (Number.isFinite(participationPrincipalRaw)) return participationPrincipalRaw
+    const principalRaw = Number(inv?.principalAmount)
+    return Number.isFinite(principalRaw) ? principalRaw : 0
   }
 
   const getViewerReceived = (inv: any) => {
@@ -401,7 +417,7 @@ export default async function InvestmentsPage() {
   const activeInvestments = displayedInvestments.filter(isActiveDeal)
 
   const totalInvested = displayedInvestments.reduce((sum, inv) => {
-    const principal = inv.myParticipation?.investedAmount || inv.principalAmount
+    const principal = getViewerPrincipal(inv)
     return sum + (Number.isFinite(principal) ? principal : 0)
   }, 0)
 
@@ -514,7 +530,7 @@ export default async function InvestmentsPage() {
     return sum + (inv.myParticipation ? (fees * ratio) * timeRatio : fees)
   }, 0))
 
-  const avgDaysToMaturity = (() => {
+  const maturityDayStats = (() => {
     const now = new Date()
     const todayStart = new Date(now.getFullYear(), now.getMonth(), now.getDate())
     const withDays = activeInvestments
@@ -528,15 +544,38 @@ export default async function InvestmentsPage() {
       })
       .filter((v): v is number => v !== null)
 
-    if (withDays.length === 0) return null
-    return withDays.reduce((sum, v) => sum + v, 0) / withDays.length
+    const upcoming = withDays.filter((days) => days >= 0)
+    const overdue = withDays.filter((days) => days < 0).map((days) => Math.abs(days))
+
+    return {
+      avgUpcomingDays: upcoming.length > 0
+        ? upcoming.reduce((sum, v) => sum + v, 0) / upcoming.length
+        : null,
+      nearMaturityDealsCount: upcoming.filter((days) => days <= 30).length,
+      overdueDealsCount: overdue.length,
+      avgOverdueDays: overdue.length > 0
+        ? overdue.reduce((sum, v) => sum + v, 0) / overdue.length
+        : null,
+    }
   })()
+
+  const avgDaysToMaturity = maturityDayStats.avgUpcomingDays
+  const nearMaturityDealsCount = maturityDayStats.nearMaturityDealsCount
+  const overdueDealsCount = maturityDayStats.overdueDealsCount
+  const avgOverdueDays = maturityDayStats.avgOverdueDays
+
+  const realizedCoveragePct = totalReturn > 0
+    ? Math.min(100, Math.max(0, (totalWithdrawn / totalReturn) * 100))
+    : 0
+
+  const statsCurrency =
+    displayedInvestments.find((inv: any) => typeof inv?.account?.currency === 'string')?.account?.currency || 'SAR'
 
   const platformTotals: Array<[string, number]> = Array.from(
     displayedInvestments
       .reduce((map: Map<string, number>, inv: any) => {
         const platform = inv.account?.name || 'Unknown'
-        const principal = inv.myParticipation?.investedAmount || inv.principalAmount
+        const principal = getViewerPrincipal(inv)
         const invested = Number.isFinite(principal) ? principal : 0
         map.set(platform, (map.get(platform) ?? 0) + invested)
         return map
@@ -572,7 +611,7 @@ export default async function InvestmentsPage() {
         const amountRaw = Number(tx.amount)
         const amount = Number.isFinite(amountRaw) ? amountRaw : 0
 
-        const viewerOk = !user.personId || tx.personId === user.personId
+        const viewerOk = isViewerTransaction(tx)
         if (!viewerOk) continue
 
         const current = buckets.get(key) ?? { received: 0, realizedProfit: 0 }
@@ -631,90 +670,26 @@ export default async function InvestmentsPage() {
   return (
     <div className="space-y-6 animate-fade-in">
       {/* Header */}
-      <div className="bg-gradient-to-r from-slate-800 to-slate-900 rounded-xl shadow-md p-6 text-white">
-        <div className="flex items-center justify-between mb-5">
-          <div>
-            <h1 className="text-2xl font-bold">Sukuk Investments</h1>
-            <p className="text-sm text-slate-400 mt-1">Islamic investment portfolio tracking</p>
-          </div>
-          <span className="hidden lg:block text-4xl opacity-80">💎</span>
-        </div>
-
-        <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
-          <div className="bg-white/5 rounded-lg p-3 border border-white/10">
-            <p className="text-[11px] text-slate-400 uppercase tracking-wider">Portfolio Value</p>
-            <p className="text-lg font-bold mt-0.5">SAR {totalValue.toLocaleString(undefined, { maximumFractionDigits: 0 })}</p>
-          </div>
-          <div className="bg-white/5 rounded-lg p-3 border border-white/10">
-            <p className="text-[11px] text-slate-400 uppercase tracking-wider">Total Return</p>
-            <p className="text-lg font-bold mt-0.5">SAR {totalReturn.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</p>
-          </div>
-          <div className="bg-white/5 rounded-lg p-3 border border-white/10">
-            <p className="text-[11px] text-slate-400 uppercase tracking-wider">Return %</p>
-            <p className={`text-lg font-bold mt-0.5 ${returnPercentage >= 0 ? 'text-emerald-400' : 'text-red-400'}`}>
-              {returnPercentage >= 0 ? '+' : ''}{returnPercentage.toFixed(2)}%
-            </p>
-          </div>
-          <div className="bg-white/5 rounded-lg p-3 border border-white/10">
-            <p className="text-[11px] text-slate-400 uppercase tracking-wider">Active Deals</p>
-            <p className="text-lg font-bold mt-0.5">{activeDealsCount}</p>
-          </div>
-        </div>
-
-        <div className="grid grid-cols-2 md:grid-cols-5 gap-3 mt-3">
-          <div className="bg-white/5 rounded-lg p-3 border border-white/10">
-            <p className="text-[11px] text-slate-400 uppercase tracking-wider">Received</p>
-            <p className="text-sm font-bold mt-0.5">SAR {totalWithdrawn.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</p>
-          </div>
-          <div className="bg-white/5 rounded-lg p-3 border border-white/10">
-            <p className="text-[11px] text-slate-400 uppercase tracking-wider">Fees Paid</p>
-            <p className="text-sm font-bold mt-0.5">SAR {totalFeesPaid.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</p>
-          </div>
-          {user.role === 'OWNER' && (
-            <div className="bg-white/5 rounded-lg p-3 border border-white/10">
-              <p className="text-[11px] text-slate-400 uppercase tracking-wider">Commission Earned</p>
-              <p className="text-sm font-bold mt-0.5">SAR {totalCommissionEarned.toLocaleString(undefined, { maximumFractionDigits: 0 })}</p>
-            </div>
-          )}
-          {user.role === 'PARTNER' && (
-            <div className="bg-white/5 rounded-lg p-3 border border-white/10">
-              <p className="text-[11px] text-slate-400 uppercase tracking-wider">Commission Paid</p>
-              <p className="text-sm font-bold mt-0.5">SAR {totalCommissionPaid.toLocaleString(undefined, { maximumFractionDigits: 0 })}</p>
-            </div>
-          )}
-          <div className="bg-white/5 rounded-lg p-3 border border-white/10">
-            <p className="text-[11px] text-slate-400 uppercase tracking-wider">Receivable</p>
-            <p className="text-sm font-bold mt-0.5">SAR {totalReceivable.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</p>
-          </div>
-          <div className="bg-white/5 rounded-lg p-3 border border-white/10">
-            <p className="text-[11px] text-slate-400 uppercase tracking-wider">Avg Days to Maturity</p>
-            <p className="text-sm font-bold mt-0.5">{avgDaysToMaturity === null ? '—' : Math.round(avgDaysToMaturity).toLocaleString()}</p>
-          </div>
-        </div>
-
-        {user.role === 'OWNER' && totalPendingFromSoldDeals > 0.01 && (
-          <div className="mt-3">
-            <div className="bg-white/5 rounded-lg p-3 border border-white/10">
-              <p className="text-[11px] text-slate-400 uppercase tracking-wider">Pending (Sold Deals)</p>
-              <p className="text-sm font-bold mt-0.5">SAR {totalPendingFromSoldDeals.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</p>
-            </div>
-          </div>
-        )}
-
-        {platformTotals.length > 0 && (
-          <div className="mt-3 bg-white/5 rounded-lg p-3 border border-white/10">
-            <p className="text-[11px] text-slate-400 uppercase tracking-wider mb-2">By Platform</p>
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-1.5">
-              {platformTotals.map(([platform, value]) => (
-                <div key={platform} className="flex items-center justify-between rounded-md bg-white/5 px-3 py-1.5">
-                  <span className="text-xs text-white/80 truncate">{platform}</span>
-                  <span className="text-xs font-semibold tabular-nums">SAR {value.toLocaleString(undefined, { maximumFractionDigits: 0 })}</span>
-                </div>
-              ))}
-            </div>
-          </div>
-        )}
-      </div>
+      <SukukStatsHeader
+        role={user.role}
+        currency={statsCurrency}
+        totalValue={totalValue}
+        totalReturn={totalReturn}
+        returnPercentage={returnPercentage}
+        activeDealsCount={activeDealsCount}
+        totalWithdrawn={totalWithdrawn}
+        totalFeesPaid={totalFeesPaid}
+        totalReceivable={totalReceivable}
+        totalCommissionEarned={totalCommissionEarned}
+        totalCommissionPaid={totalCommissionPaid}
+        totalPendingFromSoldDeals={totalPendingFromSoldDeals}
+        avgDaysToMaturity={avgDaysToMaturity}
+        nearMaturityDealsCount={nearMaturityDealsCount}
+        overdueDealsCount={overdueDealsCount}
+        avgOverdueDays={avgOverdueDays}
+        realizedCoveragePct={realizedCoveragePct}
+        platformTotals={platformTotals}
+      />
 
       {/* Investments List */}
       <Card>

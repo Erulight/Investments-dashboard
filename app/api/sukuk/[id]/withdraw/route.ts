@@ -447,14 +447,26 @@ export async function POST(
           // Reduce the allocation principal remaining (but don't delete the allocation)
           const allocations = await tx.investmentBucketAllocation.findMany({
             where: { investmentId: investment.id },
+            orderBy: { createdAt: 'asc' },
           })
 
+          let remainingReduction = Math.max(0, amount)
           for (const alloc of allocations) {
-            const newRemaining = Math.max(0, alloc.principalRemaining - amount)
+            if (remainingReduction <= 0.0001) break
+            const allocRemaining = Math.max(0, Number(alloc.principalRemaining || 0))
+            if (allocRemaining <= 0.0001) continue
+
+            const reduceBy = Math.min(allocRemaining, remainingReduction)
             await tx.investmentBucketAllocation.update({
               where: { id: alloc.id },
-              data: { principalRemaining: newRemaining },
+              data: { principalRemaining: Math.max(0, allocRemaining - reduceBy) },
             })
+
+            remainingReduction = Math.max(0, remainingReduction - reduceBy)
+          }
+
+          if (remainingReduction > 0.0001) {
+            throw new Error('PRINCIPAL_ALLOCATION_MISMATCH')
           }
         } else {
           // For profit withdrawals, use default logic (Sukuk start date)
@@ -622,6 +634,8 @@ export async function POST(
         statusCode = 400
       } else if (error.message === 'AMOUNT_EXCEEDS_PARTNER_PROFIT') {
         statusCode = 400
+      } else if (error.message === 'PRINCIPAL_ALLOCATION_MISMATCH') {
+        statusCode = 409
       }
     }
 
@@ -632,6 +646,8 @@ export async function POST(
             ? 'Amount exceeds your remaining principal'
             : error.message === 'AMOUNT_EXCEEDS_PARTNER_PROFIT'
               ? 'Amount exceeds your remaining profit'
+              : error.message === 'PRINCIPAL_ALLOCATION_MISMATCH'
+                ? 'Cannot withdraw principal because allocation state is inconsistent. Reopen the deal and try again.'
               : error.message
           : 'Failed to withdraw',
       },
