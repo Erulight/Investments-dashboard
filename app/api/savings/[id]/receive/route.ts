@@ -275,6 +275,10 @@ export async function POST(
             haulStartDate: rewardReceiptDate,
             excludeFromZakat: false,
             personId: null,
+            metadata: JSON.stringify({
+              firstContributionDate: firstContributionDate.toISOString().split('T')[0],
+              rewardHawlAnchor: rewardHawlAnchor.toISOString().split('T')[0],
+            }),
             movements: {
               create: {
                 investmentId: investment.id,
