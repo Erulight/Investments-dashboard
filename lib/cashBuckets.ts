@@ -592,16 +592,23 @@ export const creditBucketsForReceipt = async (
     }
 
     // Determine haul start date for profit bucket
-    // Priority: 1) Explicit param, 2) Investment start date, 3) Receipt date
+    // Priority: 1) Explicit param, 2) inherited savings haul start, 3) Investment start date, 4) Receipt date
     let haulStartDate = date
 
     const explicit = profitHaulStartDate instanceof Date ? profitHaulStartDate : profitHaulStartDate ? new Date(profitHaulStartDate as any) : null
     const explicitHaulStart = explicit && !Number.isNaN(explicit.getTime())
       ? new Date(explicit.getFullYear(), explicit.getMonth(), explicit.getDate())
       : null
+    const invMeta = parseMetadata(inv?.metadata)
+    const inheritedSavingsRaw = invMeta?.savingsHaulStartDate ? new Date(invMeta.savingsHaulStartDate) : null
+    const inheritedSavingsHaulStart = inheritedSavingsRaw && !Number.isNaN(inheritedSavingsRaw.getTime())
+      ? new Date(inheritedSavingsRaw.getFullYear(), inheritedSavingsRaw.getMonth(), inheritedSavingsRaw.getDate())
+      : null
 
     if (explicitHaulStart) {
       haulStartDate = explicitHaulStart
+    } else if (inheritedSavingsHaulStart) {
+      haulStartDate = inheritedSavingsHaulStart
     } else {
       const investmentStart = inv?.startDate ? new Date(inv.startDate as any) : null
       if (investmentStart && !Number.isNaN(investmentStart.getTime())) {
