@@ -738,6 +738,7 @@ export default async function ZakatPage() {
             cashBucket: {
               select: {
                 id: true,
+                label: true,
                 haulStartDate: true,
                 balance: true,
               },
@@ -1809,10 +1810,10 @@ export default async function ZakatPage() {
             id: rowKey,
             bucketId: bucket.id,
             periodIndex: i + 1,
-            label: `Idle \u2022 ${r.investmentName} \u2022 ${isoDay(periodStart)} \u2192 ${isoDay(periodEnd)}`,
+            label: `Idle • ${r.investmentName} • ${isoDay(periodStart)} → ${isoDay(periodEnd)}`,
             currency: bucket.currency,
             balance: displayBalance,
-            haulStartDate: isoDay(r.eligibilityStart),
+            haulStartDate: isoDay(periodStart),
             lastZakatPaidDate: bucket.lastZakatPaidDate
               ? bucket.lastZakatPaidDate.toISOString().split('T')[0]
               : null,
