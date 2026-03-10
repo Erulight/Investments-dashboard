@@ -15,15 +15,6 @@ const diffDays = (start: Date, end: Date) => {
 
 const getReceiptMonth = (meta: any) => Math.max(0, Math.floor(Number(meta?.receiptMonth || 0)))
 
-const isRewardEligiblePayment = (payment: any, receiptMonth: number) => {
-  if (!payment || payment.postReceipt === true) return false
-  const paymentMonth = Number(payment?.monthIndex)
-  if (Number.isInteger(paymentMonth) && receiptMonth > 0 && (paymentMonth + 1) > receiptMonth) {
-    return false
-  }
-  return true
-}
-
 /**
  * POST  — Receive the ROSCA payout for a Circlys plan.
  *         NEW RULE: Savings zakat is based on receipt date and first contribution date.
@@ -103,10 +94,7 @@ export async function POST(
     }
 
     const rewardFromPayments = paymentEntries
-      .reduce((sum: number, p: any) => {
-        if (!isRewardEligiblePayment(p, receiptMonth)) return sum
-        return sum + (Number(p?.reward) || 0)
-      }, 0)
+      .reduce((sum: number, p: any) => sum + Math.max(0, Number(p?.reward) || 0), 0)
     const rewardFromMeta = Number(meta.totalRewardPaid || 0)
     const rewardFromLegacyConfig = Number(meta.totalReward || 0)
 
@@ -120,16 +108,23 @@ export async function POST(
         ? monthlyContribution * (rewardAmountPerMonth / 100)
         : rewardAmountPerMonth
       : 0
-    const totalMonths = Math.max(0, Math.floor(Number(meta.totalMonths || 0)))
-    const scheduledRewardMonths = receiptMonth > 0
-      ? receiptMonth
-      : (totalMonths > 0 ? totalMonths : paymentEntries.length)
+    const paidMonthsFromEntries = paymentEntries
+      .filter((p: any) => typeof p?.bucketId === 'string' && p.bucketId.length > 0)
+      .length
+    const paidMonthsFromMeta = Math.max(0, Math.floor(Number(meta.monthsPaid || 0)))
+    const scheduledRewardMonths = Math.max(paidMonthsFromEntries, paidMonthsFromMeta, receiptMonth)
     const rewardFromSchedule = rewardPerMonth * scheduledRewardMonths
+    const normalizedLegacyReward = Number.isFinite(rewardFromLegacyConfig)
+      ? Math.max(0, rewardFromLegacyConfig)
+      : 0
+    const rewardFromLegacyCapped = rewardPerMonth > 0 && rewardFromSchedule > 0
+      ? Math.min(normalizedLegacyReward, Math.max(0, rewardFromSchedule))
+      : normalizedLegacyReward
 
     const configuredTotalReward = Math.max(
       Number.isFinite(rewardFromMeta) ? Math.max(0, rewardFromMeta) : 0,
       Number.isFinite(rewardFromPayments) ? Math.max(0, rewardFromPayments) : 0,
-      Number.isFinite(rewardFromLegacyConfig) ? Math.max(0, rewardFromLegacyConfig) : 0,
+      rewardFromLegacyCapped,
       Number.isFinite(rewardFromSchedule) ? Math.max(0, rewardFromSchedule) : 0,
     )
 

@@ -77,8 +77,7 @@ export async function PATCH(
       ? Math.max(0, normalizedMonthlyContributionRaw)
       : 0
     const normalizedTotalMonths = Math.max(0, Math.floor(Number(nextMeta.totalMonths || 0)))
-    const normalizedReceiptMonth = Math.max(0, Math.floor(Number(nextMeta.receiptMonth || 0)))
-    const scheduledRewardMonths = normalizedReceiptMonth > 0 ? normalizedReceiptMonth : normalizedTotalMonths
+    const scheduledRewardMonths = normalizedTotalMonths
     const rewardPerMonth = normalizedRewardAmount > 0
       ? normalizedRewardProgram === 'PERCENTAGE'
         ? normalizedMonthlyContribution * (normalizedRewardAmount / 100)

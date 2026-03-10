@@ -69,7 +69,7 @@ export async function POST(
 
     const monthIndex = Number(body.monthIndex)
     const amount = Number(body.amount)
-    const reward = body.reward !== undefined ? Number(body.reward) : 0
+    const rewardInput = body.reward !== undefined ? Number(body.reward) : null
 
     if (!Number.isInteger(monthIndex) || monthIndex < 0) {
       return NextResponse.json({ error: 'Invalid monthIndex' }, { status: 400 })
@@ -79,7 +79,7 @@ export async function POST(
       return NextResponse.json({ error: 'Invalid amount' }, { status: 400 })
     }
 
-    if (!Number.isFinite(reward) || reward < 0) {
+    if (rewardInput !== null && (!Number.isFinite(rewardInput) || rewardInput < 0)) {
       return NextResponse.json({ error: 'Invalid reward' }, { status: 400 })
     }
 
@@ -90,6 +90,19 @@ export async function POST(
         return {}
       }
     })()
+
+    const rewardAmountRaw = Number(meta.rewardAmount || 0)
+    const configuredRewardAmount = Number.isFinite(rewardAmountRaw) ? Math.max(0, rewardAmountRaw) : 0
+    const rewardProgram = String(meta.rewardProgram || 'NONE')
+    const monthlyContributionRaw = Number(meta.monthlyContribution || 0)
+    const monthlyContribution = Number.isFinite(monthlyContributionRaw)
+      ? Math.max(0, monthlyContributionRaw)
+      : 0
+    const configuredRewardPerMonth = configuredRewardAmount > 0
+      ? rewardProgram === 'PERCENTAGE'
+        ? monthlyContribution * (configuredRewardAmount / 100)
+        : configuredRewardAmount
+      : 0
 
     const receiptMonth = getReceiptMonth(meta)
     const hasReceived = Boolean(meta?.received?.date)
@@ -128,7 +141,7 @@ export async function POST(
 
     // Determine if this is a post-receipt month (deducts from cash instead of creating a new bucket)
     const isPostReceipt = hasReceived && receiptMonth > 0 && (monthIndex + 1) > receiptMonth
-    const rewardForPayment = reward
+    const rewardForPayment = rewardInput !== null ? rewardInput : configuredRewardPerMonth
 
     // Snapshot before making changes to savings plan
     await createSnapshot(prisma as any, {
@@ -313,11 +326,11 @@ export async function POST(
                   date: contributionDate,
                   notes: `Month ${monthIndex + 1}`,
                 },
-                ...(reward > 0
+                ...(rewardForPayment > 0
                   ? [
                       {
                         investmentId: investment.id,
-                        amount: reward,
+                        amount: rewardForPayment,
                         type: 'SAVINGS_REWARD',
                         date: contributionDate,
                         notes: `Month ${monthIndex + 1}`,

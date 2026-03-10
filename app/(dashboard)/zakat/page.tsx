@@ -123,16 +123,21 @@ const getExpectedSavingsRewardTotal = (metadata: any, paymentEntries: any[]) => 
     : 0
 
   const receiptMonth = Math.max(0, Math.floor(toNonNegativeNumber(metadata?.receiptMonth)))
-  const totalMonths = Math.max(0, Math.floor(toNonNegativeNumber(metadata?.totalMonths)))
-  const scheduledRewardMonths = receiptMonth > 0
-    ? receiptMonth
-    : (totalMonths > 0 ? totalMonths : normalizedEntries.length)
+  const paidMonthsFromEntries = normalizedEntries
+    .filter((p: any) => typeof p?.bucketId === 'string' && p.bucketId.length > 0)
+    .length
+  const paidMonthsFromMeta = Math.max(0, Math.floor(toNonNegativeNumber(metadata?.monthsPaid)))
+  const scheduledRewardMonths = Math.max(paidMonthsFromEntries, paidMonthsFromMeta, receiptMonth)
   const rewardFromSchedule = rewardPerMonth * scheduledRewardMonths
+  const normalizedLegacyReward = toNonNegativeNumber(rewardFromLegacyConfig)
+  const rewardFromLegacyCapped = rewardPerMonth > 0 && rewardFromSchedule > 0
+    ? Math.min(normalizedLegacyReward, Math.max(0, rewardFromSchedule))
+    : normalizedLegacyReward
 
   return Math.max(
     rewardFromPayments,
     rewardFromMeta,
-    rewardFromLegacyConfig,
+    rewardFromLegacyCapped,
     Number.isFinite(rewardFromSchedule) ? Math.max(0, rewardFromSchedule) : 0,
   )
 }
