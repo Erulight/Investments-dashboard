@@ -912,16 +912,19 @@ export default async function ZakatPage() {
         ? new Date(sukukStartRaw.getFullYear(), sukukStartRaw.getMonth(), sukukStartRaw.getDate())
         : fallbackDay
 
-      // Prefer reward continuity, then savings receipt, then recycled principal, then fallback.
-      // Normalize to the end of the last completed hawl at Sukuk start so idle cycles are preserved
-      // and continuity is not reset back to the original first-contribution anchor.
+      // Prefer metadata (already computed end-of-hawl), then bucket anchors, then fallback.
+      // If metadata exists, it already contains the end of the last completed hawl (e.g., Dec 2024)
+      // so we use it directly without re-computing.
       const baseHawlStart =
+        existingSavingsAnchor ||
         rewardRoscaAnchors[0] ||
         savingsRoscaAnchors[0] ||
         principalReceiptAnchors[0] ||
-        existingSavingsAnchor ||
         fallbackDay
-      const hawlStart = getLastCompletedHawlAnchor(baseHawlStart, sukukStartDay)
+      // Only compute if we're using bucket anchors (not metadata)
+      const hawlStart = existingSavingsAnchor
+        ? existingSavingsAnchor
+        : getLastCompletedHawlAnchor(baseHawlStart, sukukStartDay)
 
       for (const alloc of roscaAllocations) {
         const bucketId = typeof alloc?.cashBucketId === 'string' ? alloc.cashBucketId : null
