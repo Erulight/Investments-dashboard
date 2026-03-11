@@ -1674,67 +1674,59 @@ export default async function ZakatPage() {
           }
         }
 
-        // ROSCA-funded Sukuk principal row:
-        // - show only once per matured/closed Sukuk
-        // - never show while active
-        // - anchor must come from investment.metadata.savingsHaulStartDate
+        // ROSCA-funded Sukuk principal continuity rows:
+        // once ROSCA Hawl 1 completes, invested portion continues immediately under Sukuk.
         for (const alloc of sukukAllocations) {
-          const maturityDate = alloc.maturityDate
-          if (!maturityDate || Number.isNaN(maturityDate.getTime())) continue
-          const maturityDay = startOfDay(maturityDate)
-          if (maturityDay.getTime() > now.getTime()) continue
+          const continuityStart = startOfDay(firstHaulEnd)
+          const elapsedContinuityDays = diffDaysFloor(continuityStart, now)
+          const completedContinuityHawls = Math.floor(elapsedContinuityDays / 354)
+          if (completedContinuityHawls <= 0) continue
 
-          const inv = investmentMap.get(alloc.investmentId)
-          const investmentMeta = parseMetadata(inv?.metadata)
-          const metadataHaulStart = toDate(investmentMeta?.savingsHaulStartDate)
+          for (let i = 0; i < completedContinuityHawls; i++) {
+            const periodStart = addDays(continuityStart, i * 354)
+            const periodEnd = addDays(continuityStart, (i + 1) * 354)
+            const rowKey = buildRowKey([
+              'ROSCA_SUKUK_PRINCIPAL',
+              bucket.id,
+              alloc.investmentId,
+              isoDay(periodStart),
+              isoDay(periodEnd),
+            ])
+            const isPaid = movementHasRowPaid(payments, rowKey)
+            const zakatDue = !isPaid ? alloc.principalRemaining * 0.025 : 0
 
-          // Barrier: principal row must use persisted continuity anchor.
-          if (!metadataHaulStart || Number.isNaN(metadataHaulStart.getTime())) continue
-
-          const effectiveHaulStart = startOfDay(metadataHaulStart)
-          if (effectiveHaulStart.getTime() > maturityDay.getTime()) continue
-
-          const rowKey = buildRowKey([
-            'ROSCA_SUKUK_PRINCIPAL',
-            bucket.id,
-            alloc.investmentId,
-            isoDay(effectiveHaulStart),
-            isoDay(maturityDay),
-          ])
-          const isPaid = movementHasRowPaid(payments, rowKey)
-          const zakatDue = !isPaid ? alloc.principalRemaining * 0.025 : 0
-
-          savingsRows.push({
-            id: rowKey,
-            bucketId: bucket.id,
-            periodIndex: 1,
-            label: `Sukuk Principal • ${alloc.investmentName} • ${isoDay(effectiveHaulStart)} → ${isoDay(maturityDay)}`,
-            currency: bucket.currency,
-            balance: alloc.principalRemaining,
-            haulStartDate: isoDay(effectiveHaulStart),
-            lastZakatPaidDate: bucket.lastZakatPaidDate
-              ? bucket.lastZakatPaidDate.toISOString().split('T')[0]
-              : null,
-            haulCompleteDate: isoDay(maturityDay),
-            idleBase: alloc.principalRemaining,
-            receiptsTotal: 0,
-            zakatDue,
-            isPaid,
-            haulCompleted: true,
-            source: alloc.investmentName,
-            sourceGroup: `Sukuk Principal • ${alloc.investmentName}`,
-            sourceType: 'SUKUK',
-            rowKind: 'PRINCIPAL',
-            why: `Sukuk principal Zakat due on maturity (${isoDay(maturityDay)})`,
-            lastPayment: lastPayment
-              ? {
-                  id: lastPayment.id,
-                  date: new Date(lastPayment.date).toISOString().split('T')[0],
-                  amount: Math.abs(Number(lastPayment.amount || 0)),
-                }
-              : null,
-            dueReceipts: [],
-          })
+            savingsRows.push({
+              id: rowKey,
+              bucketId: bucket.id,
+              periodIndex: i + 1,
+              label: `Sukuk Principal • ${alloc.investmentName} • ${isoDay(periodStart)} → ${isoDay(periodEnd)}`,
+              currency: bucket.currency,
+              balance: alloc.principalRemaining,
+              haulStartDate: isoDay(periodStart),
+              lastZakatPaidDate: bucket.lastZakatPaidDate
+                ? bucket.lastZakatPaidDate.toISOString().split('T')[0]
+                : null,
+              haulCompleteDate: isoDay(periodEnd),
+              idleBase: alloc.principalRemaining,
+              receiptsTotal: 0,
+              zakatDue,
+              isPaid,
+              haulCompleted: true,
+              source: alloc.investmentName,
+              sourceGroup: `Sukuk Principal • ${alloc.investmentName}`,
+              sourceType: 'SUKUK',
+              rowKind: 'PRINCIPAL',
+              why: `Sukuk principal continuity from ROSCA receipt (${isoDay(periodStart)} to ${isoDay(periodEnd)})`,
+              lastPayment: lastPayment
+                ? {
+                    id: lastPayment.id,
+                    date: new Date(lastPayment.date).toISOString().split('T')[0],
+                    amount: Math.abs(Number(lastPayment.amount || 0)),
+                  }
+                : null,
+              dueReceipts: [],
+            })
+          }
         }
 
         return savingsRows
