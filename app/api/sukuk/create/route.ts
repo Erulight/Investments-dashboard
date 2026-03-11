@@ -326,8 +326,8 @@ export async function POST(req: NextRequest) {
                 return null
               }
               const bucketHaulStart = new Date(d.getFullYear(), d.getMonth(), d.getDate())
-              // Compute last completed hawl anchor from bucket hawl start to investment start date
-              // This ensures if reward sat idle completing additional hawls, Sukuk inherits the end of last completed hawl
+              // Compute continuity anchor from receipt hawl start to investment start date.
+              // Example: Jan 2024 start, then investing in Jan 2025 -> anchor rolls to Dec 2024 cycle start.
               const lastCompletedAnchor = getLastCompletedHawlAnchor(bucketHaulStart, startDate)
               return lastCompletedAnchor
             })
@@ -346,7 +346,7 @@ export async function POST(req: NextRequest) {
                 return null
               }
               const bucketHaulStart = new Date(d.getFullYear(), d.getMonth(), d.getDate())
-              // Compute last completed hawl anchor from bucket hawl start to investment start date
+              // Compute continuity anchor from receipt hawl start to investment start date.
               const lastCompletedAnchor = getLastCompletedHawlAnchor(bucketHaulStart, startDate)
               return lastCompletedAnchor
             })

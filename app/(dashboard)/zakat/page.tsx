@@ -912,19 +912,19 @@ export default async function ZakatPage() {
         ? new Date(sukukStartRaw.getFullYear(), sukukStartRaw.getMonth(), sukukStartRaw.getDate())
         : fallbackDay
 
-      // Prefer metadata (already computed end-of-hawl), then bucket anchors, then fallback.
-      // If metadata exists, it already contains the end of the last completed hawl (e.g., Dec 2024)
-      // so we use it directly without re-computing.
-      const baseHawlStart =
-        existingSavingsAnchor ||
+      const sourceFundingAnchor =
         rewardRoscaAnchors[0] ||
         savingsRoscaAnchors[0] ||
         principalReceiptAnchors[0] ||
-        fallbackDay
-      // Only compute if we're using bucket anchors (not metadata)
-      const hawlStart = existingSavingsAnchor
-        ? existingSavingsAnchor
-        : getLastCompletedHawlAnchor(baseHawlStart, sukukStartDay)
+        null
+
+      // If we can derive anchor from real funding buckets, recompute continuity from that source.
+      // This also repairs stale metadata that may still hold an old first-hawl anchor.
+      // If no source is available, fall back to persisted metadata, then to invest/start fallback.
+      const baseHawlStart = sourceFundingAnchor || existingSavingsAnchor || fallbackDay
+      const hawlStart = sourceFundingAnchor
+        ? getLastCompletedHawlAnchor(baseHawlStart, sukukStartDay)
+        : (existingSavingsAnchor || fallbackDay)
 
       for (const alloc of roscaAllocations) {
         const bucketId = typeof alloc?.cashBucketId === 'string' ? alloc.cashBucketId : null
@@ -1665,8 +1665,8 @@ export default async function ZakatPage() {
           const isPrincipalReceiptMovement = movementType === 'WITHDRAW_PRINCIPAL' || movementType === 'ROLLBACK_PRINCIPAL'
           const isProfitReceiptMovement = movementType === 'WITHDRAW_PROFIT' || (isProfitBucket && movementType === 'CASH_IN')
 
-          // Principal receipts from ROSCA-funded Sukuk inherit ROSCA first contribution date.
-          // Profit receipts always use Sukuk start date.
+          // Principal receipts from ROSCA-funded Sukuk inherit the running ROSCA hawl anchor
+          // (continuity across cycles). Profit receipts always use Sukuk start date.
           const eligibilityAnchor = (isCommissionBucket
             ? bucketStart
             : (isPrincipalReceiptMovement
