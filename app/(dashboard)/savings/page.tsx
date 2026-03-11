@@ -3,6 +3,7 @@ import Link from 'next/link'
 import { getCurrentUser } from '@/lib/auth'
 import { prisma } from '@/lib/db'
 import { requireModuleAccess } from '@/lib/rbac'
+import { DISPLAY_CURRENCY_KEY, formatCurrencyAmount, normalizeDisplayCurrency } from '@/lib/currency'
 
 export default async function SavingsPage() {
   await requireModuleAccess('savings')
@@ -11,6 +12,12 @@ export default async function SavingsPage() {
   if (!user) {
     return null
   }
+
+  const displayCurrencySetting = await prisma.systemSetting.findUnique({
+    where: { key: DISPLAY_CURRENCY_KEY },
+  })
+  const displayCurrency = normalizeDisplayCurrency(displayCurrencySetting?.value)
+  const money = (value: number) => formatCurrencyAmount(value, displayCurrency, 'SAR')
 
   // Get all savings-related investments (we'll use CIRCLYS type for now)
   let circlysInvestments: any[] = []
@@ -74,11 +81,11 @@ export default async function SavingsPage() {
         <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
           <div className="bg-white/5 rounded-lg p-3 border border-white/10">
             <p className="text-[11px] text-slate-400 uppercase tracking-wider">Total Savings</p>
-            <p className="text-lg font-bold mt-0.5">SAR {totalSavings.toLocaleString()}</p>
+            <p className="text-lg font-bold mt-0.5">{money(totalSavings)}</p>
           </div>
           <div className="bg-white/5 rounded-lg p-3 border border-white/10">
             <p className="text-[11px] text-slate-400 uppercase tracking-wider">Reward Earned</p>
-            <p className="text-lg font-bold mt-0.5">SAR {totalReward.toLocaleString()}</p>
+            <p className="text-lg font-bold mt-0.5">{money(totalReward)}</p>
           </div>
         </div>
       </div>
@@ -133,10 +140,10 @@ export default async function SavingsPage() {
                   </div>
                   <div className="text-right">
                     <div className="text-sm font-bold text-gray-900 tabular-nums">
-                      SAR {inv.currentValue.toLocaleString()}
+                      {money(Number(inv.currentValue || 0))}
                     </div>
                     <div className="text-xs text-emerald-600 font-semibold tabular-nums">
-                      +SAR {(inv.currentValue - inv.principalAmount).toLocaleString()}
+                      +{money(Number(inv.currentValue || 0) - Number(inv.principalAmount || 0))}
                     </div>
                   </div>
                 </div>

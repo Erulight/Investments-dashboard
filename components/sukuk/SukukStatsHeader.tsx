@@ -147,11 +147,11 @@ export function SukukStatsHeader({
       <div className="grid grid-cols-2 lg:grid-cols-5 gap-3">
         <div className="rounded-xl border border-white/10 bg-white/5 p-3 transition-transform duration-300 hover:-translate-y-0.5">
           <p className="text-[11px] uppercase tracking-wider text-slate-400">Portfolio Value</p>
-          <p className="mt-1 text-xl font-bold tabular-nums">{currency} {formatMoney(animated.totalValue)}</p>
+          <p className="mt-1 text-xl font-bold tabular-nums">{formatMoney(animated.totalValue)} {currency}</p>
         </div>
         <div className="rounded-xl border border-white/10 bg-white/5 p-3 transition-transform duration-300 hover:-translate-y-0.5">
           <p className="text-[11px] uppercase tracking-wider text-slate-400">Total Return</p>
-          <p className="mt-1 text-xl font-bold tabular-nums">{currency} {formatMoney(animated.totalReturn)}</p>
+          <p className="mt-1 text-xl font-bold tabular-nums">{formatMoney(animated.totalReturn)} {currency}</p>
         </div>
         <div className="rounded-xl border border-white/10 bg-white/5 p-3 transition-transform duration-300 hover:-translate-y-0.5">
           <p className="text-[11px] uppercase tracking-wider text-slate-400">Return %</p>
@@ -185,26 +185,26 @@ export function SukukStatsHeader({
       <div className="mt-3 grid grid-cols-2 lg:grid-cols-5 gap-3">
         <div className="rounded-xl border border-white/10 bg-white/5 p-3">
           <p className="text-[11px] uppercase tracking-wider text-slate-400">Received</p>
-          <p className="mt-1 text-sm font-semibold tabular-nums">{currency} {formatMoney(animated.totalWithdrawn)}</p>
+          <p className="mt-1 text-sm font-semibold tabular-nums">{formatMoney(animated.totalWithdrawn)} {currency}</p>
         </div>
         <div className="rounded-xl border border-white/10 bg-white/5 p-3">
           <p className="text-[11px] uppercase tracking-wider text-slate-400">Fees Paid</p>
-          <p className="mt-1 text-sm font-semibold tabular-nums">{currency} {formatMoney(animated.totalFeesPaid)}</p>
+          <p className="mt-1 text-sm font-semibold tabular-nums">{formatMoney(animated.totalFeesPaid)} {currency}</p>
         </div>
         {role === 'OWNER' ? (
           <div className="rounded-xl border border-white/10 bg-white/5 p-3">
             <p className="text-[11px] uppercase tracking-wider text-slate-400">Commission Earned</p>
-            <p className="mt-1 text-sm font-semibold tabular-nums">{currency} {formatMoney(animated.totalCommissionEarned)}</p>
+            <p className="mt-1 text-sm font-semibold tabular-nums">{formatMoney(animated.totalCommissionEarned)} {currency}</p>
           </div>
         ) : (
           <div className="rounded-xl border border-white/10 bg-white/5 p-3">
             <p className="text-[11px] uppercase tracking-wider text-slate-400">Commission Paid</p>
-            <p className="mt-1 text-sm font-semibold tabular-nums">{currency} {formatMoney(animated.totalCommissionPaid)}</p>
+            <p className="mt-1 text-sm font-semibold tabular-nums">{formatMoney(animated.totalCommissionPaid)} {currency}</p>
           </div>
         )}
         <div className="rounded-xl border border-white/10 bg-white/5 p-3">
           <p className="text-[11px] uppercase tracking-wider text-slate-400">Receivable</p>
-          <p className="mt-1 text-sm font-semibold tabular-nums">{currency} {formatMoney(animated.totalReceivable)}</p>
+          <p className="mt-1 text-sm font-semibold tabular-nums">{formatMoney(animated.totalReceivable)} {currency}</p>
         </div>
         <div className="rounded-xl border border-white/10 bg-white/5 p-3">
           <p className="text-[11px] uppercase tracking-wider text-slate-400">Avg Days to Maturity</p>
@@ -232,7 +232,7 @@ export function SukukStatsHeader({
         <div className="rounded-xl border border-white/10 bg-white/5 p-3">
           <p className="text-[11px] uppercase tracking-wider text-slate-400">Pending Sold Settlement</p>
           <p className="mt-1 text-sm font-semibold tabular-nums">
-            {currency} {formatMoney(animated.totalPendingFromSoldDeals)}
+            {formatMoney(animated.totalPendingFromSoldDeals)} {currency}
           </p>
         </div>
       </div>
@@ -249,7 +249,7 @@ export function SukukStatsHeader({
                   <div key={platform}>
                     <div className="mb-1 flex items-center justify-between gap-2">
                       <span className="truncate text-xs text-slate-200">{platform}</span>
-                      <span className="text-xs font-semibold tabular-nums text-slate-100">{currency} {formatMoney(value)}</span>
+                      <span className="text-xs font-semibold tabular-nums text-slate-100">{formatMoney(value)} {currency}</span>
                     </div>
                     <div className="h-1.5 w-full overflow-hidden rounded-full bg-white/10">
                       <div

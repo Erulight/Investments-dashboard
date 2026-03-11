@@ -4,6 +4,13 @@ import { prisma } from '@/lib/db'
 import { SukukList } from '@/components/sukuk/SukukList'
 import { requireModuleAccess } from '@/lib/rbac'
 import { SukukStatsHeader } from '@/components/sukuk/SukukStatsHeader'
+import {
+  DISPLAY_CURRENCY_KEY,
+  convertCurrencyAmount,
+  formatCurrencyAmount,
+  getCurrencyPrefix,
+  normalizeDisplayCurrency,
+} from '@/lib/currency'
 
 export const dynamic = 'force-dynamic'
 export const revalidate = 0
@@ -15,6 +22,14 @@ export default async function InvestmentsPage() {
   if (!user) {
     return null
   }
+
+  const displayCurrencySetting = await prisma.systemSetting.findUnique({
+    where: { key: DISPLAY_CURRENCY_KEY },
+  })
+  const displayCurrency = normalizeDisplayCurrency(displayCurrencySetting?.value)
+  const currencySymbol = getCurrencyPrefix(displayCurrency)
+  const toDisplayAmount = (value: number) => convertCurrencyAmount(value, 'SAR', displayCurrency)
+  const money = (value: number) => formatCurrencyAmount(value, displayCurrency, 'SAR')
 
   let investments: any[] = []
 
@@ -562,9 +577,6 @@ export default async function InvestmentsPage() {
     ? Math.min(100, Math.max(0, (totalWithdrawn / totalReturn) * 100))
     : 0
 
-  const statsCurrency =
-    displayedInvestments.find((inv: any) => typeof inv?.account?.currency === 'string')?.account?.currency || 'SAR'
-
   const platformTotals: Array<[string, number]> = Array.from(
     displayedInvestments
       .reduce((map: Map<string, number>, inv: any) => {
@@ -576,6 +588,9 @@ export default async function InvestmentsPage() {
       }, new Map<string, number>())
       .entries()
   ).sort((a, b) => b[1] - a[1])
+  const displayPlatformTotals: Array<[string, number]> = platformTotals
+    .map(([platform, value]) => [platform, toDisplayAmount(value)] as [string, number])
+    .sort((a, b) => b[1] - a[1])
 
   const getMonthKey = (value?: string | Date | null) => {
     const date = toDate(value)
@@ -666,23 +681,23 @@ export default async function InvestmentsPage() {
       {/* Header */}
       <SukukStatsHeader
         role={user.role}
-        currency={statsCurrency}
-        totalValue={totalValue}
-        totalReturn={totalReturn}
+        currency={currencySymbol}
+        totalValue={toDisplayAmount(totalValue)}
+        totalReturn={toDisplayAmount(totalReturn)}
         returnPercentage={returnPercentage}
         activeDealsCount={activeDealsCount}
-        totalWithdrawn={totalWithdrawn}
-        totalFeesPaid={totalFeesPaid}
-        totalReceivable={totalReceivable}
-        totalCommissionEarned={totalCommissionEarned}
-        totalCommissionPaid={totalCommissionPaid}
-        totalPendingFromSoldDeals={totalPendingFromSoldDeals}
+        totalWithdrawn={toDisplayAmount(totalWithdrawn)}
+        totalFeesPaid={toDisplayAmount(totalFeesPaid)}
+        totalReceivable={toDisplayAmount(totalReceivable)}
+        totalCommissionEarned={toDisplayAmount(totalCommissionEarned)}
+        totalCommissionPaid={toDisplayAmount(totalCommissionPaid)}
+        totalPendingFromSoldDeals={toDisplayAmount(totalPendingFromSoldDeals)}
         avgDaysToMaturity={avgDaysToMaturity}
         nearMaturityDealsCount={nearMaturityDealsCount}
         overdueDealsCount={overdueDealsCount}
         avgOverdueDays={avgOverdueDays}
         realizedCoveragePct={realizedCoveragePct}
-        platformTotals={platformTotals}
+        platformTotals={displayPlatformTotals}
       />
 
       {/* Investments List */}
@@ -711,7 +726,7 @@ export default async function InvestmentsPage() {
                   <p className="text-[11px] text-gray-500">Last {monthlySeries.length} months</p>
                 </div>
                 <div className="mt-2">
-                  {renderSparkline(monthlySeries.map((x) => x.received))}
+                  {renderSparkline(monthlySeries.map((x) => toDisplayAmount(x.received)))}
                 </div>
               </div>
 
@@ -721,7 +736,7 @@ export default async function InvestmentsPage() {
                   <p className="text-[11px] text-gray-500">Withdrawals + Sold profit + Commission</p>
                 </div>
                 <div className="mt-2">
-                  {renderSparkline(monthlySeries.map((x) => x.realizedProfit))}
+                  {renderSparkline(monthlySeries.map((x) => toDisplayAmount(x.realizedProfit)))}
                 </div>
               </div>
             </div>
@@ -734,7 +749,7 @@ export default async function InvestmentsPage() {
                     const best = monthlySeries.reduce((a, b) => (b.received > a.received ? b : a), monthlySeries[0])
                     return (
                       <p className="text-sm font-bold text-gray-900 tabular-nums">
-                        {best.label} • SAR {best.received.toLocaleString(undefined, { maximumFractionDigits: 2 })}
+                        {best.label} • {money(best.received)}
                       </p>
                     )
                   })()}
@@ -748,7 +763,7 @@ export default async function InvestmentsPage() {
                     )
                     return (
                       <p className="text-sm font-bold text-gray-900 tabular-nums">
-                        {best.label} • SAR {best.realizedProfit.toLocaleString(undefined, { maximumFractionDigits: 2 })}
+                        {best.label} • {money(best.realizedProfit)}
                       </p>
                     )
                   })()}
@@ -768,15 +783,15 @@ export default async function InvestmentsPage() {
             ) : (
               <div className="space-y-2">
                 {(() => {
-                  const max = Math.max(...platformTotals.map((x) => x[1]), 1)
-                  return platformTotals.slice(0, 8).map(([platform, value]) => {
+                  const max = Math.max(...displayPlatformTotals.map((x) => x[1]), 1)
+                  return displayPlatformTotals.slice(0, 8).map(([platform, value]) => {
                     const pct = Math.max(0, Math.min(100, (value / max) * 100))
                     return (
                       <div key={platform} className="space-y-1">
                         <div className="flex items-center justify-between gap-2">
                           <span className="truncate text-xs text-gray-700 dark:text-slate-200">{platform}</span>
                           <span className="text-xs font-semibold tabular-nums text-gray-900">
-                            SAR {value.toLocaleString(undefined, { maximumFractionDigits: 0 })}
+                            {money(value)}
                           </span>
                         </div>
                         <div className="w-full bg-gray-100 rounded-full h-2">
@@ -835,7 +850,7 @@ export default async function InvestmentsPage() {
                 <div className="flex items-center justify-between p-3 bg-gray-50 rounded-lg">
                   <span className="text-xs text-gray-500">Avg. Deal Size</span>
                   <span className="text-sm font-bold text-gray-900">
-                    SAR {(totalInvested / Math.max(1, activeDealsCount)).toLocaleString(undefined, { maximumFractionDigits: 0 })}
+                    {money(totalInvested / Math.max(1, activeDealsCount))}
                   </span>
                 </div>
                 <div className="flex items-center justify-between p-3 bg-gray-50 rounded-lg">
@@ -845,13 +860,13 @@ export default async function InvestmentsPage() {
                 <div className="flex items-center justify-between p-3 bg-gray-50 rounded-lg">
                   <span className="text-xs text-gray-500">Total Withdrawn</span>
                   <span className="text-sm font-bold text-gray-900">
-                    SAR {totalWithdrawn.toLocaleString(undefined, { maximumFractionDigits: 0 })}
+                    {money(totalWithdrawn)}
                   </span>
                 </div>
                 <div className="flex items-center justify-between p-3 bg-gray-50 rounded-lg">
                   <span className="text-xs text-gray-500">Receivable</span>
                   <span className="text-sm font-bold text-gray-900">
-                    SAR {totalReceivable.toLocaleString(undefined, { maximumFractionDigits: 0 })}
+                    {money(totalReceivable)}
                   </span>
                 </div>
               </div>

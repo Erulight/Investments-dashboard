@@ -2,6 +2,7 @@ import { getCurrentUser } from '@/lib/auth'
 import { prisma } from '@/lib/db'
 import { requireModuleAccess } from '@/lib/rbac'
 import { CirclysClient } from '@/components/savings/CirclysClient'
+import { DISPLAY_CURRENCY_KEY, normalizeDisplayCurrency } from '@/lib/currency'
 
 export default async function CirclysPage() {
   await requireModuleAccess('savings')
@@ -10,6 +11,11 @@ export default async function CirclysPage() {
   if (!user) {
     return null
   }
+
+  const displayCurrencySetting = await prisma.systemSetting.findUnique({
+    where: { key: DISPLAY_CURRENCY_KEY },
+  })
+  const displayCurrency = normalizeDisplayCurrency(displayCurrencySetting?.value)
 
   let investments: any[] = []
 
@@ -56,5 +62,11 @@ export default async function CirclysPage() {
     }))
   }
 
-  return <CirclysClient initialInvestments={investments} userRole={user.role} />
+  return (
+    <CirclysClient
+      initialInvestments={investments}
+      userRole={user.role}
+      displayCurrency={displayCurrency}
+    />
+  )
 }

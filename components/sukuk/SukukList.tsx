@@ -9,6 +9,7 @@ import { Modal } from './SukukModal'
 import { DateInput } from '@/components/ui/DateInput'
 import { formatDateInput, formatDisplayDate, toIsoDateInput } from '@/lib/date'
 import { SukukForm } from './SukukForm'
+import { formatCurrencyAmount, normalizeDisplayCurrency } from '@/lib/currency'
 
 const Icon = ({ children }: { children: ReactNode }) => (
   <span className="inline-flex h-4 w-4 items-center justify-center">{children}</span>
@@ -65,12 +66,32 @@ export function SukukList({ initialSukuk, userRole, ownerPersonId, viewerPersonI
   const [sukuk, setSukuk] = useState<any[]>(
     Array.isArray(initialSukuk) ? initialSukuk : []
   )
+  const [displayCurrency, setDisplayCurrency] = useState<'SAR' | 'USD'>('SAR')
 
   const canActOnDeals = userRole === 'OWNER' || userRole === 'PARTNER'
 
   useEffect(() => {
     setSukuk(Array.isArray(initialSukuk) ? initialSukuk : [])
   }, [initialSukuk])
+
+  useEffect(() => {
+    let mounted = true
+    const loadDisplayCurrency = async () => {
+      try {
+        const response = await fetch('/api/settings/currency')
+        if (!response.ok) return
+        const data = await response.json().catch(() => ({}))
+        if (!mounted) return
+        setDisplayCurrency(normalizeDisplayCurrency(data?.currency))
+      } catch {
+        // keep default SAR
+      }
+    }
+    loadDisplayCurrency()
+    return () => {
+      mounted = false
+    }
+  }, [])
 
   const [sort, setSort] = useState<{ key: string; dir: 'asc' | 'desc' }>(() => ({
     key: 'maturityDate',
@@ -210,12 +231,8 @@ export function SukukList({ initialSukuk, userRole, ownerPersonId, viewerPersonI
   }
 
   const formatCurrency = (value: number, currency?: string) => {
-    const amount = Number.isFinite(value) ? value : 0
-    const formatted = amount.toLocaleString(undefined, {
-      minimumFractionDigits: 2,
-      maximumFractionDigits: 2,
-    })
-    return currency ? `${currency} ${formatted}` : formatted
+    const sourceCurrency = normalizeDisplayCurrency(currency)
+    return formatCurrencyAmount(value, displayCurrency, sourceCurrency)
   }
 
   const formatPercent = (value: number) => {
@@ -2892,8 +2909,8 @@ export function SukukList({ initialSukuk, userRole, ownerPersonId, viewerPersonI
               Are you sure you want to return <strong>{returnInvestment?.name}</strong> to the owner?
             </p>
             <ul className="space-y-1 text-xs">
-              <li>• Your principal: <strong>SAR {formatCurrency(Number(returnInvestment?.myParticipation?.investedAmount || 0))}</strong></li>
-              <li>• Sale price: <strong>SAR 0</strong> (returning at cost)</li>
+              <li>• Your principal: <strong>{formatCurrency(Number(returnInvestment?.myParticipation?.investedAmount || 0), returnInvestment?.account?.currency)}</strong></li>
+              <li>• Sale price: <strong>{formatCurrency(0, returnInvestment?.account?.currency)}</strong> (returning at cost)</li>
               <li>• This action cannot be undone</li>
             </ul>
           </div>

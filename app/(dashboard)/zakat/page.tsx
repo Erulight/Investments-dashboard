@@ -3,6 +3,7 @@ import { prisma } from '@/lib/db'
 import { requireModuleAccess } from '@/lib/rbac'
 import { ZakatPageClient } from '@/components/zakat/ZakatPageClient'
 import { recomputeCashSetting } from '@/lib/cashBalance'
+import { DISPLAY_CURRENCY_KEY, formatCurrencyAmount, normalizeDisplayCurrency } from '@/lib/currency'
 
 export const dynamic = 'force-dynamic'
 
@@ -240,6 +241,11 @@ export default async function ZakatPage() {
   if (!user) {
     return null
   }
+  const displayCurrencySetting = await prisma.systemSetting.findUnique({
+    where: { key: DISPLAY_CURRENCY_KEY },
+  })
+  const displayCurrency = normalizeDisplayCurrency(displayCurrencySetting?.value)
+  const money = (value: number) => formatCurrencyAmount(value, displayCurrency, 'SAR')
 
   const canAccess = user.role === 'OWNER' || user.role === 'PARTNER'
   if (!canAccess) {
@@ -2197,13 +2203,17 @@ export default async function ZakatPage() {
         <div className="rounded-xl border border-amber-200 bg-amber-50 p-4 text-sm text-amber-900">
           <div className="font-semibold">Below Nisab</div>
           <div className="mt-1">
-            Total zakatable wealth is SAR {totalZakatableWealthForNisab.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}.
-            Nisab is SAR {nisabValue.toLocaleString(undefined, { minimumFractionDigits: 0, maximumFractionDigits: 0 })}.
+            Total zakatable wealth is {money(totalZakatableWealthForNisab)}.
+            Nisab is {money(nisabValue)}.
           </div>
         </div>
       )}
 
-      <ZakatPageClient initialBuckets={rows} zakatEnabled={zakatEnabled} />
+      <ZakatPageClient
+        initialBuckets={rows}
+        zakatEnabled={zakatEnabled}
+        displayCurrency={displayCurrency}
+      />
     </div>
   )
 }

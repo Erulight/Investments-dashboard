@@ -4,6 +4,7 @@ import { useState, useEffect, useCallback } from 'react'
 import { useRouter } from 'next/navigation'
 import { ZakatDashboard } from './ZakatDashboard'
 import { ZakatLoadingSkeleton } from './ZakatLoadingSkeleton'
+import type { DisplayCurrency } from '@/lib/currency'
 
 type BucketRow = {
   id: string
@@ -41,9 +42,11 @@ type BucketRow = {
 export function ZakatPageClient({
   initialBuckets,
   zakatEnabled = true,
+  displayCurrency = 'SAR',
 }: {
   initialBuckets: BucketRow[]
   zakatEnabled?: boolean
+  displayCurrency?: DisplayCurrency
 }) {
   const router = useRouter()
   const [buckets, setBuckets] = useState<BucketRow[]>(initialBuckets)
@@ -164,6 +167,7 @@ export function ZakatPageClient({
       <ZakatDashboard
         buckets={buckets}
         zakatEnabled={zakatEnabled}
+        displayCurrency={displayCurrency}
       />
 
       <style jsx>{`

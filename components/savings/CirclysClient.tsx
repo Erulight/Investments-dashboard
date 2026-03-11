@@ -8,10 +8,17 @@ import { Button } from '@/components/ui/Button'
 import { SavingsForm } from './SavingsForm'
 import { CreateSavingsInput } from '@/lib/validation'
 import { formatDisplayDate } from '@/lib/date'
+import {
+  formatCurrencyAmount,
+  getCurrencyPrefix,
+  type DisplayCurrency,
+  normalizeDisplayCurrency,
+} from '@/lib/currency'
 
 interface CirclysClientProps {
   initialInvestments: any[]
   userRole: string
+  displayCurrency: DisplayCurrency
 }
 
 const parseRoscaMetadata = (inv: any) => {
@@ -41,7 +48,7 @@ function getStartYear(inv: any): number {
   return new Date(inv.startDate).getFullYear()
 }
 
-export function CirclysClient({ initialInvestments, userRole }: CirclysClientProps) {
+export function CirclysClient({ initialInvestments, userRole, displayCurrency }: CirclysClientProps) {
   const [investments, setInvestments] = useState(initialInvestments)
   const [showCreateForm, setShowCreateForm] = useState(false)
   const [isLoading, setIsLoading] = useState(false)
@@ -73,6 +80,9 @@ export function CirclysClient({ initialInvestments, userRole }: CirclysClientPro
     completionRate: 0,
   }))
   const animatedStatsRef = useRef(animatedStats)
+  const money = (value: number, sourceCurrency: DisplayCurrency = 'SAR') =>
+    formatCurrencyAmount(value, displayCurrency, sourceCurrency)
+  const baseSarSymbol = getCurrencyPrefix('SAR')
 
   const years = useMemo(() => {
     const s = new Set(investments.map((i: any) => getStartYear(i)))
@@ -305,15 +315,15 @@ export function CirclysClient({ initialInvestments, userRole }: CirclysClientPro
         <div className="grid grid-cols-2 lg:grid-cols-5 gap-3">
           <div className="bg-white/5 backdrop-blur rounded-xl p-4 border border-white/10 transition-transform duration-300 hover:-translate-y-0.5">
             <p className="text-[11px] text-slate-400 uppercase tracking-wider mb-1">Total Saved</p>
-            <p className="text-xl font-bold">SAR {fmt(animatedStats.totalSaved)}</p>
+            <p className="text-xl font-bold">{money(animatedStats.totalSaved)}</p>
           </div>
           <div className="bg-white/5 backdrop-blur rounded-xl p-4 border border-white/10 transition-transform duration-300 hover:-translate-y-0.5">
             <p className="text-[11px] text-slate-400 uppercase tracking-wider mb-1">Total Reward</p>
-            <p className="text-xl font-bold text-emerald-400">SAR {fmt(animatedStats.totalReward)}</p>
+            <p className="text-xl font-bold text-emerald-400">{money(animatedStats.totalReward)}</p>
           </div>
           <div className="bg-white/5 backdrop-blur rounded-xl p-4 border border-white/10 transition-transform duration-300 hover:-translate-y-0.5">
             <p className="text-[11px] text-slate-400 uppercase tracking-wider mb-1">Current Value</p>
-            <p className="text-xl font-bold">SAR {fmt(animatedStats.totalValue)}</p>
+            <p className="text-xl font-bold">{money(animatedStats.totalValue)}</p>
           </div>
           <div className="bg-white/5 backdrop-blur rounded-xl p-4 border border-white/10 transition-transform duration-300 hover:-translate-y-0.5">
             <p className="text-[11px] text-slate-400 uppercase tracking-wider mb-1">Reward %</p>
@@ -328,7 +338,7 @@ export function CirclysClient({ initialInvestments, userRole }: CirclysClientPro
         <div className="mt-3 grid grid-cols-1 lg:grid-cols-3 gap-3">
           <div className="rounded-xl border border-white/10 bg-white/5 px-4 py-3">
             <p className="text-[11px] text-slate-400 uppercase tracking-wider mb-1">Avg Value / Plan</p>
-            <p className="text-lg font-semibold text-slate-100">SAR {fmt(animatedStats.avgValuePerPlan)}</p>
+            <p className="text-lg font-semibold text-slate-100">{money(animatedStats.avgValuePerPlan)}</p>
           </div>
           <div className="rounded-xl border border-white/10 bg-white/5 px-4 py-3">
             <p className="text-[11px] text-slate-400 uppercase tracking-wider mb-1">Received Plans</p>
@@ -427,7 +437,10 @@ export function CirclysClient({ initialInvestments, userRole }: CirclysClientPro
                           </span>
                         </TableCell>
                         <TableCell className="text-right font-medium tabular-nums text-slate-700 dark:text-slate-200">
-                          {inv.account?.currency} {meta.monthlyContribution?.toLocaleString() || 0}
+                          {money(
+                            Number(meta.monthlyContribution || 0),
+                            normalizeDisplayCurrency(inv.account?.currency),
+                          )}
                         </TableCell>
                         <TableCell>
                           <div className="flex flex-col items-center gap-1">
@@ -452,7 +465,7 @@ export function CirclysClient({ initialInvestments, userRole }: CirclysClientPro
                         <TableCell className="text-right tabular-nums">
                           {rewardEarned > 0 ? (
                             <span className="font-semibold text-emerald-700 dark:text-emerald-300">
-                              +{inv.account?.currency} {fmt(rewardEarned)}
+                              +{money(rewardEarned, normalizeDisplayCurrency(inv.account?.currency))}
                             </span>
                           ) : (
                             <span className="text-xs text-slate-400 dark:text-slate-500">—</span>
@@ -461,7 +474,7 @@ export function CirclysClient({ initialInvestments, userRole }: CirclysClientPro
                         <TableCell className="text-right tabular-nums">
                           {bookingFee > 0 ? (
                             <span className="font-medium text-red-700 dark:text-red-300">
-                              {inv.account?.currency} {fmt(bookingFee)}
+                              {money(bookingFee, normalizeDisplayCurrency(inv.account?.currency))}
                             </span>
                           ) : (
                             <span className="text-xs text-slate-400 dark:text-slate-500">—</span>
@@ -508,15 +521,15 @@ export function CirclysClient({ initialInvestments, userRole }: CirclysClientPro
                       <TableCell className="font-semibold text-slate-900 dark:text-slate-100">Total</TableCell>
                       <TableCell>{null}</TableCell>
                       <TableCell className="text-right font-semibold tabular-nums whitespace-nowrap text-slate-900 dark:text-slate-100">
-                        {tableTotals.currency} {fmt(tableTotals.monthly)}
+                        {money(tableTotals.monthly, normalizeDisplayCurrency(tableTotals.currency))}
                       </TableCell>
                       <TableCell>{null}</TableCell>
                       <TableCell>{null}</TableCell>
                       <TableCell className="text-right font-semibold tabular-nums whitespace-nowrap text-emerald-700 dark:text-emerald-300">
-                        +{tableTotals.currency} {fmt(tableTotals.reward)}
+                        +{money(tableTotals.reward, normalizeDisplayCurrency(tableTotals.currency))}
                       </TableCell>
                       <TableCell className="text-right font-semibold tabular-nums whitespace-nowrap text-red-700 dark:text-red-300">
-                        {tableTotals.currency} {fmt(tableTotals.bookingFee)}
+                        {money(tableTotals.bookingFee, normalizeDisplayCurrency(tableTotals.currency))}
                       </TableCell>
                       <TableCell>{null}</TableCell>
                       {userRole === 'OWNER' && <TableCell>{null}</TableCell>}
@@ -623,11 +636,11 @@ export function CirclysClient({ initialInvestments, userRole }: CirclysClientPro
                         <div className="text-sm">
                           {hasReceived ? (
                             <span className="font-semibold text-emerald-800">
-                              Received SAR {fmt(Number(meta.received.amount))} on {formatDisplayDate(meta.received.date)}
+                              Received {money(Number(meta.received.amount))} on {formatDisplayDate(meta.received.date)}
                             </span>
                           ) : (
                             <span className="font-semibold text-amber-800">
-                              Receipt due at Month {receiptMo} — SAR {fmt(receiveAmt)}
+                              Receipt due at Month {receiptMo} — {money(receiveAmt)}
                             </span>
                           )}
                         </div>
@@ -833,10 +846,10 @@ export function CirclysClient({ initialInvestments, userRole }: CirclysClientPro
                         <tr className="bg-gray-50 border-t border-gray-200">
                           <td colSpan={2} className="py-2 pr-3 text-xs font-semibold text-gray-500">Total</td>
                           <td className="py-2 pr-3 text-xs font-bold text-gray-900 tabular-nums whitespace-nowrap">
-                            SAR {fmt(rows.reduce((s: number, x: any) => s + (Number(x.payment?.amount) || 0), 0))}
+                            {money(rows.reduce((s: number, x: any) => s + (Number(x.payment?.amount) || 0), 0))}
                           </td>
                           <td className="py-2 pr-3 text-xs font-bold text-emerald-700 tabular-nums whitespace-nowrap">
-                            SAR {fmt(rows.reduce((s: number, x: any) => s + (Number(x.payment?.reward) || 0), 0))}
+                            {money(rows.reduce((s: number, x: any) => s + (Number(x.payment?.reward) || 0), 0))}
                           </td>
                           <td className="py-2 pr-3"></td>
                           <td className="py-2"></td>
@@ -919,7 +932,7 @@ export function CirclysClient({ initialInvestments, userRole }: CirclysClientPro
                 />
               </div>
               <div>
-                <label className="mb-2 block text-sm font-medium text-slate-700 dark:text-slate-200">Total Amount Received (SAR)</label>
+                <label className="mb-2 block text-sm font-medium text-slate-700 dark:text-slate-200">Total Amount Received ({baseSarSymbol} base)</label>
                 <input
                   type="number"
                   value={receiveModalAmount}

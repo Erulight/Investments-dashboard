@@ -9,6 +9,11 @@ import { Modal } from '@/components/sukuk/SukukModal'
 import { DateInput } from '@/components/ui/DateInput'
 import { AnimatedCard } from '@/components/ui/AnimatedCard'
 import { formatDateInput, toIsoDateInput } from '@/lib/date'
+import {
+  formatCurrencyAmount,
+  type DisplayCurrency,
+  normalizeDisplayCurrency,
+} from '@/lib/currency'
 
 type ReceiptEntry = {
   date: string
@@ -78,9 +83,11 @@ function SortArrow({ active, dir }: { active: boolean; dir: SortDir }) {
 export function ZakatDashboard({
   buckets,
   zakatEnabled = true,
+  displayCurrency = 'SAR',
 }: {
   buckets: BucketRow[]
   zakatEnabled?: boolean
+  displayCurrency?: DisplayCurrency
 }) {
   const router = useRouter()
 
@@ -573,7 +580,8 @@ export function ZakatDashboard({
     setDetailsData(null)
   }
 
-  const fmt = (n: number) => n.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })
+  const money = (n: number, sourceCurrency: DisplayCurrency = 'SAR') =>
+    formatCurrencyAmount(n, displayCurrency, sourceCurrency)
 
   return (
     <div className="space-y-4">
@@ -598,7 +606,7 @@ export function ZakatDashboard({
                     </div>
                     <div className="text-right">
                       <div className="text-[11px] text-slate-500 dark:text-slate-400">Due</div>
-                      <div className={`text-lg font-bold tabular-nums ${allPaid ? 'text-emerald-700' : 'text-amber-700'}`}>SAR {fmt(Math.max(0, s.due))}</div>
+                      <div className={`text-lg font-bold tabular-nums ${allPaid ? 'text-emerald-700' : 'text-amber-700'}`}>{money(Math.max(0, s.due))}</div>
                     </div>
                   </div>
                   <div className="mt-2 flex items-center justify-between">
@@ -630,11 +638,11 @@ export function ZakatDashboard({
       <div className="grid grid-cols-2 lg:grid-cols-6 gap-3">
         <AnimatedCard index={0} className="border border-slate-200 dark:border-white/10 p-3" hover={false}>
           <div className="text-xs text-slate-500 dark:text-slate-400">Total Zakat Due</div>
-          <div className="text-lg font-bold text-emerald-700">SAR {fmt(totalDue)}</div>
+          <div className="text-lg font-bold text-emerald-700">{money(totalDue)}</div>
         </AnimatedCard>
         <AnimatedCard index={1} className="border border-slate-200 dark:border-white/10 p-3" hover={false}>
           <div className="text-xs text-slate-500 dark:text-slate-400">Total Balance</div>
-          <div className="text-lg font-bold text-slate-900 dark:text-slate-100">SAR {fmt(totalBalance)}</div>
+          <div className="text-lg font-bold text-slate-900 dark:text-slate-100">{money(totalBalance)}</div>
         </AnimatedCard>
         <AnimatedCard index={2} className="border border-slate-200 dark:border-white/10 p-3" hover={false}>
           <div className="text-xs text-slate-500 dark:text-slate-400">Due Rows</div>
@@ -685,7 +693,7 @@ export function ZakatDashboard({
               {year}
               {yearDue > 0 && (
                 <span className="ml-2 inline-flex items-center rounded-full bg-amber-100 px-2 py-0.5 text-xs font-semibold text-amber-800">
-                  SAR {fmt(yearDue)}
+                  {money(yearDue)}
                 </span>
               )}
             </button>
@@ -847,11 +855,11 @@ export function ZakatDashboard({
                   </div>
                   <div className="text-right">
                     <div className="text-xs text-slate-500 dark:text-slate-400">Balance</div>
-                    <div className="text-sm font-semibold text-slate-900 dark:text-slate-100">SAR {fmt(group.totalBalance)}</div>
+                    <div className="text-sm font-semibold text-slate-900 dark:text-slate-100">{money(group.totalBalance)}</div>
                   </div>
                   <div className="text-right ml-4">
                     <div className="text-xs text-slate-500 dark:text-slate-400">Zakat Due</div>
-                    <div className="text-sm font-semibold text-emerald-700 dark:text-emerald-300">SAR {fmt(group.totalDue)}</div>
+                    <div className="text-sm font-semibold text-emerald-700 dark:text-emerald-300">{money(group.totalDue)}</div>
                   </div>
                   <button
                     onClick={() => {
@@ -927,7 +935,7 @@ export function ZakatDashboard({
                       const gIdle = groupRows.reduce((s, r) => s + (Number(r.idleBase) || 0), 0)
                       const gReceipts = groupRows.reduce((s, r) => s + (Number(r.receiptsTotal) || 0), 0)
                       const gZakat = groupRows.reduce((s, r) => s + (Number(r.zakatDue) || 0), 0)
-                      const cur = groupRows[0]?.currency || 'SAR'
+                      const cur = normalizeDisplayCurrency(groupRows[0]?.currency)
 
                       rows.push(
                         <tr
@@ -946,10 +954,10 @@ export function ZakatDashboard({
                           </td>
                           <td className="py-2.5 px-3 text-slate-500 dark:text-slate-400">-</td>
                           <td className="py-2.5 px-3 text-slate-500 dark:text-slate-400">-</td>
-                          <td className="py-2.5 px-3 text-right font-medium text-slate-900 dark:text-slate-100">{cur} {fmt(gBalance)}</td>
-                          <td className="py-2.5 px-3 text-right text-slate-700 dark:text-slate-200">{cur} {fmt(gIdle)}</td>
-                          <td className="py-2.5 px-3 text-right text-slate-700 dark:text-slate-200">{cur} {fmt(gReceipts)}</td>
-                          <td className="py-2.5 px-3 text-right font-semibold text-slate-900 dark:text-slate-100">{cur} {fmt(gZakat)}</td>
+                          <td className="py-2.5 px-3 text-right font-medium text-slate-900 dark:text-slate-100">{money(gBalance, cur)}</td>
+                          <td className="py-2.5 px-3 text-right text-slate-700 dark:text-slate-200">{money(gIdle, cur)}</td>
+                          <td className="py-2.5 px-3 text-right text-slate-700 dark:text-slate-200">{money(gReceipts, cur)}</td>
+                          <td className="py-2.5 px-3 text-right font-semibold text-slate-900 dark:text-slate-100">{money(gZakat, cur)}</td>
                           <td className="py-2.5 px-3 text-center">
                             {gZakat > 0.000001 ? (
                               <span className="text-[11px] font-semibold text-amber-700 dark:text-amber-300">Due</span>
@@ -990,10 +998,10 @@ export function ZakatDashboard({
                             </td>
                             <td className="py-2.5 px-3 text-gray-600">{formatDateDisplay(b.haulStartDate)}</td>
                             <td className="py-2.5 px-3 text-gray-600">{formatDateDisplay(b.haulCompleteDate)}</td>
-                            <td className="py-2.5 px-3 text-right">SAR {fmt(b.balance)}</td>
-                            <td className="py-2.5 px-3 text-right">SAR {fmt(b.idleBase)}</td>
-                            <td className="py-2.5 px-3 text-right">SAR {fmt(b.receiptsTotal)}</td>
-                            <td className="py-2.5 px-3 text-right font-semibold">SAR {fmt(b.zakatDue)}</td>
+                            <td className="py-2.5 px-3 text-right">{money(b.balance, normalizeDisplayCurrency(b.currency))}</td>
+                            <td className="py-2.5 px-3 text-right">{money(b.idleBase, normalizeDisplayCurrency(b.currency))}</td>
+                            <td className="py-2.5 px-3 text-right">{money(b.receiptsTotal, normalizeDisplayCurrency(b.currency))}</td>
+                            <td className="py-2.5 px-3 text-right font-semibold">{money(b.zakatDue, normalizeDisplayCurrency(b.currency))}</td>
                             <td className="py-2.5 px-3 text-center">
                               {b.isPaid ? (
                                 <span className="text-[11px] font-semibold text-emerald-700">Paid</span>
@@ -1050,12 +1058,12 @@ export function ZakatDashboard({
                   <tr className="bg-gray-50 border-t border-gray-200">
                     <td colSpan={3} className="py-2.5 px-3 text-xs font-semibold text-gray-500">Total</td>
                     <td className="py-2.5 px-3 text-right font-bold text-gray-900 whitespace-nowrap">
-                      SAR {fmt(totalBalance)}
+                      {money(totalBalance)}
                     </td>
                     <td className="py-2.5 px-3"></td>
                     <td className="py-2.5 px-3"></td>
                     <td className="py-2.5 px-3 text-right font-bold text-emerald-700 whitespace-nowrap">
-                      SAR {fmt(totalDue)}
+                      {money(totalDue)}
                     </td>
                     <td className="py-2.5 px-3"></td>
                     <td className="py-2.5 px-3"></td>
@@ -1164,15 +1172,15 @@ export function ZakatDashboard({
               <div className="mt-2 space-y-1 text-sm text-slate-700 dark:text-slate-200">
                 <div>
                   Idle cash held through haul completion ({formatDateDisplay(detailsTarget.haulStartDate)} → {formatDateDisplay(detailsTarget.haulCompleteDate)}):
-                  <span className="font-semibold text-slate-900 dark:text-slate-100"> {detailsTarget.currency} {detailsTarget.idleBase.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
+                  <span className="font-semibold text-slate-900 dark:text-slate-100"> {money(detailsTarget.idleBase, normalizeDisplayCurrency(detailsTarget.currency))}</span>
                 </div>
                 <div>
                   + Receipts after haul completion:
-                  <span className="font-semibold text-slate-900 dark:text-slate-100"> {detailsTarget.currency} {detailsTarget.receiptsTotal.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
+                  <span className="font-semibold text-slate-900 dark:text-slate-100"> {money(detailsTarget.receiptsTotal, normalizeDisplayCurrency(detailsTarget.currency))}</span>
                 </div>
                 <div>
                   = Zakat due:
-                  <span className="font-semibold text-emerald-700"> {detailsTarget.currency} {detailsTarget.zakatDue.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
+                  <span className="font-semibold text-emerald-700"> {money(detailsTarget.zakatDue, normalizeDisplayCurrency(detailsTarget.currency))}</span>
                 </div>
               </div>
             </div>
@@ -1202,8 +1210,7 @@ export function ZakatDashboard({
                               {m.investment?.name ? m.investment.name : '-'}
                             </td>
                             <td className={`py-2 text-right whitespace-nowrap ${m.amount < 0 ? 'text-red-700' : 'text-emerald-700'}`}>
-                              {detailsTarget.currency}{' '}
-                              {Math.abs(m.amount).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                              {money(Math.abs(m.amount), normalizeDisplayCurrency(detailsTarget.currency))}
                             </td>
                           </tr>
                         ))}
@@ -1239,8 +1246,7 @@ export function ZakatDashboard({
                               {t.description || '-'}
                             </td>
                             <td className={`py-2 text-right whitespace-nowrap ${t.amount < 0 ? 'text-red-700' : 'text-emerald-700'}`}>
-                              {detailsTarget.currency}{' '}
-                              {Math.abs(t.amount).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                              {money(Math.abs(t.amount), normalizeDisplayCurrency(detailsTarget.currency))}
                             </td>
                           </tr>
                         ))}
@@ -1269,7 +1275,7 @@ export function ZakatDashboard({
           )}
           {payTarget && (
             <div className="text-sm text-slate-600 dark:text-slate-300">
-              {formatDateTokens(payTarget.label || payTarget.source)} — Hawl {payTarget.periodIndex} • Due {payTarget.currency} {payTarget.zakatDue.toFixed(2)}
+              {formatDateTokens(payTarget.label || payTarget.source)} — Hawl {payTarget.periodIndex} • Due {money(payTarget.zakatDue, normalizeDisplayCurrency(payTarget.currency))}
             </div>
           )}
           <DateInput
