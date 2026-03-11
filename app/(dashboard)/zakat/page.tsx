@@ -361,20 +361,6 @@ export default async function ZakatPage() {
     }
   }
 
-  // Track excluded ROSCA receipt buckets (savings + reward) for first-hawl row generation
-  // so Hawl 1 remains visible even when the receipt bucket is fully invested into Sukuk.
-  const excludedRoscaReceiptFirstHawlsByBucketId = new Map<string, {
-    bucketId: string
-    bucketLabel: string
-    haulStartDate: Date
-    receiptDate: Date
-    receiptAmount: number
-    investmentName: string
-    sukukInvestedAmount: number
-    kind: 'SAVINGS' | 'REWARD'
-    currency: string
-  }>()
-
   if (user.role === 'OWNER') {
     const savingsInvestments = await prisma.investment.findMany({
       where: { account: { type: 'CIRCLYS' } },
@@ -464,7 +450,7 @@ export default async function ZakatPage() {
         rewardDateRaw.getMonth(),
         rewardDateRaw.getDate(),
       )
-      const rewardAnchorDate = getLastCompletedHawlAnchor(rewardSeedAnchor, rewardDate)
+      const rewardAnchorDate = rewardDate
       const rewardCurrency = inv.account?.currency || 'SAR'
 
       if (rewardMatured && expectedRewardTotal > REWARD_EPSILON) {
@@ -972,8 +958,6 @@ export default async function ZakatPage() {
       }
     }
 
-    const sukukInvestedReceiptIds = new Set<string>()
-
     for (const sukukInv of allSukukInvestments) {
       const cashInvestTx = allSukukCashInvestTxs.find((tx: any) => tx.investmentId === sukukInv.id)
       const fallbackRaw = cashInvestTx?.date ?? sukukInv.startDate
@@ -1030,68 +1014,22 @@ export default async function ZakatPage() {
         ? new Date(sukukStartRaw.getFullYear(), sukukStartRaw.getMonth(), sukukStartRaw.getDate())
         : fallbackDay
 
-      const sourceFundingAnchor =
-        rewardRoscaAnchors[0] ||
-        savingsRoscaAnchors[0] ||
-        principalReceiptAnchors[0] ||
-        null
+      const rewardRoscaAnchor = rewardRoscaAnchors[0] || null
+      const savingsRoscaAnchor = savingsRoscaAnchors[0] || null
+      const principalReceiptAnchor = principalReceiptAnchors[0] || null
 
-      // If we can derive anchor from real funding buckets, recompute continuity from that source.
-      // This also repairs stale metadata that may still hold an old first-hawl anchor.
-      // If no source is available, fall back to persisted metadata, then to invest/start fallback.
-      const baseHawlStart = sourceFundingAnchor || existingSavingsAnchor || fallbackDay
-      const hawlStart = sourceFundingAnchor
-        ? getLastCompletedHawlAnchor(baseHawlStart, sukukStartDay)
-        : (existingSavingsAnchor || fallbackDay)
-
-      for (const alloc of roscaAllocations) {
-        const bucketId = typeof alloc?.cashBucketId === 'string' ? alloc.cashBucketId : null
-        if (!bucketId) continue
-        const balance = Math.max(0, Number(alloc?.cashBucket?.balance) || 0)
-        const bucketLabel = typeof alloc?.cashBucket?.label === 'string' ? alloc.cashBucket.label : ''
-        const isSavingsBucket = bucketLabel.startsWith('Savings Receipt •')
-        const isRewardBucket = bucketLabel.startsWith('Circlys Reward Receipt •')
-        
-        // Suppress only receipts that were fully moved out (avoid hiding partial receipts).
-        if (balance <= 0.01) {
-          sukukInvestedReceiptIds.add(bucketId)
-          
-          // Track this excluded bucket so we can generate first-hawl row later
-          const bucket = alloc.cashBucket
-          if (bucket && (isSavingsBucket || isRewardBucket)) {
-            const haulStartRaw = toDate(bucket.haulStartDate)
-            const movements = Array.isArray(bucket.movements) ? bucket.movements : []
-            const cashInMovement = movements.find((m: any) => m?.type === 'CASH_IN')
-            const receiptDateRaw = cashInMovement?.date ? new Date(cashInMovement.date) : null
-            const receiptAmount = cashInMovement ? Math.abs(Number(cashInMovement.amount) || 0) : 0
-            
-            if (haulStartRaw && !Number.isNaN(haulStartRaw.getTime()) && receiptDateRaw && !Number.isNaN(receiptDateRaw.getTime()) && receiptAmount > 0) {
-              const haulStartDate = new Date(haulStartRaw.getFullYear(), haulStartRaw.getMonth(), haulStartRaw.getDate())
-              const receiptDate = new Date(receiptDateRaw.getFullYear(), receiptDateRaw.getMonth(), receiptDateRaw.getDate())
-              const investmentName = isSavingsBucket 
-                ? bucketLabel.replace('Savings Receipt • ', '')
-                : bucketLabel.replace('Circlys Reward Receipt • ', '')
-              
-              // Calculate Sukuk invested amount for this bucket
-              const sukukInvestedAmount = movements
-                .filter((m: any) => m?.type === 'INVEST_OUT')
-                .reduce((sum: number, m: any) => sum + Math.abs(Number(m?.amount) || 0), 0)
-              
-              excludedRoscaReceiptFirstHawlsByBucketId.set(bucketId, {
-                bucketId,
-                bucketLabel,
-                haulStartDate,
-                receiptDate,
-                receiptAmount,
-                investmentName,
-                sukukInvestedAmount,
-                kind: isSavingsBucket ? 'SAVINGS' : 'REWARD',
-                currency: bucket.currency || 'SAR',
-              })
-            }
-          }
-        }
-      }
+      // ROSCA anchor rules:
+      // - Reward receipt buckets already store the current running hawl anchor, so copy directly.
+      // - Savings receipt buckets store first contribution anchor, so inherit last completed hawl.
+      // - Principal receipt recycling keeps prior behavior.
+      const hawlStart =
+        rewardRoscaAnchor
+          ? rewardRoscaAnchor
+          : savingsRoscaAnchor
+            ? getLastCompletedHawlAnchor(savingsRoscaAnchor, sukukStartDay)
+            : principalReceiptAnchor
+              ? getLastCompletedHawlAnchor(principalReceiptAnchor, sukukStartDay)
+              : (existingSavingsAnchor || fallbackDay)
 
       // Persist hawl start in investment metadata
       const hawlIso = hawlStart.toISOString().split('T')[0]
@@ -1446,9 +1384,10 @@ export default async function ZakatPage() {
     return 'PROFIT' as const
   }
 
-  const hasAnySavingsReceiptBucket = buckets.some(
-    (b: any) => typeof b?.label === 'string' && b.label.startsWith('Savings Receipt •'),
-  )
+  const hasAnyRoscaReceiptBucket = buckets.some((b: any) => {
+    const label = typeof b?.label === 'string' ? b.label : ''
+    return label.startsWith('Savings Receipt •') || label.startsWith('Circlys Reward Receipt •')
+  })
 
   const rows: BucketRow[] = buckets
     .flatMap((bucket: any): BucketRow[] => {
@@ -1512,13 +1451,22 @@ export default async function ZakatPage() {
         const totalReceived = Math.abs(Number(cashInMovement.amount) || 0)
         if (totalReceived <= 0) return []
 
-        const haulStart = startOfDay(bucketStart)
-        const currentBalance = Math.max(0, Number(bucket.balance) || 0)
-        const investmentName = bucket.label.replace('Savings Receipt • ', '')
+        const bucketMetadata = parseMetadata(bucket?.metadata) || {}
+        const rewardFirstContributionMeta = toDate(bucketMetadata?.firstContributionDate)
+        const rewardFirstContributionFromInvestment = toDate(cashInMovement?.investment?.startDate)
+        const firstHawlStartBase = isRewardReceiptBucket
+          ? (rewardFirstContributionMeta || rewardFirstContributionFromInvestment || bucketStart)
+          : bucketStart
+        const firstHawlStart = startOfDay(firstHawlStartBase)
+        const investmentName = isRewardReceiptBucket
+          ? bucket.label.replace('Circlys Reward Receipt • ', '')
+          : bucket.label.replace('Savings Receipt • ', '')
+        const roscaLabelPrefix = isRewardReceiptBucket ? 'Circlys Reward Receipt' : 'Savings Receipt'
+        const sourceGroupLabel = `${roscaLabelPrefix} • ${investmentName}`
         const savingsRows: BucketRow[] = []
 
         // Calculate Sukuk investments made during first hawl period
-        const firstHaulEnd = addDays(haulStart, 354)
+        const firstHaulEnd = addDays(firstHawlStart, 354)
         const sukukInvestedDuringFirstHawl = movements.reduce((sum: number, m: any) => {
           const movementType = typeof m?.type === 'string' ? m.type : ''
           if (movementType !== 'INVEST_OUT') return sum
@@ -1545,7 +1493,7 @@ export default async function ZakatPage() {
           const meta = parseMetadata(inv?.metadata)
           const savingsStart = toDate(meta?.savingsHaulStartDate)
           if (!savingsStart || Number.isNaN(savingsStart.getTime())) return sum
-          if (isoDay(startOfDay(savingsStart)) !== isoDay(haulStart)) return sum
+          if (isoDay(startOfDay(savingsStart)) !== isoDay(firstHawlStart)) return sum
 
           const investTxs = cashInvestByInvestmentId.get(inv.id) || []
           const investedInFirstHawl = investTxs.reduce((txSum: number, tx: { amount: number; date: Date }) => {
@@ -1564,7 +1512,7 @@ export default async function ZakatPage() {
         // First hawl: ROSCA Hawl 1 from first contribution to receipt completion
         // BUSINESS RULE: Show FULL receipt amount, NOT reduced by Sukuk investment
         const firstHaulCompleted = now.getTime() >= firstHaulEnd.getTime()
-        const firstRowKey = buildRowKey(['SAVINGS_RECEIPT', bucket.id])
+        const firstRowKey = buildRowKey(['ROSCA_RECEIPT', isRewardReceiptBucket ? 'REWARD' : 'SAVINGS', bucket.id])
         const firstIsPaid = movementHasRowPaid(payments, firstRowKey)
         const firstHawlZakatBase = totalReceived  // FULL amount, not reduced
         const firstZakatDue = !firstIsPaid && firstHaulCompleted && firstHawlZakatBase > 0 ? firstHawlZakatBase * 0.025 : 0
@@ -1573,10 +1521,10 @@ export default async function ZakatPage() {
           id: firstRowKey,
           bucketId: bucket.id,
           periodIndex: 0,
-          label: `Savings Receipt • ${investmentName}`,
+          label: `${roscaLabelPrefix} • ${investmentName}`,
           currency: bucket.currency,
           balance: firstHawlZakatBase,
-          haulStartDate: isoDay(haulStart),
+          haulStartDate: isoDay(firstHawlStart),
           lastZakatPaidDate: bucket.lastZakatPaidDate
             ? bucket.lastZakatPaidDate.toISOString().split('T')[0]
             : null,
@@ -1587,12 +1535,12 @@ export default async function ZakatPage() {
           isPaid: firstIsPaid,
           haulCompleted: firstHaulCompleted,
           source: investmentName,
-          sourceGroup: `Savings Receipt • ${investmentName}`,
+          sourceGroup: sourceGroupLabel,
           sourceType: 'CIRCLYS',
           rowKind: 'PROFIT' as const,
           why: effectiveSukukInvested > 0
-            ? `ROSCA Hawl 1: Full receipt ${bucket.currency} ${totalReceived.toLocaleString()} from ${isoDay(haulStart)} to ${isoDay(firstHaulEnd)}. ${effectiveSukukInvested.toLocaleString()} invested in Sukuk.`
-            : `ROSCA Hawl 1: Receipt ${bucket.currency} ${totalReceived.toLocaleString()} from ${isoDay(haulStart)} to ${isoDay(firstHaulEnd)}`,
+            ? `ROSCA Hawl 1: Full receipt ${bucket.currency} ${totalReceived.toLocaleString()} from ${isoDay(firstHawlStart)} to ${isoDay(firstHaulEnd)}. ${effectiveSukukInvested.toLocaleString()} invested in Sukuk.`
+            : `ROSCA Hawl 1: Receipt ${bucket.currency} ${totalReceived.toLocaleString()} from ${isoDay(firstHawlStart)} to ${isoDay(firstHaulEnd)}`,
           lastPayment: lastPayment
             ? {
                 id: lastPayment.id,
@@ -1669,7 +1617,7 @@ export default async function ZakatPage() {
         )
         const savingsIdleBase = Math.max(0, baseForSecondAndLater - sukukInvestedBase)
 
-        if (firstHaulCompleted && (savingsIdleBase > 0 || sukukInvestedBase > 0)) {
+        if (firstHaulCompleted && savingsIdleBase > 0) {
           const idleStart = firstHaulEnd
           const elapsedSinceFirstHawl = diffDaysFloor(idleStart, now)
           const completedIdleHawls = Math.floor(elapsedSinceFirstHawl / 354)
@@ -1688,7 +1636,7 @@ export default async function ZakatPage() {
                 id: rowKey,
                 bucketId: bucket.id,
                 periodIndex: i + 1,
-                label: `Idle • Savings Receipt • ${investmentName} • ${isoDay(periodStart)} → ${isoDay(periodEnd)}`,
+                label: `Idle • ${roscaLabelPrefix} • ${investmentName} • ${isoDay(periodStart)} → ${isoDay(periodEnd)}`,
                 currency: bucket.currency,
                 balance: savingsIdleBase,
                 haulStartDate: isoDay(periodStart),
@@ -1702,7 +1650,7 @@ export default async function ZakatPage() {
                 isPaid,
                 haulCompleted: now.getTime() >= periodEnd.getTime(),
                 source: investmentName,
-                sourceGroup: `Savings Receipt • ${investmentName}`,
+                sourceGroup: sourceGroupLabel,
                 sourceType: 'CIRCLYS',
                 rowKind: 'IDLE',
                 why: `Cash idle from ${isoDay(periodStart)} to ${isoDay(periodEnd)} (${idleDays} days)`,
@@ -1716,75 +1664,70 @@ export default async function ZakatPage() {
                 dueReceipts: [],
               })
             }
-
-            for (const alloc of sukukAllocations) {
-              // For active Sukuk investments, defer Zakat to maturity date, not hawl completion
-              const maturityTime = alloc.maturityDate?.getTime() || 0
-              const periodEndTime = periodEnd.getTime()
-              const isMatured = !alloc.maturityDate || maturityTime <= now.getTime()
-              if (!isMatured) continue
-              const inv = investmentMap.get(alloc.investmentId)
-              const investmentMeta = parseMetadata(inv?.metadata)
-              const metadataHaulStart = toDate(investmentMeta?.savingsHaulStartDate)
-              const effectiveHaulStart = metadataHaulStart && !Number.isNaN(metadataHaulStart.getTime())
-                ? startOfDay(metadataHaulStart)
-                : haulStart
-              
-              // For matured investments or periods that include maturity, use maturity date as hawl complete
-              const effectiveHaulComplete = alloc.maturityDate && maturityTime <= periodEndTime && maturityTime >= periodStart.getTime()
-                ? alloc.maturityDate
-                : periodEnd
-              
-              // Closed/matured Sukuk only.
-              const isMaturedForPeriod = !alloc.isActive || maturityTime <= periodEndTime
-              
-              const rowKey = buildRowKey([
-                'SAVINGS_SUKUK_IDLE',
-                bucket.id,
-                alloc.investmentId,
-                isoDay(periodStart),
-                isoDay(effectiveHaulComplete),
-              ])
-              const isPaid = movementHasRowPaid(payments, rowKey)
-              const zakatDue = isMaturedForPeriod && !isPaid ? alloc.principalRemaining * 0.025 : 0
-
-              savingsRows.push({
-                id: rowKey,
-                bucketId: bucket.id,
-                periodIndex: i + 1,
-                label: `Idle • Sukuk Principal • ${alloc.investmentName} • ${isoDay(effectiveHaulStart)} → ${isoDay(effectiveHaulComplete)}`,
-                currency: bucket.currency,
-                balance: alloc.principalRemaining,
-                haulStartDate: isoDay(effectiveHaulStart),
-                lastZakatPaidDate: bucket.lastZakatPaidDate
-                  ? bucket.lastZakatPaidDate.toISOString().split('T')[0]
-                  : null,
-                haulCompleteDate: isoDay(effectiveHaulComplete),
-                idleBase: alloc.principalRemaining,
-                receiptsTotal: 0,
-                zakatDue,
-                isPaid,
-                haulCompleted: isMaturedForPeriod,
-                source: alloc.investmentName,
-                sourceGroup: `Sukuk Principal • ${alloc.investmentName}`,
-                sourceType: 'SUKUK',
-                rowKind: 'PRINCIPAL',
-                why: alloc.isActive && !isMaturedForPeriod
-                  ? `Sukuk principal - Zakat deferred to maturity (${isoDay(alloc.maturityDate!)})`
-                  : alloc.maturityDate && maturityTime <= periodEndTime 
-                  ? `Sukuk principal Zakat due on maturity (${isoDay(alloc.maturityDate)})`
-                  : `Sukuk principal carrying forward hawl from ${isoDay(effectiveHaulStart)}`,
-                lastPayment: lastPayment
-                  ? {
-                      id: lastPayment.id,
-                      date: new Date(lastPayment.date).toISOString().split('T')[0],
-                      amount: Math.abs(Number(lastPayment.amount || 0)),
-                    }
-                  : null,
-                dueReceipts: [],
-              })
-            }
           }
+        }
+
+        // ROSCA-funded Sukuk principal row:
+        // - show only once per matured/closed Sukuk
+        // - never show while active
+        // - anchor must come from investment.metadata.savingsHaulStartDate
+        for (const alloc of sukukAllocations) {
+          const maturityDate = alloc.maturityDate
+          if (!maturityDate || Number.isNaN(maturityDate.getTime())) continue
+          const maturityDay = startOfDay(maturityDate)
+          if (maturityDay.getTime() > now.getTime()) continue
+
+          const inv = investmentMap.get(alloc.investmentId)
+          const investmentMeta = parseMetadata(inv?.metadata)
+          const metadataHaulStart = toDate(investmentMeta?.savingsHaulStartDate)
+
+          // Barrier: principal row must use persisted continuity anchor.
+          if (!metadataHaulStart || Number.isNaN(metadataHaulStart.getTime())) continue
+
+          const effectiveHaulStart = startOfDay(metadataHaulStart)
+          if (effectiveHaulStart.getTime() > maturityDay.getTime()) continue
+
+          const rowKey = buildRowKey([
+            'ROSCA_SUKUK_PRINCIPAL',
+            bucket.id,
+            alloc.investmentId,
+            isoDay(effectiveHaulStart),
+            isoDay(maturityDay),
+          ])
+          const isPaid = movementHasRowPaid(payments, rowKey)
+          const zakatDue = !isPaid ? alloc.principalRemaining * 0.025 : 0
+
+          savingsRows.push({
+            id: rowKey,
+            bucketId: bucket.id,
+            periodIndex: 1,
+            label: `Sukuk Principal • ${alloc.investmentName} • ${isoDay(effectiveHaulStart)} → ${isoDay(maturityDay)}`,
+            currency: bucket.currency,
+            balance: alloc.principalRemaining,
+            haulStartDate: isoDay(effectiveHaulStart),
+            lastZakatPaidDate: bucket.lastZakatPaidDate
+              ? bucket.lastZakatPaidDate.toISOString().split('T')[0]
+              : null,
+            haulCompleteDate: isoDay(maturityDay),
+            idleBase: alloc.principalRemaining,
+            receiptsTotal: 0,
+            zakatDue,
+            isPaid,
+            haulCompleted: true,
+            source: alloc.investmentName,
+            sourceGroup: `Sukuk Principal • ${alloc.investmentName}`,
+            sourceType: 'SUKUK',
+            rowKind: 'PRINCIPAL',
+            why: `Sukuk principal Zakat due on maturity (${isoDay(maturityDay)})`,
+            lastPayment: lastPayment
+              ? {
+                  id: lastPayment.id,
+                  date: new Date(lastPayment.date).toISOString().split('T')[0],
+                  amount: Math.abs(Number(lastPayment.amount || 0)),
+                }
+              : null,
+            dueReceipts: [],
+          })
         }
 
         return savingsRows
@@ -1794,7 +1737,7 @@ export default async function ZakatPage() {
       // General Cash idle rows that double-count against the Savings Receipt row.
       if (
         user.role === 'OWNER' &&
-        hasAnySavingsReceiptBucket &&
+        hasAnyRoscaReceiptBucket &&
         !isSavingsReceiptBucket &&
         !isImmediateReceiptBucket &&
         (bucket.label === 'General Cash' || bucket.label == null)
@@ -2104,137 +2047,6 @@ export default async function ZakatPage() {
       return bucketRows
     })
     .filter((row: BucketRow): row is BucketRow => Boolean(row))
-
-  // Add first-hawl rows for excluded ROSCA receipt buckets (both savings and rewards)
-  // These rows show Hawl 1 from first ROSCA contribution to receipt completion
-  const todayForExcluded = new Date()
-  const todayDayForExcluded = new Date(todayForExcluded.getFullYear(), todayForExcluded.getMonth(), todayForExcluded.getDate())
-  
-  // Fetch all Sukuk investments to generate principal/profit rows for excluded buckets
-  const allSukukForExcluded = await prisma.investmentBucketAllocation.findMany({
-    where: {
-      investment: { account: { type: 'SUKUK' } },
-      cashBucket: {
-        OR: [
-          { label: { startsWith: 'Savings Receipt •' } },
-          { label: { startsWith: 'Circlys Reward Receipt •' } },
-        ],
-      },
-    },
-    select: {
-      cashBucketId: true,
-      principalAllocated: true,
-      principalRemaining: true,
-      investment: {
-        select: {
-          id: true,
-          name: true,
-          principalAmount: true,
-          startDate: true,
-          maturityDate: true,
-          metadata: true,
-        },
-      },
-    },
-  })
-  
-  for (const excluded of excludedRoscaReceiptFirstHawlsByBucketId.values()) {
-    const firstHaulEnd = addDays(excluded.haulStartDate, 354)
-    const firstHaulCompleted = todayDayForExcluded.getTime() >= firstHaulEnd.getTime()
-    const rowKey = `ROSCA_FIRST_HAWL|${excluded.kind}|${excluded.bucketId}`
-    
-    // Check if this row was already paid
-    const isPaid = false // No payment tracking for excluded buckets, user must manually mark
-    
-    // Calculate zakat due: 2.5% of the FULL receipt amount (not reduced by Sukuk investment)
-    const firstHawlZakatBase = excluded.receiptAmount
-    const zakatDue = !isPaid && firstHaulCompleted && firstHawlZakatBase > 0 ? firstHawlZakatBase * 0.025 : 0
-
-    const labelPrefix = excluded.kind === 'SAVINGS' ? 'ROSCA Savings' : 'ROSCA Reward'
-    rows.push({
-      id: rowKey,
-      bucketId: excluded.bucketId,
-      periodIndex: 0,
-      label: `${labelPrefix} • ${excluded.investmentName}`,
-      currency: excluded.currency,
-      balance: firstHawlZakatBase,
-      haulStartDate: isoDay(excluded.haulStartDate),
-      lastZakatPaidDate: null,
-      haulCompleteDate: isoDay(firstHaulEnd),
-      idleBase: 0,
-      receiptsTotal: firstHawlZakatBase,
-      zakatDue,
-      isPaid,
-      haulCompleted: firstHaulCompleted,
-      source: excluded.investmentName,
-      sourceGroup: `${labelPrefix} • ${excluded.investmentName}`,
-      sourceType: 'CIRCLYS',
-      rowKind: 'PROFIT' as const,
-      why: `ROSCA ${excluded.kind.toLowerCase()} Hawl 1 from first contribution (${isoDay(excluded.haulStartDate)}) to receipt (${isoDay(excluded.receiptDate)}). Full amount: ${excluded.currency} ${firstHawlZakatBase.toLocaleString()}, ${excluded.sukukInvestedAmount.toLocaleString()} invested in Sukuk.`,
-      lastPayment: null,
-      dueReceipts: [{
-        date: isoDay(excluded.receiptDate),
-        amount: firstHawlZakatBase,
-        type: excluded.kind === 'SAVINGS' ? 'ROSCA_SAVINGS_INVESTED' : 'ROSCA_REWARD_INVESTED',
-        investmentName: excluded.investmentName,
-      }],
-    })
-    
-    // Add Sukuk principal rows for this excluded bucket
-    const sukukAllocations = allSukukForExcluded.filter((alloc: any) => alloc.cashBucketId === excluded.bucketId)
-    
-    for (const allocation of sukukAllocations) {
-      const principalRemaining = Math.max(0, Number(allocation.principalRemaining) || 0)
-      if (principalRemaining <= 0) continue
-      
-      const sukuk = allocation.investment
-      if (!sukuk) continue
-      
-      const maturityDate = sukuk.maturityDate ? new Date(sukuk.maturityDate) : null
-      const isActive = maturityDate && !Number.isNaN(maturityDate.getTime()) && maturityDate.getTime() > todayDayForExcluded.getTime()
-      
-      const sukukStartDate = sukuk.startDate ? new Date(sukuk.startDate) : todayDayForExcluded
-      
-      // Sukuk principal inherits hawl from ROSCA receipt:
-      // - SAVINGS: Calculate end of last completed hawl from firstContributionDate to investment date
-      //   Example: Jan 2024 start → invest Jan 2025 → Dec 2024 (end of hawl 1)
-      // - REWARDS: Direct copy of receiptDate (already at hawl 2 start, no recalculation)
-      const sukukHaulStart = excluded.kind === 'SAVINGS' 
-        ? getLastCompletedHawlAnchor(excluded.haulStartDate, sukukStartDate)
-        : excluded.receiptDate
-      const sukukHaulEnd = addDays(sukukHaulStart, 354)
-      const sukukHaulCompleted = todayDayForExcluded.getTime() >= sukukHaulEnd.getTime()
-      
-      const sukukRowKey = `SUKUK_PRINCIPAL|${excluded.bucketId}|${sukuk.id}`
-      const sukukZakatDue = isActive ? 0 : (sukukHaulCompleted ? principalRemaining * 0.025 : 0)
-      
-      rows.push({
-        id: sukukRowKey,
-        bucketId: excluded.bucketId,
-        periodIndex: 1,
-        label: `Sukuk Principal • ${sukuk.name}`,
-        currency: excluded.currency,
-        balance: principalRemaining,
-        haulStartDate: isoDay(sukukHaulStart),
-        lastZakatPaidDate: null,
-        haulCompleteDate: maturityDate ? isoDay(maturityDate) : isoDay(sukukHaulEnd),
-        idleBase: principalRemaining,
-        receiptsTotal: 0,
-        zakatDue: sukukZakatDue,
-        isPaid: false,
-        haulCompleted: !isActive,
-        source: sukuk.name,
-        sourceGroup: `Sukuk Principal • ${sukuk.name}`,
-        sourceType: 'SUKUK',
-        rowKind: 'PRINCIPAL' as const,
-        why: isActive 
-          ? `Sukuk principal - Zakat deferred to maturity (${maturityDate ? isoDay(maturityDate) : 'TBD'})`
-          : `Sukuk principal from ROSCA ${excluded.kind.toLowerCase()}, hawl from ${isoDay(sukukHaulStart)}`,
-        lastPayment: null,
-        dueReceipts: [],
-      })
-    }
-  }
 
   // Sort rows so ROSCA first-hawl rows appear before principal/profit rows
   rows.sort((a, b) => {

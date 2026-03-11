@@ -22,33 +22,10 @@ type FundingSource = {
   amount: number
 }
 
-const diffDays = (start: Date, end: Date) => {
-  const s = new Date(start)
-  const e = new Date(end)
-  s.setHours(0, 0, 0, 0)
-  e.setHours(0, 0, 0, 0)
-  return Math.max(0, Math.round((e.getTime() - s.getTime()) / (1000 * 60 * 60 * 24)))
-}
-
-const addDays = (date: Date, days: number) => {
-  const d = new Date(date)
-  d.setDate(d.getDate() + days)
-  return d
-}
-
 const addMonths = (date: Date, months: number) => {
   const d = new Date(date)
   d.setMonth(d.getMonth() + months)
   return d
-}
-
-const getLastCompletedHawlAnchor = (initialAnchor: Date, referenceDate: Date) => {
-  const start = new Date(initialAnchor.getFullYear(), initialAnchor.getMonth(), initialAnchor.getDate())
-  const ref = new Date(referenceDate.getFullYear(), referenceDate.getMonth(), referenceDate.getDate())
-  const elapsed = diffDays(start, ref)
-  if (elapsed < 354) return start
-  const completedCycles = Math.floor(elapsed / 354)
-  return addDays(start, completedCycles * 354)
 }
 
 const getReceiptMonth = (meta: any) => Math.max(0, Math.floor(Number(meta?.receiptMonth || 0)))
@@ -354,8 +331,8 @@ export async function POST(
       rewardReceiptDateRaw.getMonth(),
       rewardReceiptDateRaw.getDate(),
     )
-    // Reward bucket uses first contribution date as hawl anchor (same as savings)
-    const rewardHawlAnchor = firstContributionDate
+    // Reward bucket anchor is the reward receipt date (hawl-2 start for reward cash).
+    const rewardHawlAnchor = rewardReceiptDate
 
     const nextMeta: any = {
       ...meta,
