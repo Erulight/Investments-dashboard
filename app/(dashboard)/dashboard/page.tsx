@@ -451,6 +451,20 @@ export default async function DashboardPage({
       return txs.some((tx: any) => tx?.type === 'SELL_TO_PARTNER' && tx.personId === ownerPersonId)
     }
 
+    const hasOwnerReceivedProfit = (inv: any) => {
+      const txs = Array.isArray(inv.transactions) ? inv.transactions : []
+      // Check for any profit receipt transactions (WITHDRAW_PROFIT or totalReceived > 0)
+      const hasWithdrawProfit = txs.some((tx: any) => {
+        if (tx?.type !== 'WITHDRAW_PROFIT') return false
+        if (ownerPersonId && tx?.personId !== ownerPersonId && tx?.personId != null) return false
+        return Math.abs(Number(tx?.amount) || 0) > 0
+      })
+      if (hasWithdrawProfit) return true
+      // Also check if investment has totalReceived > 0 (matured deals)
+      const totalReceived = Number(inv.totalReceived)
+      return Number.isFinite(totalReceived) && totalReceived > 0
+    }
+
     const isSoldSukukForOwner = (inv: any) => {
       if (inv?.account?.type !== 'SUKUK') return false
       const participants = Array.isArray(inv.dealParticipants) ? inv.dealParticipants : []
@@ -518,7 +532,8 @@ export default async function DashboardPage({
 
     const ownerScoped = owned.filter((inv: any) => {
       if (inv.account?.type !== 'SUKUK') return true
-      return getOwnerSukukPrincipal(inv) > 0 || hasOwnerSellTx(inv)
+      // Include Sukuk if owner has principal, sell transaction, OR received profit (matured deals)
+      return getOwnerSukukPrincipal(inv) > 0 || hasOwnerSellTx(inv) || hasOwnerReceivedProfit(inv)
     })
 
     ownedInvestments = ownerScoped
