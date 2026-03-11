@@ -890,20 +890,45 @@ export default async function DashboardPage({
       .map(([type, data]) => ({ type, ...data }))
       .sort((a, b) => b.value - a.value)
 
-    const currentYear = new Date().getFullYear()
-    const receivableYears = [selectedYear - 3, selectedYear - 2, selectedYear - 1, selectedYear]
-    receivableByYear = receivableYears.map((year) => {
-      const asOf = year < currentYear
-        ? new Date(year, 11, 31, 23, 59, 59, 999)
-        : new Date()
-      const amount = ownerScoped
-        .filter((inv: any) => getAccountType(inv) === 'SUKUK')
-        .reduce((sum: number, inv: any) => {
-          const m = getOwnerSukukMetrics(inv, asOf)
-          return sum + Math.max(0, toFiniteNumber(m.receivable))
-        }, 0)
-      return { year, amount: round2(amount) }
+    // Group receivables by maturity year instead of point-in-time snapshots
+    const receivableMap = new Map<number, { amount: number; deals: Array<{ name: string; maturityDate: Date; receivable: number; id: string }> }>()
+    const activeSukukForReceivable = ownerScoped.filter((inv: any) => {
+      if (getAccountType(inv) !== 'SUKUK') return false
+      const metrics = ownerSukukMetricsById.get(inv.id)
+      if (!metrics) return false
+      // Include if has outstanding receivable OR principal (deal not yet matured)
+      return metrics.receivable > 0.01 || metrics.principalOutstanding > 0.01
     })
+
+    for (const inv of activeSukukForReceivable) {
+      const maturity = toDate(inv.maturityDate)
+      if (!maturity) continue
+      const maturityYear = maturity.getFullYear()
+      const metrics = ownerSukukMetricsById.get(inv.id)
+      if (!metrics) continue
+      
+      // Calculate expected receivable at maturity (not current accrued)
+      const receivableAtMaturity = metrics.accruedProfit > 0
+        ? Math.max(0, metrics.accruedProfit - metrics.received)
+        : metrics.receivable
+      
+      if (receivableAtMaturity < 0.01) continue
+      
+      const existing = receivableMap.get(maturityYear) || { amount: 0, deals: [] }
+      existing.amount += receivableAtMaturity
+      existing.deals.push({
+        id: inv.id,
+        name: inv.name || 'Unnamed',
+        maturityDate: maturity,
+        receivable: round2(receivableAtMaturity),
+      })
+      receivableMap.set(maturityYear, existing)
+    }
+
+    receivableByYear = Array.from(receivableMap.entries())
+      .map(([year, data]) => ({ year, amount: round2(data.amount), deals: data.deals }))
+      .filter((x) => x.amount > 0)
+      .sort((a, b) => a.year - b.year)
 
     // Calculate ROSCA / Circlys remaining payback debt.
     const roscaInvestments = investments.filter((inv: any) => getAccountType(inv) === 'CIRCLYS')
