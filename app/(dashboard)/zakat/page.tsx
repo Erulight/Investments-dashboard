@@ -1054,33 +1054,6 @@ export default async function ZakatPage() {
         if (balance <= 0.01) {
           sukukInvestedReceiptIds.add(bucketId)
 
-          // For excluded ROSCA receipt buckets, capture first-hawl info
-          // so we can still show the ROSCA Hawl 1 row (e.g., Jan 2024 - Dec 2024)
-          if (isRewardBucket && sourceFundingAnchor) {
-            const bucketHaulStart = toDate(alloc?.cashBucket?.haulStartDate)
-            if (bucketHaulStart && !Number.isNaN(bucketHaulStart.getTime())) {
-              const haulStartDay = new Date(
-                bucketHaulStart.getFullYear(),
-                bucketHaulStart.getMonth(),
-                bucketHaulStart.getDate(),
-              )
-              // The first hawl ends when the Sukuk investment starts (money was invested)
-              // Calculate investment amount from this bucket
-              const investedAmount = Math.abs(Number(alloc?.principalRemaining) || 0) || Math.abs(Number(alloc?.amount) || 0)
-              // Extract ROSCA name from bucket label (e.g., "Circlys Reward Receipt • Circle Name")
-              const roscaName = bucketLabel.replace('Circlys Reward Receipt • ', '')
-
-              excludedRewardReceiptFirstHawls.push({
-                bucketId,
-                bucketLabel,
-                haulStartDate: haulStartDay,
-                receiptDate: sukukStartDay, // The money was invested on Sukuk start
-                receiptAmount: investedAmount,
-                investmentName: roscaName,
-                sukukInvestedAmount: investedAmount,
-              })
-            }
-          }
         }
       }
 
@@ -1546,12 +1519,12 @@ export default async function ZakatPage() {
 
         const effectiveSukukInvested = Math.max(sukukInvestedDuringFirstHawl, sukukInvestedByMetadata)
 
-        // First hawl: special receipt zakat (from first contribution date)
+        // First hawl: ROSCA Hawl 1 from first contribution to receipt completion
+        // BUSINESS RULE: Show FULL receipt amount, NOT reduced by Sukuk investment
         const firstHaulCompleted = now.getTime() >= firstHaulEnd.getTime()
         const firstRowKey = buildRowKey(['SAVINGS_RECEIPT', bucket.id])
         const firstIsPaid = movementHasRowPaid(payments, firstRowKey)
-        // Reduce Zakat base by amount invested in Sukuk during first hawl
-        const firstHawlZakatBase = Math.max(0, totalReceived - effectiveSukukInvested)
+        const firstHawlZakatBase = totalReceived  // FULL amount, not reduced
         const firstZakatDue = !firstIsPaid && firstHaulCompleted && firstHawlZakatBase > 0 ? firstHawlZakatBase * 0.025 : 0
 
         savingsRows.push({
@@ -1576,8 +1549,8 @@ export default async function ZakatPage() {
           sourceType: 'CIRCLYS',
           rowKind: 'PROFIT' as const,
           why: effectiveSukukInvested > 0
-            ? `ROSCA receipt of SAR ${totalReceived.toLocaleString()}, ${effectiveSukukInvested.toLocaleString()} invested in Sukuk, hawl from ${isoDay(haulStart)}`
-            : `ROSCA receipt of SAR ${totalReceived.toLocaleString()}, hawl from ${isoDay(haulStart)}`,
+            ? `ROSCA Hawl 1: Full receipt ${bucket.currency} ${totalReceived.toLocaleString()} from ${isoDay(haulStart)} to ${isoDay(firstHaulEnd)}. ${effectiveSukukInvested.toLocaleString()} invested in Sukuk.`
+            : `ROSCA Hawl 1: Receipt ${bucket.currency} ${totalReceived.toLocaleString()} from ${isoDay(haulStart)} to ${isoDay(firstHaulEnd)}`,
           lastPayment: lastPayment
             ? {
                 id: lastPayment.id,
@@ -2083,28 +2056,29 @@ export default async function ZakatPage() {
     })
     .filter((row: BucketRow): row is BucketRow => Boolean(row))
 
-  // Add first-hawl rows for excluded reward receipt buckets (ROSCA period hawl)
-  // These rows show the hawl from first ROSCA contribution to when money was invested in Sukuk
+  // Add first-hawl rows for excluded ROSCA receipt buckets (both savings and rewards)
+  // These rows show Hawl 1 from first ROSCA contribution to receipt completion
   const todayForExcluded = new Date()
   const todayDayForExcluded = new Date(todayForExcluded.getFullYear(), todayForExcluded.getMonth(), todayForExcluded.getDate())
-  for (const excluded of excludedRewardReceiptFirstHawls) {
+  for (const excluded of excludedRoscaReceiptFirstHawlsByBucketId.values()) {
     const firstHaulEnd = addDays(excluded.haulStartDate, 354)
     const firstHaulCompleted = todayDayForExcluded.getTime() >= firstHaulEnd.getTime()
-    const rowKey = `ROSCA_REWARD_FIRST_HAWL|${excluded.bucketId}`
+    const rowKey = `ROSCA_FIRST_HAWL|${excluded.kind}|${excluded.bucketId}`
     
     // Check if this row was already paid
     const isPaid = false // No payment tracking for excluded buckets, user must manually mark
     
-    // Calculate zakat due: 2.5% of the amount that completed the first hawl
+    // Calculate zakat due: 2.5% of the FULL receipt amount (not reduced by Sukuk investment)
     const firstHawlZakatBase = excluded.receiptAmount
     const zakatDue = !isPaid && firstHaulCompleted && firstHawlZakatBase > 0 ? firstHawlZakatBase * 0.025 : 0
 
+    const labelPrefix = excluded.kind === 'SAVINGS' ? 'ROSCA Savings' : 'ROSCA Reward'
     rows.push({
       id: rowKey,
       bucketId: excluded.bucketId,
       periodIndex: 0,
-      label: `ROSCA Reward • ${excluded.investmentName}`,
-      currency: 'SAR',
+      label: `${labelPrefix} • ${excluded.investmentName}`,
+      currency: excluded.currency,
       balance: firstHawlZakatBase,
       haulStartDate: isoDay(excluded.haulStartDate),
       lastZakatPaidDate: null,
@@ -2115,15 +2089,15 @@ export default async function ZakatPage() {
       isPaid,
       haulCompleted: firstHaulCompleted,
       source: excluded.investmentName,
-      sourceGroup: `ROSCA Reward • ${excluded.investmentName}`,
+      sourceGroup: `${labelPrefix} • ${excluded.investmentName}`,
       sourceType: 'CIRCLYS',
       rowKind: 'PROFIT' as const,
-      why: `ROSCA reward money from first contribution (${isoDay(excluded.haulStartDate)}) to investment in Sukuk (${isoDay(excluded.receiptDate)}). Amount: SAR ${firstHawlZakatBase.toLocaleString()}, invested in Sukuk.`,
+      why: `ROSCA ${excluded.kind.toLowerCase()} Hawl 1 from first contribution (${isoDay(excluded.haulStartDate)}) to receipt (${isoDay(excluded.receiptDate)}). Full amount: ${excluded.currency} ${firstHawlZakatBase.toLocaleString()}, ${excluded.sukukInvestedAmount.toLocaleString()} invested in Sukuk.`,
       lastPayment: null,
       dueReceipts: [{
         date: isoDay(excluded.receiptDate),
         amount: firstHawlZakatBase,
-        type: 'ROSCA_REWARD_INVESTED',
+        type: excluded.kind === 'SAVINGS' ? 'ROSCA_SAVINGS_INVESTED' : 'ROSCA_REWARD_INVESTED',
         investmentName: excluded.investmentName,
       }],
     })
