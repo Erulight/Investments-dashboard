@@ -1767,14 +1767,18 @@ export default async function ZakatPage() {
         // If receipt was fully reinvested, skip idle rows to avoid double-counting
         if (reinvestedAmount >= r.amount - 0.01) return
 
-        // If receipt itself completed the first hawl (>=354), next hawl starts from receipt day.
+        // If receipt itself completed the first hawl (>=354), the receipt row already shows Zakat for that period.
+        // Idle rows should start from the NEXT hawl cycle (receipt day + 354 days).
         // If receipt happened before first hawl completion, keep continuity from eligibilityStart.
         const idleAnchorStart = r.eligibilityDuration >= 354 ? r.receiptDay : r.eligibilityStart
         const idleElapsed = diffDaysFloor(idleAnchorStart, now)
         const completedIdleHauls = Math.floor(idleElapsed / 354)
-        if (completedIdleHauls <= 0) return
+        
+        // If receipt completed first hawl, skip that first idle period (already shown in receipt row)
+        const startIndex = r.eligibilityDuration >= 354 ? 1 : 0
+        if (completedIdleHauls <= startIndex) return
 
-        for (let i = 0; i < completedIdleHauls; i++) {
+        for (let i = startIndex; i < completedIdleHauls; i++) {
           const periodStart = addDays(idleAnchorStart, i * 354)
           const periodEnd = addDays(idleAnchorStart, (i + 1) * 354)
           const periodEndTime = periodEnd.getTime()
