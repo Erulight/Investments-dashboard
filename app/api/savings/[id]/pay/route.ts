@@ -354,9 +354,8 @@ export async function POST(
       rewardReceiptDateRaw.getMonth(),
       rewardReceiptDateRaw.getDate(),
     )
-    // Compute end of last completed hawl from first contribution to receipt date
-    // This gives us the completion date of hawl 1, which becomes the start of hawl 2
-    const rewardHawlAnchor = getLastCompletedHawlAnchor(firstContributionDate, rewardReceiptDate)
+    // Reward bucket uses first contribution date as hawl anchor (same as savings)
+    const rewardHawlAnchor = firstContributionDate
 
     const nextMeta: any = {
       ...meta,
