@@ -23,7 +23,7 @@ type BucketRow = {
   source: string
   sourceGroup: string
   sourceType: string
-  rowKind?: 'PROFIT' | 'COMMISSION' | 'IDLE' | 'PRINCIPAL'
+  rowKind?: 'PROFIT' | 'COMMISSION' | 'IDLE' | 'PRINCIPAL' | 'RECEIPT' | 'REWARD'
   why?: string | null
   lastPayment: null | {
     id: string

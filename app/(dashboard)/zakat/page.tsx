@@ -27,7 +27,7 @@ type BucketRow = {
   source: string
   sourceGroup: string
   sourceType: string
-  rowKind?: 'PROFIT' | 'COMMISSION' | 'IDLE' | 'PRINCIPAL'
+  rowKind?: 'PROFIT' | 'COMMISSION' | 'IDLE' | 'PRINCIPAL' | 'RECEIPT' | 'REWARD'
   why?: string | null
   lastPayment: null | {
     id: string
@@ -1381,11 +1381,13 @@ export default async function ZakatPage() {
   const getRowKind = (bucket: any, rowKey: string, dueReceipts: any[]) => {
     const label = typeof bucket?.label === 'string' ? bucket.label : ''
     if (label === 'Partner Commission') return 'COMMISSION' as const
+    if (label.startsWith('Circlys Reward Receipt •')) return 'REWARD' as const
+    if (label.startsWith('Savings Receipt •')) return 'RECEIPT' as const
     if (rowKey.startsWith('IDLE|') || rowKey.startsWith('DEPOSIT|')) return 'IDLE' as const
     const t = dueReceipts?.[0]?.type
     if (t === 'WITHDRAW_PRINCIPAL') return 'PRINCIPAL' as const
     if (t === 'WITHDRAW_PROFIT') return 'PROFIT' as const
-    if (label.startsWith('Profit \u2022')) return 'PROFIT' as const
+    if (label.startsWith('Profit •')) return 'PROFIT' as const
     return 'PROFIT' as const
   }
 
@@ -1542,7 +1544,7 @@ export default async function ZakatPage() {
           source: investmentName,
           sourceGroup: sourceGroupLabel,
           sourceType: 'CIRCLYS',
-          rowKind: 'PROFIT' as const,
+          rowKind: isRewardReceiptBucket ? ('REWARD' as const) : ('RECEIPT' as const),
           why: effectiveSukukInvested > 0
             ? `ROSCA Hawl 1: Full receipt ${bucket.currency} ${totalReceived.toLocaleString()} from ${isoDay(firstHawlStart)} to ${isoDay(firstHaulEnd)}. ${effectiveSukukInvested.toLocaleString()} invested in Sukuk.`
             : `ROSCA Hawl 1: Receipt ${bucket.currency} ${totalReceived.toLocaleString()} from ${isoDay(firstHawlStart)} to ${isoDay(firstHaulEnd)}`,
