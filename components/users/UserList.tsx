@@ -4,6 +4,7 @@ import { useEffect, useState } from 'react'
 import type { ChangeEvent } from 'react'
 import { useRouter } from 'next/navigation'
 import { Button } from '@/components/ui/Button'
+import { formatDisplayDate } from '@/lib/date'
 
 interface ModulePermissions {
   sukuk?: boolean
@@ -265,7 +266,7 @@ export function UserList() {
             </div>
             <div className="flex flex-col items-end space-y-2">
               <div className="text-xs text-gray-400">
-                {new Date(user.createdAt).toLocaleDateString()}
+                {formatDisplayDate(user.createdAt)}
               </div>
               <div className="flex items-center space-x-2">
                 <Button

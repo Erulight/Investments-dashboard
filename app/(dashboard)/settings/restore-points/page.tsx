@@ -3,6 +3,7 @@
 import { useState, useEffect, useMemo } from 'react'
 import { Button } from '@/components/ui/Button'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/Card'
+import { formatDisplayDate } from '@/lib/date'
 
 interface Snapshot {
   id: string
@@ -135,14 +136,8 @@ export default function RestorePointsPage() {
       return `Yesterday at ${date.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' })}`
     } else if (diffDays < 7) {
       return `${diffDays} days ago`
-    } else {
-      return date.toLocaleDateString('en-US', { 
-        month: 'short', 
-        day: 'numeric',
-        hour: 'numeric',
-        minute: '2-digit'
-      })
     }
+    return formatDisplayDate(date)
   }
 
   useEffect(() => {

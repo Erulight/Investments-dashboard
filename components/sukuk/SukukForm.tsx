@@ -4,7 +4,7 @@ import { useState, useEffect } from 'react'
 import { Button } from '@/components/ui/Button'
 import { DateInput } from '@/components/ui/DateInput'
 import { createSukukSchema } from '@/lib/validation'
-import { formatDateInput, parseDateInput, toIsoDateInput } from '@/lib/date'
+import { formatDateInput, formatDisplayDate, parseDateInput, toIsoDateInput } from '@/lib/date'
 
 interface SukukFormProps {
   mode: 'create' | 'edit'
@@ -672,7 +672,7 @@ export function SukukForm({ mode, initialData, userRole, onSuccess, onCancel }: 
                 {receiptRows.slice(0, 6).map((tx) => (
                   <div key={tx.id} className="flex items-center justify-between px-4 py-2">
                     <div className="text-slate-700 dark:text-slate-200">
-                      {new Date(tx.date).toLocaleDateString()} • {tx.type}
+                      {formatDisplayDate(tx.date)} • {tx.type}
                     </div>
                     <div className="text-green-600">
                       +{Math.abs(tx.amount).toLocaleString()}

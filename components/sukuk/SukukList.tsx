@@ -125,7 +125,7 @@ export function SukukList({ initialSukuk, userRole, ownerPersonId, viewerPersonI
 
   const openCreateModal = () => setIsCreateModalOpen(true)
   const asOfDate = new Date()
-  const asOfLabel = asOfDate.toLocaleDateString()
+  const asOfLabel = formatDisplayDate(asOfDate)
 
   const toDate = (value?: string | Date | null) => {
     if (!value) return null

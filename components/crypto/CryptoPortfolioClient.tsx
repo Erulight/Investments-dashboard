@@ -618,7 +618,7 @@ export function CryptoPortfolioClient({ investment }: { investment: Investment }
                     .map((row: { at: Date; value: number; change: number | null; investedAt: number; profitAt: number }) => {
                       const changePositive = row.change !== null ? row.change >= 0 : true
                       const profitPositive = row.profitAt >= 0
-                      const monthLabel = row.at.toLocaleDateString(undefined, { year: 'numeric', month: 'short', timeZone: 'UTC' })
+                      const monthLabel = formatDisplayDate(row.at)
                       return (
                         <tr key={row.at.toISOString()} className="border-b last:border-b-0">
                           <td className="py-2 pr-4 font-medium text-gray-900">{monthLabel}</td>
