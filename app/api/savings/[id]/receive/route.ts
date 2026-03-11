@@ -227,11 +227,11 @@ export async function POST(
         rewardReceiptDateRaw.getMonth(),
         rewardReceiptDateRaw.getDate(),
       )
-      // Reward bucket uses first contribution date as hawl anchor (same as savings)
-      // Example: Jan 2024 (first contribution) → Dec 2024 (receipt, 354 days) → hawl 1 completes
-      // Reward bucket haulStartDate = Jan 2024 (same as savings contribution)
-      // When invested in Sukuk, Sukuk inherits Jan 2024 and computes last completed hawl to Dec 2024
-      const rewardHawlAnchor = firstContributionDate
+      const rewardHawlAnchor = rewardReceiptDate
+      // rewardReceiptDate is the date reward was actually received (Dec 20 2024)
+      // This is correct because hawl 1 completed at this point
+      // hawl 2 starts from this date
+      // Store firstContributionDate in metadata for hawl 1 display only
 
       let rewardBucketId: string | null = null
 
@@ -277,6 +277,10 @@ export async function POST(
             balance: rewardReceiptAmount,
             haulStartDate: rewardHawlAnchor,
             excludeFromZakat: false,
+            metadata: JSON.stringify({
+              firstContributionDate: firstContributionDate.toISOString().split('T')[0],
+              isRoscaReward: true,
+            }),
             movements: {
               create: {
                 investmentId: investment.id,

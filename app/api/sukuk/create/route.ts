@@ -326,10 +326,11 @@ export async function POST(req: NextRequest) {
                 return null
               }
               const bucketHaulStart = new Date(d.getFullYear(), d.getMonth(), d.getDate())
-              // Compute last completed hawl anchor from bucket hawl start to investment start date
-              // This ensures if reward sat idle completing additional hawls, Sukuk inherits the end of last completed hawl
-              const lastCompletedAnchor = getLastCompletedHawlAnchor(bucketHaulStart, startDate)
-              return lastCompletedAnchor
+              // Do NOT recalculate. Directly inherit the bucket haulStartDate.
+              // For savings: bucket haulStartDate = firstContributionDate → Sukuk inherits it directly
+              // For rewards: bucket haulStartDate = rewardReceiptDate (Dec 20) → Sukuk inherits it directly
+              // The clock never resets. It continues from wherever the bucket left off.
+              return bucketHaulStart
             })
             .filter((d: Date | null): d is Date => Boolean(d))
             .sort((a: Date, b: Date) => a.getTime() - b.getTime())[0] || null
@@ -346,9 +347,11 @@ export async function POST(req: NextRequest) {
                 return null
               }
               const bucketHaulStart = new Date(d.getFullYear(), d.getMonth(), d.getDate())
-              // Compute last completed hawl anchor from bucket hawl start to investment start date
-              const lastCompletedAnchor = getLastCompletedHawlAnchor(bucketHaulStart, startDate)
-              return lastCompletedAnchor
+              // Do NOT recalculate. Directly inherit the bucket haulStartDate.
+              // For savings: bucket haulStartDate = firstContributionDate → Sukuk inherits it directly
+              // For rewards: bucket haulStartDate = rewardReceiptDate (Dec 20) → Sukuk inherits it directly
+              // The clock never resets. It continues from wherever the bucket left off.
+              return bucketHaulStart
             })
             .filter((d: Date | null): d is Date => Boolean(d))
             .sort((a: Date, b: Date) => a.getTime() - b.getTime())[0] || null
@@ -376,6 +379,15 @@ export async function POST(req: NextRequest) {
           },
         })
         console.log('[SUKUK_CREATE] Metadata after update:', updatedInvestment.metadata)
+        
+        // BARRIER: savingsHaulStartDate must never be later than investment startDate
+        // and must never be null when funding came from ROSCA bucket
+        if (!inheritedSavingsHaulStart) {
+          throw new Error('ROSCA bucket found but haulStartDate is missing — cannot create Sukuk without hawl continuity')
+        }
+        if (inheritedSavingsHaulStart > startDate) {
+          throw new Error('ROSCA bucket haulStartDate cannot be in the future relative to investment start')
+        }
       } else {
         const existingMeta = parseMetadata(newSukuk.metadata)
         if (typeof existingMeta?.savingsHaulStartDate === 'string') {
