@@ -180,14 +180,24 @@ export default async function DashboardPage({
     return Math.round(n * 100) / 100
   }
 
+  const toFiniteNumber = (value: unknown, fallback = 0) => {
+    const n = Number(value)
+    return Number.isFinite(n) ? n : fallback
+  }
+
+  const getAccountType = (entity: any) => {
+    const t = entity?.account?.type
+    return typeof t === 'string' && t.length > 0 ? t : null
+  }
+
   const parseMetadata = (value: unknown) => {
-    if (!value) return null
+    if (!value) return {}
     if (typeof value === 'object') return value as any
-    if (typeof value !== 'string') return null
+    if (typeof value !== 'string') return {}
     try {
       return JSON.parse(value)
     } catch {
-      return null
+      return {}
     }
   }
 
@@ -445,6 +455,112 @@ export default async function DashboardPage({
       return 0
     }
 
+    const getOwnerPrincipalShare = (inv: any) => {
+      const accountType = getAccountType(inv)
+      if (!accountType) return 0
+      if (accountType === 'SUKUK') return getOwnerSukukPrincipal(inv)
+
+      const ownerPosition = getOwnerPosition(inv)
+      if (ownerPosition) {
+        return Math.max(0, toFiniteNumber(ownerPosition.investedAmount))
+      }
+
+      const participants = Array.isArray(inv?.dealParticipants) ? inv.dealParticipants : []
+      if (participants.length > 0) return 0
+
+      return Math.max(0, toFiniteNumber(inv?.principalAmount))
+    }
+
+    const getOwnerSukukMetrics = (inv: any, asOf: Date) => {
+      const principal = getOwnerSukukPrincipal(inv)
+      if (principal <= 0) {
+        return {
+          principal: 0,
+          principalOutstanding: 0,
+          receivable: 0,
+          received: 0,
+          value: 0,
+          accruedProfit: 0,
+        }
+      }
+
+      const totalPrincipal = Math.max(0, toFiniteNumber(inv?.principalAmount))
+      const ownershipRatio = totalPrincipal > 0 ? Math.min(1, Math.max(0, principal / totalPrincipal)) : 0
+
+      const totalProfitFull = getSukukNetProfit(inv)
+      const totalProfit = Math.max(0, totalProfitFull * ownershipRatio)
+
+      const start = toDate(inv?.startDate)
+      const maturity = toDate(inv?.maturityDate)
+      const startTime = start?.getTime() || 0
+      const maturityTime = maturity?.getTime() || 0
+      const totalMs = maturityTime > startTime ? maturityTime - startTime : 0
+      const atMs = asOf.getTime()
+      const elapsedMs = totalMs > 0
+        ? Math.min(Math.max(atMs - startTime, 0), totalMs)
+        : (atMs > startTime ? 1 : 0)
+      const accruedProfit = totalMs > 0
+        ? totalProfit * (elapsedMs / totalMs)
+        : (atMs > startTime ? totalProfit : 0)
+
+      const txs = Array.isArray(inv?.transactions) ? inv.transactions : []
+      const principalWithdrawn = txs
+        .filter((tx: any) => tx?.type === 'WITHDRAW_PRINCIPAL')
+        .filter((tx: any) => {
+          if (ownerPersonId && tx?.personId !== ownerPersonId && tx?.personId != null) return false
+          const d = tx?.date instanceof Date ? tx.date : new Date(tx?.date)
+          return !Number.isNaN(d.getTime()) && d.getTime() <= atMs
+        })
+        .reduce((sum: number, tx: any) => {
+          const meta = parseMetadata(tx?.metadata)
+          if (meta?.source === 'PROFIT') return sum
+          return sum + Math.max(0, Math.abs(toFiniteNumber(tx?.amount)))
+        }, 0)
+      const principalOutstanding = Math.max(0, principal - principalWithdrawn)
+
+      const receivedFromProfitTx = txs
+        .filter((tx: any) => tx?.type === 'WITHDRAW_PROFIT')
+        .filter((tx: any) => {
+          if (ownerPersonId && tx?.personId !== ownerPersonId && tx?.personId != null) return false
+          const d = tx?.date instanceof Date ? tx.date : new Date(tx?.date)
+          return !Number.isNaN(d.getTime()) && d.getTime() <= atMs
+        })
+        .reduce((sum: number, tx: any) => sum + Math.max(0, Math.abs(toFiniteNumber(tx?.amount))), 0)
+
+      const receivedFromLegacyPrincipalTx = txs
+        .filter((tx: any) => tx?.type === 'WITHDRAW_PRINCIPAL')
+        .filter((tx: any) => {
+          if (ownerPersonId && tx?.personId !== ownerPersonId && tx?.personId != null) return false
+          const d = tx?.date instanceof Date ? tx.date : new Date(tx?.date)
+          return !Number.isNaN(d.getTime()) && d.getTime() <= atMs
+        })
+        .reduce((sum: number, tx: any) => {
+          const meta = parseMetadata(tx?.metadata)
+          if (meta?.source !== 'PROFIT') return sum
+          return sum + Math.max(0, Math.abs(toFiniteNumber(tx?.amount)))
+        }, 0)
+
+      const totalReceivedShare = Math.max(0, toFiniteNumber(inv?.totalReceived) * ownershipRatio)
+      const received = Math.max(receivedFromProfitTx, totalReceivedShare) + receivedFromLegacyPrincipalTx
+      const receivable = Math.max(0, accruedProfit - received)
+      const value = principalOutstanding + receivable
+
+      return {
+        principal,
+        principalOutstanding,
+        receivable,
+        received,
+        value,
+        accruedProfit,
+      }
+    }
+
+    const isActiveSukukDeal = (inv: any, asOf: Date, principalOutstanding: number) => {
+      if (principalOutstanding <= 0) return false
+      const maturity = toDate(inv?.maturityDate)
+      return !maturity || maturity.getTime() >= asOf.getTime()
+    }
+
     const hasOwnerSellTx = (inv: any) => {
       if (!ownerPersonId) return false
       const txs = Array.isArray(inv.transactions) ? inv.transactions : []
@@ -524,159 +640,133 @@ export default async function DashboardPage({
     }
 
     const owned = investments.filter((inv: any) => {
-      // Exclude CASH and CIRCLYS from the main owned bucket
-      if (inv.account?.type === 'CASH') return false
-      if (inv.account?.type === 'CIRCLYS') return false
+      const accountType = getAccountType(inv)
+      if (!accountType) return false
+      if (accountType === 'CASH') return false
+      if (accountType === 'CIRCLYS') return false
       return true
     })
 
     const ownerScoped = owned.filter((inv: any) => {
-      if (inv.account?.type !== 'SUKUK') return true
-      // Include Sukuk if owner has principal, sell transaction, OR received profit (matured deals)
+      const accountType = getAccountType(inv)
+      if (!accountType) return false
+      if (accountType !== 'SUKUK') return true
       return getOwnerSukukPrincipal(inv) > 0 || hasOwnerSellTx(inv) || hasOwnerReceivedProfit(inv)
     })
 
     ownedInvestments = ownerScoped
 
-    const activeSukuk = ownerScoped
-      .filter((inv) => inv.account.type === 'SUKUK')
-      .filter((inv) => getOwnerSukukPrincipal(inv) > 0)
+    const now = new Date()
+    const ownerSukuk = ownerScoped.filter((inv: any) => getAccountType(inv) === 'SUKUK')
+    const ownerSukukMetricsById = new Map<string, ReturnType<typeof getOwnerSukukMetrics>>()
+    for (const inv of ownerSukuk) {
+      ownerSukukMetricsById.set(inv.id, getOwnerSukukMetrics(inv, now))
+    }
 
-    // Total Invested = principal in active Sukuk deals only
-    totalInvested = activeSukuk.reduce((sum, inv) => sum + getOwnerSukukPrincipal(inv), 0)
+    const activeSukuk = ownerSukuk.filter((inv: any) => {
+      const metrics = ownerSukukMetricsById.get(inv.id)
+      if (!metrics) return false
+      return isActiveSukukDeal(inv, now, metrics.principalOutstanding)
+    })
 
-    // Active Deals and Sukuk Total use active Sukuk principal only
-    activeInvestments = activeSukuk.length
-    sukukInvested = activeSukuk.reduce((sum, inv) => sum + getOwnerSukukPrincipal(inv), 0)
+    const activeNonSukuk = ownerScoped.filter((inv: any) => {
+      const accountType = getAccountType(inv)
+      if (!accountType || accountType === 'SUKUK') return false
 
-    totalValue = ownerScoped.reduce(
-      (sum, inv) => {
-        const principal = inv.account.type === 'SUKUK'
-          ? getOwnerSukukPrincipal(inv)
-          : inv.principalAmount
-        return sum + (inv.account.type === 'SUKUK' ? principal : inv.currentValue)
-      },
-      0
-    )
-    // Profit from non-Sukuk owned investments (SIP currently excluded intentionally)
+      const maturity = toDate(inv?.maturityDate)
+      if (maturity && maturity.getTime() < now.getTime()) return false
+
+      const ownerPrincipal = getOwnerPrincipalShare(inv)
+      const currentValue = Math.max(0, toFiniteNumber(inv?.currentValue))
+      return ownerPrincipal > 0 || currentValue > 0
+    })
+
+    activeInvestments = activeSukuk.length + activeNonSukuk.length
+    sukukInvested = activeSukuk.reduce((sum, inv) => {
+      const metrics = ownerSukukMetricsById.get(inv.id)
+      return sum + (metrics ? metrics.principalOutstanding : 0)
+    }, 0)
+
+    const nonSukukValue = ownerScoped.reduce((sum, inv) => {
+      const accountType = getAccountType(inv)
+      if (!accountType || accountType === 'SUKUK') return sum
+
+      const currentValue = Math.max(0, toFiniteNumber(inv?.currentValue))
+      const ownerPrincipal = getOwnerPrincipalShare(inv)
+      const totalPrincipal = Math.max(0, toFiniteNumber(inv?.principalAmount))
+
+      if (ownerPrincipal > 0 && totalPrincipal > 0 && ownerPrincipal < totalPrincipal) {
+        return sum + currentValue * (ownerPrincipal / totalPrincipal)
+      }
+
+      if (ownerPrincipal <= 0 && Array.isArray(inv?.dealParticipants) && inv.dealParticipants.length > 0) {
+        return sum
+      }
+
+      return sum + currentValue
+    }, 0)
+
+    const sukukPrincipalValue = ownerSukuk.reduce((sum, inv) => {
+      const metrics = ownerSukukMetricsById.get(inv.id)
+      return sum + (metrics ? metrics.principalOutstanding : 0)
+    }, 0)
+    totalValue = nonSukukValue + sukukPrincipalValue
+
     const nonSukukOwnedProfit = ownerScoped.reduce(
       (sum, inv) => {
-        const accountType = inv.account.type
+        const accountType = getAccountType(inv)
+        if (!accountType || accountType === 'SUKUK') return sum
+
         const pos = getOwnerPosition(inv)
-        
-        // Include profit from: CRYPTO, MALAA
-        if (['CRYPTO', 'MALAA'].includes(accountType)) {
-          if (pos) return sum + (Number(pos.profit) || 0)
-          return sum + (Number(inv.realizedProfit) || 0) + (Number(inv.unrealizedProfit) || 0)
-        }
-        
-        return sum
+        if (pos) return sum + toFiniteNumber(pos.profit)
+        return sum + toFiniteNumber(inv.realizedProfit) + toFiniteNumber(inv.unrealizedProfit)
       },
       0
     )
-    
-    // Add CIRCLYS (Circles) rewards separately since they're excluded from owned.
-    // Reward source of truth is current value minus principal (matches Savings page).
+
+    // Add CIRCLYS rewards separately (excluded from ownerScoped).
     const circlysProfit = investments
-      .filter((inv: any) => inv.account?.type === 'CIRCLYS')
+      .filter((inv: any) => getAccountType(inv) === 'CIRCLYS')
       .reduce((sum, inv) => {
         const pos = getOwnerPosition(inv)
         const principal = pos
-          ? (Number(pos.investedAmount) || 0)
-          : (Number(inv.principalAmount) || 0)
+          ? toFiniteNumber(pos.investedAmount)
+          : toFiniteNumber(inv.principalAmount)
         const value = pos
-          ? (Number(pos.currentValue) || 0)
-          : (Number(inv.currentValue) || 0)
+          ? toFiniteNumber(pos.currentValue)
+          : toFiniteNumber(inv.currentValue)
 
-        if (Number.isFinite(value) && Number.isFinite(principal) && value > 0 && principal > 0) {
+        if (value > 0 && principal > 0) {
           return sum + Math.max(0, value - principal)
         }
 
-        if (pos) return sum + Math.max(0, Number(pos.profit) || 0)
-        return sum + Math.max(0, Number(inv.realizedProfit) || 0) + Math.max(0, Number(inv.unrealizedProfit) || 0)
-      }, 0)
-    
-    const now = new Date()
-    sukukReceivable = ownerScoped
-      .filter((inv) => inv.account.type === 'SUKUK')
-      .reduce((sum, inv) => {
-        const principal = getOwnerSukukPrincipal(inv)
-        
-        // Skip sold deals where owner no longer has ownership (principal = 0)
-        if (principal <= 0) return sum
-        
-        const v = getSukukValueAt(inv, now)
-        
-        // Calculate total accrued profit
-        const accruedProfit = Math.max(0, v - principal)
-        
-        // Subtract already withdrawn profit
-        const txs = Array.isArray(inv.transactions) ? inv.transactions : []
-        const receivedFromTx = txs
-          .filter((tx: any) => tx?.type === 'WITHDRAW_PROFIT')
-          .filter((tx: any) => {
-            if (ownerPersonId && tx?.personId !== ownerPersonId && tx?.personId != null) return false
-            const d = tx?.date instanceof Date ? tx.date : new Date(tx?.date)
-            return !Number.isNaN(d.getTime()) && d.getTime() <= now.getTime()
-          })
-          .reduce((s: number, tx: any) => s + Math.max(0, Number(tx?.amount) || 0), 0)
-
-        const totalReceivedRaw = Number(inv.totalReceived)
-        const withdrawnProfit = Number.isFinite(totalReceivedRaw)
-          ? Math.max(Math.max(0, totalReceivedRaw), receivedFromTx)
-          : receivedFromTx
-        
-        // Receivable = accrued profit - withdrawn profit
-        const receivable = Math.max(0, accruedProfit - withdrawnProfit)
-        return sum + receivable
+        if (pos) return sum + Math.max(0, toFiniteNumber(pos.profit))
+        return sum + Math.max(0, toFiniteNumber(inv.realizedProfit)) + Math.max(0, toFiniteNumber(inv.unrealizedProfit))
       }, 0)
 
-    const sukukReceivedProfit = ownerScoped
-      .filter((inv) => inv.account.type === 'SUKUK')
-      .reduce((sum, inv) => {
-        if (isSoldSukukForOwner(inv)) {
-          const settlement = getOwnerSoldSettlement(inv)
-          return sum + settlement.received
-        }
+    sukukReceivable = ownerSukuk.reduce((sum, inv) => {
+      if (isSoldSukukForOwner(inv)) {
+        const settlement = getOwnerSoldSettlement(inv)
+        return sum + Math.max(0, settlement.pending)
+      }
+      const metrics = ownerSukukMetricsById.get(inv.id)
+      return sum + (metrics ? Math.max(0, metrics.receivable) : 0)
+    }, 0)
 
-        const txs = Array.isArray(inv.transactions) ? inv.transactions : []
-        const receivedFromProfitTx = txs
-          .filter((tx: any) => tx?.type === 'WITHDRAW_PROFIT')
-          .filter((tx: any) => {
-            if (ownerPersonId && tx?.personId !== ownerPersonId && tx?.personId != null) return false
-            const d = tx?.date instanceof Date ? tx.date : new Date(tx?.date)
-            return !Number.isNaN(d.getTime()) && d.getTime() <= now.getTime()
-          })
-          .reduce((s: number, tx: any) => s + Math.max(0, Number(tx?.amount) || 0), 0)
-
-        // Legacy fallback: some old records may have profit encoded on principal withdrawals.
-        const receivedFromLegacyPrincipalTx = txs
-          .filter((tx: any) => tx?.type === 'WITHDRAW_PRINCIPAL')
-          .filter((tx: any) => {
-            if (ownerPersonId && tx?.personId !== ownerPersonId && tx?.personId != null) return false
-            const d = tx?.date instanceof Date ? tx.date : new Date(tx?.date)
-            return !Number.isNaN(d.getTime()) && d.getTime() <= now.getTime()
-          })
-          .reduce((s: number, tx: any) => {
-            const meta = parseMetadata(tx?.metadata)
-            if (meta?.source !== 'PROFIT') return s
-            return s + Math.max(0, Number(tx?.amount) || 0)
-          }, 0)
-
-        const totalReceivedRaw = Number(inv.totalReceived)
-        const receivedFromInvestmentField = Number.isFinite(totalReceivedRaw)
-          ? Math.max(0, totalReceivedRaw)
-          : 0
-
-        const received = Math.max(receivedFromProfitTx, receivedFromInvestmentField) + receivedFromLegacyPrincipalTx
-        return sum + received
-      }, 0)
+    const sukukReceivedProfit = ownerSukuk.reduce((sum, inv) => {
+      if (isSoldSukukForOwner(inv)) {
+        const settlement = getOwnerSoldSettlement(inv)
+        return sum + Math.max(0, settlement.received)
+      }
+      const metrics = ownerSukukMetricsById.get(inv.id)
+      return sum + (metrics ? Math.max(0, metrics.received) : 0)
+    }, 0)
 
     const commissionSourceSukuk = owned
-      .filter((inv) => inv.account.type === 'SUKUK')
+      .filter((inv) => getAccountType(inv) === 'SUKUK')
 
     const sukukCommissionFromTx = commissionSourceSukuk
-      .filter((inv) => inv.account.type === 'SUKUK')
+      .filter((inv) => getAccountType(inv) === 'SUKUK')
       .reduce((sum, inv) => {
         const txs = Array.isArray(inv.transactions) ? inv.transactions : []
         const commission = txs
@@ -691,7 +781,7 @@ export default async function DashboardPage({
       }, 0)
 
     const sukukCommissionFromSellMeta = commissionSourceSukuk
-      .filter((inv) => inv.account.type === 'SUKUK')
+      .filter((inv) => getAccountType(inv) === 'SUKUK')
       .reduce((sum, inv) => {
         const txs = Array.isArray(inv.transactions) ? inv.transactions : []
         const sells = txs
@@ -718,49 +808,58 @@ export default async function DashboardPage({
     sukukValue = sukukInvested + sukukReceivable
     totalValue += sukukReceivable
     sipValue = ownerScoped
-      .filter((inv) => inv.account.type === 'SIP')
-      .reduce((sum, inv) => sum + inv.currentValue, 0)
+      .filter((inv) => getAccountType(inv) === 'SIP')
+      .reduce((sum, inv) => sum + Math.max(0, toFiniteNumber(inv.currentValue)), 0)
 
     cryptoValue = ownerScoped
-      .filter((inv) => inv.account.type === 'CRYPTO')
-      .reduce((sum, inv) => sum + inv.currentValue, 0)
+      .filter((inv) => getAccountType(inv) === 'CRYPTO')
+      .reduce((sum, inv) => sum + Math.max(0, toFiniteNumber(inv.currentValue)), 0)
 
     // Calculate Circles ongoing: total contributed in active ongoing Circles
     circlysOngoingSaved = investments
-      .filter((inv: any) => inv.account?.type === 'CIRCLYS')
+      .filter((inv: any) => getAccountType(inv) === 'CIRCLYS')
       .reduce((sum, inv) => {
-        try {
-          const meta = inv.metadata ? JSON.parse(inv.metadata as string) : {}
-          const monthlyContribution = Number(meta.monthlyContribution) || 0
-          const totalMonths = Number(meta.totalMonths) || 0
-          const totalRequired = monthlyContribution * totalMonths
-          const totalPaid = Number(meta.totalPaid) || 0
-          
-          // Only count active ongoing Circles (not fully paid)
-          if (totalRequired > totalPaid) {
-            return sum + totalPaid
-          }
-          return sum
-        } catch {
-          return sum
+        const meta = parseMetadata(inv.metadata)
+        const monthlyContribution = toFiniteNumber(meta?.monthlyContribution)
+        const totalMonths = toFiniteNumber(meta?.totalMonths)
+        const totalRequired = monthlyContribution * totalMonths
+        const totalPaid = Math.max(0, toFiniteNumber(meta?.totalPaid))
+
+        // Only count active ongoing Circles (not fully paid).
+        if (totalRequired > totalPaid) {
+          return sum + totalPaid
         }
+        return sum
       }, 0)
+
+    const activeNonSukukInvested = activeNonSukuk.reduce((sum: number, inv: any) => {
+      const accountType = getAccountType(inv)
+      if (!accountType || accountType === 'SUKUK') return sum
+      return sum + getOwnerPrincipalShare(inv)
+    }, 0)
+    const debtInvested = Math.max(0, toFiniteNumber(debtsAtEnd))
+    totalInvested = sukukInvested + activeNonSukukInvested + circlysOngoingSaved + debtInvested
 
     // Build per-type breakdown
     const typeMap = new Map<string, { invested: number; value: number; count: number }>()
     for (const inv of ownerScoped) {
-      const t = inv.account.type
+      const t = getAccountType(inv)
+      if (!t) continue
       const existing = typeMap.get(t) || { invested: 0, value: 0, count: 0 }
       const invested = t === 'SUKUK'
-        ? getOwnerSukukPrincipal(inv)
-        : (Number(inv.principalAmount) || 0)
+        ? (ownerSukukMetricsById.get(inv.id)?.principalOutstanding || 0)
+        : getOwnerPrincipalShare(inv)
       existing.invested += invested
       if (t === 'SUKUK') {
-        const principal = getOwnerSukukPrincipal(inv)
-        const v = getSukukValueAt(inv, new Date())
-        existing.value += principal > 0 ? Math.max(0, Math.min(v, principal + Math.max(0, v - principal))) : 0
+        existing.value += ownerSukukMetricsById.get(inv.id)?.value || 0
       } else {
-        existing.value += inv.currentValue
+        const currentValue = Math.max(0, toFiniteNumber(inv.currentValue))
+        const ownerPrincipal = getOwnerPrincipalShare(inv)
+        const totalPrincipal = Math.max(0, toFiniteNumber(inv.principalAmount))
+        const value = ownerPrincipal > 0 && totalPrincipal > 0 && ownerPrincipal < totalPrincipal
+          ? currentValue * (ownerPrincipal / totalPrincipal)
+          : currentValue
+        existing.value += value
       }
       existing.count += 1
       typeMap.set(t, existing)
@@ -769,21 +868,16 @@ export default async function DashboardPage({
       .map(([type, data]) => ({ type, ...data }))
       .sort((a, b) => b.value - a.value)
 
-    // Calculate ROSCA / Circlys remaining payback debt
-    // For ROSCA plans: if totalPaid < (monthlyAmount * durationMonths), the remainder is debt
-    const roscaInvestments = owned.filter(inv => inv.account.type === 'CIRCLYS')
+    // Calculate ROSCA / Circlys remaining payback debt.
+    const roscaInvestments = investments.filter((inv: any) => getAccountType(inv) === 'CIRCLYS')
     for (const inv of roscaInvestments) {
-      try {
-        const meta = inv.metadata ? JSON.parse(inv.metadata as string) : {}
-        const monthlyContribution = Number(meta.monthlyContribution) || 0
-        const totalMonths = Number(meta.totalMonths) || 0
-        const totalPaid = Number(meta.totalPaid) || 0
-        const totalRequired = monthlyContribution * totalMonths
-        if (totalRequired > totalPaid) {
-          roscaDebt += (totalRequired - totalPaid)
-        }
-      } catch {
-        // skip invalid metadata
+      const meta = parseMetadata(inv.metadata)
+      const monthlyContribution = Math.max(0, toFiniteNumber(meta?.monthlyContribution))
+      const totalMonths = Math.max(0, toFiniteNumber(meta?.totalMonths))
+      const totalPaid = Math.max(0, toFiniteNumber(meta?.totalPaid))
+      const totalRequired = monthlyContribution * totalMonths
+      if (totalRequired > totalPaid) {
+        roscaDebt += (totalRequired - totalPaid)
       }
     }
   } else if (user.role === 'PARTNER' && user.personId) {
@@ -813,38 +907,64 @@ export default async function DashboardPage({
 
     const now = new Date()
 
-    totalInvested = participants.reduce((sum: number, p: any) => sum + (Number(p.investedAmount) || 0), 0)
-    totalValue = participants.reduce((sum: number, p: any) => {
-      const t = p.investment.account.type
-      if (t === 'SUKUK') {
-        const m = getPartnerSukukMetrics(p.investment, p, now)
-        return sum + m.value
-      }
-      return sum + (Number(p.currentValue) || 0)
+    totalInvested = participants.reduce((sum: number, p: any) => {
+      const investment = p?.investment
+      const accountType = getAccountType(investment)
+      if (!accountType) return sum
+      return sum + Math.max(0, toFiniteNumber(p?.investedAmount))
     }, 0)
 
-    // For partners, totalProfit = accrued profit-to-date (not just stored p.profit)
-    totalProfit = participants.reduce((sum: number, p: any) => {
-      const t = p.investment.account.type
-      if (t === 'SUKUK') {
-        const m = getPartnerSukukMetrics(p.investment, p, now)
-        return sum + m.profitAccrued
+    totalValue = participants.reduce((sum: number, p: any) => {
+      const investment = p?.investment
+      const accountType = getAccountType(investment)
+      if (!accountType) return sum
+      if (accountType === 'SUKUK') {
+        const m = getPartnerSukukMetrics(investment, p, now)
+        return sum + Math.max(0, toFiniteNumber(m.value))
       }
-      return sum + (Number(p.profit) || 0)
+      return sum + Math.max(0, toFiniteNumber(p?.currentValue))
     }, 0)
-    activeInvestments = participants.length
+
+    // For partners, totalProfit = accrued profit-to-date.
+    totalProfit = participants.reduce((sum: number, p: any) => {
+      const investment = p?.investment
+      const accountType = getAccountType(investment)
+      if (!accountType) return sum
+      if (accountType === 'SUKUK') {
+        const m = getPartnerSukukMetrics(investment, p, now)
+        return sum + Math.max(0, toFiniteNumber(m.profitAccrued))
+      }
+      return sum + toFiniteNumber(p?.profit)
+    }, 0)
+
+    activeInvestments = participants.filter((p: any) => {
+      const investment = p?.investment
+      const accountType = getAccountType(investment)
+      if (!accountType) return false
+      const maturity = toDate(investment?.maturityDate)
+      const invested = Math.max(0, toFiniteNumber(p?.investedAmount))
+      if (accountType === 'SUKUK') {
+        const m = getPartnerSukukMetrics(investment, p, now)
+        const principalOutstanding = Math.max(0, toFiniteNumber(m.value) - Math.max(0, toFiniteNumber(m.receivable)))
+        if (maturity && maturity.getTime() < now.getTime()) return false
+        return principalOutstanding > 0 || Math.max(0, toFiniteNumber(m.receivable)) > 0
+      }
+      if (maturity && maturity.getTime() < now.getTime()) return false
+      return invested > 0 || Math.max(0, toFiniteNumber(p?.currentValue)) > 0
+    }).length
 
     const typeMap = new Map<string, { invested: number; value: number; count: number }>()
     for (const p of participants) {
-      const t = p.investment.account.type
+      const t = getAccountType(p?.investment)
+      if (!t) continue
       const existing = typeMap.get(t) || { invested: 0, value: 0, count: 0 }
-      const invested = Number(p.investedAmount) || 0
+      const invested = Math.max(0, toFiniteNumber(p?.investedAmount))
       existing.invested += invested
       if (t === 'SUKUK') {
-        const m = getPartnerSukukMetrics(p.investment, p, now)
-        existing.value += m.value
+        const m = getPartnerSukukMetrics(p?.investment, p, now)
+        existing.value += Math.max(0, toFiniteNumber(m.value))
       } else {
-        existing.value += Number(p.currentValue) || 0
+        existing.value += Math.max(0, toFiniteNumber(p?.currentValue))
       }
       existing.count += 1
       typeMap.set(t, existing)
@@ -856,6 +976,20 @@ export default async function DashboardPage({
     ownedInvestments = []
   }
 
+  cashBalance = toFiniteNumber(cashBalance)
+  cashSettingDelta = toFiniteNumber(cashSettingDelta)
+  totalInvested = Math.max(0, toFiniteNumber(totalInvested))
+  totalValue = Math.max(0, toFiniteNumber(totalValue))
+  totalProfit = toFiniteNumber(totalProfit)
+  activeInvestments = Math.max(0, Math.floor(toFiniteNumber(activeInvestments)))
+  sukukInvested = Math.max(0, toFiniteNumber(sukukInvested))
+  sukukValue = Math.max(0, toFiniteNumber(sukukValue))
+  sukukReceivable = Math.max(0, toFiniteNumber(sukukReceivable))
+  sipValue = Math.max(0, toFiniteNumber(sipValue))
+  circlysOngoingSaved = Math.max(0, toFiniteNumber(circlysOngoingSaved))
+  cryptoValue = Math.max(0, toFiniteNumber(cryptoValue))
+  roscaDebt = Math.max(0, toFiniteNumber(roscaDebt))
+
   const yearlyValueChange = (() => {
     if (user.role !== 'OWNER') return { start: 0, end: 0, change: 0, pct: 0 }
     const startAt = yearStart
@@ -866,7 +1000,8 @@ export default async function DashboardPage({
     const investmentsAtEnd = base.filter((inv: any) => isActiveAt(inv, endAt))
 
     const valueAt = (inv: any, at: Date) => {
-      const t = inv.account?.type
+      const t = getAccountType(inv)
+      if (!t) return 0
       if (t === 'SUKUK') {
         return getSukukValueAt(inv, at)
       }
