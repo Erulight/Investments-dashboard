@@ -1723,6 +1723,11 @@ export default async function ZakatPage() {
         // ROSCA-funded Sukuk principal continuity rows:
         // once ROSCA Hawl 1 completes, invested portion continues immediately under Sukuk.
         for (const alloc of sukukAllocations) {
+          const allocInvestment = investmentMap.get(alloc.investmentId)
+          const allocInvestmentPrincipal = Math.max(0, Number(allocInvestment?.principalAmount || 0))
+          const isDealClosed = allocInvestmentPrincipal <= 0.0001
+          if (!isDealClosed) continue
+
           const continuityStart = startOfDay(firstHaulEnd)
           const elapsedContinuityDays = diffDaysFloor(continuityStart, now)
           const completedContinuityHawls = Math.floor(elapsedContinuityDays / 354)
@@ -1740,6 +1745,7 @@ export default async function ZakatPage() {
             ])
             const isPaid = movementHasRowPaid(payments, rowKey)
             const zakatDue = !isPaid ? alloc.principalRemaining * 0.025 : 0
+            if (zakatDue <= 0) continue
 
             savingsRows.push({
               id: rowKey,
@@ -1823,6 +1829,11 @@ export default async function ZakatPage() {
           const isPrincipalReceiptMovement = movementType === 'WITHDRAW_PRINCIPAL' || movementType === 'ROLLBACK_PRINCIPAL'
           const isProfitReceiptMovement = movementType === 'WITHDRAW_PROFIT' || (isProfitBucket && movementType === 'CASH_IN')
 
+          if (isPrincipalReceiptMovement && inv?.account?.type === 'SUKUK') {
+            const currentPrincipal = Math.max(0, Number(inv?.principalAmount || 0))
+            if (currentPrincipal > 0.0001) return null
+          }
+
           // Principal receipts from ROSCA-funded Sukuk inherit the running ROSCA hawl anchor
           // (continuity across cycles). Profit receipts always use Sukuk start date.
           const eligibilityAnchor = (isCommissionBucket
@@ -1881,6 +1892,7 @@ export default async function ZakatPage() {
         ]
         const rowKind = getRowKind(bucket, rowKey, dueReceipts)
         const daysHeld = diffDaysFloor(r.eligibilityStart, r.receiptDay)
+        if (rowKind === 'PRINCIPAL' && zakatDue <= 0) return
         const why = rowKind === 'COMMISSION'
           ? `Commission from sale on ${isoDay(bucket.haulStartDate)}, held ${daysHeld} days`
           : rowKind === 'PRINCIPAL'
