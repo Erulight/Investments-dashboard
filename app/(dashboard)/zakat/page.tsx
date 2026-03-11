@@ -1721,14 +1721,16 @@ export default async function ZakatPage() {
               // For active Sukuk investments, defer Zakat to maturity date, not hawl completion
               const maturityTime = alloc.maturityDate?.getTime() || 0
               const periodEndTime = periodEnd.getTime()
+              const isMatured = !alloc.maturityDate || maturityTime <= now.getTime()
+              if (!isMatured) continue
               
               // For matured investments or periods that include maturity, use maturity date as hawl complete
               const effectiveHaulComplete = alloc.maturityDate && maturityTime <= periodEndTime && maturityTime >= periodStart.getTime()
                 ? alloc.maturityDate
                 : periodEnd
               
-              // For active Sukuk, Zakat is deferred to maturity (zakatDue = 0 until maturity)
-              const isMatured = !alloc.isActive || maturityTime <= periodEndTime
+              // Closed/matured Sukuk only.
+              const isMaturedForPeriod = !alloc.isActive || maturityTime <= periodEndTime
               
               const rowKey = buildRowKey([
                 'SAVINGS_SUKUK_IDLE',
@@ -1738,7 +1740,7 @@ export default async function ZakatPage() {
                 isoDay(effectiveHaulComplete),
               ])
               const isPaid = movementHasRowPaid(payments, rowKey)
-              const zakatDue = isMatured && !isPaid ? alloc.principalRemaining * 0.025 : 0
+              const zakatDue = isMaturedForPeriod && !isPaid ? alloc.principalRemaining * 0.025 : 0
 
               savingsRows.push({
                 id: rowKey,
@@ -1756,12 +1758,12 @@ export default async function ZakatPage() {
                 receiptsTotal: 0,
                 zakatDue,
                 isPaid,
-                haulCompleted: isMatured,
+                haulCompleted: isMaturedForPeriod,
                 source: alloc.investmentName,
                 sourceGroup: `Sukuk Principal • ${alloc.investmentName}`,
                 sourceType: 'SUKUK',
                 rowKind: 'PRINCIPAL',
-                why: alloc.isActive && !isMatured
+                why: alloc.isActive && !isMaturedForPeriod
                   ? `Sukuk principal - Zakat deferred to maturity (${isoDay(alloc.maturityDate!)})`
                   : alloc.maturityDate && maturityTime <= periodEndTime 
                   ? `Sukuk principal Zakat due on maturity (${isoDay(alloc.maturityDate)})`
