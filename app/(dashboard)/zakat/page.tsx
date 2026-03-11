@@ -603,38 +603,134 @@ export default async function ZakatPage() {
           })
         }
       } else if (hasReceived && expectedRewardTotal > REWARD_EPSILON) {
-        if (rewardBucketIdFromMeta) {
-          await prisma.cashBucket.updateMany({
-            where: { id: rewardBucketIdFromMeta },
+        // Reward not yet "matured" by paidMonths logic, but money WAS received.
+        // Ensure the reward bucket exists, is visible for Zakat, and credited.
+        const rewardBucket = await prisma.cashBucket.findFirst({
+          where: {
+            personId: null,
+            OR: [
+              ...(rewardBucketIdFromMeta ? [{ id: rewardBucketIdFromMeta }] : []),
+              {
+                label: `Circlys Reward Receipt • ${inv.name}`,
+                movements: {
+                  some: {
+                    investmentId: inv.id,
+                    type: 'CASH_IN',
+                  },
+                },
+              },
+            ],
+          },
+          include: {
+            movements: {
+              where: { type: 'CASH_IN' },
+              select: { amount: true },
+            },
+          },
+        })
+
+        let resolvedRewardBucketId = rewardBucket?.id || rewardBucketIdFromMeta
+        let creditedReward = (rewardBucket?.movements || []).reduce(
+          (sum: number, m: any) => sum + toNonNegativeNumber(m?.amount),
+          0,
+        )
+
+        if (!rewardBucket) {
+          // Create the reward bucket so the reward money appears in Zakat
+          const createdRewardBucket = await prisma.cashBucket.create({
+            data: {
+              label: `Circlys Reward Receipt • ${inv.name}`,
+              currency: rewardCurrency,
+              balance: expectedRewardTotal,
+              haulStartDate: rewardAnchorDate,
+              excludeFromZakat: false,
+              personId: null,
+              movements: {
+                create: {
+                  investmentId: inv.id,
+                  amount: expectedRewardTotal,
+                  type: 'CASH_IN',
+                  date: rewardDate,
+                  notes: `Circlys reward receipt • ${inv.name}`,
+                },
+              },
+            },
+            select: { id: true },
+          })
+
+          resolvedRewardBucketId = createdRewardBucket.id
+          creditedReward = expectedRewardTotal
+
+          const cashAccountId = await ensureCashAccountId(rewardCurrency)
+          if (cashAccountId) {
+            await prisma.transaction.create({
+              data: {
+                accountId: cashAccountId,
+                investmentId: inv.id,
+                personId: null,
+                type: 'CASH_IN',
+                amount: expectedRewardTotal,
+                date: rewardDate,
+                description: `Circlys reward receipt • ${inv.name}`,
+              },
+            })
+          }
+          rewardCashAdjusted = true
+        } else {
+          // Bucket exists — ensure it is NOT excluded from Zakat
+          await prisma.cashBucket.update({
+            where: { id: rewardBucket.id },
             data: {
               haulStartDate: rewardAnchorDate,
-              excludeFromZakat: true,
+              excludeFromZakat: false,
               personId: null,
             },
           })
         }
 
-        await prisma.cashBucket.updateMany({
-          where: {
-            personId: null,
-            label: `Circlys Reward Receipt • ${inv.name}`,
-            movements: {
-              some: {
-                investmentId: inv.id,
-                type: 'CASH_IN',
-              },
-            },
-          },
-          data: {
-            haulStartDate: rewardAnchorDate,
-            excludeFromZakat: true,
-            personId: null,
-          },
-        })
+        // Top up if shortfall
+        const rewardShortfall = Math.max(0, expectedRewardTotal - creditedReward)
+        if (resolvedRewardBucketId && rewardShortfall > REWARD_EPSILON) {
+          await prisma.cashBucket.update({
+            where: { id: resolvedRewardBucketId },
+            data: { balance: { increment: rewardShortfall } },
+          })
 
+          await prisma.cashBucketMovement.create({
+            data: {
+              cashBucketId: resolvedRewardBucketId,
+              investmentId: inv.id,
+              amount: rewardShortfall,
+              type: 'CASH_IN',
+              date: rewardDate,
+              notes: `Circlys reward reconciliation • ${inv.name}`,
+            },
+          })
+
+          const cashAccountId = await ensureCashAccountId(rewardCurrency)
+          if (cashAccountId) {
+            await prisma.transaction.create({
+              data: {
+                accountId: cashAccountId,
+                investmentId: inv.id,
+                personId: null,
+                type: 'CASH_IN',
+                amount: rewardShortfall,
+                date: rewardDate,
+                description: `Circlys reward reconciliation • ${inv.name}`,
+              },
+            })
+          }
+          rewardCashAdjusted = true
+        }
+
+        // Keep metadata in sync
         if (
-          rewardBucketIdFromMeta ||
-          toNonNegativeNumber(metadata?.received?.rewardAmount) > REWARD_EPSILON
+          resolvedRewardBucketId &&
+          (
+            rewardBucketIdFromMeta !== resolvedRewardBucketId ||
+            Math.abs(toNonNegativeNumber(metadata?.received?.rewardAmount) - expectedRewardTotal) > REWARD_EPSILON
+          )
         ) {
           await prisma.investment.update({
             where: { id: inv.id },
@@ -643,8 +739,8 @@ export default async function ZakatPage() {
                 ...metadata,
                 received: {
                   ...(metadata?.received && typeof metadata.received === 'object' ? metadata.received : {}),
-                  rewardAmount: 0,
-                  rewardBucketId: null,
+                  rewardAmount: expectedRewardTotal,
+                  rewardBucketId: resolvedRewardBucketId,
                 },
               }),
             },
