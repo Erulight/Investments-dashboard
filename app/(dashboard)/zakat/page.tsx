@@ -958,9 +958,22 @@ export default async function ZakatPage() {
       }
     }
 
+    const firstCashInvestDayByInvestmentId = new Map<string, Date>()
+    for (const tx of allSukukCashInvestTxs) {
+      const investmentId = typeof tx?.investmentId === 'string' ? tx.investmentId : null
+      if (!investmentId) continue
+      const rawDate = tx?.date instanceof Date ? tx.date : new Date(tx?.date as any)
+      if (Number.isNaN(rawDate.getTime())) continue
+      const txDay = new Date(rawDate.getFullYear(), rawDate.getMonth(), rawDate.getDate())
+      const existing = firstCashInvestDayByInvestmentId.get(investmentId)
+      if (!existing || txDay.getTime() < existing.getTime()) {
+        firstCashInvestDayByInvestmentId.set(investmentId, txDay)
+      }
+    }
+
     for (const sukukInv of allSukukInvestments) {
-      const cashInvestTx = allSukukCashInvestTxs.find((tx: any) => tx.investmentId === sukukInv.id)
-      const fallbackRaw = cashInvestTx?.date ?? sukukInv.startDate
+      const firstCashInvestDay = firstCashInvestDayByInvestmentId.get(sukukInv.id) || null
+      const fallbackRaw = firstCashInvestDay ?? sukukInv.startDate
       if (!fallbackRaw) continue
       const fallbackDate = fallbackRaw instanceof Date ? fallbackRaw : new Date(fallbackRaw as any)
       if (Number.isNaN(fallbackDate.getTime())) continue
@@ -1026,9 +1039,9 @@ export default async function ZakatPage() {
         rewardRoscaAnchor
           ? rewardRoscaAnchor
           : savingsRoscaAnchor
-            ? getLastCompletedHawlAnchor(savingsRoscaAnchor, sukukStartDay)
+            ? getLastCompletedHawlAnchor(savingsRoscaAnchor, fallbackDay)
             : principalReceiptAnchor
-              ? getLastCompletedHawlAnchor(principalReceiptAnchor, sukukStartDay)
+              ? getLastCompletedHawlAnchor(principalReceiptAnchor, fallbackDay)
               : (existingSavingsAnchor || fallbackDay)
 
       // Persist hawl start in investment metadata

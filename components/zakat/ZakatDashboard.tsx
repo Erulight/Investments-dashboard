@@ -102,6 +102,21 @@ export function ZakatDashboard({
     return day.toISOString().split('T')[0]
   }
 
+  const formatDateDisplay = (value?: string | null) => {
+    if (!value) return '-'
+    const d = toDay(value)
+    if (Number.isNaN(d.getTime())) return value
+    const dd = String(d.getDate()).padStart(2, '0')
+    const mm = String(d.getMonth() + 1).padStart(2, '0')
+    const yy = String(d.getFullYear()).slice(-2)
+    return `${dd}/${mm}/${yy}`
+  }
+
+  const formatDateTokens = (value?: string | null) => {
+    if (!value) return value || ''
+    return value.replace(/\b(\d{4})-(\d{2})-(\d{2})\b/g, (_m, y, m, d) => `${d}/${m}/${String(y).slice(-2)}`)
+  }
+
   const hijriEpochStart = new Date(2022, 6, 30) // 1444 AH ~ 2022-07-30
   const hijriEpochYear = 1444
   const hijriYearLengthDays = 354
@@ -962,19 +977,19 @@ export function ZakatDashboard({
                             <td className="py-2.5 px-3">
                               <div className="flex items-start justify-between gap-2">
                                 <div>
-                                  <div className="font-medium text-slate-900 dark:text-slate-100">{b.label || b.source}</div>
+                                  <div className="font-medium text-slate-900 dark:text-slate-100">{formatDateTokens(b.label || b.source)}</div>
                                   <div className="mt-1 flex items-center gap-2">
                                     {kindBadge(b.rowKind)}
                                     <span className="text-[11px] text-gray-400">{b.sourceType}</span>
                                   </div>
                                   {b.why && (
-                                    <div className="text-[11px] text-gray-500 mt-1">{b.why}</div>
+                                    <div className="text-[11px] text-gray-500 mt-1">{formatDateTokens(b.why)}</div>
                                   )}
                                 </div>
                               </div>
                             </td>
-                            <td className="py-2.5 px-3 text-gray-600">{b.haulStartDate}</td>
-                            <td className="py-2.5 px-3 text-gray-600">{b.haulCompleteDate}</td>
+                            <td className="py-2.5 px-3 text-gray-600">{formatDateDisplay(b.haulStartDate)}</td>
+                            <td className="py-2.5 px-3 text-gray-600">{formatDateDisplay(b.haulCompleteDate)}</td>
                             <td className="py-2.5 px-3 text-right">SAR {fmt(b.balance)}</td>
                             <td className="py-2.5 px-3 text-right">SAR {fmt(b.idleBase)}</td>
                             <td className="py-2.5 px-3 text-right">SAR {fmt(b.receiptsTotal)}</td>
@@ -1127,7 +1142,7 @@ export function ZakatDashboard({
       <Modal
         isOpen={Boolean(detailsTarget)}
         onClose={closeDetails}
-        title={detailsTarget ? `Bucket Details • ${detailsTarget.label ? detailsTarget.label : detailsTarget.id.slice(0, 8)}` : 'Bucket Details'}
+        title={detailsTarget ? `Bucket Details • ${detailsTarget.label ? formatDateTokens(detailsTarget.label) : detailsTarget.id.slice(0, 8)}` : 'Bucket Details'}
       >
         {detailsError && (
           <div className="rounded-lg bg-red-50 p-3 text-sm text-red-700 border border-red-200 mb-4">
@@ -1148,7 +1163,7 @@ export function ZakatDashboard({
               </div>
               <div className="mt-2 space-y-1 text-sm text-slate-700 dark:text-slate-200">
                 <div>
-                  Idle cash held through haul completion ({detailsTarget.haulStartDate} → {detailsTarget.haulCompleteDate}):
+                  Idle cash held through haul completion ({formatDateDisplay(detailsTarget.haulStartDate)} → {formatDateDisplay(detailsTarget.haulCompleteDate)}):
                   <span className="font-semibold text-slate-900 dark:text-slate-100"> {detailsTarget.currency} {detailsTarget.idleBase.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
                 </div>
                 <div>
@@ -1180,7 +1195,7 @@ export function ZakatDashboard({
                         {detailsData.bucket.movements.map((m: any) => (
                           <tr key={m.id} className="text-slate-700 dark:text-slate-200">
                             <td className="py-2 pr-3 whitespace-nowrap">
-                              {new Date(m.date).toISOString().split('T')[0]}
+                              {formatDateDisplay(m.date)}
                             </td>
                             <td className="py-2 pr-3 whitespace-nowrap">{m.type}</td>
                             <td className="py-2 pr-3 truncate max-w-[220px]">
@@ -1217,7 +1232,7 @@ export function ZakatDashboard({
                         {detailsData.transactions.map((t: any) => (
                           <tr key={t.id} className="text-slate-700 dark:text-slate-200">
                             <td className="py-2 pr-3 whitespace-nowrap">
-                              {new Date(t.date).toISOString().split('T')[0]}
+                              {formatDateDisplay(t.date)}
                             </td>
                             <td className="py-2 pr-3 whitespace-nowrap">{t.type}</td>
                             <td className="py-2 pr-3 truncate max-w-[260px]">
@@ -1254,7 +1269,7 @@ export function ZakatDashboard({
           )}
           {payTarget && (
             <div className="text-sm text-slate-600 dark:text-slate-300">
-              {payTarget.label || payTarget.source} — Hawl {payTarget.periodIndex} • Due {payTarget.currency} {payTarget.zakatDue.toFixed(2)}
+              {formatDateTokens(payTarget.label || payTarget.source)} — Hawl {payTarget.periodIndex} • Due {payTarget.currency} {payTarget.zakatDue.toFixed(2)}
             </div>
           )}
           <DateInput
