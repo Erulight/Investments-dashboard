@@ -326,11 +326,18 @@ export async function POST(req: NextRequest) {
                 return null
               }
               const bucketHaulStart = new Date(d.getFullYear(), d.getMonth(), d.getDate())
+<<<<<<< HEAD
               // Do NOT recalculate. Directly inherit the bucket haulStartDate.
               // For savings: bucket haulStartDate = firstContributionDate → Sukuk inherits it directly
               // For rewards: bucket haulStartDate = rewardReceiptDate (Dec 20) → Sukuk inherits it directly
               // The clock never resets. It continues from wherever the bucket left off.
               return bucketHaulStart
+=======
+              // Compute continuity anchor from receipt hawl start to investment start date.
+              // Example: Jan 2024 start, then investing in Jan 2025 -> anchor rolls to Dec 2024 cycle start.
+              const lastCompletedAnchor = getLastCompletedHawlAnchor(bucketHaulStart, startDate)
+              return lastCompletedAnchor
+>>>>>>> 82404e2ce9ae983089115d59de7aa90a1993ed03
             })
             .filter((d: Date | null): d is Date => Boolean(d))
             .sort((a: Date, b: Date) => a.getTime() - b.getTime())[0] || null
@@ -347,11 +354,17 @@ export async function POST(req: NextRequest) {
                 return null
               }
               const bucketHaulStart = new Date(d.getFullYear(), d.getMonth(), d.getDate())
+<<<<<<< HEAD
               // Do NOT recalculate. Directly inherit the bucket haulStartDate.
               // For savings: bucket haulStartDate = firstContributionDate → Sukuk inherits it directly
               // For rewards: bucket haulStartDate = rewardReceiptDate (Dec 20) → Sukuk inherits it directly
               // The clock never resets. It continues from wherever the bucket left off.
               return bucketHaulStart
+=======
+              // Compute continuity anchor from receipt hawl start to investment start date.
+              const lastCompletedAnchor = getLastCompletedHawlAnchor(bucketHaulStart, startDate)
+              return lastCompletedAnchor
+>>>>>>> 82404e2ce9ae983089115d59de7aa90a1993ed03
             })
             .filter((d: Date | null): d is Date => Boolean(d))
             .sort((a: Date, b: Date) => a.getTime() - b.getTime())[0] || null

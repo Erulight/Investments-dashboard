@@ -20,6 +20,29 @@ const parseMetadata = (value: unknown) => {
 
 const round2 = (value: number) => Math.round((Number(value) || 0) * 100) / 100
 
+const diffDays = (start: Date, end: Date) => {
+  const s = new Date(start)
+  const e = new Date(end)
+  s.setHours(0, 0, 0, 0)
+  e.setHours(0, 0, 0, 0)
+  return Math.max(0, Math.round((e.getTime() - s.getTime()) / (1000 * 60 * 60 * 24)))
+}
+
+const addDays = (date: Date, days: number) => {
+  const d = new Date(date)
+  d.setDate(d.getDate() + days)
+  return d
+}
+
+const getLastCompletedHawlAnchor = (initialAnchor: Date, referenceDate: Date) => {
+  const start = new Date(initialAnchor.getFullYear(), initialAnchor.getMonth(), initialAnchor.getDate())
+  const ref = new Date(referenceDate.getFullYear(), referenceDate.getMonth(), referenceDate.getDate())
+  const elapsed = diffDays(start, ref)
+  if (elapsed < 354) return start
+  const completedCycles = Math.floor(elapsed / 354)
+  return addDays(start, completedCycles * 354)
+}
+
 export async function POST(
   req: NextRequest,
   { params }: { params: Promise<{ id: string }> }
@@ -182,7 +205,9 @@ export async function POST(
             principalAmount: source === 'PRINCIPAL'
               ? investment.principalAmount - amount
               : investment.principalAmount,
-            currentValue: Math.max(0, investment.currentValue - amount),
+            currentValue: source === 'PRINCIPAL'
+              ? investment.currentValue
+              : Math.max(0, investment.currentValue - amount),
           },
         })
       }
@@ -385,11 +410,26 @@ export async function POST(
         }
       } else {
         if (source === 'PRINCIPAL') {
-          // For principal withdrawals, create a new independent bucket
-          // Use maturity date as hawl start (new cycle)
+          let principalHaulStart = date
+          const invMeta = parseMetadata(investment.metadata)
+          const savingsAnchorRaw = typeof invMeta?.savingsHaulStartDate === 'string'
+            ? new Date(invMeta.savingsHaulStartDate)
+            : null
+          const savingsAnchor = savingsAnchorRaw && !Number.isNaN(savingsAnchorRaw.getTime())
+            ? new Date(
+                savingsAnchorRaw.getFullYear(),
+                savingsAnchorRaw.getMonth(),
+                savingsAnchorRaw.getDate(),
+              )
+            : null
+
+          if (savingsAnchor) {
+            principalHaulStart = getLastCompletedHawlAnchor(savingsAnchor, date)
+          }
+
           await createCashBucket(tx, {
             amount: amount,
-            haulStartDate: date,
+            haulStartDate: principalHaulStart,
             label: `${investment.name} Principal Receipt`,
             date: date,
             notes: notes || null,

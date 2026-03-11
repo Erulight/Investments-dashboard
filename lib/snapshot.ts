@@ -515,29 +515,7 @@ export async function restoreSnapshot(
 }
 
 export async function cleanupOldSnapshots(tx: PrismaClient | any): Promise<number> {
-  // Delete snapshots older than 30 days
-  const thirtyDaysAgo = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000)
-  
-  const deleted = await tx.snapshot.deleteMany({
-    where: {
-      createdAt: { lt: thirtyDaysAgo },
-    },
-  })
-
-  // Keep only the most recent 100 snapshots
-  const allSnapshots = await tx.snapshot.findMany({
-    orderBy: { createdAt: 'desc' },
-    select: { id: true },
-  })
-
-  if (allSnapshots.length > 100) {
-    const toDelete = allSnapshots.slice(100)
-    await tx.snapshot.deleteMany({
-      where: {
-        id: { in: toDelete.map((s: any) => s.id) },
-      },
-    })
-  }
-
+  // Delete ALL snapshots
+  const deleted = await tx.snapshot.deleteMany({})
   return deleted.count
 }

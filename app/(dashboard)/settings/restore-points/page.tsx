@@ -21,6 +21,7 @@ export default function RestorePointsPage() {
   const [searchQuery, setSearchQuery] = useState('')
   const [restoringId, setRestoringId] = useState<string | null>(null)
   const [cleaning, setCleaning] = useState(false)
+  const [deletingId, setDeletingId] = useState<string | null>(null)
 
   const showMessage = (message: string, type: 'success' | 'error' = 'success') => {
     alert(`${type.toUpperCase()}: ${message}`)
@@ -68,8 +69,34 @@ export default function RestorePointsPage() {
     }
   }
 
+  const handleDelete = async (snapshotId: string) => {
+    if (!confirm('Are you sure you want to delete this restore point? This action cannot be undone.')) {
+      return
+    }
+
+    try {
+      setDeletingId(snapshotId)
+      const response = await fetch(`/api/admin/snapshots/${snapshotId}`, {
+        method: 'DELETE',
+      })
+      
+      if (!response.ok) {
+        const error = await response.json()
+        throw new Error(error.error || 'Failed to delete snapshot')
+      }
+
+      showMessage('Restore point deleted successfully')
+      fetchSnapshots()
+    } catch (error) {
+      console.error('Error deleting snapshot:', error)
+      showMessage(error instanceof Error ? error.message : 'Failed to delete snapshot', 'error')
+    } finally {
+      setDeletingId(null)
+    }
+  }
+
   const handleCleanup = async () => {
-    if (!confirm('Are you sure you want to cleanup old snapshots?')) {
+    if (!confirm('Are you sure you want to delete ALL restore points? This action cannot be undone.')) {
       return
     }
 
@@ -82,7 +109,7 @@ export default function RestorePointsPage() {
       if (!response.ok) throw new Error('Failed to cleanup snapshots')
       
       const result = await response.json()
-      showMessage(`Cleanup completed! Deleted ${result.deletedCount} old snapshots.`)
+      showMessage(`Cleanup completed! Deleted ${result.deletedCount} snapshots.`)
       fetchSnapshots()
     } catch (error) {
       console.error('Error cleaning up snapshots:', error)
@@ -252,10 +279,17 @@ export default function RestorePointsPage() {
                   <div className="flex items-center space-x-2">
                     <Button
                       onClick={() => handleRestore(snapshot.id)}
-                      disabled={!!restoringId}
+                      disabled={!!restoringId || !!deletingId}
                       className="bg-red-500 text-white hover:bg-red-600 disabled:bg-gray-300"
                     >
                       {restoringId === snapshot.id ? 'Restoring...' : 'Restore Again'}
+                    </Button>
+                    <Button
+                      onClick={() => handleDelete(snapshot.id)}
+                      disabled={!!restoringId || !!deletingId}
+                      className="bg-gray-700 text-white hover:bg-gray-800 disabled:bg-gray-300"
+                    >
+                      {deletingId === snapshot.id ? 'Deleting...' : 'Delete'}
                     </Button>
                   </div>
                 </CardContent>
@@ -279,12 +313,12 @@ export default function RestorePointsPage() {
           <Button
             onClick={handleCleanup}
             disabled={cleaning}
-            className="bg-gray-500 text-white hover:bg-gray-600"
+            className="bg-red-500 text-white hover:bg-red-600"
           >
             {cleaning ? 'Cleaning...' : 'Run Cleanup'}
           </Button>
           <p className="text-xs text-gray-500 mt-2">
-            Removes restore points older than 30 days and keeps only the 100 most recent ones.
+            Removes ALL restore points from the database.
           </p>
         </CardContent>
       </Card>

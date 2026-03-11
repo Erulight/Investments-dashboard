@@ -213,6 +213,8 @@ export async function POST(
                 source: 'SOLD_DEAL_RECEIPT',
                 originalSalePrice: saleMeta.salePrice,
                 investorProfit: ownerProfit,
+                ownerProfitTarget,
+                alreadyReceived,
               }),
             },
           })
