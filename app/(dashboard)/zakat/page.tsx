@@ -1723,6 +1723,12 @@ export default async function ZakatPage() {
               const periodEndTime = periodEnd.getTime()
               const isMatured = !alloc.maturityDate || maturityTime <= now.getTime()
               if (!isMatured) continue
+              const inv = investmentMap.get(alloc.investmentId)
+              const investmentMeta = parseMetadata(inv?.metadata)
+              const metadataHaulStart = toDate(investmentMeta?.savingsHaulStartDate)
+              const effectiveHaulStart = metadataHaulStart && !Number.isNaN(metadataHaulStart.getTime())
+                ? startOfDay(metadataHaulStart)
+                : haulStart
               
               // For matured investments or periods that include maturity, use maturity date as hawl complete
               const effectiveHaulComplete = alloc.maturityDate && maturityTime <= periodEndTime && maturityTime >= periodStart.getTime()
@@ -1746,10 +1752,10 @@ export default async function ZakatPage() {
                 id: rowKey,
                 bucketId: bucket.id,
                 periodIndex: i + 1,
-                label: `Idle • Sukuk Principal • ${alloc.investmentName} • ${isoDay(haulStart)} → ${isoDay(effectiveHaulComplete)}`,
+                label: `Idle • Sukuk Principal • ${alloc.investmentName} • ${isoDay(effectiveHaulStart)} → ${isoDay(effectiveHaulComplete)}`,
                 currency: bucket.currency,
                 balance: alloc.principalRemaining,
-                haulStartDate: isoDay(haulStart),
+                haulStartDate: isoDay(effectiveHaulStart),
                 lastZakatPaidDate: bucket.lastZakatPaidDate
                   ? bucket.lastZakatPaidDate.toISOString().split('T')[0]
                   : null,
@@ -1767,7 +1773,7 @@ export default async function ZakatPage() {
                   ? `Sukuk principal - Zakat deferred to maturity (${isoDay(alloc.maturityDate!)})`
                   : alloc.maturityDate && maturityTime <= periodEndTime 
                   ? `Sukuk principal Zakat due on maturity (${isoDay(alloc.maturityDate)})`
-                  : `Sukuk principal carrying forward hawl from ${isoDay(haulStart)}`,
+                  : `Sukuk principal carrying forward hawl from ${isoDay(effectiveHaulStart)}`,
                 lastPayment: lastPayment
                   ? {
                       id: lastPayment.id,
