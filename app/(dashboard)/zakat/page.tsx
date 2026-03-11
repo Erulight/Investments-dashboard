@@ -361,8 +361,9 @@ export default async function ZakatPage() {
     }
   }
 
-  // Track excluded reward receipt buckets for first-hawl row generation (scoped outside OWNER block)
-  const excludedRewardReceiptFirstHawls: Array<{
+  // Track excluded ROSCA receipt buckets (savings + reward) for first-hawl row generation
+  // so Hawl 1 remains visible even when the receipt bucket is fully invested into Sukuk.
+  const excludedRoscaReceiptFirstHawlsByBucketId = new Map<string, {
     bucketId: string
     bucketLabel: string
     haulStartDate: Date
@@ -370,7 +371,9 @@ export default async function ZakatPage() {
     receiptAmount: number
     investmentName: string
     sukukInvestedAmount: number
-  }> = []
+    kind: 'SAVINGS' | 'REWARD'
+    currency: string
+  }>()
 
   if (user.role === 'OWNER') {
     const savingsInvestments = await prisma.investment.findMany({
@@ -842,12 +845,20 @@ export default async function ZakatPage() {
           select: {
             investmentId: true,
             cashBucketId: true,
+            principalAllocated: true,
+            principalRemaining: true,
             cashBucket: {
               select: {
                 id: true,
                 label: true,
                 haulStartDate: true,
                 balance: true,
+                currency: true,
+                movements: {
+                  where: { type: 'CASH_IN' },
+                  select: { amount: true, date: true },
+                  orderBy: { date: 'asc' },
+                },
               },
             },
           },
@@ -1043,8 +1054,8 @@ export default async function ZakatPage() {
         if (balance <= 0.01) {
           sukukInvestedReceiptIds.add(bucketId)
 
-          // For reward receipt buckets being excluded, capture first-hawl info
-          // so we can still show the ROSCA period hawl row (e.g., Jan 2024 - Dec 2024)
+          // For excluded ROSCA receipt buckets, capture first-hawl info
+          // so we can still show the ROSCA Hawl 1 row (e.g., Jan 2024 - Dec 2024)
           if (isRewardBucket && sourceFundingAnchor) {
             const bucketHaulStart = toDate(alloc?.cashBucket?.haulStartDate)
             if (bucketHaulStart && !Number.isNaN(bucketHaulStart.getTime())) {
