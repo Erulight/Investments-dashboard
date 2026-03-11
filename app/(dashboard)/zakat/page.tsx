@@ -1249,8 +1249,8 @@ export default async function ZakatPage() {
     return Number.isFinite(amount) ? amount : 0
   }
 
-  const isReceiptMovement = (m: any, isProfitBucket: boolean) => {
-    if (isProfitBucket && m?.type === 'CASH_IN') return true
+  const isReceiptMovement = (m: any, treatCashInAsReceipt: boolean) => {
+    if (treatCashInAsReceipt && m?.type === 'CASH_IN') return true
     return receiptTypes.has(m?.type)
   }
 
@@ -1301,6 +1301,7 @@ export default async function ZakatPage() {
       const isCirclys = typeof bucket.label === 'string' && bucket.label.startsWith('Circlys')
       const isSavingsContribution = typeof bucket.label === 'string' && bucket.label.startsWith('Circlys •') && !bucket.label.includes('Receipt')
       const isSavingsReceiptBucket = typeof bucket.label === 'string' && bucket.label.startsWith('Savings Receipt •')
+      const isRewardReceiptBucket = typeof bucket.label === 'string' && bucket.label.startsWith('Circlys Reward Receipt •')
 
       const alloc = bucket.allocations?.[0]
       const source = alloc?.investment?.name || bucket.label || 'General'
@@ -1318,7 +1319,16 @@ export default async function ZakatPage() {
       const lastPayment = payments[0]
 
       const movements = Array.isArray(bucket.movements) ? bucket.movements : []
-      const receiptMovements = movements.filter((m: any) => isReceiptMovement(m, isImmediateReceiptBucket))
+      const treatCashInAsReceipt = isImmediateReceiptBucket || isRewardReceiptBucket
+      const receiptMovements = movements.filter((m: any) => {
+        if (!isReceiptMovement(m, treatCashInAsReceipt)) return false
+        if (isRewardReceiptBucket) {
+          // Barrier: reward buckets should anchor from the original reward receipt only.
+          // Do not start additional receipt/idle timelines from later non-CASH_IN movement types.
+          return m?.type === 'CASH_IN'
+        }
+        return true
+      })
 
       // RULE 1: Exclude savings contribution buckets from zakat calculation
       // They are just temporary tracking, not actual zakat buckets
@@ -1785,6 +1795,13 @@ export default async function ZakatPage() {
           const periodEnd = addDays(idleAnchorStart, (i + 1) * 354)
           const periodEndTime = periodEnd.getTime()
 
+          // Barrier: never duplicate the exact first-hawl period already represented by a receipt row.
+          const isFirstHawlDuplicate =
+            r.eligibilityDuration >= 354 &&
+            isoDay(periodStart) === isoDay(r.eligibilityStart) &&
+            isoDay(periodEnd) === isoDay(r.receiptDay)
+          if (isFirstHawlDuplicate) continue
+
           const poolOutstanding = qualifyingReceipts
             .filter((q) => q.receiptDay.getTime() < periodEndTime)
             .reduce((s, q) => s + q.amount, 0)
@@ -1859,7 +1876,7 @@ export default async function ZakatPage() {
 
       const hasAnyInvestOut = movements.some((m: any) => m?.type === 'INVEST_OUT')
       const hasPrincipalWithdrawal = movements.some((m: any) => m?.type === 'WITHDRAW_PRINCIPAL' || m?.type === 'ROLLBACK_PRINCIPAL')
-      if (!hasAnyInvestOut && !hasPrincipalWithdrawal && !isImmediateReceiptBucket) {
+      if (qualifyingReceipts.length === 0 && !hasAnyInvestOut && !hasPrincipalWithdrawal && !isImmediateReceiptBucket) {
         const start = startOfDay(bucketStart)
         const elapsed = diffDaysFloor(start, now)
         const completed = Math.floor(elapsed / 354)

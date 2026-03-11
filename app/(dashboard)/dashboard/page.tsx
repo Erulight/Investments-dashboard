@@ -383,6 +383,7 @@ export default async function DashboardPage({
         interestRate: true,
         fees: true,
         receivableAmount: true,
+        totalReceived: true,
         metadata: true,
         account: { select: { type: true } },
         dealParticipants: {
@@ -492,7 +493,10 @@ export default async function DashboardPage({
 
         if (tx.type === 'WITHDRAW_PROFIT') {
           const meta = parseMetadata(tx.metadata)
-          if (meta?.source !== 'SOLD_DEAL_RECEIPT') return sum
+          // Legacy guard: older records may not always carry SOLD_DEAL_RECEIPT source.
+          // For sold deals, treat missing source (or PROFIT source) as received settlement profit.
+          const source = typeof meta?.source === 'string' ? meta.source : ''
+          if (source && source !== 'SOLD_DEAL_RECEIPT' && source !== 'PROFIT') return sum
           const amount = Number(tx.amount)
           return sum + (Number.isFinite(amount) ? Math.max(0, amount) : 0)
         }
