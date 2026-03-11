@@ -4,12 +4,12 @@ import { requireAuth } from '@/lib/rbac'
 
 export async function DELETE(
   _req: NextRequest,
-  { params }: { params: { snapshotId: string } }
+  { params }: { params: Promise<{ snapshotId: string }> }
 ) {
   try {
     await requireAuth(['OWNER'])
 
-    const { snapshotId } = params
+    const { snapshotId } = await params
 
     if (!snapshotId) {
       return NextResponse.json({ error: 'Snapshot ID is required' }, { status: 400 })
