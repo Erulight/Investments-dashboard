@@ -1115,19 +1115,23 @@ export default async function ZakatPage() {
       })
     }
 
-    // Exclude fully-invested Savings Receipt buckets from Zakat
-    if (sukukInvestedReceiptIds.size > 0) {
-      await prisma.cashBucket.updateMany({
-        where: { id: { in: Array.from(sukukInvestedReceiptIds) } },
-        data: { excludeFromZakat: true },
-      })
-    }
+    // DO NOT exclude ROSCA receipt buckets from Zakat.
+    // They must always show hawl 1 completed row even after full investment.
+    // Reinvestment tracking (investOutEvents barrier) prevents double counting instead.
   }
 
   const buckets = await prisma.cashBucket.findMany({
     where: {
       AND: [
-        { excludeFromZakat: false },
+        {
+          OR: [
+            { excludeFromZakat: false },
+            // Always include ROSCA receipt buckets regardless of excludeFromZakat flag
+            // because they need to show hawl 1 completed row even after full investment
+            { label: { startsWith: 'Savings Receipt •' } },
+            { label: { startsWith: 'Circlys Reward Receipt •' } },
+          ],
+        },
         ...(user.role === 'OWNER'
           ? [
               {
