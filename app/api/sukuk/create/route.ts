@@ -326,10 +326,8 @@ export async function POST(req: NextRequest) {
                 return null
               }
               const bucketHaulStart = new Date(d.getFullYear(), d.getMonth(), d.getDate())
-              // Do NOT recalculate. Directly inherit the bucket haulStartDate.
-              // For savings: bucket haulStartDate = firstContributionDate → Sukuk inherits it directly
-              // For rewards: bucket haulStartDate = rewardReceiptDate (Dec 20) → Sukuk inherits it directly
-              // The clock never resets. It continues from wherever the bucket left off.
+              // REWARD bucket: haulStartDate is already set to rewardReceiptDate (Dec 20 2024)
+              // which IS the hawl 2 start date. Direct copy, no recalculation needed.
               return bucketHaulStart
             })
             .filter((d: Date | null): d is Date => Boolean(d))
@@ -347,11 +345,11 @@ export async function POST(req: NextRequest) {
                 return null
               }
               const bucketHaulStart = new Date(d.getFullYear(), d.getMonth(), d.getDate())
-              // Do NOT recalculate. Directly inherit the bucket haulStartDate.
-              // For savings: bucket haulStartDate = firstContributionDate → Sukuk inherits it directly
-              // For rewards: bucket haulStartDate = rewardReceiptDate (Dec 20) → Sukuk inherits it directly
-              // The clock never resets. It continues from wherever the bucket left off.
-              return bucketHaulStart
+              // SAVINGS bucket: haulStartDate = firstContributionDate (Jan 2024)
+              // Calculate end of last completed hawl before investment date.
+              // Example: Jan 2024 start → invest Jan 2025 → returns Dec 2024 (end of hawl 1)
+              const lastCompletedAnchor = getLastCompletedHawlAnchor(bucketHaulStart, startDate)
+              return lastCompletedAnchor
             })
             .filter((d: Date | null): d is Date => Boolean(d))
             .sort((a: Date, b: Date) => a.getTime() - b.getTime())[0] || null

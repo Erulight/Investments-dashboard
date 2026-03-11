@@ -2180,8 +2180,15 @@ export default async function ZakatPage() {
       const maturityDate = sukuk.maturityDate ? new Date(sukuk.maturityDate) : null
       const isActive = maturityDate && !Number.isNaN(maturityDate.getTime()) && maturityDate.getTime() > todayDayForExcluded.getTime()
       
-      // Sukuk principal inherits hawl from ROSCA receipt
-      const sukukHaulStart = excluded.kind === 'SAVINGS' ? excluded.haulStartDate : excluded.receiptDate
+      const sukukStartDate = sukuk.startDate ? new Date(sukuk.startDate) : todayDayForExcluded
+      
+      // Sukuk principal inherits hawl from ROSCA receipt:
+      // - SAVINGS: Calculate end of last completed hawl from firstContributionDate to investment date
+      //   Example: Jan 2024 start → invest Jan 2025 → Dec 2024 (end of hawl 1)
+      // - REWARDS: Direct copy of receiptDate (already at hawl 2 start, no recalculation)
+      const sukukHaulStart = excluded.kind === 'SAVINGS' 
+        ? getLastCompletedHawlAnchor(excluded.haulStartDate, sukukStartDate)
+        : excluded.receiptDate
       const sukukHaulEnd = addDays(sukukHaulStart, 354)
       const sukukHaulCompleted = todayDayForExcluded.getTime() >= sukukHaulEnd.getTime()
       
