@@ -79,6 +79,15 @@ export async function POST(
         },
       })
 
+      // Also fetch INVEST_OUT movements to restore funding bucket balances
+      const investOutMovements = await tx.cashBucketMovement.findMany({
+        where: {
+          investmentId: id,
+          type: 'INVEST_OUT',
+          cashBucket: { ...(scopeFilter as any) },
+        },
+      })
+
       const receiptTransactions = await tx.transaction.findMany({
         where: {
           investmentId: id,
@@ -242,6 +251,33 @@ export async function POST(
       let partnerParticipantId: string | null = null
       let unmatchedPrincipalRestore = 0
       
+      // First, restore funding bucket balances from INVEST_OUT movements
+      // INVEST_OUT movements have negative amounts, so we subtract them to restore the balance
+      for (const movement of investOutMovements) {
+        const movementAmount = Number(movement?.amount || 0)
+        const bucketId = typeof movement?.cashBucketId === 'string' ? movement.cashBucketId : null
+
+        if (bucketId && Number.isFinite(movementAmount) && movementAmount !== 0) {
+          const bucket = await tx.cashBucket.findUnique({
+            where: { id: bucketId },
+            select: { id: true, balance: true, label: true },
+          })
+
+          if (bucket) {
+            // INVEST_OUT amounts are negative, so subtracting them restores the balance
+            const nextBalance = Number(bucket.balance || 0) - movementAmount
+            await tx.cashBucket.update({
+              where: { id: bucket.id },
+              data: { 
+                balance: nextBalance,
+                // If this was a reward/savings bucket that was marked excluded, restore it
+                excludeFromZakat: false,
+              },
+            })
+          }
+        }
+      }
+      
       // Roll back receipt bucket balances and restore allocation principal.
       for (const movement of receiptMovements) {
         const movementAmount = Number(movement?.amount || 0)
@@ -368,6 +404,12 @@ export async function POST(
         await tx.cashBucketMovement.deleteMany({ where: { id: { in: movementIds } } })
       }
 
+      // Delete INVEST_OUT movements after restoring balances
+      const investOutMovementIds = investOutMovements.map((m: any) => m.id)
+      if (investOutMovementIds.length > 0) {
+        await tx.cashBucketMovement.deleteMany({ where: { id: { in: investOutMovementIds } } })
+      }
+
       const transactionIds = receiptTransactions.map((t: any) => t.id)
       if (transactionIds.length > 0) {
         await tx.transaction.deleteMany({ where: { id: { in: transactionIds } } })
@@ -386,6 +428,39 @@ export async function POST(
           where: {
             id: { in: profitBucketIdsForScope },
           },
+        })
+      }
+
+      // Also remove Sukuk Principal receipt buckets (recycled principal)
+      await tx.cashBucket.deleteMany({
+        where: {
+          label: `Sukuk Principal • ${investment.name}`,
+          ...(scopeFilter as any),
+        },
+      })
+
+      // Remove reward and savings receipt buckets that were depleted by this Sukuk
+      // These buckets should have been marked excludeFromZakat=true when fully invested
+      // and should be cleaned up on reopen to restore proper cash balance
+      const roscaReceiptBuckets = await tx.cashBucket.findMany({
+        where: {
+          OR: [
+            { label: `Circlys Reward Receipt • ${investment.name}` },
+            { label: `Savings Receipt • ${investment.name}` },
+          ],
+          ...(scopeFilter as any),
+        },
+        select: { id: true, balance: true, excludeFromZakat: true },
+      })
+
+      // Only delete if they were marked as excluded (fully invested) or have zero/negative balance
+      const roscaBucketsToDelete = roscaReceiptBuckets
+        .filter((b: any) => b.excludeFromZakat === true || Number(b.balance || 0) <= 0.01)
+        .map((b: any) => b.id)
+
+      if (roscaBucketsToDelete.length > 0) {
+        await tx.cashBucket.deleteMany({
+          where: { id: { in: roscaBucketsToDelete } },
         })
       }
 
