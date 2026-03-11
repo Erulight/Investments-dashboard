@@ -7,7 +7,7 @@ import { Button } from '@/components/ui/Button'
 import { DateInput } from '@/components/ui/DateInput'
 import { Modal } from '@/components/sukuk/SukukModal'
 import { AnimatedCard } from '@/components/ui/AnimatedCard'
-import { formatDateInput, toIsoDateInput } from '@/lib/date'
+import { formatDateInput, formatDisplayDate, toIsoDateInput } from '@/lib/date'
 
 type CashBucketInfo = {
   id: string
@@ -39,7 +39,7 @@ type Debt = {
 }
 
 const fmt = (n: number) => n.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })
-const fmtDate = (d: string) => new Date(d).toLocaleDateString('en-CA')
+const fmtDate = (d: string) => formatDisplayDate(d)
 const toDayKey = (value: string | Date) => {
   const d = value instanceof Date ? value : new Date(value)
   if (Number.isNaN(d.getTime())) return ''

@@ -868,6 +868,7 @@ export default async function ZakatPage() {
           },
           select: {
             investmentId: true,
+            date: true,
             cashBucket: {
               select: {
                 label: true,
@@ -924,6 +925,9 @@ export default async function ZakatPage() {
     const savingsRoscaInvestOutAnchorsByInvestmentId = new Map<string, Date[]>()
     const rewardRoscaInvestOutAnchorsByInvestmentId = new Map<string, Date[]>()
     const principalInvestOutAnchorsByInvestmentId = new Map<string, Date[]>()
+    const savingsRoscaFundingDatesByInvestmentId = new Map<string, Date[]>()
+    const rewardRoscaFundingDatesByInvestmentId = new Map<string, Date[]>()
+    const principalFundingDatesByInvestmentId = new Map<string, Date[]>()
     for (const movement of allSukukInvestOutFundingAnchors) {
       const investmentId = typeof movement?.investmentId === 'string' ? movement.investmentId : null
       if (!investmentId) continue
@@ -932,6 +936,11 @@ export default async function ZakatPage() {
       const rawAnchor = toDate(movement?.cashBucket?.haulStartDate)
       if (!rawAnchor || Number.isNaN(rawAnchor.getTime())) continue
       const anchor = new Date(rawAnchor.getFullYear(), rawAnchor.getMonth(), rawAnchor.getDate())
+      const movementRawDate = toDate((movement as any)?.date)
+      const movementDay =
+        movementRawDate && !Number.isNaN(movementRawDate.getTime())
+          ? new Date(movementRawDate.getFullYear(), movementRawDate.getMonth(), movementRawDate.getDate())
+          : null
 
       const isSavingsRoscaFunding = label.startsWith('Savings Receipt •')
       const isRewardRoscaFunding = label.startsWith('Circlys Reward Receipt •')
@@ -943,18 +952,33 @@ export default async function ZakatPage() {
         const list = savingsRoscaInvestOutAnchorsByInvestmentId.get(investmentId) || []
         list.push(anchor)
         savingsRoscaInvestOutAnchorsByInvestmentId.set(investmentId, list)
+        if (movementDay) {
+          const dateList = savingsRoscaFundingDatesByInvestmentId.get(investmentId) || []
+          dateList.push(movementDay)
+          savingsRoscaFundingDatesByInvestmentId.set(investmentId, dateList)
+        }
       }
 
       if (isRewardRoscaFunding) {
         const list = rewardRoscaInvestOutAnchorsByInvestmentId.get(investmentId) || []
         list.push(anchor)
         rewardRoscaInvestOutAnchorsByInvestmentId.set(investmentId, list)
+        if (movementDay) {
+          const dateList = rewardRoscaFundingDatesByInvestmentId.get(investmentId) || []
+          dateList.push(movementDay)
+          rewardRoscaFundingDatesByInvestmentId.set(investmentId, dateList)
+        }
       }
 
       if (isPrincipalFunding) {
         const list = principalInvestOutAnchorsByInvestmentId.get(investmentId) || []
         list.push(anchor)
         principalInvestOutAnchorsByInvestmentId.set(investmentId, list)
+        if (movementDay) {
+          const dateList = principalFundingDatesByInvestmentId.get(investmentId) || []
+          dateList.push(movementDay)
+          principalFundingDatesByInvestmentId.set(investmentId, dateList)
+        }
       }
     }
 
@@ -1030,6 +1054,15 @@ export default async function ZakatPage() {
       const rewardRoscaAnchor = rewardRoscaAnchors[0] || null
       const savingsRoscaAnchor = savingsRoscaAnchors[0] || null
       const principalReceiptAnchor = principalReceiptAnchors[0] || null
+      const savingsFundingDates = (savingsRoscaFundingDatesByInvestmentId.get(sukukInv.id) || [])
+        .sort((a: Date, b: Date) => a.getTime() - b.getTime())
+      const rewardFundingDates = (rewardRoscaFundingDatesByInvestmentId.get(sukukInv.id) || [])
+        .sort((a: Date, b: Date) => a.getTime() - b.getTime())
+      const principalFundingDates = (principalFundingDatesByInvestmentId.get(sukukInv.id) || [])
+        .sort((a: Date, b: Date) => a.getTime() - b.getTime())
+      const savingsReferenceDay = savingsFundingDates[0] || fallbackDay
+      const rewardReferenceDay = rewardFundingDates[0] || fallbackDay
+      const principalReferenceDay = principalFundingDates[0] || fallbackDay
 
       // ROSCA anchor rules:
       // - Reward receipt buckets already store the current running hawl anchor, so copy directly.
@@ -1037,11 +1070,11 @@ export default async function ZakatPage() {
       // - Principal receipt recycling keeps prior behavior.
       const hawlStart =
         rewardRoscaAnchor
-          ? rewardRoscaAnchor
+          ? getLastCompletedHawlAnchor(rewardRoscaAnchor, rewardReferenceDay)
           : savingsRoscaAnchor
-            ? getLastCompletedHawlAnchor(savingsRoscaAnchor, fallbackDay)
+            ? getLastCompletedHawlAnchor(savingsRoscaAnchor, savingsReferenceDay)
             : principalReceiptAnchor
-              ? getLastCompletedHawlAnchor(principalReceiptAnchor, fallbackDay)
+              ? getLastCompletedHawlAnchor(principalReceiptAnchor, principalReferenceDay)
               : (existingSavingsAnchor || fallbackDay)
 
       // Persist hawl start in investment metadata

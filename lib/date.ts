@@ -13,11 +13,12 @@ export const parseDateInput = (value?: string | null) => {
     return date
   }
 
-  const match = trimmed.match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})$/)
+  const match = trimmed.match(/^(\d{1,2})[/-](\d{1,2})[/-](\d{2}|\d{4})$/)
   if (!match) return null
   const day = Number(match[1])
   const month = Number(match[2])
-  const year = Number(match[3])
+  const yearToken = String(match[3])
+  const year = yearToken.length === 2 ? 2000 + Number(yearToken) : Number(yearToken)
   const date = new Date(year, month - 1, day)
   if (
     date.getFullYear() !== year ||
@@ -33,7 +34,7 @@ export const formatDateInput = (value?: string | Date | null) => {
   if (!value) return ''
   const date = value instanceof Date ? value : parseDateInput(String(value))
   if (!date) return ''
-  return `${pad(date.getDate())}/${pad(date.getMonth() + 1)}/${date.getFullYear()}`
+  return `${pad(date.getDate())}-${pad(date.getMonth() + 1)}-${String(date.getFullYear()).slice(-2)}`
 }
 
 export const toIsoDateInput = (value?: string | null) => {
@@ -46,7 +47,14 @@ export const formatGregorianDate = (value?: string | Date | null) => {
   if (!value) return ''
   const date = value instanceof Date ? value : new Date(value)
   if (Number.isNaN(date.getTime())) return ''
-  return date.toLocaleDateString('en-CA')
+  return `${pad(date.getDate())}-${pad(date.getMonth() + 1)}-${String(date.getFullYear()).slice(-2)}`
+}
+
+export const formatDisplayDate = (value?: string | Date | null, fallback = '-') => {
+  if (!value) return fallback
+  const date = value instanceof Date ? value : new Date(value)
+  if (Number.isNaN(date.getTime())) return fallback
+  return `${pad(date.getDate())}-${pad(date.getMonth() + 1)}-${String(date.getFullYear()).slice(-2)}`
 }
 
 export const formatHijriDate = (value?: string | Date | null) => {

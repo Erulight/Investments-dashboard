@@ -2,10 +2,10 @@ import { useRef } from 'react'
 import { formatDateInput, toIsoDateInput } from '@/lib/date'
 
 const normalizeDateInput = (value: string) => {
-  const digits = value.replace(/\D/g, '').slice(0, 8)
+  const digits = value.replace(/\D/g, '').slice(0, 6)
   if (digits.length <= 2) return digits
-  if (digits.length <= 4) return `${digits.slice(0, 2)}/${digits.slice(2)}`
-  return `${digits.slice(0, 2)}/${digits.slice(2, 4)}/${digits.slice(4)}`
+  if (digits.length <= 4) return `${digits.slice(0, 2)}-${digits.slice(2)}`
+  return `${digits.slice(0, 2)}-${digits.slice(2, 4)}-${digits.slice(4)}`
 }
 
 type DateInputProps = {
@@ -23,7 +23,7 @@ type DateInputProps = {
 export function DateInput({
   value,
   onChange,
-  placeholder = 'DD/MM/YYYY',
+  placeholder = 'DD-MM-YY',
   className = '',
   ariaLabel,
   id,

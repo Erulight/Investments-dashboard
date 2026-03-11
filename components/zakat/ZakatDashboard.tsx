@@ -109,12 +109,12 @@ export function ZakatDashboard({
     const dd = String(d.getDate()).padStart(2, '0')
     const mm = String(d.getMonth() + 1).padStart(2, '0')
     const yy = String(d.getFullYear()).slice(-2)
-    return `${dd}/${mm}/${yy}`
+    return `${dd}-${mm}-${yy}`
   }
 
   const formatDateTokens = (value?: string | null) => {
     if (!value) return value || ''
-    return value.replace(/\b(\d{4})-(\d{2})-(\d{2})\b/g, (_m, y, m, d) => `${d}/${m}/${String(y).slice(-2)}`)
+    return value.replace(/\b(\d{4})-(\d{2})-(\d{2})\b/g, (_m, y, m, d) => `${d}-${m}-${String(y).slice(-2)}`)
   }
 
   const hijriEpochStart = new Date(2022, 6, 30) // 1444 AH ~ 2022-07-30

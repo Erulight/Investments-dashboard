@@ -7,7 +7,7 @@ import { Table, TableHeader, TableBody, TableFooter, TableRow, TableHead, TableC
 import { Button } from '@/components/ui/Button'
 import { Modal } from './SukukModal'
 import { DateInput } from '@/components/ui/DateInput'
-import { formatDateInput, toIsoDateInput } from '@/lib/date'
+import { formatDateInput, formatDisplayDate, toIsoDateInput } from '@/lib/date'
 import { SukukForm } from './SukukForm'
 
 const Icon = ({ children }: { children: ReactNode }) => (
@@ -206,8 +206,7 @@ export function SukukList({ initialSukuk, userRole, ownerPersonId, viewerPersonI
 
   const formatDate = (value?: string | Date | null) => {
     const date = toDate(value)
-    if (!date) return '-'
-    return date.toLocaleDateString('en-CA')
+    return formatDisplayDate(date, '-')
   }
 
   const formatCurrency = (value: number, currency?: string) => {

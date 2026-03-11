@@ -6,7 +6,7 @@ import Link from 'next/link'
 import { Card, CardContent } from '@/components/ui/Card'
 import { Button } from '@/components/ui/Button'
 import { DateInput } from '@/components/ui/DateInput'
-import { formatDateInput, toIsoDateInput } from '@/lib/date'
+import { formatDateInput, formatDisplayDate, toIsoDateInput } from '@/lib/date'
 
 interface RecentTx {
   id: string
@@ -174,7 +174,7 @@ export function CashBalanceCard({ initialCash, role }: { initialCash: number; ro
             {recentTxs.map(tx => (
               <div key={tx.id} className="flex items-center justify-between text-[11px]">
                 <span className="text-gray-400 truncate max-w-[120px]">
-                  {new Date(tx.date).toLocaleDateString('en-CA')}
+                  {formatDisplayDate(tx.date)}
                 </span>
                 <span className={`font-medium tabular-nums ${tx.amount >= 0 ? 'text-emerald-600' : 'text-red-500'}`}>
                   {tx.amount >= 0 ? '+' : ''}{tx.amount.toLocaleString()}

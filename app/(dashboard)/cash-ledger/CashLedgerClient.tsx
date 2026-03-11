@@ -3,6 +3,7 @@
 import { useEffect, useState, useCallback, useMemo } from 'react'
 import { Card, CardHeader, CardTitle, CardContent } from '@/components/ui/Card'
 import { Button } from '@/components/ui/Button'
+import { formatDisplayDate } from '@/lib/date'
 
 interface Transaction {
   id: string
@@ -52,7 +53,7 @@ interface LedgerData {
 }
 
 const fmt = (n: number) => n.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })
-const fmtDate = (d: string) => new Date(d).toLocaleDateString('en-CA')
+const fmtDate = (d: string) => formatDisplayDate(d)
 const MONTHS = [
   { value: '1', label: 'Jan' },
   { value: '2', label: 'Feb' },

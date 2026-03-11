@@ -4,6 +4,7 @@ import { useEffect, useMemo, useRef, useState } from 'react'
 import { animate, motion, useMotionValue, useTransform } from 'framer-motion'
 import { Responsive } from 'react-grid-layout'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/Card'
+import { formatDisplayDate } from '@/lib/date'
 
 const ResponsiveAny = Responsive as any
 
@@ -378,8 +379,7 @@ export function AnalyticsGrid({
                         <div className="h-full flex items-center justify-center text-sm text-gray-400">No recent activity</div>
                       ) : (
                         activity.map((a) => {
-                          const dt = new Date(a.date)
-                          const dateLabel = Number.isNaN(dt.getTime()) ? a.date : dt.toLocaleDateString('en-CA')
+                          const dateLabel = formatDisplayDate(a.date, a.date)
                           const amt = Number(a.amount) || 0
                           const amtClass = amt >= 0 ? 'text-emerald-600' : 'text-red-600'
                           return (

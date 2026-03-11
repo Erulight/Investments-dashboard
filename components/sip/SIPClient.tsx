@@ -2,6 +2,7 @@
 
 import { useState, type FormEvent, type ChangeEvent } from 'react'
 import { CreateSipInput } from '@/lib/validation'
+import { formatDisplayDate } from '@/lib/date'
 import { SIPForm } from './SIPForm'
 import { Table, TableBody, TableCell, TableFooter, TableHead, TableHeader, TableRow } from '@/components/ui/Table'
 
@@ -330,7 +331,7 @@ export function SIPClient({ investments, userRole }: SIPClientProps) {
                       {meta.aprYearly ? `${Number(meta.aprYearly).toFixed(2)}%` : '-'}
                     </TableCell>
                     <TableCell className="px-2 py-1.5 whitespace-nowrap text-gray-700">
-                      {new Date(inv.startDate).toLocaleDateString('en-CA')}
+                      {formatDisplayDate(inv.startDate)}
                     </TableCell>
                     <TableCell className="px-2 py-1.5 whitespace-nowrap text-right tabular-nums text-gray-700">
                       {meta.expectedAprYearly ? `${Number(meta.expectedAprYearly).toFixed(2)}%` : '-'}

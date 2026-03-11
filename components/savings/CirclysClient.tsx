@@ -7,6 +7,7 @@ import { Table, TableHeader, TableBody, TableFooter, TableRow, TableHead, TableC
 import { Button } from '@/components/ui/Button'
 import { SavingsForm } from './SavingsForm'
 import { CreateSavingsInput } from '@/lib/validation'
+import { formatDisplayDate } from '@/lib/date'
 
 interface CirclysClientProps {
   initialInvestments: any[]
@@ -622,7 +623,7 @@ export function CirclysClient({ initialInvestments, userRole }: CirclysClientPro
                         <div className="text-sm">
                           {hasReceived ? (
                             <span className="font-semibold text-emerald-800">
-                              Received SAR {fmt(Number(meta.received.amount))} on {new Date(meta.received.date).toISOString().split('T')[0]}
+                              Received SAR {fmt(Number(meta.received.amount))} on {formatDisplayDate(meta.received.date)}
                             </span>
                           ) : (
                             <span className="font-semibold text-amber-800">
@@ -707,7 +708,7 @@ export function CirclysClient({ initialInvestments, userRole }: CirclysClientPro
                                 )}
                               </td>
                               <td className="py-2 pr-3 whitespace-nowrap text-gray-500 tabular-nums">
-                                {r.due.toISOString().split('T')[0]}
+                                {formatDisplayDate(r.due)}
                               </td>
                               <td className="py-2 pr-3">
                                 <input

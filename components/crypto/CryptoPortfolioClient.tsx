@@ -3,6 +3,7 @@
 import { useMemo, useState, type ChangeEvent, type FormEvent } from 'react'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/Card'
 import { AnimatedCard } from '@/components/ui/AnimatedCard'
+import { formatDisplayDate } from '@/lib/date'
 
 interface Investment {
   id: string
@@ -681,7 +682,7 @@ export function CryptoPortfolioClient({ investment }: { investment: Investment }
             <div>
               <CardTitle className="text-sm font-bold text-gray-800">Zakat</CardTitle>
               <p className="text-xs text-gray-500 mt-0.5">
-                Haul starts at {haulStartAt.toISOString().split('T')[0]} and completes at {haulCompleteAt.toISOString().split('T')[0]}
+                Haul starts at {formatDisplayDate(haulStartAt)} and completes at {formatDisplayDate(haulCompleteAt)}
               </p>
             </div>
             <button

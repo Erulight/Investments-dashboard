@@ -9,6 +9,7 @@ import { PremiumStatsGrid } from '@/components/dashboard/PremiumStatsGrid'
 import { AnimatedCard } from '@/components/ui/AnimatedCard'
 import { TradingChartOverlay } from '@/components/dashboard/TradingChartOverlay'
 import { CASH_BALANCE_KEY, getBucketCashBalance } from '@/lib/cashBalance'
+import { formatDisplayDate } from '@/lib/date'
 import { PageTransition } from '@/components/animations/PageTransition'
 import { AnimatedList, AnimatedListItem } from '@/components/animations/AnimatedList'
 import { AnimatedStatCard } from '@/components/animations/AnimatedCard'
@@ -1511,8 +1512,7 @@ export default async function DashboardPage({
               {activity.slice(0, 8).map((entry: any, idx: number) => {
                 const amount = Number(entry?.amount || 0)
                 const isIn = amount >= 0
-                const d = new Date(entry?.date)
-                const dateLabel = Number.isNaN(d.getTime()) ? '—' : d.toLocaleDateString('en-CA')
+                const dateLabel = formatDisplayDate(entry?.date, '—')
                 return (
                   <AnimatedListItem
                     key={entry.id}
