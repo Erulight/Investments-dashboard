@@ -108,6 +108,7 @@ export async function POST(req: NextRequest) {
     })
 
     // Log the action
+    const auditMeta = (() => { try { return JSON.parse(investment.metadata || '{}') } catch { return {} } })()
     await createAuditLog(
       user.id,
       'CREATE',
@@ -117,12 +118,12 @@ export async function POST(req: NextRequest) {
         type: 'ROSCA',
         name: investment.name,
         accountId: investment.accountId,
-        monthlyContribution: JSON.parse(investment.metadata || '{}').monthlyContribution,
-        totalMonths: JSON.parse(investment.metadata || '{}').totalMonths,
-        bookingFee: JSON.parse(investment.metadata || '{}').bookingFee,
-        rewardProgram: JSON.parse(investment.metadata || '{}').rewardProgram,
-        rewardAmount: JSON.parse(investment.metadata || '{}').rewardAmount,
-        receiptMonth: JSON.parse(investment.metadata || '{}').receiptMonth,
+        monthlyContribution: auditMeta.monthlyContribution,
+        totalMonths: auditMeta.totalMonths,
+        bookingFee: auditMeta.bookingFee,
+        rewardProgram: auditMeta.rewardProgram,
+        rewardAmount: auditMeta.rewardAmount,
+        receiptMonth: auditMeta.receiptMonth,
       }
     )
 

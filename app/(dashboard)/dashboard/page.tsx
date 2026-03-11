@@ -149,6 +149,9 @@ export default async function DashboardPage({
   let circlysOngoingSaved = 0
   let cryptoValue = 0
 
+  // Owner Sukuk principal lookup for portfolio chart (populated inside owner block)
+  const ownerSukukPrincipalById = new Map<string, number>()
+
   const toDate = (value?: string | Date | null) => {
     if (!value) return null
     if (value instanceof Date) return value
@@ -301,8 +304,10 @@ export default async function DashboardPage({
     }
   }
 
-  const getSukukValueAt = (inv: any, at: Date) => {
-    const principal = Number.isFinite(inv.principalAmount) ? Number(inv.principalAmount) : 0
+  const getSukukValueAt = (inv: any, at: Date, ownerPrincipalOverride?: number) => {
+    const principal = ownerPrincipalOverride !== undefined
+      ? (Number.isFinite(ownerPrincipalOverride) ? Math.max(0, ownerPrincipalOverride) : 0)
+      : (Number.isFinite(inv.principalAmount) ? Number(inv.principalAmount) : 0)
     if (principal <= 0) return 0
 
     const start = toDate(inv.startDate)
@@ -310,7 +315,9 @@ export default async function DashboardPage({
     const startTime = start?.getTime() || 0
     const maturityTime = maturity?.getTime() || 0
 
-    const totalProfit = getSukukNetProfit(inv)
+    const fullPrincipal = Math.max(0, toFiniteNumber(inv.principalAmount))
+    const ownershipRatio = fullPrincipal > 0 ? Math.min(1, Math.max(0, principal / fullPrincipal)) : (ownerPrincipalOverride !== undefined ? 0 : 1)
+    const totalProfit = getSukukNetProfit(inv) * ownershipRatio
 
     const totalMs = maturityTime > startTime ? maturityTime - startTime : 0
     const atMs = at.getTime()
@@ -323,10 +330,12 @@ export default async function DashboardPage({
       : (atMs > startTime ? totalProfit : 0)
 
     const txs = Array.isArray(inv.transactions) ? inv.transactions : []
+    const ownerPid = user.role === 'OWNER' ? (user.personId || null) : null
     const upTo = (type: string) =>
       txs
         .filter((tx: any) => {
           if (tx?.type !== type) return false
+          if (ownerPid && tx?.personId !== ownerPid && tx?.personId != null) return false
           const d = tx?.date instanceof Date ? tx.date : new Date(tx?.date)
           return !Number.isNaN(d.getTime()) && d.getTime() <= atMs
         })
@@ -342,13 +351,7 @@ export default async function DashboardPage({
   }
 
   const getValueFromHistoryAt = (inv: any, at: Date) => {
-    const metadata = (() => {
-      try {
-        return JSON.parse(inv.metadata || '{}')
-      } catch {
-        return {}
-      }
-    })()
+    const metadata = parseMetadata(inv.metadata)
 
     const history = Array.isArray(metadata.history) ? metadata.history : []
     const points = history
@@ -660,7 +663,9 @@ export default async function DashboardPage({
     const ownerSukuk = ownerScoped.filter((inv: any) => getAccountType(inv) === 'SUKUK')
     const ownerSukukMetricsById = new Map<string, ReturnType<typeof getOwnerSukukMetrics>>()
     for (const inv of ownerSukuk) {
-      ownerSukukMetricsById.set(inv.id, getOwnerSukukMetrics(inv, now))
+      const metrics = getOwnerSukukMetrics(inv, now)
+      ownerSukukMetricsById.set(inv.id, metrics)
+      ownerSukukPrincipalById.set(inv.id, metrics.principal)
     }
 
     const activeSukuk = ownerSukuk.filter((inv: any) => {
@@ -1003,7 +1008,8 @@ export default async function DashboardPage({
       const t = getAccountType(inv)
       if (!t) return 0
       if (t === 'SUKUK') {
-        return getSukukValueAt(inv, at)
+        const ownerPrincipal = ownerSukukPrincipalById.get(inv.id)
+        return getSukukValueAt(inv, at, ownerPrincipal)
       }
 
       return getValueFromHistoryAt(inv, at)
@@ -1016,7 +1022,8 @@ export default async function DashboardPage({
     const startNetWorth = startAssets - debtsAtStart
     const endNetWorth = endAssets - debtsAtEnd
     const change = endNetWorth - startNetWorth
-    const pct = startNetWorth > 0 ? (change / startNetWorth) * 100 : 0
+    const rawPct = startNetWorth > 0 ? (change / startNetWorth) * 100 : 0
+    const pct = Number.isFinite(rawPct) ? rawPct : 0
 
     if (dashboardDebug) {
       console.log('[DASHBOARD_DEBUG] investmentsValueAtStart', startValue)
@@ -1031,7 +1038,7 @@ export default async function DashboardPage({
     return { start: startNetWorth, end: endNetWorth, change, pct }
   })()
 
-  const displayedValue = cashBalance + totalValue
+  const displayedValue = toFiniteNumber(cashBalance + totalValue)
   const yearlyProfitValue = await (async () => {
     if (user.role === 'OWNER') {
       if (!cashAccount) return 0
@@ -1101,12 +1108,15 @@ export default async function DashboardPage({
     return Math.max(0, Math.abs(Number(txSum._sum.amount || 0)))
   })()
 
-  const yearlyReturnPercentage = user.role === 'PARTNER'
-    ? (totalInvested > 0 ? (yearlyProfitValue / totalInvested) * 100 : 0)
-    : (totalInvested > 0 ? (yearlyProfitValue / totalInvested) * 100 : 0)
-  const netWorth = user.role === 'OWNER'
-    ? displayedValue - roscaDebt - debtsAtEnd
-    : displayedValue - roscaDebt
+  const yearlyReturnPercentage = (() => {
+    const raw = totalInvested > 0 ? (yearlyProfitValue / totalInvested) * 100 : 0
+    return Number.isFinite(raw) ? raw : 0
+  })()
+  const netWorth = toFiniteNumber(
+    user.role === 'OWNER'
+      ? displayedValue - roscaDebt - debtsAtEnd
+      : displayedValue - roscaDebt
+  )
 
   const monthlyLabels = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec']
 
@@ -1151,9 +1161,10 @@ export default async function DashboardPage({
       const monthCash = await cashAt(monthEndExclusive)
       const monthInvestments = (ownedInvestments || []).filter((inv: any) => isActiveAt(inv, at))
       const monthValue = monthInvestments.reduce((s: number, inv: any) => {
-        const t = inv.account?.type
+        const t = getAccountType(inv)
         if (t === 'SUKUK') {
-          return s + getSukukValueAt(inv, at)
+          const ownerPrincipal = ownerSukukPrincipalById.get(inv.id)
+          return s + getSukukValueAt(inv, at, ownerPrincipal)
         }
 
         return s + getValueFromHistoryAt(inv, at)
@@ -1183,7 +1194,7 @@ export default async function DashboardPage({
   })()
 
   const cashRunwayMonths = avgMonthlyOutflow > 0
-    ? cashBalance / avgMonthlyOutflow
+    ? Math.min(cashBalance / avgMonthlyOutflow, 999)
     : null
 
   const totalTypeValue = typeBreakdowns.reduce((sum, item) => sum + (Number(item.value) || 0), 0)

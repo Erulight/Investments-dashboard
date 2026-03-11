@@ -1088,6 +1088,7 @@ export default async function ZakatPage() {
                     AND: [
                       { NOT: { label: 'Partner Commission' } },
                       { NOT: { label: { startsWith: 'Debt •' } } },
+                      { NOT: { label: { startsWith: 'Debt Refund •' } } },
                     ],
                   },
                 ],
@@ -1190,7 +1191,7 @@ export default async function ZakatPage() {
           where: {
             type: { in: ['WITHDRAW_PROFIT', 'WITHDRAW_PRINCIPAL'] },
           },
-          select: { type: true, date: true, amount: true },
+          select: { type: true, date: true, amount: true, personId: true },
           orderBy: { date: 'asc' },
         },
       },
@@ -1230,8 +1231,12 @@ export default async function ZakatPage() {
         : (atMs > startTime ? totalProfit : 0)
 
       const txs = Array.isArray(inv.transactions) ? inv.transactions : []
+      const isOwnerTx = (tx: any) => {
+        if (!ownerPersonId) return true
+        return tx?.personId === ownerPersonId || tx?.personId == null
+      }
       const withdrawnProfit = txs
-        .filter((tx: any) => tx?.type === 'WITHDRAW_PROFIT')
+        .filter((tx: any) => tx?.type === 'WITHDRAW_PROFIT' && isOwnerTx(tx))
         .filter((tx: any) => {
           const d = tx?.date instanceof Date ? tx.date : new Date(tx?.date)
           return !Number.isNaN(d.getTime()) && d.getTime() <= atMs
@@ -1239,7 +1244,7 @@ export default async function ZakatPage() {
         .reduce((s: number, tx: any) => s + Math.abs(Number(tx?.amount) || 0), 0)
 
       const withdrawnPrincipal = txs
-        .filter((tx: any) => tx?.type === 'WITHDRAW_PRINCIPAL')
+        .filter((tx: any) => tx?.type === 'WITHDRAW_PRINCIPAL' && isOwnerTx(tx))
         .filter((tx: any) => {
           const d = tx?.date instanceof Date ? tx.date : new Date(tx?.date)
           return !Number.isNaN(d.getTime()) && d.getTime() <= atMs
@@ -2060,24 +2065,26 @@ export default async function ZakatPage() {
     return aEnd - bEnd
   })
 
-  console.log(
-    'ZAKAT BUCKETS:',
-    JSON.stringify(
-      rows.map((r) => ({
-        label: r.label,
-        periodIndex: r.periodIndex,
-        haulStart: r.haulStartDate,
-        haulEnd: r.haulCompleteDate,
-        balance: r.balance,
-        idleBase: r.idleBase,
-        receipts: r.receiptsTotal,
-        zakatDue: r.zakatDue,
-        status: r.isPaid ? 'PAID' : r.zakatDue > 0 ? 'HAS_DUE' : 'NO_ACTIVITY',
-      })),
-      null,
-      2,
-    ),
-  )
+  if (process.env.ZAKAT_DEBUG || process.env.DASHBOARD_DEBUG) {
+    console.log(
+      'ZAKAT BUCKETS:',
+      JSON.stringify(
+        rows.map((r) => ({
+          label: r.label,
+          periodIndex: r.periodIndex,
+          haulStart: r.haulStartDate,
+          haulEnd: r.haulCompleteDate,
+          balance: r.balance,
+          idleBase: r.idleBase,
+          receipts: r.receiptsTotal,
+          zakatDue: r.zakatDue,
+          status: r.isPaid ? 'PAID' : r.zakatDue > 0 ? 'HAS_DUE' : 'NO_ACTIVITY',
+        })),
+        null,
+        2,
+      ),
+    )
+  }
 
   return (
     <div className="space-y-6">

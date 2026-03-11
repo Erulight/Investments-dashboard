@@ -337,13 +337,7 @@ export default async function InvestmentsPage() {
       const transactions = Array.isArray(inv.transactions) ? inv.transactions : []
       const sellTx = transactions.find((tx: any) => tx.type === 'SELL_TO_PARTNER' && tx.personId === user.personId)
       if (sellTx) {
-        const saleMeta = (() => {
-          try {
-            return sellTx.metadata ? JSON.parse(sellTx.metadata) : null
-          } catch {
-            return null
-          }
-        })()
+        const saleMeta = parseMetadata(sellTx.metadata)
         if (saleMeta && Number.isFinite(saleMeta.accruedProfitAtSale ?? saleMeta.investorProfit)) {
           return round2(Math.max(0, Number(saleMeta.accruedProfitAtSale ?? saleMeta.investorProfit)))
         }

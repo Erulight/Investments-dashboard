@@ -105,6 +105,16 @@ export async function POST(
         },
       })
 
+      // Update debt bucket excludeFromZakat based on remaining outstanding
+      const totalPaidAfter = totalPaidBefore + amount
+      const outstandingAfter = Math.max(0, Number(debt.amount) - totalPaidAfter)
+      if (debt.cashBucketId) {
+        await tx.cashBucket.update({
+          where: { id: debt.cashBucketId },
+          data: { excludeFromZakat: outstandingAfter > 0.000001 },
+        })
+      }
+
       await recomputeCashSetting(tx, null)
 
       const updated = await tx.debt.findUnique({

@@ -95,6 +95,7 @@ export async function POST(req: NextRequest) {
         where: { id: bucketId },
         data: {
           balance: { decrement: amount },
+          lastZakatPaidDate: date,
         },
       })
 

@@ -313,15 +313,13 @@ export function SukukList({ initialSukuk, userRole, ownerPersonId, viewerPersonI
     const sellTx = investment.transactions?.find(
       (t: any) => t.type === 'SELL_TO_PARTNER'
     )
-    const meta = sellTx?.metadata
-      ? JSON.parse(sellTx.metadata) : null
+    const meta = parseMetadata(sellTx?.metadata)
 
     // Owner is the one who originally sold — stored in BUY_FROM_PARTNER as sellerPersonId
     const buyTx = investment.transactions?.find(
       (t: any) => t.type === 'BUY_FROM_PARTNER'
     )
-    const buyMeta = buyTx?.metadata
-      ? JSON.parse(buyTx.metadata) : null
+    const buyMeta = parseMetadata(buyTx?.metadata)
 
     const resolvedOwnerPersonId = buyMeta?.sellerPersonId || meta?.sellerPersonId || ownerPersonId
 
@@ -348,15 +346,13 @@ export function SukukList({ initialSukuk, userRole, ownerPersonId, viewerPersonI
     const sellTx = investment.transactions?.find(
       (t: any) => t.type === 'SELL_TO_PARTNER'
     )
-    const meta = sellTx?.metadata
-      ? JSON.parse(sellTx.metadata) : null
+    const meta = parseMetadata(sellTx?.metadata)
 
     // Owner is the one who originally sold — stored in BUY_FROM_PARTNER as sellerPersonId
     const buyTx = investment.transactions?.find(
       (t: any) => t.type === 'BUY_FROM_PARTNER'
     )
-    const buyMeta = buyTx?.metadata
-      ? JSON.parse(buyTx.metadata) : null
+    const buyMeta = parseMetadata(buyTx?.metadata)
 
     const resolvedOwnerPersonId = buyMeta?.sellerPersonId || meta?.sellerPersonId || ownerPersonId
 

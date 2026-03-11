@@ -4,6 +4,7 @@ import { prisma } from '@/lib/db'
 import { requireModuleAccess } from '@/lib/rbac'
 import { updateSavingsSchema, UpdateSavingsInput } from '@/lib/validation'
 import { createAuditLog } from '@/lib/audit'
+import { recomputeCashSetting } from '@/lib/cashBalance'
 
 export async function PATCH(
   req: NextRequest,
@@ -169,15 +170,57 @@ export async function DELETE(
     })()
 
     const payments = meta.payments && typeof meta.payments === 'object' ? meta.payments : {}
-    const bucketIds: string[] = Object.values(payments)
+    const contributionBucketIds: string[] = Object.values(payments)
       .map((p: any) => p?.bucketId)
-      .filter((x: any): x is string => typeof x === 'string' && x.length > 0)
+      .filter((x: any): x is string => typeof x === 'string' && x.length > 0 && !x.startsWith('post-receipt-'))
 
-    if (bucketIds.length) {
-      await prisma.cashBucket.deleteMany({ where: { id: { in: bucketIds } } })
-    }
+    // Collect receipt and reward bucket IDs (stored in meta.received)
+    const receiptBucketId = typeof meta?.received?.bucketId === 'string' ? meta.received.bucketId : null
+    const rewardBucketId = typeof meta?.received?.rewardBucketId === 'string' ? meta.received.rewardBucketId : null
 
-    await prisma.investment.delete({ where: { id } })
+    const allBucketIds = [
+      ...contributionBucketIds,
+      ...(receiptBucketId ? [receiptBucketId] : []),
+      ...(rewardBucketId ? [rewardBucketId] : []),
+    ]
+
+    await prisma.$transaction(async (tx: any) => {
+      // Delete movements before buckets to avoid FK issues
+      if (allBucketIds.length > 0) {
+        await tx.cashBucketMovement.deleteMany({
+          where: { cashBucketId: { in: allBucketIds } },
+        })
+        await tx.cashBucket.deleteMany({ where: { id: { in: allBucketIds } } })
+      }
+
+      // Also clean up any legacy reward buckets by label
+      const legacyRewardBuckets = await tx.cashBucket.findMany({
+        where: {
+          personId: null,
+          OR: [
+            { label: { startsWith: `Circlys Reward • ${existing.name} •` } },
+            { label: `Circlys Reward Receipt • ${existing.name}` },
+          ],
+        },
+        select: { id: true },
+      })
+      const legacyIds = legacyRewardBuckets.map((b: any) => b.id)
+      if (legacyIds.length > 0) {
+        await tx.cashBucketMovement.deleteMany({
+          where: { cashBucketId: { in: legacyIds } },
+        })
+        await tx.cashBucket.deleteMany({ where: { id: { in: legacyIds } } })
+      }
+
+      // Clean up ledger transactions for this investment
+      await tx.transaction.deleteMany({
+        where: { investmentId: id },
+      })
+
+      await tx.investment.delete({ where: { id } })
+
+      await recomputeCashSetting(tx, null)
+    })
 
     await createAuditLog(user.id, 'DELETE', 'INVESTMENT', id, {
       type: 'ROSCA',

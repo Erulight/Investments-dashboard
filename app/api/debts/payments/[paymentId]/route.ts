@@ -54,7 +54,7 @@ export async function DELETE(
         amount,
         haulStartDate: payment.paidAt,
         currency,
-        label: `Debt • ${debt.lenderName} (undo)`,
+        label: `Debt Refund • ${debt.lenderName}`,
         date: payment.paidAt,
         notes: payment.notes || null,
         type: 'CASH_IN',

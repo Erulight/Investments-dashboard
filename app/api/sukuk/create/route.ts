@@ -53,10 +53,7 @@ export async function POST(req: NextRequest) {
     
     const body = await req.json()
     
-    // DEBUG: Log incoming request body
-    console.log('[SUKUK_CREATE] Received body:', JSON.stringify(body, null, 2))
-    console.log('[SUKUK_CREATE] principalAmount type:', typeof body.principalAmount)
-    console.log('[SUKUK_CREATE] principalAmount value:', body.principalAmount)
+    const DEBUG = Boolean(process.env.SUKUK_DEBUG)
     
     // Validate input
     const validationResult = createSukukSchema.safeParse(body)
@@ -202,12 +199,10 @@ export async function POST(req: NextRequest) {
       // Use whichever is higher (transaction sum or bucket sum)
       const cashAtStartDate = Math.max(cashBalanceAtStartDate, bucketSum)
 
-      // Log for debugging
-      console.log('[SUKUK_CREATE] Deal start date:', startDate.toISOString().split('T')[0])
-      console.log('[SUKUK_CREATE] Cash from transactions at start date:', cashBalanceAtStartDate)
-      console.log('[SUKUK_CREATE] Cash from buckets at start date:', bucketSum)
-      console.log('[SUKUK_CREATE] Total cash at start date:', cashAtStartDate)
-      console.log('[SUKUK_CREATE] Principal required:', data.principalAmount)
+      if (DEBUG) {
+        console.log('[SUKUK_CREATE] Deal start date:', startDate.toISOString().split('T')[0])
+        console.log('[SUKUK_CREATE] Cash at start date:', cashAtStartDate, 'Required:', data.principalAmount)
+      }
 
       if (cashAtStartDate < data.principalAmount) {
         throw new Error(`INSUFFICIENT_CASH_AT_DATE:${startDate.toISOString().split('T')[0]}:${cashAtStartDate.toFixed(2)}:${data.principalAmount.toFixed(2)}`)
@@ -231,7 +226,7 @@ export async function POST(req: NextRequest) {
       })
 
       // Create the investment
-      console.log('[SUKUK_CREATE] Creating investment with principalAmount:', data.principalAmount)
+      if (DEBUG) console.log('[SUKUK_CREATE] Creating investment with principalAmount:', data.principalAmount)
       const newSukuk = await tx.investment.create({
         data: {
           accountId: data.accountId,
@@ -250,7 +245,7 @@ export async function POST(req: NextRequest) {
           metadata: user.role === 'PARTNER' ? JSON.stringify(metadataWithCommission) : data.metadata,
         },
       })
-      console.log('[SUKUK_CREATE] Investment created with ID:', newSukuk.id, 'principalAmount:', newSukuk.principalAmount)
+      if (DEBUG) console.log('[SUKUK_CREATE] Investment created with ID:', newSukuk.id)
 
       await withdrawFromBuckets(tx, {
         amount: data.principalAmount,
@@ -287,16 +282,9 @@ export async function POST(req: NextRequest) {
           },
         })
 
-        console.log('[SUKUK_CREATE] Investment ID:', newSukuk.id)
-        console.log('[SUKUK_CREATE] Found allocations:', fundingAllocations.length)
-        fundingAllocations.forEach((alloc: any) => {
-          console.log('[SUKUK_CREATE] Allocation:', {
-            bucketId: alloc.cashBucket?.id,
-            label: alloc.cashBucket?.label,
-            haulStart: alloc.cashBucket?.haulStartDate,
-            principalAllocated: alloc.principalAllocated,
-          })
-        })
+        if (DEBUG) {
+          console.log('[SUKUK_CREATE] Investment ID:', newSukuk.id, 'Allocations:', fundingAllocations.length)
+        }
 
         const hasPrincipalReceiptFunding = fundingAllocations.some((alloc: any) => {
           const label = typeof alloc?.cashBucket?.label === 'string' ? alloc.cashBucket.label : ''
@@ -306,7 +294,7 @@ export async function POST(req: NextRequest) {
         if (hasPrincipalReceiptFunding) {
           // Recycled Sukuk principal starts a new independent cycle.
           // Do not inherit ROSCA savings hawl anchor.
-          console.log('[SUKUK_CREATE] Principal receipt funding detected - skipping savingsHaulStartDate inheritance')
+          if (DEBUG) console.log('[SUKUK_CREATE] Principal receipt funding - skipping savingsHaulStartDate')
           inheritedSavingsHaulStart = null
         }
 
@@ -357,7 +345,7 @@ export async function POST(req: NextRequest) {
           inheritedSavingsHaulStart = rewardRoscaAnchors || savingsRoscaAnchors || null
         }
 
-        console.log('[SUKUK_CREATE] Final inherited hawl start:', inheritedSavingsHaulStart?.toISOString().split('T')[0] || 'NONE')
+        if (DEBUG) console.log('[SUKUK_CREATE] Inherited hawl start:', inheritedSavingsHaulStart?.toISOString().split('T')[0] || 'NONE')
       } catch (err) {
         console.error('[SUKUK_CREATE] Error finding allocations:', err)
         inheritedSavingsHaulStart = null
@@ -366,8 +354,8 @@ export async function POST(req: NextRequest) {
       if (inheritedSavingsHaulStart) {
         const existingMeta = parseMetadata(newSukuk.metadata)
         const inheritedIso = inheritedSavingsHaulStart.toISOString().split('T')[0]
-        console.log('[SUKUK_CREATE] Updating metadata with savingsHaulStartDate:', inheritedIso)
-        const updatedInvestment = await tx.investment.update({
+        if (DEBUG) console.log('[SUKUK_CREATE] Saving savingsHaulStartDate:', inheritedIso)
+        await tx.investment.update({
           where: { id: newSukuk.id },
           data: {
             metadata: JSON.stringify({
@@ -376,13 +364,8 @@ export async function POST(req: NextRequest) {
             }),
           },
         })
-        console.log('[SUKUK_CREATE] Metadata after update:', updatedInvestment.metadata)
         
         // BARRIER: savingsHaulStartDate must never be later than investment startDate
-        // and must never be null when funding came from ROSCA bucket
-        if (!inheritedSavingsHaulStart) {
-          throw new Error('ROSCA bucket found but haulStartDate is missing — cannot create Sukuk without hawl continuity')
-        }
         if (inheritedSavingsHaulStart > startDate) {
           throw new Error('ROSCA bucket haulStartDate cannot be in the future relative to investment start')
         }
@@ -390,15 +373,13 @@ export async function POST(req: NextRequest) {
         const existingMeta = parseMetadata(newSukuk.metadata)
         if (typeof existingMeta?.savingsHaulStartDate === 'string') {
           const { savingsHaulStartDate: _removed, ...metaWithoutSavingsHaul } = existingMeta as Record<string, unknown>
-          const updatedInvestment = await tx.investment.update({
+          await tx.investment.update({
             where: { id: newSukuk.id },
             data: {
               metadata: JSON.stringify(metaWithoutSavingsHaul),
             },
           })
-          console.log('[SUKUK_CREATE] Cleared stale savingsHaulStartDate from metadata:', updatedInvestment.metadata)
         } else {
-          console.log('[SUKUK_CREATE] No ROSCA hawl start found - metadata already clean')
         }
       }
 

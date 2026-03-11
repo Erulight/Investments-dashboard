@@ -123,25 +123,7 @@ export async function POST(
 
     if (!seller) {
       return NextResponse.json(
-        {
-          error: 'Seller does not own this Sukuk',
-          debug: {
-            user: {
-              id: user.id,
-              role: user.role,
-              personId: user.personId,
-              email: (user as any).email,
-              name: (user as any).name,
-            },
-            participants: investment.dealParticipants.map((p: any) => ({
-              id: p.id,
-              personId: p.personId,
-              personEmail: p.person?.email || null,
-              personName: p.person?.name || null,
-              investedAmount: p.investedAmount,
-            })),
-          },
-        },
+        { error: 'Seller does not own this Sukuk' },
         { status: 400 }
       )
     }
