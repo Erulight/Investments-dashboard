@@ -11,7 +11,13 @@ import { AnimatedCard } from '@/components/ui/AnimatedCard'
 import { TradingChartOverlay } from '@/components/dashboard/TradingChartOverlay'
 import { CASH_BALANCE_KEY, getBucketCashBalance } from '@/lib/cashBalance'
 import { formatDisplayDate } from '@/lib/date'
-import { DISPLAY_CURRENCY_KEY, formatCurrencyAmount, getCurrencyPrefix, normalizeDisplayCurrency } from '@/lib/currency'
+import {
+  DISPLAY_CURRENCY_KEY,
+  convertCurrencyAmount,
+  formatCurrencyAmount,
+  getCurrencyPrefix,
+  normalizeDisplayCurrency,
+} from '@/lib/currency'
 import { PageTransition } from '@/components/animations/PageTransition'
 import { AnimatedList, AnimatedListItem } from '@/components/animations/AnimatedList'
 import { AnimatedStatCard } from '@/components/animations/AnimatedCard'
@@ -77,7 +83,8 @@ export default async function DashboardPage({
   })
   const displayCurrency = normalizeDisplayCurrency(displayCurrencySetting?.value)
   const currencyPrefix = getCurrencyPrefix(displayCurrency)
-  const money = (value: number) => formatCurrencyAmount(value, displayCurrency)
+  const toDisplayAmount = (value: number) => convertCurrencyAmount(value, 'SAR', displayCurrency)
+  const money = (value: number) => formatCurrencyAmount(value, displayCurrency, 'SAR')
 
   const ownerTxScope = user.personId
     ? ({ OR: [{ personId: null }, { personId: user.personId }] } as any)
@@ -1304,8 +1311,8 @@ export default async function DashboardPage({
     return [] as any[]
   })()
 
-  const portfolioSparkline = monthlyPortfolioValue.map(m => m.value)
-  const cashSparkline = monthlyCashflow.map(m => Math.abs(m.value))
+  const portfolioSparkline = monthlyPortfolioValue.map(m => toDisplayAmount(m.value))
+  const cashSparkline = monthlyCashflow.map(m => toDisplayAmount(Math.abs(m.value)))
   const profitTrend = totalInvested > 0 ? (totalProfit / totalInvested) * 100 : 0
   const portfolioTrend = user.role === 'OWNER' ? yearlyValueChange.pct : yearlyReturnPercentage
 
@@ -1328,11 +1335,11 @@ export default async function DashboardPage({
 
       {/* Premium Stats Grid */}
       <PremiumStatsGrid
-        portfolioValue={displayedValue}
-        cashBalance={cashBalance}
-        cashSettingDelta={cashSettingDelta}
-        totalInvested={totalInvested}
-        totalProfit={totalProfit}
+        portfolioValue={toDisplayAmount(displayedValue)}
+        cashBalance={toDisplayAmount(cashBalance)}
+        cashSettingDelta={toDisplayAmount(cashSettingDelta)}
+        totalInvested={toDisplayAmount(totalInvested)}
+        totalProfit={toDisplayAmount(totalProfit)}
         portfolioTrend={portfolioTrend}
         profitTrend={profitTrend}
         portfolioSparkline={portfolioSparkline}
@@ -1520,7 +1527,10 @@ export default async function DashboardPage({
       {/* Per-Type Breakdown */}
       {user.role === 'OWNER' && (
         <ReceivableByYearCard
-          data={receivableByYear}
+          data={receivableByYear.map((point) => ({
+            ...point,
+            amount: toDisplayAmount(point.amount),
+          }))}
           currencyPrefix={currencyPrefix}
         />
       )}

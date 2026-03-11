@@ -177,8 +177,8 @@ export function PremiumStatsCard({
               className="text-3xl font-bold text-white tabular-nums"
               style={{ color: colors.primary }}
             >
-              {prefix}{' '}
-              <motion.span>{rounded}</motion.span>
+              <motion.span>{rounded}</motion.span>{' '}
+              {prefix}
             </motion.div>
             {subtitle && (
               <p className="text-xs text-slate-500">{subtitle}</p>

@@ -33,7 +33,7 @@ export function ReceivableByYearCard({
               return (
                 <div key={point.year} className="rounded-lg border border-slate-700/40 bg-slate-800/30 px-3 py-3">
                   <div className="text-xs font-semibold text-slate-300 tabular-nums">
-                    {currencyPrefix} {amount.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                    {amount.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })} {currencyPrefix}
                   </div>
                   <div className="mt-2 h-24 w-full rounded-full bg-emerald-500/10 relative overflow-hidden">
                     <div
