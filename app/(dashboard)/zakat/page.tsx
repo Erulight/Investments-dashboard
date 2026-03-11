@@ -1755,17 +1755,19 @@ export default async function ZakatPage() {
       qualifyingReceipts.forEach((r) => {
         // Check if this receipt was reinvested after receipt date
         const receiptTime = r.receiptDay.getTime()
-        const reinvestedAmount = movements.reduce((sum: number, m: any) => {
-          if (m?.type !== 'INVEST_OUT') return sum
-          const movementDate = m?.date ? new Date(m.date) : null
-          if (!movementDate || Number.isNaN(movementDate.getTime())) return sum
-          if (movementDate.getTime() <= receiptTime) return sum
-          const amt = Math.abs(Number(m?.amount) || 0)
-          return sum + amt
-        }, 0)
-
-        // If receipt was fully reinvested, skip idle rows to avoid double-counting
-        if (reinvestedAmount >= r.amount - 0.01) return
+        const investOutEvents = movements
+          .filter((m: any) => m?.type === 'INVEST_OUT')
+          .map((m: any) => {
+            const movementDate = m?.date ? new Date(m.date) : null
+            const time = movementDate && !Number.isNaN(movementDate.getTime())
+              ? new Date(movementDate.getFullYear(), movementDate.getMonth(), movementDate.getDate()).getTime()
+              : null
+            const amount = Math.abs(Number(m?.amount) || 0)
+            return time != null && amount > 0 ? { time, amount } : null
+          })
+          .filter((x: { time: number; amount: number } | null): x is { time: number; amount: number } => Boolean(x))
+          // Include same-day INVEST_OUT as reinvestment so Sukuk-funded amounts are not treated as idle.
+          .filter((x: { time: number; amount: number }) => x.time >= receiptTime)
 
         // If receipt itself completed the first hawl (>=354), the receipt row already shows Zakat for that period.
         // Idle rows should start from the NEXT hawl cycle (receipt day + 354 days).
@@ -1787,9 +1789,17 @@ export default async function ZakatPage() {
             .filter((q) => q.receiptDay.getTime() < periodEndTime)
             .reduce((s, q) => s + q.amount, 0)
 
+          // Barrier: do not treat amounts already reinvested into Sukuk by this period end as idle.
+          const reinvestedByPeriod = investOutEvents
+            .filter((x: { time: number; amount: number }) => x.time <= periodEndTime)
+            .reduce((s: number, x: { time: number; amount: number }) => s + x.amount, 0)
+          const outstandingForReceipt = Math.max(0, r.amount - reinvestedByPeriod)
+          if (outstandingForReceipt <= 0.01) continue
+
           const balanceAtEnd = Math.max(0, Number(bucket.balance) || 0)
           const ratio = poolOutstanding > 0 ? Math.min(1, balanceAtEnd / poolOutstanding) : 0
-          const idleAmount = Math.max(0, r.amount * ratio)
+          const idleAmount = Math.max(0, Math.min(outstandingForReceipt, r.amount * ratio))
+          if (idleAmount <= 0.01) continue
 
           const rowKey = buildRowKey(['IDLE', bucket.id, r.movementId, isoDay(periodStart), isoDay(periodEnd)])
           const isPaid = movementHasRowPaid(payments, rowKey)
