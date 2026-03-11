@@ -6,6 +6,7 @@ import { PortfolioReset } from '@/components/settings/PortfolioReset'
 import { PartnerReset } from '@/components/settings/PartnerReset'
 import { InvestmentTypeManager } from '@/components/settings/InvestmentTypeManager'
 import { NisabSettings } from '@/components/settings/NisabSettings'
+import { CurrencySettings } from '@/components/settings/CurrencySettings'
 import { UserList } from '@/components/users/UserList'
 import { prisma } from '@/lib/db'
 
@@ -58,8 +59,13 @@ export default async function SettingsPage() {
     {
       id: 'zakat',
       title: 'Zakat & Nisab',
-      description: 'Zakat thresholds and haul assumptions',
-      content: <NisabSettings />,
+      description: 'Zakat thresholds and display currency',
+      content: (
+        <div className="space-y-4">
+          <NisabSettings />
+          <CurrencySettings />
+        </div>
+      ),
     },
     {
       id: 'recovery',

@@ -18,6 +18,7 @@ interface StatsData {
   investedSparkline?: number[]
   profitSparkline?: number[]
   role?: 'OWNER' | 'PARTNER'
+  currencyPrefix?: string
 }
 
 export function PremiumStatsGrid({
@@ -35,6 +36,7 @@ export function PremiumStatsGrid({
   investedSparkline,
   profitSparkline,
   role = 'OWNER',
+  currencyPrefix = 'SAR',
 }: StatsData) {
   return (
     <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
@@ -49,6 +51,7 @@ export function PremiumStatsGrid({
         showProgress={role === 'OWNER' || role === 'PARTNER'}
         progressValue={totalInvested}
         progressMax={portfolioValue}
+        prefix={currencyPrefix}
       />
 
       <PremiumCashBalanceCard
@@ -58,6 +61,7 @@ export function PremiumStatsGrid({
         sparklineData={cashSparkline}
         index={1}
         role={role}
+        currencyPrefix={currencyPrefix}
       />
       
       <PremiumStatsCard
@@ -68,6 +72,7 @@ export function PremiumStatsGrid({
         sparklineData={investedSparkline}
         accentColor="purple"
         index={2}
+        prefix={currencyPrefix}
       />
       
       <PremiumStatsCard
@@ -79,6 +84,7 @@ export function PremiumStatsGrid({
         sparklineData={profitSparkline}
         accentColor="green"
         index={3}
+        prefix={currencyPrefix}
       />
     </div>
   )

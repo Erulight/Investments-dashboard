@@ -15,6 +15,7 @@ interface PremiumCashBalanceCardProps {
   sparklineData?: number[]
   index: number
   role?: 'OWNER' | 'PARTNER'
+  currencyPrefix?: string
 }
 
 interface PartnerOption {
@@ -29,6 +30,7 @@ export function PremiumCashBalanceCard({
   sparklineData,
   index,
   role = 'OWNER',
+  currencyPrefix = 'SAR',
 }: PremiumCashBalanceCardProps) {
   const cardRef = useRef<HTMLDivElement>(null)
   const [mousePosition, setMousePosition] = useState({ x: 0, y: 0 })
@@ -263,7 +265,7 @@ export function PremiumCashBalanceCard({
               className="text-3xl font-bold text-white tabular-nums"
               style={{ color: colors.primary }}
             >
-              SAR <motion.span>{rounded}</motion.span>
+              {currencyPrefix} <motion.span>{rounded}</motion.span>
             </motion.div>
             <p className="text-xs text-slate-500">Available liquidity</p>
             {role === 'OWNER' && typeof settingDelta === 'number' && Math.abs(settingDelta) > 0.01 && (

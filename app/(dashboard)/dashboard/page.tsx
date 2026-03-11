@@ -6,10 +6,12 @@ import { YearFilter } from '@/components/dashboard/YearFilter'
 import { ReportButton } from '@/components/dashboard/ReportButton'
 import { DashboardCharts } from '@/components/dashboard/DashboardCharts'
 import { PremiumStatsGrid } from '@/components/dashboard/PremiumStatsGrid'
+import { ReceivableByYearCard } from '@/components/dashboard/ReceivableByYearCard'
 import { AnimatedCard } from '@/components/ui/AnimatedCard'
 import { TradingChartOverlay } from '@/components/dashboard/TradingChartOverlay'
 import { CASH_BALANCE_KEY, getBucketCashBalance } from '@/lib/cashBalance'
 import { formatDisplayDate } from '@/lib/date'
+import { DISPLAY_CURRENCY_KEY, formatCurrencyAmount, getCurrencyPrefix, normalizeDisplayCurrency } from '@/lib/currency'
 import { PageTransition } from '@/components/animations/PageTransition'
 import { AnimatedList, AnimatedListItem } from '@/components/animations/AnimatedList'
 import { AnimatedStatCard } from '@/components/animations/AnimatedCard'
@@ -70,6 +72,12 @@ export default async function DashboardPage({
       ? await prisma.systemSetting.findUnique({ where: { key: CASH_BALANCE_KEY } })
       : null
   const ownerCashSettingValue = Number(ownerCashSetting?.value || 0)
+  const displayCurrencySetting = await prisma.systemSetting.findUnique({
+    where: { key: DISPLAY_CURRENCY_KEY },
+  })
+  const displayCurrency = normalizeDisplayCurrency(displayCurrencySetting?.value)
+  const currencyPrefix = getCurrencyPrefix(displayCurrency)
+  const money = (value: number) => formatCurrencyAmount(value, displayCurrency)
 
   const ownerTxScope = user.personId
     ? ({ OR: [{ personId: null }, { personId: user.personId }] } as any)
@@ -135,6 +143,7 @@ export default async function DashboardPage({
 
   let investments: any[] = []
   let ownedInvestments: any[] = []
+  let receivableByYear: Array<{ year: number; amount: number }> = []
 
   // Per-type breakdown
   type TypeBreakdown = { type: string; invested: number; value: number; count: number }
@@ -874,6 +883,21 @@ export default async function DashboardPage({
       .map(([type, data]) => ({ type, ...data }))
       .sort((a, b) => b.value - a.value)
 
+    const currentYear = new Date().getFullYear()
+    const receivableYears = [selectedYear - 3, selectedYear - 2, selectedYear - 1, selectedYear]
+    receivableByYear = receivableYears.map((year) => {
+      const asOf = year < currentYear
+        ? new Date(year, 11, 31, 23, 59, 59, 999)
+        : new Date()
+      const amount = ownerScoped
+        .filter((inv: any) => getAccountType(inv) === 'SUKUK')
+        .reduce((sum: number, inv: any) => {
+          const m = getOwnerSukukMetrics(inv, asOf)
+          return sum + Math.max(0, toFiniteNumber(m.receivable))
+        }, 0)
+      return { year, amount: round2(amount) }
+    })
+
     // Calculate ROSCA / Circlys remaining payback debt.
     const roscaInvestments = investments.filter((inv: any) => getAccountType(inv) === 'CIRCLYS')
     for (const inv of roscaInvestments) {
@@ -1314,6 +1338,7 @@ export default async function DashboardPage({
         portfolioSparkline={portfolioSparkline}
         cashSparkline={cashSparkline}
         role={user.role as 'OWNER' | 'PARTNER'}
+        currencyPrefix={currencyPrefix}
       />
 
       <div className={`grid gap-3 ${user.role === 'OWNER' ? 'grid-cols-2 lg:grid-cols-5' : 'grid-cols-2 lg:grid-cols-3'}`}>
@@ -1329,7 +1354,7 @@ export default async function DashboardPage({
           <div className="p-5">
             <p className="text-xs font-medium text-slate-400 uppercase tracking-wider">Avg Monthly Cashflow</p>
             <div className={`text-2xl font-bold mt-2 tabular-nums ${avgMonthlyCashflow >= 0 ? 'text-emerald-400' : 'text-red-400'}`}>
-              SAR {round2(Math.abs(avgMonthlyCashflow)).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+              {money(round2(Math.abs(avgMonthlyCashflow)))}
             </div>
             <p className="text-xs text-slate-500 mt-1">{avgMonthlyCashflow >= 0 ? 'Net inflow trend' : 'Net outflow trend'}</p>
           </div>
@@ -1351,7 +1376,7 @@ export default async function DashboardPage({
               <p className="text-xs font-medium text-slate-400 uppercase tracking-wider">Cash Sync Health</p>
               <div className={`text-2xl font-bold mt-2 tabular-nums ${Math.abs(cashSettingDelta) > 0.01 ? 'text-amber-400' : 'text-emerald-400'}`}>
                 {Math.abs(cashSettingDelta) > 0.01
-                  ? `${cashSettingDelta > 0 ? '+' : ''}${round2(cashSettingDelta).toFixed(2)}`
+                  ? `${cashSettingDelta > 0 ? '+' : ''}${money(Math.abs(round2(cashSettingDelta)))}`
                   : 'Synced'}
               </div>
               <p className="text-xs text-slate-500 mt-1">Setting vs bucket balance drift</p>
@@ -1379,7 +1404,7 @@ export default async function DashboardPage({
             <div className="p-6">
               <p className="text-xs font-medium text-slate-400 uppercase tracking-wider">Profit (Accrued)</p>
               <div className="text-2xl font-bold text-emerald-400 mt-2 tabular-nums">
-                SAR {round2(totalProfit).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                {money(round2(totalProfit))}
               </div>
               <p className="text-xs text-slate-500 mt-1">Across your deals</p>
             </div>
@@ -1388,7 +1413,7 @@ export default async function DashboardPage({
             <div className="p-6">
               <p className="text-xs font-medium text-slate-400 uppercase tracking-wider">Receivable</p>
               <div className="text-2xl font-bold text-sky-400 mt-2 tabular-nums">
-                SAR {round2(Math.max(0, totalValue - totalInvested)).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                {money(round2(Math.max(0, totalValue - totalInvested)))}
               </div>
               <p className="text-xs text-slate-500 mt-1">Accrued - received</p>
             </div>
@@ -1397,7 +1422,7 @@ export default async function DashboardPage({
             <div className="p-6">
               <p className="text-xs font-medium text-slate-400 uppercase tracking-wider">Received (This Year)</p>
               <div className="text-2xl font-bold text-purple-400 mt-2 tabular-nums">
-                SAR {round2(yearlyProfitValue).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                {money(round2(yearlyProfitValue))}
               </div>
               <p className="text-xs text-slate-500 mt-1">Withdrawals / realized</p>
             </div>
@@ -1429,7 +1454,7 @@ export default async function DashboardPage({
             <div className="p-6">
               <p className="text-xs font-medium text-red-400 uppercase tracking-wider">ROSCA Remaining</p>
               <div className="text-2xl font-bold text-red-500 mt-2 tabular-nums">
-                SAR {roscaDebt.toLocaleString()}
+                {money(roscaDebt)}
               </div>
               <p className="text-xs text-red-400 mt-1">Unpaid commitments</p>
             </div>
@@ -1440,7 +1465,7 @@ export default async function DashboardPage({
           <div className="p-6">
             <p className="text-xs font-medium text-slate-400 uppercase tracking-wider">Net Worth</p>
             <div className={`text-2xl font-bold mt-2 tabular-nums ${netWorth >= 0 ? 'text-emerald-400' : 'text-red-400'}`}>
-              SAR {netWorth.toLocaleString()}
+              {money(netWorth)}
             </div>
             <p className="text-xs text-slate-500 mt-1">Portfolio − Debt</p>
           </div>
@@ -1454,9 +1479,9 @@ export default async function DashboardPage({
             <div className="p-6">
               <p className="text-xs font-medium text-slate-400 uppercase tracking-wider">Sukuk Total</p>
               <div className="text-2xl font-bold text-indigo-400 mt-2 tabular-nums">
-                SAR {sukukInvested.toLocaleString()}
+                {money(sukukInvested)}
               </div>
-              <p className="text-xs text-slate-500 mt-1">Invested SAR {sukukInvested.toLocaleString()}</p>
+              <p className="text-xs text-slate-500 mt-1">Invested {money(sukukInvested)}</p>
             </div>
           </AnimatedCard>
 
@@ -1464,7 +1489,7 @@ export default async function DashboardPage({
             <div className="p-6">
               <p className="text-xs font-medium text-slate-400 uppercase tracking-wider">Circlys Ongoing</p>
               <div className="text-2xl font-bold text-pink-400 mt-2 tabular-nums">
-                SAR {circlysOngoingSaved.toLocaleString()}
+                {money(circlysOngoingSaved)}
               </div>
               <p className="text-xs text-slate-500 mt-1">Saved (not received)</p>
             </div>
@@ -1474,7 +1499,7 @@ export default async function DashboardPage({
             <div className="p-6">
               <p className="text-xs font-medium text-slate-400 uppercase tracking-wider">SIP Total</p>
               <div className="text-2xl font-bold text-teal-400 mt-2 tabular-nums">
-                SAR {sipValue.toLocaleString()}
+                {money(sipValue)}
               </div>
               <p className="text-xs text-slate-500 mt-1">Current value</p>
             </div>
@@ -1484,7 +1509,7 @@ export default async function DashboardPage({
             <div className="p-6">
               <p className="text-xs font-medium text-slate-400 uppercase tracking-wider">Crypto Total</p>
               <div className="text-2xl font-bold text-orange-400 mt-2 tabular-nums">
-                SAR {cryptoValue.toLocaleString()}
+                {money(cryptoValue)}
               </div>
               <p className="text-xs text-slate-500 mt-1">Current value</p>
             </div>
@@ -1493,6 +1518,13 @@ export default async function DashboardPage({
       )}
 
       {/* Per-Type Breakdown */}
+      {user.role === 'OWNER' && (
+        <ReceivableByYearCard
+          data={receivableByYear}
+          currencyPrefix={currencyPrefix}
+        />
+      )}
+
       {user.role === 'OWNER' && (
         <DashboardCharts
           selectedYear={selectedYear}
@@ -1531,7 +1563,7 @@ export default async function DashboardPage({
                       </p>
                     </div>
                     <div className={`ml-3 shrink-0 text-sm font-semibold tabular-nums ${isIn ? 'text-emerald-400' : 'text-rose-400'}`}>
-                      {isIn ? '+' : '-'}SAR {Math.abs(amount).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                      {isIn ? '+' : '-'}{money(Math.abs(amount))}
                     </div>
                   </AnimatedListItem>
                 )
@@ -1572,11 +1604,11 @@ export default async function DashboardPage({
                     <div className="mt-3 flex items-center gap-6">
                       <div className="text-right">
                         <div className="text-xs text-slate-400">Invested</div>
-                        <div className="text-sm font-medium text-slate-200 tabular-nums">SAR {tb.invested.toLocaleString()}</div>
+                        <div className="text-sm font-medium text-slate-200 tabular-nums">{money(tb.invested)}</div>
                       </div>
                       <div className="text-right min-w-[60px]">
                         <div className="text-xs text-slate-400">Value</div>
-                        <div className="text-sm font-bold text-slate-100 tabular-nums">SAR {tb.value.toLocaleString()}</div>
+                        <div className="text-sm font-bold text-slate-100 tabular-nums">{money(tb.value)}</div>
                       </div>
                       <div className="text-right min-w-[60px]">
                         <div className="text-xs text-slate-400">Return</div>
