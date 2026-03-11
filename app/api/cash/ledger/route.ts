@@ -102,7 +102,7 @@ export async function GET(req: NextRequest) {
     if (exportFormat === 'csv') {
       const exportTransactions = await prisma.transaction.findMany({
         where: txWhere as any,
-        orderBy: [{ date: 'desc' }, { createdAt: 'desc' }],
+        orderBy: [{ date: 'asc' }, { createdAt: 'asc' }],
         take: 5000,
         include: {
           investment: { select: { name: true } },
@@ -170,7 +170,7 @@ export async function GET(req: NextRequest) {
     const [transactionsRaw, totalCount, summaryAgg, inflowAgg, outflowAgg] = await Promise.all([
       prisma.transaction.findMany({
         where: txWhere as any,
-        orderBy: [{ date: 'desc' }, { createdAt: 'desc' }],
+        orderBy: [{ date: 'asc' }, { createdAt: 'asc' }],
         skip: (page - 1) * limit,
         take: limit,
         include: {

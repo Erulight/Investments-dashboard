@@ -949,8 +949,8 @@ export function ZakatDashboard({
                       const sorted = [...groupRows].sort((a, b) => {
                         const da = String(a.haulCompleteDate)
                         const db = String(b.haulCompleteDate)
-                        if (da < db) return 1
-                        if (da > db) return -1
+                        if (da < db) return -1
+                        if (da > db) return 1
                         return (a.label || '').localeCompare(b.label || '')
                       })
 
