@@ -227,7 +227,9 @@ export async function POST(
         rewardReceiptDateRaw.getMonth(),
         rewardReceiptDateRaw.getDate(),
       )
-      const rewardHawlAnchor = getLastCompletedHawlAnchor(firstContributionDate, rewardReceiptDate)
+      // Reward hawl starts from LAST contribution date (end of savings period), not first
+      // This ensures Sukuk inherits the correct hawl anchor (e.g., Dec 2024, not Jan 2024)
+      const rewardHawlAnchor = rewardReceiptDate
 
       let rewardBucketId: string | null = null
 

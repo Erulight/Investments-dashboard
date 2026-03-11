@@ -354,7 +354,8 @@ export async function POST(
       rewardReceiptDateRaw.getMonth(),
       rewardReceiptDateRaw.getDate(),
     )
-    const rewardHawlAnchor = getLastCompletedHawlAnchor(firstContributionDate, rewardReceiptDate)
+    // Reward hawl starts from LAST contribution date (end of savings period), not first
+    const rewardHawlAnchor = rewardReceiptDate
 
     const nextMeta: any = {
       ...meta,
