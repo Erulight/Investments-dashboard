@@ -423,8 +423,133 @@ export async function POST(
               )
             : null
 
-          if (savingsAnchor) {
-            principalHaulStart = getLastCompletedHawlAnchor(savingsAnchor, date)
+          const fundingMovements = await tx.cashBucketMovement.findMany({
+            where: {
+              investmentId: investment.id,
+              type: 'INVEST_OUT',
+              cashBucket: {
+                personId: null,
+                OR: [
+                  { label: { startsWith: 'Savings Receipt •' } },
+                  { label: { startsWith: 'Circlys Reward Receipt •' } },
+                  { label: { startsWith: 'Sukuk Principal •' } },
+                  { label: { endsWith: ' Principal Receipt' } },
+                ],
+              },
+            } as any,
+            select: {
+              date: true,
+              cashBucket: {
+                select: {
+                  label: true,
+                  haulStartDate: true,
+                },
+              },
+            },
+            orderBy: { date: 'asc' },
+          })
+
+          const rewardAnchors: Date[] = []
+          const savingsAnchors: Date[] = []
+          const principalAnchors: Date[] = []
+
+          for (const movement of fundingMovements) {
+            const label = typeof movement?.cashBucket?.label === 'string' ? movement.cashBucket.label : ''
+            const anchorRaw = movement?.cashBucket?.haulStartDate ? new Date(movement.cashBucket.haulStartDate) : null
+            const movementRaw = movement?.date ? new Date(movement.date) : null
+            if (!anchorRaw || Number.isNaN(anchorRaw.getTime())) continue
+            if (!movementRaw || Number.isNaN(movementRaw.getTime())) continue
+
+            const anchor = new Date(anchorRaw.getFullYear(), anchorRaw.getMonth(), anchorRaw.getDate())
+            const movementDay = new Date(movementRaw.getFullYear(), movementRaw.getMonth(), movementRaw.getDate())
+            const completedAnchor = getLastCompletedHawlAnchor(anchor, movementDay)
+
+            if (label.startsWith('Circlys Reward Receipt •')) {
+              rewardAnchors.push(completedAnchor)
+            } else if (label.startsWith('Savings Receipt •')) {
+              savingsAnchors.push(completedAnchor)
+            } else if (label.startsWith('Sukuk Principal •') || label.endsWith(' Principal Receipt')) {
+              principalAnchors.push(completedAnchor)
+            }
+          }
+
+          if (
+            rewardAnchors.length === 0 &&
+            savingsAnchors.length === 0 &&
+            principalAnchors.length === 0
+          ) {
+            const allocationFunding = await tx.investmentBucketAllocation.findMany({
+              where: {
+                investmentId: investment.id,
+                principalAllocated: { gt: 0 },
+              },
+              select: {
+                cashBucket: {
+                  select: {
+                    label: true,
+                    haulStartDate: true,
+                    movements: {
+                      where: { type: 'CASH_IN' },
+                      select: { date: true },
+                      orderBy: { date: 'asc' },
+                      take: 1,
+                    },
+                  },
+                },
+              },
+            })
+
+            for (const alloc of allocationFunding) {
+              const label = typeof alloc?.cashBucket?.label === 'string' ? alloc.cashBucket.label : ''
+              const anchorRaw = alloc?.cashBucket?.haulStartDate
+                ? new Date(alloc.cashBucket.haulStartDate)
+                : null
+              const refRaw = alloc?.cashBucket?.movements?.[0]?.date
+                ? new Date(alloc.cashBucket.movements[0].date)
+                : date
+              if (!anchorRaw || Number.isNaN(anchorRaw.getTime())) continue
+              if (!refRaw || Number.isNaN(refRaw.getTime())) continue
+
+              const anchor = new Date(anchorRaw.getFullYear(), anchorRaw.getMonth(), anchorRaw.getDate())
+              const referenceDay = new Date(refRaw.getFullYear(), refRaw.getMonth(), refRaw.getDate())
+              const completedAnchor = getLastCompletedHawlAnchor(anchor, referenceDay)
+
+              if (label.startsWith('Circlys Reward Receipt •')) {
+                rewardAnchors.push(completedAnchor)
+              } else if (label.startsWith('Savings Receipt •')) {
+                savingsAnchors.push(completedAnchor)
+              } else if (label.startsWith('Sukuk Principal •') || label.endsWith(' Principal Receipt')) {
+                principalAnchors.push(completedAnchor)
+              }
+            }
+          }
+
+          const startDay = (() => {
+            const raw = investment.startDate ? new Date(investment.startDate as any) : null
+            if (!raw || Number.isNaN(raw.getTime())) return date
+            return new Date(raw.getFullYear(), raw.getMonth(), raw.getDate())
+          })()
+
+          const derivedAnchor =
+            rewardAnchors[0] ||
+            savingsAnchors[0] ||
+            principalAnchors[0] ||
+            savingsAnchor ||
+            startDay
+
+          principalHaulStart = derivedAnchor
+
+          const derivedIso = `${derivedAnchor.getFullYear()}-${String(derivedAnchor.getMonth() + 1).padStart(2, '0')}-${String(derivedAnchor.getDate()).padStart(2, '0')}`
+          if (invMeta?.savingsHaulStartDate !== derivedIso) {
+            await tx.investment.update({
+              where: { id: investment.id },
+              data: {
+                metadata: JSON.stringify({
+                  ...invMeta,
+                  savingsHaulStartDate: derivedIso,
+                }),
+              },
+            })
           }
 
           await createCashBucket(tx, {

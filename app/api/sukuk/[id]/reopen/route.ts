@@ -79,15 +79,6 @@ export async function POST(
         },
       })
 
-      // Also fetch INVEST_OUT movements to restore funding bucket balances
-      const investOutMovements = await tx.cashBucketMovement.findMany({
-        where: {
-          investmentId: id,
-          type: 'INVEST_OUT',
-          cashBucket: { ...(scopeFilter as any) },
-        },
-      })
-
       const receiptTransactions = await tx.transaction.findMany({
         where: {
           investmentId: id,
@@ -238,6 +229,13 @@ export async function POST(
       const totalReceipt = useMovements ? movementTotal : transactionTotal
       const profitReceipt = useMovements ? movementProfit : transactionProfit
       const principalReceipt = useMovements ? movementPrincipal : transactionPrincipal
+      const existingInvestOutCount = await tx.cashBucketMovement.count({
+        where: {
+          investmentId: id,
+          type: 'INVEST_OUT',
+          cashBucket: { ...(scopeFilter as any) },
+        },
+      })
 
       if (totalReceipt <= 0) {
         return { success: true }
@@ -250,33 +248,6 @@ export async function POST(
       let canonicalFees: number | undefined
       let partnerParticipantId: string | null = null
       let unmatchedPrincipalRestore = 0
-      
-      // First, restore funding bucket balances from INVEST_OUT movements
-      // INVEST_OUT movements have negative amounts, so we subtract them to restore the balance
-      for (const movement of investOutMovements) {
-        const movementAmount = Number(movement?.amount || 0)
-        const bucketId = typeof movement?.cashBucketId === 'string' ? movement.cashBucketId : null
-
-        if (bucketId && Number.isFinite(movementAmount) && movementAmount !== 0) {
-          const bucket = await tx.cashBucket.findUnique({
-            where: { id: bucketId },
-            select: { id: true, balance: true, label: true },
-          })
-
-          if (bucket) {
-            // INVEST_OUT amounts are negative, so subtracting them restores the balance
-            const nextBalance = Number(bucket.balance || 0) - movementAmount
-            await tx.cashBucket.update({
-              where: { id: bucket.id },
-              data: { 
-                balance: nextBalance,
-                // If this was a reward/savings bucket that was marked excluded, restore it
-                excludeFromZakat: false,
-              },
-            })
-          }
-        }
-      }
       
       // Roll back receipt bucket balances and restore allocation principal.
       for (const movement of receiptMovements) {
@@ -399,15 +370,89 @@ export async function POST(
         }
       }
 
+      // Repair legacy reopen leak:
+      // older reopen flow restored funding bucket balances and deleted INVEST_OUT records.
+      // If that happened, relock principal back into INVEST_OUT using allocation buckets.
+      if (existingInvestOutCount === 0 && principalReceipt > 0.0001) {
+        const fundingAllocations = await tx.investmentBucketAllocation.findMany({
+          where: {
+            investmentId: id,
+            ...(user.role === 'PARTNER'
+              ? { cashBucket: { personId: user.personId } }
+              : { cashBucket: { OR: [{ personId: null }, { personId: user.personId || null }] } }),
+          } as any,
+          include: {
+            cashBucket: {
+              select: {
+                id: true,
+                balance: true,
+                movements: {
+                  where: { type: 'CASH_IN' },
+                  select: { date: true },
+                  orderBy: { date: 'asc' },
+                  take: 1,
+                },
+              },
+            },
+          },
+          orderBy: { createdAt: 'asc' },
+        })
+
+        const usableAllocations = fundingAllocations
+          .filter((alloc: any) => Number(alloc?.principalAllocated || 0) > 0 && alloc?.cashBucket?.id)
+        const totalAllocated = usableAllocations.reduce(
+          (sum: number, alloc: any) => sum + Math.max(0, Number(alloc?.principalAllocated || 0)),
+          0,
+        )
+
+        let remainingRelock = Math.max(0, principalReceipt)
+        for (let i = 0; i < usableAllocations.length; i++) {
+          if (remainingRelock <= 0.0001) break
+          const alloc = usableAllocations[i]
+          const principalAllocated = Math.max(0, Number(alloc?.principalAllocated || 0))
+          const ratio = totalAllocated > 0 ? principalAllocated / totalAllocated : 0
+          const targetShare = i === usableAllocations.length - 1
+            ? remainingRelock
+            : Math.min(remainingRelock, Math.round(principalReceipt * ratio * 100) / 100)
+
+          if (targetShare <= 0.0001) continue
+
+          const bucketBalance = Math.max(0, Number(alloc?.cashBucket?.balance || 0))
+          const relockAmount = Math.min(targetShare, bucketBalance, remainingRelock)
+          if (relockAmount <= 0.0001) continue
+
+          const firstCashInRaw = alloc?.cashBucket?.movements?.[0]?.date
+            ? new Date(alloc.cashBucket.movements[0].date)
+            : null
+          const startRaw = investment?.startDate ? new Date(investment.startDate as any) : null
+          const lockDateRaw = firstCashInRaw && !Number.isNaN(firstCashInRaw.getTime())
+            ? firstCashInRaw
+            : (startRaw && !Number.isNaN(startRaw.getTime()) ? startRaw : new Date())
+          const lockDate = new Date(lockDateRaw.getFullYear(), lockDateRaw.getMonth(), lockDateRaw.getDate())
+
+          await tx.cashBucket.update({
+            where: { id: alloc.cashBucket.id },
+            data: { balance: { decrement: relockAmount } },
+          })
+
+          await tx.cashBucketMovement.create({
+            data: {
+              cashBucketId: alloc.cashBucket.id,
+              investmentId: id,
+              amount: -relockAmount,
+              type: 'INVEST_OUT',
+              date: lockDate,
+              notes: 'Reconstructed funding lock on reopen',
+            },
+          })
+
+          remainingRelock = Math.max(0, remainingRelock - relockAmount)
+        }
+      }
+
       const movementIds = receiptMovements.map((m: any) => m.id)
       if (movementIds.length > 0) {
         await tx.cashBucketMovement.deleteMany({ where: { id: { in: movementIds } } })
-      }
-
-      // Delete INVEST_OUT movements after restoring balances
-      const investOutMovementIds = investOutMovements.map((m: any) => m.id)
-      if (investOutMovementIds.length > 0) {
-        await tx.cashBucketMovement.deleteMany({ where: { id: { in: investOutMovementIds } } })
       }
 
       const transactionIds = receiptTransactions.map((t: any) => t.id)
@@ -415,13 +460,26 @@ export async function POST(
         await tx.transaction.deleteMany({ where: { id: { in: transactionIds } } })
       }
 
-      // Remove receipt buckets created by withdrawals BEFORE recalculating cash
-      await tx.cashBucket.deleteMany({
-        where: {
-          label: `${investment.name} Principal Receipt`,
-          ...(scopeFilter as any),
-        },
-      })
+      const rawReceiptBucketIds = receiptMovements
+        .map((m: any) => (typeof m?.cashBucketId === 'string' ? m.cashBucketId : null))
+        .filter((bucketId: string | null): bucketId is string => Boolean(bucketId))
+      const receiptBucketIdsForScope = Array.from(new Set<string>(rawReceiptBucketIds))
+
+      const allocationLinkedBucketIds = new Set<string>()
+      if (receiptBucketIdsForScope.length > 0) {
+        const linkedAllocations = await tx.investmentBucketAllocation.findMany({
+          where: {
+            investmentId: id,
+            cashBucketId: { in: receiptBucketIdsForScope },
+          },
+          select: { cashBucketId: true },
+        })
+        for (const alloc of linkedAllocations) {
+          if (typeof alloc?.cashBucketId === 'string') {
+            allocationLinkedBucketIds.add(alloc.cashBucketId)
+          }
+        }
+      }
 
       if (profitBucketIdsForScope.length > 0) {
         await tx.cashBucket.deleteMany({
@@ -431,36 +489,12 @@ export async function POST(
         })
       }
 
-      // Also remove Sukuk Principal receipt buckets (recycled principal)
-      await tx.cashBucket.deleteMany({
-        where: {
-          label: `Sukuk Principal • ${investment.name}`,
-          ...(scopeFilter as any),
-        },
-      })
+      const deletableReceiptBucketIds = receiptBucketIdsForScope
+        .filter((bucketId: string) => !allocationLinkedBucketIds.has(bucketId))
 
-      // Remove reward and savings receipt buckets that were depleted by this Sukuk
-      // These buckets should have been marked excludeFromZakat=true when fully invested
-      // and should be cleaned up on reopen to restore proper cash balance
-      const roscaReceiptBuckets = await tx.cashBucket.findMany({
-        where: {
-          OR: [
-            { label: `Circlys Reward Receipt • ${investment.name}` },
-            { label: `Savings Receipt • ${investment.name}` },
-          ],
-          ...(scopeFilter as any),
-        },
-        select: { id: true, balance: true, excludeFromZakat: true },
-      })
-
-      // Only delete if they were marked as excluded (fully invested) or have zero/negative balance
-      const roscaBucketsToDelete = roscaReceiptBuckets
-        .filter((b: any) => b.excludeFromZakat === true || Number(b.balance || 0) <= 0.01)
-        .map((b: any) => b.id)
-
-      if (roscaBucketsToDelete.length > 0) {
+      if (deletableReceiptBucketIds.length > 0) {
         await tx.cashBucket.deleteMany({
-          where: { id: { in: roscaBucketsToDelete } },
+          where: { id: { in: deletableReceiptBucketIds } },
         })
       }
 
