@@ -1396,7 +1396,7 @@ export default async function ZakatPage() {
     return label.startsWith('Savings Receipt •') || label.startsWith('Circlys Reward Receipt •')
   })
 
-  const rows: BucketRow[] = buckets
+  const rawRows: BucketRow[] = buckets
     .flatMap((bucket: any): BucketRow[] => {
       const now = startOfDay(new Date())
       const bucketStart = new Date(bucket.haulStartDate)
@@ -2054,6 +2054,46 @@ export default async function ZakatPage() {
       return bucketRows
     })
     .filter((row: BucketRow): row is BucketRow => Boolean(row))
+
+  const principalAggregate = new Map<string, BucketRow>()
+  const passthroughRows: BucketRow[] = []
+
+  for (const row of rawRows) {
+    const isRoscaSukukPrincipalRow =
+      row.rowKind === 'PRINCIPAL' &&
+      row.sourceType === 'SUKUK' &&
+      typeof row.id === 'string' &&
+      row.id.startsWith('ROSCA_SUKUK_PRINCIPAL|')
+
+    if (!isRoscaSukukPrincipalRow) {
+      passthroughRows.push(row)
+      continue
+    }
+
+    const aggregateKey = [
+      row.source,
+      row.haulStartDate,
+      row.haulCompleteDate,
+      row.currency,
+    ].join('|')
+
+    const existing = principalAggregate.get(aggregateKey)
+    if (!existing) {
+      principalAggregate.set(aggregateKey, {
+        ...row,
+        id: `ROSCA_SUKUK_PRINCIPAL_AGG|${aggregateKey}`,
+      })
+      continue
+    }
+
+    existing.balance += row.balance
+    existing.idleBase += row.idleBase
+    existing.receiptsTotal += row.receiptsTotal
+    existing.zakatDue += row.zakatDue
+    existing.isPaid = existing.isPaid && row.isPaid
+  }
+
+  const rows: BucketRow[] = [...passthroughRows, ...principalAggregate.values()]
 
   // Sort rows so ROSCA first-hawl rows appear before principal/profit rows
   rows.sort((a, b) => {
