@@ -1177,7 +1177,7 @@ export default async function ZakatPage() {
       allocations: {
         include: {
           investment: {
-            select: { id: true, name: true, account: { select: { type: true } } },
+            select: { id: true, name: true, principalAmount: true, account: { select: { type: true } } },
           },
         },
       },
@@ -1461,7 +1461,9 @@ export default async function ZakatPage() {
       const isImmediateReceiptBucket = isProfitBucket || isCommissionBucket
       const isCirclys = typeof bucket.label === 'string' && bucket.label.startsWith('Circlys')
       const isSavingsContribution = typeof bucket.label === 'string' && bucket.label.startsWith('Circlys •') && !bucket.label.includes('Receipt')
-      const isSavingsReceiptBucket = typeof bucket.label === 'string' && bucket.label.startsWith('Savings Receipt •')
+      const isSavingsReceiptBucket =
+        typeof bucket.label === 'string' &&
+        (bucket.label.startsWith('Savings Receipt •') || bucket.label.startsWith('Circlys Reward Receipt •'))
       const isRewardReceiptBucket = typeof bucket.label === 'string' && bucket.label.startsWith('Circlys Reward Receipt •')
 
       const alloc = bucket.allocations?.[0]
@@ -1637,11 +1639,10 @@ export default async function ZakatPage() {
             const principalRemaining = Math.max(0, Number(alloc?.principalRemaining) || 0)
             const invId = typeof alloc?.investment?.id === 'string' ? alloc.investment.id : null
             const invName = typeof alloc?.investment?.name === 'string' ? alloc.investment.name : 'Sukuk'
-            const invType = alloc?.investment?.account?.type
             const invPrincipal = Math.max(0, Number(alloc?.investment?.principalAmount) || 0)
             
-            // Skip if not a Sukuk, or if principal remaining is 0, or if investment is closed (principalAmount = 0)
-            if (!invId || invType !== 'SUKUK' || principalRemaining <= 0 || invPrincipal <= 0) return null
+            // Skip if invalid allocation, empty principal, or closed investment.
+            if (!invId || principalRemaining <= 0 || invPrincipal <= 0) return null
             
             // Get investment details from investmentMap
             const inv = investmentMap.get(invId)
