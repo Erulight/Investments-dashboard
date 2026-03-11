@@ -208,6 +208,8 @@ export function ZakatDashboard({
     if (k === 'PROFIT') return <span className={`${base} bg-emerald-100 text-emerald-800 dark:bg-emerald-500/15 dark:text-emerald-300`}>Profit</span>
     if (k === 'COMMISSION') return <span className={`${base} bg-blue-100 text-blue-800 dark:bg-blue-500/15 dark:text-blue-300`}>Commission</span>
     if (k === 'IDLE') return <span className={`${base} bg-amber-100 text-amber-800 dark:bg-amber-500/15 dark:text-amber-300`}>Idle Cash</span>
+    if (k === 'RECEIPT') return <span className={`${base} bg-teal-100 text-teal-800 dark:bg-teal-500/15 dark:text-teal-300`}>Receipt</span>
+    if (k === 'REWARD') return <span className={`${base} bg-violet-100 text-violet-800 dark:bg-violet-500/15 dark:text-violet-300`}>Reward</span>
     return <span className={`${base} bg-slate-100 text-slate-700 dark:bg-white/10 dark:text-slate-200`}>Principal</span>
   }
 
