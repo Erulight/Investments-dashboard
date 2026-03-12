@@ -331,8 +331,12 @@ export async function POST(
       rewardReceiptDateRaw.getMonth(),
       rewardReceiptDateRaw.getDate(),
     )
-    // Reward bucket anchor is the reward receipt date (hawl-2 start for reward cash).
-    const rewardHawlAnchor = rewardReceiptDate
+    // Reward receipt keeps Hawl 1 continuity from the first contribution date.
+    const rewardHawlAnchor = new Date(
+      firstContributionDate.getFullYear(),
+      firstContributionDate.getMonth(),
+      firstContributionDate.getDate(),
+    )
 
     const nextMeta: any = {
       ...meta,

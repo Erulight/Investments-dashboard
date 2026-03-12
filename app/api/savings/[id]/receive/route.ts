@@ -227,11 +227,12 @@ export async function POST(
         rewardReceiptDateRaw.getMonth(),
         rewardReceiptDateRaw.getDate(),
       )
-      const rewardHawlAnchor = rewardReceiptDate
-      // rewardReceiptDate is the date reward was actually received (Dec 20 2024)
-      // This is correct because hawl 1 completed at this point
-      // hawl 2 starts from this date
-      // Store firstContributionDate in metadata for hawl 1 display only
+      // Keep reward receipt Hawl continuity anchored to first contribution date.
+      const rewardHawlAnchor = new Date(
+        firstContributionDate.getFullYear(),
+        firstContributionDate.getMonth(),
+        firstContributionDate.getDate(),
+      )
 
       let rewardBucketId: string | null = null
 

@@ -293,7 +293,7 @@ export async function POST(req: NextRequest) {
           console.log('[SUKUK_CREATE] Investment ID:', newSukuk.id, 'Allocations:', fundingAllocations.length)
         }
 
-        const normalizedFundingAnchors = fundingAllocations
+        const resolvedFundingAnchors = fundingAllocations
           .map((alloc: any) => {
             const label = typeof alloc?.cashBucket?.label === 'string' ? alloc.cashBucket.label : ''
             const rawAnchor = alloc?.haulStartDate
@@ -308,23 +308,40 @@ export async function POST(req: NextRequest) {
               label.startsWith('Sukuk Principal •') || label.endsWith(' Principal Receipt')
 
             if (isRewardRoscaReceipt) {
-              // Reward continuity: direct copy, no recalculation.
-              return anchorDay
+              // Reward receipts inherit Hawl 1 start (first contribution) and
+              // convert to the last completed cycle at investment time.
+              return {
+                allocationId: alloc.id as string,
+                anchor: getLastCompletedHawlAnchor(anchorDay, startDate),
+              }
             }
             if (isSavingsRoscaReceipt) {
               // Savings continuity: use the last completed cycle at investment date.
-              return getLastCompletedHawlAnchor(anchorDay, startDate)
+              return {
+                allocationId: alloc.id as string,
+                anchor: getLastCompletedHawlAnchor(anchorDay, startDate),
+              }
             }
             if (isPrincipalReceiptFunding) {
               // Principal continuity: keep inherited running anchor.
-              return anchorDay
+              return {
+                allocationId: alloc.id as string,
+                anchor: anchorDay,
+              }
             }
             return null
           })
-          .filter((d: Date | null): d is Date => Boolean(d))
-          .sort((a: Date, b: Date) => a.getTime() - b.getTime())
+          .filter((item: { allocationId: string; anchor: Date } | null): item is { allocationId: string; anchor: Date } => Boolean(item))
+          .sort((a: { anchor: Date }, b: { anchor: Date }) => a.anchor.getTime() - b.anchor.getTime())
 
-        inheritedSavingsHaulStart = normalizedFundingAnchors[0] || null
+        for (const item of resolvedFundingAnchors) {
+          await tx.investmentBucketAllocation.update({
+            where: { id: item.allocationId },
+            data: { haulStartDate: item.anchor } as any,
+          })
+        }
+
+        inheritedSavingsHaulStart = resolvedFundingAnchors[0]?.anchor || null
 
         if (DEBUG) console.log('[SUKUK_CREATE] Inherited hawl start:', inheritedSavingsHaulStart?.toISOString().split('T')[0] || 'NONE')
       } catch (err) {

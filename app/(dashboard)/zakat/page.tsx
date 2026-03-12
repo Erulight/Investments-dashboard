@@ -464,7 +464,11 @@ export default async function ZakatPage() {
         rewardDateRaw.getMonth(),
         rewardDateRaw.getDate(),
       )
-      const rewardAnchorDate = rewardDate
+      const rewardAnchorDate = new Date(
+        rewardSeedAnchor.getFullYear(),
+        rewardSeedAnchor.getMonth(),
+        rewardSeedAnchor.getDate(),
+      )
       const rewardCurrency = inv.account?.currency || 'SAR'
 
       if (rewardMatured && expectedRewardTotal > REWARD_EPSILON) {
@@ -1179,7 +1183,7 @@ export default async function ZakatPage() {
       //   post-completion Sukuk hawl timelines.
       const hawlStart =
         rewardRoscaAnchor
-          ? rewardRoscaAnchor
+          ? getLastCompletedHawlAnchor(rewardRoscaAnchor, rewardReferenceDay)
           : savingsRoscaAnchor
             ? getLastCompletedHawlAnchor(savingsRoscaAnchor, savingsReferenceDay)
             : principalReceiptAnchor
