@@ -275,12 +275,13 @@ export function NexusGuardMascot({
       )}
 
       <div
-        className="fixed z-[100] pointer-events-none transition-all duration-[3000ms] ease-in-out"
+        className="fixed z-[100] pointer-events-none"
         style={{
           left: position.x,
           top: position.y,
           width: 80,
           transform: `${flip ? 'scaleX(-1)' : ''} rotate(${tilt}deg)`,
+          transition: 'transform 0.1s ease-out',
         }}
       >
         <svg viewBox="0 0 100 160" xmlns="http://www.w3.org/2000/svg" style={{ width: '100%', overflow: 'visible' }}>
