@@ -2198,13 +2198,14 @@ export default async function ZakatPage() {
           }
         })
         .filter((x: { time: number; amount: number } | null): x is { time: number; amount: number } => Boolean(x))
+      const hasReceiptMovements = receiptMovements.length > 0
       const normalizedCashInEvents = cashInEvents.length > 0
         ? cashInEvents
-        : (displayBalance > 0
+        : (!hasReceiptMovements && displayBalance > 0
           ? [{ time: startOfDay(bucketStart).getTime(), amount: displayBalance }]
           : [])
 
-      if (!isImmediateReceiptBucket && normalizedCashInEvents.length > 0) {
+      if (!isImmediateReceiptBucket && !hasReceiptMovements && normalizedCashInEvents.length > 0) {
         const earliestCashInTime = normalizedCashInEvents.reduce(
           (min: number, evt: { time: number; amount: number }) => Math.min(min, evt.time),
           normalizedCashInEvents[0].time,
