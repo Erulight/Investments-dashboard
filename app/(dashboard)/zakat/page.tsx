@@ -2189,26 +2189,41 @@ export default async function ZakatPage() {
 
       bucketRows.push(...completedIdleRows)
 
-      const hasAnyInvestOut = movements.some((m: any) => m?.type === 'INVEST_OUT')
-      const hasPrincipalWithdrawal = movements.some((m: any) => m?.type === 'WITHDRAW_PRINCIPAL' || m?.type === 'ROLLBACK_PRINCIPAL')
-      if (qualifyingReceipts.length === 0 && !hasAnyInvestOut && !hasPrincipalWithdrawal && !isImmediateReceiptBucket) {
-        const start = startOfDay(bucketStart)
+      const cashInEvents = movements
+        .map((m: any) => {
+          if (m?.type !== 'CASH_IN') return null
+
+          const day = movementDay(m)
+          if (!day) return null
+
+          const amount = Math.abs(Number(m?.amount) || 0)
+          if (amount <= 0) return null
+
+          return {
+            time: day.getTime(),
+            amount,
+          }
+        })
+        .filter((x: { time: number; amount: number } | null): x is { time: number; amount: number } => Boolean(x))
+
+      if (!isImmediateReceiptBucket && cashInEvents.length > 0) {
+        const earliestCashInTime = cashInEvents.reduce(
+          (min: number, evt: { time: number; amount: number }) => Math.min(min, evt.time),
+          cashInEvents[0].time,
+        )
+        const start = startOfDay(new Date(earliestCashInTime))
         const elapsed = diffDaysFloor(start, now)
         const completed = Math.floor(elapsed / 354)
         for (let i = 0; i < completed; i++) {
           const periodStart = addDays(start, i * 354)
           const periodEnd = addDays(start, (i + 1) * 354)
-          const inflowsByPeriodEnd = movements.reduce((sum: number, m: any) => {
-            const movementType = typeof m?.type === 'string' ? m.type : ''
-            if (movementType === 'ZAKAT_PAID' || hawlOutflowTypes.has(movementType)) return sum
+          const periodEndTime = startOfDay(periodEnd).getTime()
 
-            const day = movementDay(m)
-            if (!day || day.getTime() > startOfDay(periodEnd).getTime()) return sum
+          const inflowsByPeriodEnd = cashInEvents
+            .filter((evt: { time: number; amount: number }) => evt.time <= periodEndTime)
+            .reduce((sum: number, evt: { time: number; amount: number }) => sum + evt.amount, 0)
+          if (inflowsByPeriodEnd <= 0.01) continue
 
-            const amount = Math.abs(Number(m?.amount) || 0)
-            if (amount <= 0) return sum
-            return sum + amount
-          }, 0)
           const withdrawnBeforePeriodEnd = sumHawlOutflowsBetween(start, periodEnd)
           const heldForFullHawl = Math.max(0, inflowsByPeriodEnd - withdrawnBeforePeriodEnd)
           if (heldForFullHawl <= 0.01) continue
@@ -2239,7 +2254,9 @@ export default async function ZakatPage() {
             sourceGroup,
             sourceType,
             rowKind: 'IDLE',
-            why: `Cash idle from ${isoDay(periodStart)} to ${isoDay(periodEnd)} (${idleDays} days)`,
+            why: withdrawnBeforePeriodEnd > 0
+              ? `Cash idle from ${isoDay(periodStart)} to ${isoDay(periodEnd)} (${idleDays} days), reduced by ${withdrawnBeforePeriodEnd.toLocaleString()} withdrawn/spent before hawl end.`
+              : `Cash idle from ${isoDay(periodStart)} to ${isoDay(periodEnd)} (${idleDays} days)`,
             lastPayment: lastPayment
               ? {
                   id: lastPayment.id,
