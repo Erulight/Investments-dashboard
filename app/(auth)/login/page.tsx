@@ -42,8 +42,7 @@ export default function LoginPage() {
 
       setShowLaser(true)
       setTimeout(() => {
-        router.push('/dashboard')
-        router.refresh()
+        window.location.href = '/dashboard'
       }, 2000)
     } catch (err) {
       setError('An error occurred. Please try again.')

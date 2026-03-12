@@ -28,6 +28,11 @@ export function NexusGuardMascot({
   const [laserActive, setLaserActive] = useState(false)
   const [eyeColor, setEyeColor] = useState('#00F5FF')
   const bubbleTimerRef = useRef<NodeJS.Timeout | null>(null)
+  const velocityRef = useRef({ x: 0, y: 0 })
+  const mousePosRef = useRef({ x: 0, y: 0 })
+  const robotStateRef = useRef<'patrolling' | 'tracking' | 'alerting' | 'scanning' | 'guarding'>('patrolling')
+  const roamTargetRef = useRef({ x: 200, y: 300 })
+  const idleTimeRef = useRef(0)
 
   const patrolComments = [
     "Unauthorized cursor detected. Logging.",
@@ -87,15 +92,18 @@ export function NexusGuardMascot({
   useEffect(() => {
     if (passwordFocused) {
       setRobotState('guarding')
+      robotStateRef.current = 'guarding'
       setEyeColor('#FF4444')
       setLaserActive(false)
       showBubbleMessage(randOf(passwordComments), 3500)
     } else if (emailFocused) {
       setRobotState('scanning')
+      robotStateRef.current = 'scanning'
       setLaserActive(true)
       showBubbleMessage(randOf(emailComments), 3000)
     } else if (!loginError) {
       setRobotState('patrolling')
+      robotStateRef.current = 'patrolling'
       setLaserActive(false)
       setEyeColor('#00F5FF')
     }
@@ -117,8 +125,11 @@ export function NexusGuardMascot({
 
   useEffect(() => {
     const handleMouseMove = (e: MouseEvent) => {
-      setMousePos({ x: e.clientX, y: e.clientY })
+      const pos = { x: e.clientX, y: e.clientY }
+      setMousePos(pos)
+      mousePosRef.current = pos
       setIdleTime(0)
+      idleTimeRef.current = 0
     }
     window.addEventListener('mousemove', handleMouseMove)
     return () => window.removeEventListener('mousemove', handleMouseMove)
@@ -127,68 +138,81 @@ export function NexusGuardMascot({
   useEffect(() => {
     const newPatrolTarget = () => {
       const margin = 100
-      setRoamTarget({
+      const target = {
         x: margin + Math.random() * (window.innerWidth - margin * 2),
         y: margin + Math.random() * (window.innerHeight - margin * 2)
-      })
+      }
+      setRoamTarget(target)
+      roamTargetRef.current = target
     }
     newPatrolTarget()
 
     const updateLoop = setInterval(() => {
       setPosition(prev => {
-        const dist = Math.hypot(mousePos.x - prev.x, mousePos.y - prev.y)
-        setIdleTime(t => t + 1)
+        const mouseX = mousePosRef.current.x
+        const mouseY = mousePosRef.current.y
+        const dist = Math.hypot(mouseX - prev.x, mouseY - prev.y)
+        
+        idleTimeRef.current += 1
+        setIdleTime(idleTimeRef.current)
 
-        if (robotState !== 'guarding' && robotState !== 'scanning') {
+        const currentState = robotStateRef.current
+
+        if (currentState !== 'guarding' && currentState !== 'scanning') {
           if (dist < 80) {
-            if (robotState !== 'alerting') {
+            if (currentState !== 'alerting') {
               setRobotState('alerting')
+              robotStateRef.current = 'alerting'
               setLaserActive(false)
               showBubbleMessage(randOf(alertComments), 2500)
               setEyeColor('#FF4444')
               setTimeout(() => {
                 setRobotState('patrolling')
+                robotStateRef.current = 'patrolling'
                 setEyeColor('#00F5FF')
               }, 2500)
             }
-          } else if (dist < 300 && robotState !== 'alerting') {
-            if (robotState !== 'tracking') {
+          } else if (dist < 300 && currentState !== 'alerting') {
+            if (currentState !== 'tracking') {
               setRobotState('tracking')
+              robotStateRef.current = 'tracking'
               setLaserActive(true)
               if (Math.random() < 0.5) showBubbleMessage(randOf(trackComments), 2500)
             }
-          } else if (dist >= 300 && robotState === 'tracking') {
+          } else if (dist >= 300 && currentState === 'tracking') {
             setRobotState('patrolling')
+            robotStateRef.current = 'patrolling'
             setLaserActive(false)
           }
 
-          if (idleTime > 350 && Math.random() < 0.003) {
+          if (idleTimeRef.current > 350 && Math.random() < 0.003) {
             showBubbleMessage(randOf(idleComments), 3500)
+            idleTimeRef.current = 0
             setIdleTime(0)
           }
 
-          if (robotState === 'patrolling' && Math.random() < 0.001) {
+          if (currentState === 'patrolling' && Math.random() < 0.001) {
             showBubbleMessage(randOf(patrolComments), 3000)
           }
         }
 
         let tx = prev.x, ty = prev.y, speed = 0
 
-        if (robotState === 'alerting') {
-          tx = prev.x + (prev.x - mousePos.x) * 3
-          ty = prev.y + (prev.y - mousePos.y) * 3
+        if (currentState === 'alerting') {
+          tx = prev.x + (prev.x - mouseX) * 3
+          ty = prev.y + (prev.y - mouseY) * 3
           speed = 5
-        } else if (robotState === 'tracking') {
-          const angle = Math.atan2(prev.y - mousePos.y, prev.x - mousePos.x) + 0.015
+        } else if (currentState === 'tracking') {
+          const angle = Math.atan2(prev.y - mouseY, prev.x - mouseX) + 0.015
           const orbitR = 200
-          tx = mousePos.x + Math.cos(angle) * orbitR
-          ty = mousePos.y + Math.sin(angle) * orbitR
+          tx = mouseX + Math.cos(angle) * orbitR
+          ty = mouseY + Math.sin(angle) * orbitR
           speed = 2.5
-        } else if (robotState === 'patrolling') {
-          tx = roamTarget.x
-          ty = roamTarget.y
+        } else if (currentState === 'patrolling') {
+          tx = roamTargetRef.current.x
+          ty = roamTargetRef.current.y
           speed = 1.5
-          const d = Math.hypot(roamTarget.x - prev.x, roamTarget.y - prev.y)
+          const d = Math.hypot(roamTargetRef.current.x - prev.x, roamTargetRef.current.y - prev.y)
           if (d < 25) newPatrolTarget()
         } else {
           speed = 0.3
@@ -198,28 +222,25 @@ export function NexusGuardMascot({
         const dist2 = Math.hypot(tx - prev.x, ty - prev.y)
         const accel = Math.min(speed, dist2 * 0.07)
         
-        setVelocity(v => {
-          const newVx = (v.x + Math.cos(toAngle) * accel) * 0.8
-          const newVy = (v.y + Math.sin(toAngle) * accel) * 0.8
-          
-          const spd = Math.hypot(newVx, newVy)
-          setWalkCycle(w => w + spd * 0.15)
-          
-          const newX = Math.max(10, Math.min(window.innerWidth - 90, prev.x + newVx))
-          const newY = Math.max(10, Math.min(window.innerHeight - 160, prev.y + newVy))
-          
-          return { x: newVx, y: newVy }
-        })
-
-        const newX = Math.max(10, Math.min(window.innerWidth - 90, prev.x + velocity.x))
-        const newY = Math.max(10, Math.min(window.innerHeight - 160, prev.y + velocity.y))
+        const currentVel = velocityRef.current
+        const newVx = (currentVel.x + Math.cos(toAngle) * accel) * 0.8
+        const newVy = (currentVel.y + Math.sin(toAngle) * accel) * 0.8
+        
+        velocityRef.current = { x: newVx, y: newVy }
+        setVelocity({ x: newVx, y: newVy })
+        
+        const spd = Math.hypot(newVx, newVy)
+        setWalkCycle(w => w + spd * 0.15)
+        
+        const newX = Math.max(10, Math.min(window.innerWidth - 90, prev.x + newVx))
+        const newY = Math.max(10, Math.min(window.innerHeight - 160, prev.y + newVy))
         
         return { x: newX, y: newY }
       })
     }, 50)
 
     return () => clearInterval(updateLoop)
-  }, [mousePos, robotState, roamTarget, velocity, idleTime])
+  }, [])
 
   const legSwing = Math.sin(walkCycle) * 12
   const flip = velocity.x < -0.3
