@@ -99,6 +99,35 @@ export function ZakatPageClient({
     return () => clearInterval(interval)
   }, [refreshData])
 
+  const handlePrint = useCallback(() => {
+    const printWindow = window.open('', '_blank', 'width=900,height=700')
+    if (!printWindow) return
+    const now = new Date().toLocaleString()
+    const totalDue = buckets.reduce((s, b) => s + (Number(b.zakatDue) || 0), 0)
+    const paidRows = buckets.filter((b) => b.isPaid)
+    const dueRows = buckets.filter((b) => Number(b.zakatDue) > 0)
+    const groups = new Map<string, typeof buckets>()
+    for (const b of buckets) {
+      const k = b.source && b.source !== 'General' ? b.source : 'General Cash'
+      groups.set(k, [...(groups.get(k) || []), b])
+    }
+    const fmt = (n: number) => n.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })
+    const fmtDate = (d: string) => {
+      const m = d.match(/^(\d{4})-(\d{2})-(\d{2})/)
+      return m ? `${m[3]}-${m[2]}-${m[1]}` : d
+    }
+    const rows = Array.from(groups.entries()).map(([grp, items]) => {
+      const gDue = items.reduce((s, b) => s + (Number(b.zakatDue) || 0), 0)
+      const gBal = items.reduce((s, b) => s + (Number(b.balance) || 0), 0)
+      return `<tr style="background:#f8fafc"><td colspan="6" style="padding:6px 10px;font-weight:700;font-size:12px;border-bottom:1px solid #e2e8f0">${grp} — ${items.length} item(s) — Balance: SAR ${fmt(gBal)} — Due: SAR ${fmt(gDue)}</td></tr>` +
+        items.map(b => `<tr><td style="padding:5px 10px 5px 20px;font-size:11px">${(b.label || b.source || '').replace(/\u2022/g,'•')}</td><td>${fmtDate(b.haulStartDate)}</td><td>${fmtDate(b.haulCompleteDate)}</td><td style="text-align:right">SAR ${fmt(b.idleBase)}</td><td style="text-align:right">SAR ${fmt(b.receiptsTotal)}</td><td style="text-align:right;font-weight:600;color:${b.zakatDue > 0 ? '#b45309' : '#059669'}">SAR ${fmt(b.zakatDue)}</td></tr>`).join('')
+    }).join('')
+    printWindow.document.write(`<!DOCTYPE html><html><head><title>Zakat Report — ${now}</title><style>body{font-family:Arial,sans-serif;margin:24px;color:#1e293b}h1{font-size:20px;margin:0 0 4px}h2{font-size:13px;font-weight:600;margin:18px 0 8px;color:#475569;border-bottom:1px solid #e2e8f0;padding-bottom:4px}table{width:100%;border-collapse:collapse;margin-bottom:16px}th{background:#f1f5f9;text-align:left;padding:6px 10px;font-size:11px;border-bottom:2px solid #cbd5e1}td{padding:5px 10px;font-size:11px;border-bottom:1px solid #f1f5f9}tr:hover td{background:#f8fafc}.meta{font-size:11px;color:#64748b;margin-bottom:16px}.summary{display:flex;gap:24px;background:#f8fafc;border:1px solid #e2e8f0;border-radius:6px;padding:12px 16px;margin-bottom:20px}.stat{display:flex;flex-direction:column}.stat-val{font-size:18px;font-weight:700}.stat-due{color:#b45309}.stat-paid{color:#059669}.stat-total{color:#1e40af}@media print{@page{margin:16mm}}</style></head><body><h1>🕌 Zakat Report</h1><div class="meta">Generated: ${now}</div><div class="summary"><div class="stat"><span style="font-size:10px;color:#94a3b8;text-transform:uppercase">Total Zakat Due</span><span class="stat-val stat-due">SAR ${fmt(totalDue)}</span></div><div class="stat"><span style="font-size:10px;color:#94a3b8;text-transform:uppercase">Due Rows</span><span class="stat-val" style="color:#92400e">${dueRows.length}</span></div><div class="stat"><span style="font-size:10px;color:#94a3b8;text-transform:uppercase">Paid Rows</span><span class="stat-val stat-paid">${paidRows.length}</span></div><div class="stat"><span style="font-size:10px;color:#94a3b8;text-transform:uppercase">Total Rows</span><span class="stat-val stat-total">${buckets.length}</span></div></div><h2>Per Source Breakdown</h2><table><thead><tr><th>Item</th><th>Haul Start</th><th>Haul End</th><th style="text-align:right">Idle Cash</th><th style="text-align:right">Receipts</th><th style="text-align:right">Zakat Due</th></tr></thead><tbody>${rows}</tbody></table></body></html>`)
+    printWindow.document.close()
+    printWindow.focus()
+    setTimeout(() => printWindow.print(), 400)
+  }, [buckets])
+
   // Broadcast update to other tabs when user makes changes
   const notifyOtherTabs = useCallback(() => {
     if (typeof window === 'undefined') return
@@ -145,22 +174,32 @@ export function ZakatPageClient({
         <span>
           Last updated: {lastUpdate.toLocaleTimeString()}
         </span>
-        <button
-          onClick={refreshData}
-          disabled={isRefreshing}
-          className="text-emerald-600 hover:text-emerald-700 disabled:opacity-50 flex items-center gap-1"
-        >
-          <svg 
-            className={`h-4 w-4 ${isRefreshing ? 'animate-spin' : ''}`} 
-            xmlns="http://www.w3.org/2000/svg" 
-            fill="none" 
-            viewBox="0 0 24 24" 
-            stroke="currentColor"
+        <div className="flex items-center gap-2">
+          <button
+            onClick={handlePrint}
+            className="text-slate-500 hover:text-slate-700 flex items-center gap-1 text-xs border border-slate-200 rounded-md px-2.5 py-1.5 hover:bg-slate-50 transition-colors"
+            title="Export Zakat Report as PDF"
           >
-            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
-          </svg>
-          Refresh
-        </button>
+            <svg className="h-3.5 w-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 17h2a2 2 0 002-2v-4a2 2 0 00-2-2H5a2 2 0 00-2 2v4a2 2 0 002 2h2m2 4h6a2 2 0 002-2v-4a2 2 0 00-2-2H9a2 2 0 00-2 2v4a2 2 0 002 2zm8-12V5a2 2 0 00-2-2H9a2 2 0 00-2 2v4h10z" /></svg>
+            Export PDF
+          </button>
+          <button
+            onClick={refreshData}
+            disabled={isRefreshing}
+            className="text-emerald-600 hover:text-emerald-700 disabled:opacity-50 flex items-center gap-1"
+          >
+            <svg 
+              className={`h-4 w-4 ${isRefreshing ? 'animate-spin' : ''}`} 
+              xmlns="http://www.w3.org/2000/svg" 
+              fill="none" 
+              viewBox="0 0 24 24" 
+              stroke="currentColor"
+            >
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+            </svg>
+            Refresh
+          </button>
+        </div>
       </div>
 
       {/* Main dashboard */}

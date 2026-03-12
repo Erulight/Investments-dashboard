@@ -1171,26 +1171,111 @@ export function ZakatDashboard({
 
         {!detailsLoading && detailsTarget && (
           <div className="space-y-6">
-            <div className="rounded-lg border border-slate-200 bg-slate-50 p-4 dark:border-white/10 dark:bg-white/5">
-              <div className="text-sm font-semibold text-slate-900 dark:text-slate-100">How this bucket’s zakat is calculated</div>
-              <div className="mt-2 text-sm text-slate-700 dark:text-slate-200">
-                Zakat is calculated as 2.5% of:
+            {/* ── Hawl Calculation Drill-Down ── */}
+            <div className="rounded-lg border border-slate-200 bg-slate-50 dark:border-white/10 dark:bg-white/5 overflow-hidden">
+              <div className="px-4 py-3 border-b border-slate-200 dark:border-white/10 flex items-center justify-between">
+                <div className="flex items-center gap-2">
+                  <span className="text-sm font-semibold text-slate-900 dark:text-slate-100">Hawl Calculation Breakdown</span>
+                  {kindBadge(detailsTarget.rowKind)}
+                </div>
+                {detailsTarget.isPaid && (
+                  <span className="text-[11px] font-semibold text-emerald-600 bg-emerald-50 dark:bg-emerald-500/10 dark:text-emerald-400 px-2 py-0.5 rounded-full border border-emerald-200 dark:border-emerald-500/30">
+                    ✓ Paid
+                  </span>
+                )}
               </div>
-              <div className="mt-2 space-y-1 text-sm text-slate-700 dark:text-slate-200">
-                <div>
-                  Idle cash held through haul completion ({formatDateDisplay(detailsTarget.haulStartDate)} → {formatDateDisplay(detailsTarget.haulCompleteDate)}):
-                  <span className="font-semibold text-slate-900 dark:text-slate-100"> {money(detailsTarget.idleBase, normalizeDisplayCurrency(detailsTarget.currency))}</span>
+
+              {/* Period timeline bar */}
+              <div className="px-4 pt-4 pb-2">
+                <div className="flex items-center justify-between text-[11px] text-slate-500 dark:text-slate-400 mb-1.5">
+                  <span className="font-mono">{formatDateDisplay(detailsTarget.haulStartDate)}</span>
+                  <span className="text-[10px] font-semibold text-slate-400 dark:text-slate-500 uppercase tracking-wider">354-day hawl</span>
+                  <span className="font-mono">{formatDateDisplay(detailsTarget.haulCompleteDate)}</span>
                 </div>
-                <div>
-                  + Receipts after haul completion:
-                  <span className="font-semibold text-slate-900 dark:text-slate-100"> {money(detailsTarget.receiptsTotal, normalizeDisplayCurrency(detailsTarget.currency))}</span>
+                <div className="h-2.5 rounded-full bg-slate-200 dark:bg-slate-700 overflow-hidden relative">
+                  <div
+                    className="h-full rounded-full absolute top-0 left-0"
+                    style={{
+                      width: detailsTarget.haulCompleted ? '100%' : (() => {
+                        const start = new Date(detailsTarget.haulStartDate).getTime()
+                        const end = new Date(detailsTarget.haulCompleteDate).getTime()
+                        const now = Date.now()
+                        const pct = Math.max(0, Math.min(100, ((now - start) / (end - start)) * 100))
+                        return `${pct}%`
+                      })(),
+                      background: detailsTarget.haulCompleted
+                        ? 'linear-gradient(90deg,#059669,#10b981)'
+                        : 'linear-gradient(90deg,#7c3aed,#8b5cf6)',
+                    }}
+                  />
                 </div>
-                <div>
-                  = Zakat due:
-                  <span className="font-semibold text-emerald-700"> {money(detailsTarget.zakatDue, normalizeDisplayCurrency(detailsTarget.currency))}</span>
+                <div className="mt-1 text-[10px] text-center text-slate-400 dark:text-slate-500">
+                  {detailsTarget.haulCompleted ? 'Haul completed ✓' : 'Haul in progress'}
                 </div>
               </div>
+
+              {/* Amount grid */}
+              <div className="grid grid-cols-3 divide-x divide-slate-200 dark:divide-white/10 border-t border-slate-200 dark:border-white/10">
+                {[
+                  { label: 'Idle Cash Base', val: detailsTarget.idleBase, sub: '(held through haul)', col: 'text-slate-700 dark:text-slate-200' },
+                  { label: 'Receipts', val: detailsTarget.receiptsTotal, sub: '(after haul end)', col: 'text-violet-700 dark:text-violet-300' },
+                  { label: 'Zakat Due (2.5%)', val: detailsTarget.zakatDue, sub: '(idle + receipts × 2.5%)', col: detailsTarget.zakatDue > 0 ? 'text-amber-700 dark:text-amber-300 font-bold' : 'text-emerald-600 dark:text-emerald-400' },
+                ].map((f) => (
+                  <div key={f.label} className="px-4 py-3 text-center">
+                    <div className="text-[10px] text-slate-500 dark:text-slate-400 uppercase tracking-wider mb-0.5">{f.label}</div>
+                    <div className={`text-base tabular-nums ${f.col}`}>
+                      {money(f.val, normalizeDisplayCurrency(detailsTarget.currency))}
+                    </div>
+                    <div className="text-[9px] text-slate-400 dark:text-slate-600 mt-0.5">{f.sub}</div>
+                  </div>
+                ))}
+              </div>
+
+              {/* Why / source */}
+              {detailsTarget.why && (
+                <div className="px-4 py-2.5 border-t border-slate-200 dark:border-white/10 bg-slate-100/50 dark:bg-white/3">
+                  <span className="text-[10px] text-slate-500 dark:text-slate-400 uppercase tracking-wider font-semibold mr-2">Source:</span>
+                  <span className="text-xs text-slate-600 dark:text-slate-300">{detailsTarget.why}</span>
+                </div>
+              )}
+
+              {/* Last payment info */}
+              {detailsTarget.lastPayment && (
+                <div className="px-4 py-2.5 border-t border-slate-200 dark:border-white/10 flex items-center justify-between">
+                  <span className="text-[11px] text-slate-500 dark:text-slate-400">Last payment</span>
+                  <div className="flex items-center gap-3">
+                    <span className="font-mono text-[11px] text-slate-600 dark:text-slate-300">{formatDateDisplay(detailsTarget.lastPayment.date)}</span>
+                    <span className="text-[11px] font-semibold text-emerald-600 dark:text-emerald-400">
+                      {money(detailsTarget.lastPayment.amount, normalizeDisplayCurrency(detailsTarget.currency))}
+                    </span>
+                  </div>
+                </div>
+              )}
             </div>
+
+            {/* ── Due Receipts ── */}
+            {detailsTarget.dueReceipts && detailsTarget.dueReceipts.length > 0 && (
+              <div className="rounded-lg border border-slate-200 dark:border-white/10">
+                <div className="px-4 py-2.5 border-b border-slate-200 dark:border-white/10">
+                  <span className="text-sm font-semibold text-slate-900 dark:text-slate-100">Due Receipts</span>
+                  <span className="ml-2 text-[11px] text-slate-500">({detailsTarget.dueReceipts.length})</span>
+                </div>
+                <div className="divide-y divide-slate-100 dark:divide-white/10">
+                  {detailsTarget.dueReceipts.map((r, ri) => (
+                    <div key={ri} className="flex items-center justify-between px-4 py-2 text-xs">
+                      <div className="flex items-center gap-2">
+                        <span className="font-mono text-slate-500 dark:text-slate-400">{formatDateDisplay(r.date)}</span>
+                        <span className="text-slate-400 dark:text-slate-500">{r.type}</span>
+                        {r.investmentName && <span className="text-cyan-600 dark:text-cyan-400 truncate max-w-[160px]">{r.investmentName}</span>}
+                      </div>
+                      <span className="font-semibold tabular-nums text-violet-600 dark:text-violet-400">
+                        {money(r.amount, normalizeDisplayCurrency(detailsTarget.currency))}
+                      </span>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
 
             <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
               <div className="rounded-lg border border-slate-200 p-4 dark:border-white/10">

@@ -125,6 +125,7 @@ export function Navbar({ user, activeAccountTypes, notifications }: NavbarProps)
   const [notificationsOpen, setNotificationsOpen] = useState(false)
   const [dismissLoading, setDismissLoading] = useState<string | null>(null)
   const [notifError, setNotifError] = useState('')
+  const [zakatHealth, setZakatHealth] = useState<'OK' | 'WARNINGS' | null>(null)
 
   const permissionMap = useMemo(() => parsePermissionMap(user.permissions), [user.permissions])
 
@@ -132,6 +133,14 @@ export function Navbar({ user, activeAccountTypes, notifications }: NavbarProps)
     if (typeof document === 'undefined') return
     setIsDark(document.documentElement.classList.contains('dark'))
   }, [])
+
+  useEffect(() => {
+    if (user.role !== 'OWNER') return
+    fetch('/api/admin/zakat-health')
+      .then((r) => r.json().catch(() => ({})))
+      .then((d) => { if (d.status) setZakatHealth(d.status) })
+      .catch(() => {})
+  }, [user.role])
 
   const toggleTheme = () => {
     const nextIsDark = !isDark
@@ -309,6 +318,13 @@ export function Navbar({ user, activeAccountTypes, notifications }: NavbarProps)
                       >
                         <span className="mr-1.5 text-sm">{item.icon}</span>
                         {item.name}
+                        {item.name === 'Zakat' && zakatHealth !== null && (
+                          <span
+                            className={`ml-1.5 inline-block w-2 h-2 rounded-full flex-shrink-0 ${zakatHealth === 'OK' ? 'bg-emerald-400' : 'bg-red-500'}`}
+                            style={{ boxShadow: zakatHealth === 'OK' ? '0 0 4px rgba(52,211,153,0.8)' : '0 0 4px rgba(239,68,68,0.8)' }}
+                            title={zakatHealth === 'OK' ? 'Zakat health: OK' : 'Zakat warnings detected'}
+                          />
+                        )}
                         <svg className="ml-1 w-3 h-3 opacity-60" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                           <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
                         </svg>
