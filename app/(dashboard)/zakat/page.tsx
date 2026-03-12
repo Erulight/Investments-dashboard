@@ -1784,9 +1784,10 @@ export default async function ZakatPage() {
             const invId = typeof alloc?.investment?.id === 'string' ? alloc.investment.id : null
             const invName = typeof alloc?.investment?.name === 'string' ? alloc.investment.name : 'Sukuk'
             const invPrincipal = Math.max(0, Number(alloc?.investment?.principalAmount) || 0)
+            const isDealClosed = invPrincipal <= 0.0001
             
-            // Skip if invalid allocation, empty principal, or closed investment.
-            if (!invId || principalRemaining <= 0 || invPrincipal <= 0) return null
+            // Keep closed deals too: they are when principal continuity becomes due.
+            if (!invId || principalRemaining <= 0) return null
             
             // Get investment details from investmentMap
             const inv = investmentMap.get(invId)
@@ -1799,9 +1800,10 @@ export default async function ZakatPage() {
               principalRemaining,
               maturityDate,
               isActive,
+              isDealClosed,
             }
           })
-          .filter((x: any): x is { investmentId: string; investmentName: string; principalRemaining: number; maturityDate: Date | null; isActive: boolean } => Boolean(x))
+          .filter((x: any): x is { investmentId: string; investmentName: string; principalRemaining: number; maturityDate: Date | null; isActive: boolean; isDealClosed: boolean } => Boolean(x))
 
         const sukukInvestedByAllocations = sukukAllocations.reduce(
           (sum: number, a: { principalRemaining: number }) => sum + a.principalRemaining,
@@ -1888,8 +1890,8 @@ export default async function ZakatPage() {
               isoDay(periodEnd),
             ])
             const isPaid = movementHasRowPaid(payments, rowKey)
-            const zakatDue = !isPaid ? alloc.principalRemaining * 0.025 : 0
-            if (zakatDue <= 0) continue
+            const isUpcomingUntilClosure = !alloc.isDealClosed
+            const zakatDue = !isPaid && !isUpcomingUntilClosure ? alloc.principalRemaining * 0.025 : 0
 
             savingsRows.push({
               id: rowKey,
@@ -1907,12 +1909,14 @@ export default async function ZakatPage() {
               receiptsTotal: 0,
               zakatDue,
               isPaid,
-              haulCompleted: true,
+              haulCompleted: !isUpcomingUntilClosure,
               source: alloc.investmentName,
               sourceGroup: `Sukuk Principal • ${alloc.investmentName}`,
               sourceType: 'SUKUK',
               rowKind: 'PRINCIPAL',
-              why: `Sukuk principal continuity from ROSCA receipt (${isoDay(periodStart)} to ${isoDay(periodEnd)})`,
+              why: isUpcomingUntilClosure
+                ? `Sukuk principal continuity from ROSCA receipt (${isoDay(periodStart)} to ${isoDay(periodEnd)}). Upcoming: due only after Sukuk is closed.`
+                : `Sukuk principal continuity from ROSCA receipt (${isoDay(periodStart)} to ${isoDay(periodEnd)}). Deal closed: Zakat due now.`,
               lastPayment: lastPayment
                 ? {
                     id: lastPayment.id,

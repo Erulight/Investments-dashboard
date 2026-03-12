@@ -55,7 +55,7 @@ type BucketRow = {
 type SortKey = 'label' | 'balance' | 'idleBase' | 'receiptsTotal' | 'zakatDue' | 'haulStartDate' | 'haulCompleteDate'
 type SortDir = 'asc' | 'desc'
 type StatusFilter = 'all' | 'completed' | 'pending'
-type DueFilter = 'all' | 'due' | 'none'
+type DueFilter = 'all' | 'due' | 'none' | 'upcoming'
 
 const sumUniqueBucketBalances = (rows: BucketRow[]) => {
   const byBucket = new Map<string, number>()
@@ -311,6 +311,8 @@ export function ZakatDashboard({
       list = list.filter(b => b.zakatDue > 0)
     } else if (dueFilter === 'none') {
       list = list.filter(b => b.zakatDue <= 0)
+    } else if (dueFilter === 'upcoming') {
+      list = list.filter(b => !b.isPaid && b.zakatDue <= 0 && !b.haulCompleted)
     }
     
     // Sort
@@ -749,7 +751,7 @@ export function ZakatDashboard({
         </div>
         <div className="flex items-center gap-1.5">
           <span className="font-medium text-slate-500 dark:text-slate-400">Zakat:</span>
-          {(['all', 'due', 'none'] as DueFilter[]).map(f => (
+          {(['all', 'due', 'upcoming', 'none'] as DueFilter[]).map(f => (
             <button
               key={f}
               onClick={() => setDueFilter(f)}
@@ -759,7 +761,7 @@ export function ZakatDashboard({
                   : 'bg-slate-100 text-slate-600 hover:bg-slate-200 dark:bg-white/10 dark:text-slate-300 dark:hover:bg-white/15'
               }`}
             >
-              {f === 'all' ? 'All' : f === 'due' ? 'Has Due' : 'No Due'}
+              {f === 'all' ? 'All' : f === 'due' ? 'Has Due' : f === 'upcoming' ? 'Upcoming' : 'No Due'}
             </button>
           ))}
         </div>
@@ -935,6 +937,7 @@ export function ZakatDashboard({
                       const gIdle = groupRows.reduce((s, r) => s + (Number(r.idleBase) || 0), 0)
                       const gReceipts = groupRows.reduce((s, r) => s + (Number(r.receiptsTotal) || 0), 0)
                       const gZakat = groupRows.reduce((s, r) => s + (Number(r.zakatDue) || 0), 0)
+                      const gUpcoming = groupRows.some(r => !r.isPaid && (Number(r.zakatDue) || 0) <= EPSILON && !r.haulCompleted)
                       const cur = normalizeDisplayCurrency(groupRows[0]?.currency)
 
                       rows.push(
@@ -961,6 +964,8 @@ export function ZakatDashboard({
                           <td className="py-2.5 px-3 text-center">
                             {gZakat > 0.000001 ? (
                               <span className="text-[11px] font-semibold text-amber-700 dark:text-amber-300">Due</span>
+                            ) : gUpcoming ? (
+                              <span className="text-[11px] font-semibold text-blue-700 dark:text-blue-300">Upcoming</span>
                             ) : (
                               <span className="text-[11px] font-semibold text-emerald-700 dark:text-emerald-300">Paid</span>
                             )}
@@ -1007,6 +1012,8 @@ export function ZakatDashboard({
                                 <span className="text-[11px] font-semibold text-emerald-700">Paid</span>
                               ) : b.zakatDue > 0 ? (
                                 <span className="text-[11px] font-semibold text-amber-700">Due</span>
+                              ) : !b.haulCompleted ? (
+                                <span className="text-[11px] font-semibold text-blue-700">Upcoming</span>
                               ) : (
                                 <span className="text-[11px] font-semibold text-gray-500">-</span>
                               )}
