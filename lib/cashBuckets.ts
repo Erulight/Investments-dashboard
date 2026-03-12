@@ -12,6 +12,13 @@ type MovementType =
 
 const DEFAULT_CURRENCY = 'SAR'
 
+export const WITHDRAW_BUCKET_PRIORITY = [
+  'Savings Receipt •',
+  'Circlys Reward Receipt •',
+  'Sukuk Principal •',
+  'Profit •',
+]
+
 const parseMetadata = (value: unknown) => {
   if (!value) return null
   if (typeof value === 'object') return value as any
@@ -130,7 +137,11 @@ export const withdrawFromBuckets = async (
   })
 
   if (Array.isArray(preferredLabelPrefixes) && preferredLabelPrefixes.length > 0) {
-    const prefixes = preferredLabelPrefixes.filter((p) => typeof p === 'string' && p.length > 0)
+    const preferredPrefixes = preferredLabelPrefixes.filter((p) => typeof p === 'string' && p.length > 0)
+    const prefixes = [
+      ...preferredPrefixes,
+      ...WITHDRAW_BUCKET_PRIORITY.filter((prefix) => !preferredPrefixes.includes(prefix)),
+    ]
     if (prefixes.length > 0) {
       const priorityFor = (label?: string | null) => {
         const normalized = label || ''

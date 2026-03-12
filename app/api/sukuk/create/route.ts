@@ -44,6 +44,13 @@ const parseMetadata = (value: unknown) => {
 
 const round2 = (value: number) => Math.round((Number(value) || 0) * 100) / 100
 
+const SUKUK_WITHDRAW_BUCKET_PRIORITY = [
+  'Savings Receipt •',
+  'Circlys Reward Receipt •',
+  'Sukuk Principal •',
+  'Profit •',
+]
+
 export async function POST(req: NextRequest) {
   try {
     const user = await requireModuleAccess('sukuk')
@@ -258,7 +265,7 @@ export async function POST(req: NextRequest) {
         availableOnOrBefore: startDate,
         personId: user.role === 'OWNER' ? null : user.personId,
         preferredLabelPrefixes: user.role === 'OWNER'
-          ? ['Circlys Reward Receipt •', 'Savings Receipt •']
+          ? SUKUK_WITHDRAW_BUCKET_PRIORITY
           : undefined,
       })
 
