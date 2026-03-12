@@ -159,27 +159,15 @@ export function NexusGuardMascot({
         const currentState = robotStateRef.current
 
         if (currentState !== 'guarding' && currentState !== 'scanning') {
-          if (dist < 80) {
-            if (currentState !== 'alerting') {
-              setRobotState('alerting')
-              robotStateRef.current = 'alerting'
-              setLaserActive(false)
-              showBubbleMessage(randOf(alertComments), 2500)
-              setEyeColor('#FF4444')
-              setTimeout(() => {
-                setRobotState('patrolling')
-                robotStateRef.current = 'patrolling'
-                setEyeColor('#00F5FF')
-              }, 2500)
-            }
-          } else if (dist < 300 && currentState !== 'alerting') {
+          // Follow cursor when it's nearby
+          if (dist < 400) {
             if (currentState !== 'tracking') {
               setRobotState('tracking')
               robotStateRef.current = 'tracking'
               setLaserActive(true)
-              if (Math.random() < 0.5) showBubbleMessage(randOf(trackComments), 2500)
+              if (Math.random() < 0.3) showBubbleMessage(randOf(trackComments), 2500)
             }
-          } else if (dist >= 300 && currentState === 'tracking') {
+          } else if (dist >= 400 && currentState === 'tracking') {
             setRobotState('patrolling')
             robotStateRef.current = 'patrolling'
             setLaserActive(false)
@@ -198,16 +186,13 @@ export function NexusGuardMascot({
 
         let tx = prev.x, ty = prev.y, speed = 0
 
-        if (currentState === 'alerting') {
-          tx = prev.x + (prev.x - mouseX) * 3
-          ty = prev.y + (prev.y - mouseY) * 3
-          speed = 5
-        } else if (currentState === 'tracking') {
-          const angle = Math.atan2(prev.y - mouseY, prev.x - mouseX) + 0.015
-          const orbitR = 200
-          tx = mouseX + Math.cos(angle) * orbitR
-          ty = mouseY + Math.sin(angle) * orbitR
-          speed = 2.5
+        if (currentState === 'tracking') {
+          // Follow cursor with slight offset to stay behind it
+          const offsetDist = 60
+          const angle = Math.atan2(mouseY - prev.y, mouseX - prev.x)
+          tx = mouseX - Math.cos(angle) * offsetDist
+          ty = mouseY - Math.sin(angle) * offsetDist
+          speed = 3
         } else if (currentState === 'patrolling') {
           tx = roamTargetRef.current.x
           ty = roamTargetRef.current.y
