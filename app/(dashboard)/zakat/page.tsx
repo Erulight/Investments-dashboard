@@ -831,6 +831,7 @@ export default async function ZakatPage() {
               OR: [
                 { label: { startsWith: 'Savings Receipt •' } },
                 { label: { startsWith: 'Circlys Reward Receipt •' } },
+                { label: { startsWith: 'Circlys •' } },
               ],
             },
           } as any,
@@ -867,6 +868,7 @@ export default async function ZakatPage() {
               OR: [
                 { label: { startsWith: 'Savings Receipt •' } },
                 { label: { startsWith: 'Circlys Reward Receipt •' } },
+                { label: { startsWith: 'Circlys •' } },
                 { label: { startsWith: 'Sukuk Principal •' } },
                 { label: { endsWith: ' Principal Receipt' } },
               ],
@@ -948,7 +950,7 @@ export default async function ZakatPage() {
           ? new Date(movementRawDate.getFullYear(), movementRawDate.getMonth(), movementRawDate.getDate())
           : null
 
-      const isSavingsRoscaFunding = label.startsWith('Savings Receipt •')
+      const isSavingsRoscaFunding = label.startsWith('Savings Receipt •') || label.startsWith('Circlys •')
       const isRewardRoscaFunding = label.startsWith('Circlys Reward Receipt •')
       const isPrincipalFunding =
         label.startsWith('Sukuk Principal •') ||
@@ -1014,7 +1016,7 @@ export default async function ZakatPage() {
       const savingsRoscaAnchorFromAllocations = roscaAllocations
         .filter((alloc: any) => {
           const label = typeof alloc?.cashBucket?.label === 'string' ? alloc.cashBucket.label : ''
-          return label.startsWith('Savings Receipt •')
+          return label.startsWith('Savings Receipt •') || label.startsWith('Circlys •')
         })
         .map((alloc: any) => toDate(alloc?.cashBucket?.haulStartDate))
         .filter((d: Date | null): d is Date => Boolean(d && !Number.isNaN(d.getTime())))
