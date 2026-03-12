@@ -31,7 +31,16 @@ const navigation: NavItem[] = [
   { name: 'Dashboard', href: '/dashboard', icon: '📊' },
   { name: 'Cash Ledger', href: '/cash-ledger', roles: ['OWNER', 'PARTNER'], icon: '💵' },
   { name: 'Debts', href: '/debts', roles: ['OWNER'], icon: '💳' },
-  { name: 'Zakat', href: '/zakat', module: 'zakat', icon: '🕌' },
+  {
+    name: 'Zakat',
+    href: '/zakat',
+    module: 'zakat',
+    icon: '🕌',
+    children: [
+      { name: 'Dashboard', href: '/zakat', module: 'zakat', icon: '🕌' },
+      { name: 'Audit', href: '/zakat/audit', module: 'zakat', icon: '📋' },
+    ],
+  },
   { 
     name: 'Investments', 
     href: '/investments', 
