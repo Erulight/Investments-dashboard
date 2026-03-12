@@ -1201,17 +1201,6 @@ export default async function ZakatPage() {
         })
       }
 
-      const profitHawlStart = sukukStartDay
-
-      // Profit remains anchored to Sukuk start date.
-      await prisma.cashBucket.updateMany({
-        where: {
-          personId: ownerPersonId,
-          label: { startsWith: 'Profit •' },
-          movements: { some: { investmentId: sukukInv.id } },
-        },
-        data: { haulStartDate: profitHawlStart },
-      })
     }
 
     // DO NOT exclude ROSCA receipt buckets from Zakat.
