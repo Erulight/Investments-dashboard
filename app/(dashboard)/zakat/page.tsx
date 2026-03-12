@@ -809,26 +809,16 @@ export default async function ZakatPage() {
     // Persist anchor in metadata and keep receipt suppression only for fully depleted receipts.
 
     const allSukukInvestments = await prisma.investment.findMany({
-      where: {
-        account: { type: 'SUKUK' },
-        ...(ownerPersonId
-          ? {
-              OR: [
-                { dealParticipants: { some: { personId: ownerPersonId } } },
-                { transactions: { some: { personId: ownerPersonId } } },
-              ],
-            }
-          : {
-              transactions: { some: { personId: null } },
-            }),
-      },
+      where: { account: { type: 'SUKUK' } },
       select: { id: true, metadata: true, startDate: true },
     })
 
     const allSukukCashInvestTxs = await prisma.transaction.findMany({
       where: {
         type: 'CASH_INVEST',
-        personId: ownerPersonId,
+        ...(ownerPersonId
+          ? { OR: [{ personId: ownerPersonId }, { personId: null }] }
+          : { personId: null }),
         investmentId: { not: null },
         investment: { account: { type: 'SUKUK' } },
       },
@@ -840,11 +830,17 @@ export default async function ZakatPage() {
           where: {
             investmentId: { in: allSukukInvestments.map((inv: any) => inv.id) },
             cashBucket: {
-              personId: ownerPersonId,
-              OR: [
-                { label: { startsWith: 'Savings Receipt •' } },
-                { label: { startsWith: 'Circlys Reward Receipt •' } },
-                { label: { startsWith: 'Circlys •' } },
+              AND: [
+                ...(ownerPersonId
+                  ? [{ OR: [{ personId: ownerPersonId }, { personId: null }] }]
+                  : [{ personId: null }]),
+                {
+                  OR: [
+                    { label: { startsWith: 'Savings Receipt •' } },
+                    { label: { startsWith: 'Circlys Reward Receipt •' } },
+                    { label: { startsWith: 'Circlys •' } },
+                  ],
+                },
               ],
             },
           } as any,
@@ -877,13 +873,19 @@ export default async function ZakatPage() {
             investmentId: { in: allSukukInvestments.map((inv: any) => inv.id) },
             type: 'INVEST_OUT',
             cashBucket: {
-              personId: ownerPersonId,
-              OR: [
-                { label: { startsWith: 'Savings Receipt •' } },
-                { label: { startsWith: 'Circlys Reward Receipt •' } },
-                { label: { startsWith: 'Circlys •' } },
-                { label: { startsWith: 'Sukuk Principal •' } },
-                { label: { endsWith: ' Principal Receipt' } },
+              AND: [
+                ...(ownerPersonId
+                  ? [{ OR: [{ personId: ownerPersonId }, { personId: null }] }]
+                  : [{ personId: null }]),
+                {
+                  OR: [
+                    { label: { startsWith: 'Savings Receipt •' } },
+                    { label: { startsWith: 'Circlys Reward Receipt •' } },
+                    { label: { startsWith: 'Circlys •' } },
+                    { label: { startsWith: 'Sukuk Principal •' } },
+                    { label: { endsWith: ' Principal Receipt' } },
+                  ],
+                },
               ],
             },
           },
@@ -905,10 +907,16 @@ export default async function ZakatPage() {
           where: {
             investmentId: { in: allSukukInvestments.map((inv: any) => inv.id) },
             cashBucket: {
-              personId: ownerPersonId,
-              OR: [
-                { label: { startsWith: 'Sukuk Principal •' } },
-                { label: { endsWith: ' Principal Receipt' } },
+              AND: [
+                ...(ownerPersonId
+                  ? [{ OR: [{ personId: ownerPersonId }, { personId: null }] }]
+                  : [{ personId: null }]),
+                {
+                  OR: [
+                    { label: { startsWith: 'Sukuk Principal •' } },
+                    { label: { endsWith: ' Principal Receipt' } },
+                  ],
+                },
               ],
             },
           } as any,
@@ -1091,7 +1099,7 @@ export default async function ZakatPage() {
       // - Principal receipt recycling keeps prior behavior.
       const hawlStart =
         rewardRoscaAnchor
-          ? getLastCompletedHawlAnchor(rewardRoscaAnchor, rewardReferenceDay)
+          ? rewardRoscaAnchor
           : savingsRoscaAnchor
             ? getLastCompletedHawlAnchor(savingsRoscaAnchor, savingsReferenceDay)
             : principalReceiptAnchor
@@ -1140,7 +1148,10 @@ export default async function ZakatPage() {
         ...(user.role === 'OWNER'
           ? [
               {
-                personId: ownerPersonId,
+                OR: [
+                  { personId: null },
+                  { personId: ownerPersonId },
+                ],
               },
             ]
           : [
@@ -1384,7 +1395,11 @@ export default async function ZakatPage() {
   const cashInvestTransactions = await prisma.transaction.findMany({
     where: {
       type: 'CASH_INVEST',
-      ...(user.role === 'OWNER' ? { personId: ownerPersonId } : { personId: user.personId }),
+      ...(user.role === 'OWNER'
+        ? (ownerPersonId
+            ? { OR: [{ personId: ownerPersonId }, { personId: null }] }
+            : { personId: null })
+        : { personId: user.personId }),
     },
     select: { investmentId: true, amount: true, date: true },
   })
