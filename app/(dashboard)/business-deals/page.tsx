@@ -3,14 +3,21 @@ import { prisma } from '@/lib/db'
 import { getCurrentUser } from '@/lib/auth'
 import { requireModuleAccess } from '@/lib/rbac'
 import { Table, TableBody, TableCell, TableFooter, TableHead, TableHeader, TableRow } from '@/components/ui/Table'
+import { DISPLAY_CURRENCY_KEY, formatCurrencyAmount, normalizeDisplayCurrency } from '@/lib/currency'
 
 export default async function BusinessDealsPage() {
   await requireModuleAccess('business-deals')
   const user = await getCurrentUser()
-  
+
   if (!user) {
     return null
   }
+
+  const displayCurrencySetting = await prisma.systemSetting.findUnique({
+    where: { key: DISPLAY_CURRENCY_KEY },
+  })
+  const displayCurrency = normalizeDisplayCurrency(displayCurrencySetting?.value)
+  const money = (value: number) => formatCurrencyAmount(value, displayCurrency, 'SAR')
 
   let investments: any[] = []
 
@@ -85,11 +92,11 @@ export default async function BusinessDealsPage() {
         <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
           <div className="bg-white/5 rounded-lg p-3 border border-white/10">
             <p className="text-[11px] text-slate-400 uppercase tracking-wider">Portfolio Value</p>
-            <p className="text-lg font-bold mt-0.5">SAR {totalValue.toLocaleString()}</p>
+            <p className="text-lg font-bold mt-0.5">{money(totalValue)}</p>
           </div>
           <div className="bg-white/5 rounded-lg p-3 border border-white/10">
             <p className="text-[11px] text-slate-400 uppercase tracking-wider">Total Return</p>
-            <p className="text-lg font-bold mt-0.5">SAR {totalReturn.toLocaleString()}</p>
+            <p className="text-lg font-bold mt-0.5">{money(totalReturn)}</p>
           </div>
           <div className="bg-white/5 rounded-lg p-3 border border-white/10">
             <p className="text-[11px] text-slate-400 uppercase tracking-wider">Return %</p>

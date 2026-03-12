@@ -1,12 +1,17 @@
+import { redirect } from 'next/navigation'
 import { getCurrentUser } from '@/lib/auth'
+import { requireModuleAccess } from '@/lib/rbac'
 import { prisma } from '@/lib/db'
 import SIPPortfolioClient from '@/components/sip/SIPPortfolioClient'
 
+export const dynamic = 'force-dynamic'
+
 export default async function SIPPage() {
+  await requireModuleAccess('sip')
   const user = await getCurrentUser()
-  
+
   if (!user) {
-    return <div>Please log in to view SIP plans.</div>
+    redirect('/login')
   }
 
   const investment = await prisma.investment.findFirst({

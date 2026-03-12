@@ -1,3 +1,4 @@
+import { redirect } from 'next/navigation'
 import { getCurrentUser } from '@/lib/auth'
 import { Card, CardHeader, CardTitle, CardContent } from '@/components/ui/Card'
 import { prisma } from '@/lib/db'
@@ -32,7 +33,7 @@ export default async function DashboardPage({
   const user = await getCurrentUser()
   
   if (!user) {
-    return null
+    redirect('/login')
   }
 
   const yearParam = searchParams?.year

@@ -64,8 +64,8 @@ export default async function SavingsPage() {
     }))
   }
 
-  totalSavings = circlysInvestments.reduce((sum, inv) => sum + inv.principalAmount, 0)
-  totalReward = circlysInvestments.reduce((sum, inv) => sum + (inv.currentValue - inv.principalAmount), 0)
+  totalSavings = circlysInvestments.reduce((sum, inv) => sum + (Number(inv.principalAmount) || 0), 0)
+  totalReward = circlysInvestments.reduce((sum, inv) => sum + Math.max(0, (Number(inv.currentValue) || 0) - (Number(inv.principalAmount) || 0)), 0)
 
   return (
     <div className="space-y-6 animate-fade-in">
