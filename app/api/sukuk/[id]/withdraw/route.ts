@@ -530,11 +530,24 @@ export async function POST(
             return new Date(raw.getFullYear(), raw.getMonth(), raw.getDate())
           })()
 
+          const latestRewardAnchor = rewardAnchors.length > 0
+            ? [...rewardAnchors].sort((a: Date, b: Date) => a.getTime() - b.getTime())[rewardAnchors.length - 1]
+            : null
+          const latestSavingsAnchor = savingsAnchors.length > 0
+            ? [...savingsAnchors].sort((a: Date, b: Date) => a.getTime() - b.getTime())[savingsAnchors.length - 1]
+            : null
+          const latestPrincipalAnchor = principalAnchors.length > 0
+            ? [...principalAnchors].sort((a: Date, b: Date) => a.getTime() - b.getTime())[principalAnchors.length - 1]
+            : null
+          const normalizedSavingsAnchor = savingsAnchor
+            ? getLastCompletedHawlAnchor(savingsAnchor, date)
+            : null
+
           const derivedAnchor =
-            rewardAnchors[0] ||
-            savingsAnchors[0] ||
-            principalAnchors[0] ||
-            savingsAnchor ||
+            latestRewardAnchor ||
+            latestSavingsAnchor ||
+            latestPrincipalAnchor ||
+            normalizedSavingsAnchor ||
             startDay
 
           principalHaulStart = derivedAnchor

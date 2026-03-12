@@ -1020,7 +1020,7 @@ export default async function ZakatPage() {
           ? new Date(movementRawDate.getFullYear(), movementRawDate.getMonth(), movementRawDate.getDate())
           : null
 
-      const isSavingsRoscaFunding = label.startsWith('Savings Receipt •') || label.startsWith('Circlys •')
+      const isSavingsRoscaFunding = label.startsWith('Savings Receipt •')
       const isRewardRoscaFunding = label.startsWith('Circlys Reward Receipt •')
       const isPrincipalFunding =
         label.startsWith('Sukuk Principal •') ||
@@ -1086,7 +1086,7 @@ export default async function ZakatPage() {
       const savingsRoscaAnchorFromAllocations = roscaAllocations
         .filter((alloc: any) => {
           const label = typeof alloc?.cashBucket?.label === 'string' ? alloc.cashBucket.label : ''
-          return label.startsWith('Savings Receipt •') || label.startsWith('Circlys •')
+          return label.startsWith('Savings Receipt •')
         })
         .map((alloc: any) => toDate(alloc?.cashBucket?.haulStartDate))
         .filter((d: Date | null): d is Date => Boolean(d && !Number.isNaN(d.getTime())))
@@ -1152,24 +1152,32 @@ export default async function ZakatPage() {
 
       const rewardRoscaAnchor = rewardRoscaAnchors[0] || relatedRewardReceiptAnchors[0] || sameNameRewardAnchor || null
       const savingsRoscaAnchor = savingsRoscaAnchors[0] || null
-      const principalReceiptAnchor = principalReceiptAnchors[0] || null
+      const principalReceiptAnchor = principalReceiptAnchors.length > 0
+        ? principalReceiptAnchors[principalReceiptAnchors.length - 1]
+        : null
       const savingsFundingDates = (savingsRoscaFundingDatesByInvestmentId.get(sukukInv.id) || [])
         .sort((a: Date, b: Date) => a.getTime() - b.getTime())
       const rewardFundingDates = (rewardRoscaFundingDatesByInvestmentId.get(sukukInv.id) || [])
         .sort((a: Date, b: Date) => a.getTime() - b.getTime())
       const principalFundingDates = (principalFundingDatesByInvestmentId.get(sukukInv.id) || [])
         .sort((a: Date, b: Date) => a.getTime() - b.getTime())
-      const savingsReferenceDay = savingsFundingDates[0] || fallbackDay
-      const rewardReferenceDay = rewardFundingDates[0] || fallbackDay
-      const principalReferenceDay = principalFundingDates[0] || fallbackDay
+      const savingsReferenceDay = savingsFundingDates.length > 0
+        ? savingsFundingDates[savingsFundingDates.length - 1]
+        : fallbackDay
+      const rewardReferenceDay = rewardFundingDates.length > 0
+        ? rewardFundingDates[rewardFundingDates.length - 1]
+        : fallbackDay
+      const principalReferenceDay = principalFundingDates.length > 0
+        ? principalFundingDates[principalFundingDates.length - 1]
+        : fallbackDay
 
       // ROSCA anchor rules:
-      // - Reward receipt buckets already store the current running hawl anchor, so copy directly.
-      // - Savings receipt buckets store first contribution anchor, so inherit last completed hawl.
-      // - Principal receipt recycling keeps prior behavior.
+      // - Resolve reward/savings/principal anchors to the latest completed cycle at funding time.
+      // - This preserves continuity while preventing old pre-completion starts from leaking into
+      //   post-completion Sukuk hawl timelines.
       const hawlStart =
         rewardRoscaAnchor
-          ? rewardRoscaAnchor
+          ? getLastCompletedHawlAnchor(rewardRoscaAnchor, rewardReferenceDay)
           : savingsRoscaAnchor
             ? getLastCompletedHawlAnchor(savingsRoscaAnchor, savingsReferenceDay)
             : principalReceiptAnchor
@@ -1975,15 +1983,18 @@ export default async function ZakatPage() {
             if (currentPrincipal > 0.0001) return null
           }
 
-          // Principal receipts from ROSCA-funded Sukuk inherit the running ROSCA hawl anchor
-          // (continuity across cycles). Profit receipts always use Sukuk start date.
+          // Principal/profit receipts from ROSCA-funded Sukuk inherit the resolved running
+          // ROSCA hawl anchor (continuity across cycles).
+          const resolvedRoscaAnchor = ownerSukukAnchor && !Number.isNaN(ownerSukukAnchor.getTime())
+            ? ownerSukukAnchor
+            : start
           const eligibilityAnchor = (isCommissionBucket
             ? bucketStart
             : (isPrincipalReceiptMovement
-              ? ownerSukukAnchor
+              ? resolvedRoscaAnchor
               : (isProfitReceiptMovement
-                ? start
-                : ownerSukukAnchor)))
+                ? resolvedRoscaAnchor
+                : resolvedRoscaAnchor)))
           const eligibilityStart = startOfDay(eligibilityAnchor)
           const duration = diffDaysFloor(eligibilityStart, day)
 
