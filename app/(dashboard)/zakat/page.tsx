@@ -1541,11 +1541,6 @@ export default async function ZakatPage() {
     return 'PROFIT' as const
   }
 
-  const hasAnyRoscaReceiptBucket = buckets.some((b: any) => {
-    const label = typeof b?.label === 'string' ? b.label : ''
-    return label.startsWith('Savings Receipt •') || label.startsWith('Circlys Reward Receipt •')
-  })
-
   const rawRows: BucketRow[] = buckets
     .flatMap((bucket: any): BucketRow[] => {
       const now = startOfDay(new Date())
@@ -1927,18 +1922,6 @@ export default async function ZakatPage() {
         return savingsRows
       }
 
-      // In ROSCA scenarios, manual funding cash-ins can create standalone
-      // General Cash idle rows that double-count against the Savings Receipt row.
-      if (
-        user.role === 'OWNER' &&
-        hasAnyRoscaReceiptBucket &&
-        !isSavingsReceiptBucket &&
-        !isImmediateReceiptBucket &&
-        (bucket.label === 'General Cash' || bucket.label == null)
-      ) {
-        return []
-      }
-
       const qualifyingReceipts = receiptMovements
         .map((m: any) => {
           const day = movementDay(m)
@@ -2205,11 +2188,16 @@ export default async function ZakatPage() {
           }
         })
         .filter((x: { time: number; amount: number } | null): x is { time: number; amount: number } => Boolean(x))
+      const normalizedCashInEvents = cashInEvents.length > 0
+        ? cashInEvents
+        : (displayBalance > 0
+          ? [{ time: startOfDay(bucketStart).getTime(), amount: displayBalance }]
+          : [])
 
-      if (!isImmediateReceiptBucket && cashInEvents.length > 0) {
-        const earliestCashInTime = cashInEvents.reduce(
+      if (!isImmediateReceiptBucket && normalizedCashInEvents.length > 0) {
+        const earliestCashInTime = normalizedCashInEvents.reduce(
           (min: number, evt: { time: number; amount: number }) => Math.min(min, evt.time),
-          cashInEvents[0].time,
+          normalizedCashInEvents[0].time,
         )
         const start = startOfDay(new Date(earliestCashInTime))
         const elapsed = diffDaysFloor(start, now)
@@ -2219,7 +2207,7 @@ export default async function ZakatPage() {
           const periodEnd = addDays(start, (i + 1) * 354)
           const periodEndTime = startOfDay(periodEnd).getTime()
 
-          const inflowsByPeriodEnd = cashInEvents
+          const inflowsByPeriodEnd = normalizedCashInEvents
             .filter((evt: { time: number; amount: number }) => evt.time <= periodEndTime)
             .reduce((sum: number, evt: { time: number; amount: number }) => sum + evt.amount, 0)
           if (inflowsByPeriodEnd <= 0.01) continue
