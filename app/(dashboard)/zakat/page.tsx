@@ -1560,26 +1560,6 @@ export default async function ZakatPage() {
         (bucket.label.startsWith('Savings Receipt •') || bucket.label.startsWith('Circlys Reward Receipt •'))
       const isRewardReceiptBucket = typeof bucket.label === 'string' && bucket.label.startsWith('Circlys Reward Receipt •')
 
-      const displayBalance = Number(bucket.balance) || 0
-
-      // Skip buckets that are fully allocated to active Sukuk investments.
-      // These will show in the Sukuk "upcoming" section instead of as idle cash.
-      const activeAllocations = (Array.isArray(bucket.allocations) ? bucket.allocations : [])
-        .filter((alloc: any) => {
-          const principalRemaining = Math.max(0, Number(alloc?.principalRemaining) || 0)
-          if (principalRemaining <= 0) return false
-          const inv = alloc?.investment
-          if (!inv || inv?.account?.type !== 'SUKUK') return false
-          const principalAmount = Math.max(0, Number(inv?.principalAmount) || 0)
-          return principalAmount > 0.0001 // Active Sukuk with principal remaining
-        })
-      const totalActiveAllocation = activeAllocations.reduce(
-        (sum: number, alloc: any) => sum + Math.max(0, Number(alloc?.principalRemaining) || 0),
-        0
-      )
-      // If bucket balance is fully allocated to active investments, skip idle row generation
-      if (totalActiveAllocation > 0 && displayBalance <= 0.01) return []
-
       const alloc = bucket.allocations?.[0]
       const source = alloc?.investment?.name || bucket.label || 'General'
       const sourceType = alloc?.investment?.account?.type || 'OTHER'
@@ -1587,6 +1567,8 @@ export default async function ZakatPage() {
         isCirclys && bucket.label
           ? bucket.label.split(' \u2022 ').slice(0, 2).join(' \u2022 ')
           : source
+
+      const displayBalance = Number(bucket.balance) || 0
 
       const payments = (Array.isArray(bucket.movements) ? bucket.movements : [])
         .filter((m: any) => m?.type === 'ZAKAT_PAID')
