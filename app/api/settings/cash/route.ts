@@ -21,13 +21,13 @@ const getCashAccount = async (tx: any, currency = 'SAR') => {
 
 export async function GET() {
   try {
-    await requireAuth(['OWNER'])
-    const bucketCash = await getBucketCashBalance(prisma, null)
+    const user = await requireAuth(['OWNER'])
+    const bucketCash = await getBucketCashBalance(prisma, user.personId || null)
     const setting = await prisma.systemSetting.findUnique({ where: { key: CASH_BALANCE_KEY } })
     const settingValue = Number(setting?.value || 0)
 
     if (!setting || Math.abs(settingValue - bucketCash) > 0.0001) {
-      await recomputeCashSetting(prisma, null)
+      await recomputeCashSetting(prisma, user.personId || null)
     }
 
     return NextResponse.json({
@@ -45,7 +45,7 @@ export async function GET() {
 
 export async function PUT(req: NextRequest) {
   try {
-    await requireAuth(['OWNER'])
+    const user = await requireAuth(['OWNER'])
     const body = await req.json().catch(() => ({}))
     const cashBalance = Number(body.cashBalance)
 
@@ -56,11 +56,11 @@ export async function PUT(req: NextRequest) {
       )
     }
 
-    const currentBucketCash = await getBucketCashBalance(prisma, null)
+    const currentBucketCash = await getBucketCashBalance(prisma, user.personId || null)
     const delta = cashBalance - currentBucketCash
     if (Math.abs(delta) <= 0.0001) {
       const synced = await prisma.$transaction(async (tx: any) => {
-        return recomputeCashSetting(tx, null)
+        return recomputeCashSetting(tx, user.personId || null)
       })
       return NextResponse.json({ cashBalance: synced, appliedDelta: 0 })
     }
@@ -79,14 +79,14 @@ export async function PUT(req: NextRequest) {
           date: entryDate,
           notes: 'Manual cash sync from settings',
           type: 'CASH_IN',
-          personId: null,
+          personId: user.personId || null,
         })
 
         await tx.transaction.create({
           data: {
             accountId: cashAccount.id,
             investmentId: null,
-            personId: null,
+            personId: user.personId || null,
             type: 'CASH_IN',
             amount: delta,
             date: entryDate,
@@ -101,14 +101,14 @@ export async function PUT(req: NextRequest) {
           date: entryDate,
           type: 'CASH_OUT',
           notes: 'Settings cash sync decrease',
-          personId: null,
+          personId: user.personId || null,
         })
 
         await tx.transaction.create({
           data: {
             accountId: cashAccount.id,
             investmentId: null,
-            personId: null,
+            personId: user.personId || null,
             type: 'CASH_OUT',
             amount: -withdrawalAmount,
             date: entryDate,
@@ -117,7 +117,7 @@ export async function PUT(req: NextRequest) {
         })
       }
 
-      return recomputeCashSetting(tx, null)
+      return recomputeCashSetting(tx, user.personId || null)
     })
 
     return NextResponse.json({ cashBalance: updatedCash, appliedDelta: delta })

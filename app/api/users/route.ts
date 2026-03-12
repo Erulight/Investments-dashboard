@@ -88,7 +88,8 @@ export async function POST(req: NextRequest) {
     const hashedPassword = await hashPassword(validatedData.password)
     
     const user = await prisma.$transaction(async (tx) => {
-      const personId = validatedData.role === 'PARTNER'
+      // Create Person entity for OWNER and PARTNER roles to enable data isolation
+      const personId = (validatedData.role === 'PARTNER' || validatedData.role === 'OWNER')
         ? (
             await tx.person.create({
               data: {

@@ -67,9 +67,7 @@ export async function POST(req: NextRequest) {
       const bucket = await tx.cashBucket.findFirst({
         where: {
           id: bucketId,
-          ...(user.role === 'OWNER'
-            ? { OR: [{ personId: null }, { personId: user.personId || null }] }
-            : { personId: user.personId }),
+          personId: user.personId,
         },
       })
       if (!bucket) {

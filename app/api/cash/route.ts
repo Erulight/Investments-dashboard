@@ -85,11 +85,9 @@ export async function GET(req: NextRequest) {
 
     const ownerSetting = await prisma.systemSetting.findUnique({ where: { key: CASH_BALANCE_KEY } })
     const ownerSettingValue = Number(ownerSetting?.value || 0)
-    const ownerBucketBalance = await getBucketCashBalance(prisma, null)
+    const ownerBucketBalance = await getBucketCashBalance(prisma, user.personId || null)
 
-    const ownerTxScope = user.personId
-      ? ({ OR: [{ personId: null }, { personId: user.personId }] } as any)
-      : ({ personId: null } as any)
+    const ownerTxScope = ({ personId: user.personId || null } as any)
 
     const allCashTxSum = cashAccount
       ? (
@@ -125,7 +123,7 @@ export async function GET(req: NextRequest) {
     const buckets = await prisma.cashBucket.findMany({
       where: {
         balance: { gt: 0 },
-        personId: null,
+        personId: user.personId || null,
       },
       orderBy: { haulStartDate: 'asc' },
       select: {
