@@ -293,64 +293,38 @@ export async function POST(req: NextRequest) {
           console.log('[SUKUK_CREATE] Investment ID:', newSukuk.id, 'Allocations:', fundingAllocations.length)
         }
 
-        const hasPrincipalReceiptFunding = fundingAllocations.some((alloc: any) => {
-          const label = typeof alloc?.cashBucket?.label === 'string' ? alloc.cashBucket.label : ''
-          return label.startsWith('Sukuk Principal •') || label.endsWith(' Principal Receipt')
-        })
+        const normalizedFundingAnchors = fundingAllocations
+          .map((alloc: any) => {
+            const label = typeof alloc?.cashBucket?.label === 'string' ? alloc.cashBucket.label : ''
+            const rawAnchor = alloc?.haulStartDate
+              ? new Date(alloc.haulStartDate)
+              : (alloc?.cashBucket?.haulStartDate ? new Date(alloc.cashBucket.haulStartDate) : null)
+            if (!rawAnchor || Number.isNaN(rawAnchor.getTime())) return null
 
-        if (hasPrincipalReceiptFunding) {
-          // Recycled Sukuk principal starts a new independent cycle.
-          // Do not inherit ROSCA savings hawl anchor.
-          if (DEBUG) console.log('[SUKUK_CREATE] Principal receipt funding - skipping savingsHaulStartDate')
-          inheritedSavingsHaulStart = null
-        }
+            const anchorDay = new Date(rawAnchor.getFullYear(), rawAnchor.getMonth(), rawAnchor.getDate())
+            const isRewardRoscaReceipt = label.startsWith('Circlys Reward Receipt •')
+            const isSavingsRoscaReceipt = label.startsWith('Savings Receipt •')
+            const isPrincipalReceiptFunding =
+              label.startsWith('Sukuk Principal •') || label.endsWith(' Principal Receipt')
 
-        // Only inherit from Savings/Reward Receipt buckets (ROSCA funds)
-        // Manual cash entries should NOT pass their hawl date to Sukuk.
-        // If reward funding exists, prefer reward anchor (last completed hawl continuity).
-        if (!hasPrincipalReceiptFunding) {
-          const rewardRoscaAnchors = fundingAllocations
-            .map((alloc: any) => {
-              const label = typeof alloc?.cashBucket?.label === 'string' ? alloc.cashBucket.label : ''
-              const isRewardRoscaReceipt = label.startsWith('Circlys Reward Receipt •')
-              if (!isRewardRoscaReceipt) {
-                return null
-              }
-              const d = alloc?.cashBucket?.haulStartDate ? new Date(alloc.cashBucket.haulStartDate) : null
-              if (!d || Number.isNaN(d.getTime())) {
-                return null
-              }
-              const bucketHaulStart = new Date(d.getFullYear(), d.getMonth(), d.getDate())
-              // REWARD bucket: haulStartDate is already set to rewardReceiptDate (Dec 20 2024)
-              // which IS the hawl 2 start date. Direct copy, no recalculation needed.
-              return bucketHaulStart
-            })
-            .filter((d: Date | null): d is Date => Boolean(d))
-            .sort((a: Date, b: Date) => a.getTime() - b.getTime())[0] || null
+            if (isRewardRoscaReceipt) {
+              // Reward continuity: direct copy, no recalculation.
+              return anchorDay
+            }
+            if (isSavingsRoscaReceipt) {
+              // Savings continuity: use the last completed cycle at investment date.
+              return getLastCompletedHawlAnchor(anchorDay, startDate)
+            }
+            if (isPrincipalReceiptFunding) {
+              // Principal continuity: keep inherited running anchor.
+              return anchorDay
+            }
+            return null
+          })
+          .filter((d: Date | null): d is Date => Boolean(d))
+          .sort((a: Date, b: Date) => a.getTime() - b.getTime())
 
-          const savingsRoscaAnchors = fundingAllocations
-            .map((alloc: any) => {
-              const label = typeof alloc?.cashBucket?.label === 'string' ? alloc.cashBucket.label : ''
-              const isSavingsRoscaReceipt = label.startsWith('Savings Receipt •')
-              if (!isSavingsRoscaReceipt) {
-                return null
-              }
-              const d = alloc?.cashBucket?.haulStartDate ? new Date(alloc.cashBucket.haulStartDate) : null
-              if (!d || Number.isNaN(d.getTime())) {
-                return null
-              }
-              const bucketHaulStart = new Date(d.getFullYear(), d.getMonth(), d.getDate())
-              // SAVINGS bucket: haulStartDate = firstContributionDate (Jan 2024)
-              // Calculate end of last completed hawl before investment date.
-              // Example: Jan 2024 start → invest Jan 2025 → returns Dec 2024 (end of hawl 1)
-              const lastCompletedAnchor = getLastCompletedHawlAnchor(bucketHaulStart, startDate)
-              return lastCompletedAnchor
-            })
-            .filter((d: Date | null): d is Date => Boolean(d))
-            .sort((a: Date, b: Date) => a.getTime() - b.getTime())[0] || null
-
-          inheritedSavingsHaulStart = rewardRoscaAnchors || savingsRoscaAnchors || null
-        }
+        inheritedSavingsHaulStart = normalizedFundingAnchors[0] || null
 
         if (DEBUG) console.log('[SUKUK_CREATE] Inherited hawl start:', inheritedSavingsHaulStart?.toISOString().split('T')[0] || 'NONE')
       } catch (err) {

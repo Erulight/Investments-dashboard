@@ -410,150 +410,128 @@ export async function POST(
         }
       } else {
         if (source === 'PRINCIPAL') {
-          let principalHaulStart = date
           const invMeta = parseMetadata(investment.metadata)
-          const savingsAnchorRaw = typeof invMeta?.savingsHaulStartDate === 'string'
-            ? new Date(invMeta.savingsHaulStartDate)
-            : null
-          const savingsAnchor = savingsAnchorRaw && !Number.isNaN(savingsAnchorRaw.getTime())
-            ? new Date(
-                savingsAnchorRaw.getFullYear(),
-                savingsAnchorRaw.getMonth(),
-                savingsAnchorRaw.getDate(),
-              )
-            : null
+          const normalizeDay = (value: unknown): Date | null => {
+            if (!value) return null
+            const raw = value instanceof Date ? value : new Date(value as any)
+            if (Number.isNaN(raw.getTime())) return null
+            return new Date(raw.getFullYear(), raw.getMonth(), raw.getDate())
+          }
 
-          const fundingMovements = await tx.cashBucketMovement.findMany({
+          const savingsAnchor = typeof invMeta?.savingsHaulStartDate === 'string'
+            ? normalizeDay(invMeta.savingsHaulStartDate)
+            : null
+          const investmentStartAnchor = normalizeDay(investment.startDate) || normalizeDay(date) || date
+
+          const allocations = await tx.investmentBucketAllocation.findMany({
             where: {
               investmentId: investment.id,
-              type: 'INVEST_OUT',
-              cashBucket: {
-                personId: null,
-                OR: [
-                  { label: { startsWith: 'Savings Receipt •' } },
-                  { label: { startsWith: 'Circlys Reward Receipt •' } },
-                  { label: { startsWith: 'Sukuk Principal •' } },
-                  { label: { endsWith: ' Principal Receipt' } },
-                ],
-              },
-            } as any,
-            select: {
-              date: true,
+              principalRemaining: { gt: 0 },
+            },
+            include: {
               cashBucket: {
                 select: {
+                  id: true,
                   label: true,
                   haulStartDate: true,
                 },
               },
             },
-            orderBy: { date: 'asc' },
+            orderBy: { createdAt: 'asc' },
           })
 
-          const rewardAnchors: Date[] = []
-          const savingsAnchors: Date[] = []
-          const principalAnchors: Date[] = []
-
-          for (const movement of fundingMovements) {
-            const label = typeof movement?.cashBucket?.label === 'string' ? movement.cashBucket.label : ''
-            const anchorRaw = movement?.cashBucket?.haulStartDate ? new Date(movement.cashBucket.haulStartDate) : null
-            const movementRaw = movement?.date ? new Date(movement.date) : null
-            if (!anchorRaw || Number.isNaN(anchorRaw.getTime())) continue
-            if (!movementRaw || Number.isNaN(movementRaw.getTime())) continue
-
-            const anchor = new Date(anchorRaw.getFullYear(), anchorRaw.getMonth(), anchorRaw.getDate())
-            const movementDay = new Date(movementRaw.getFullYear(), movementRaw.getMonth(), movementRaw.getDate())
-            const completedAnchor = getLastCompletedHawlAnchor(anchor, movementDay)
-
-            if (label.startsWith('Circlys Reward Receipt •')) {
-              rewardAnchors.push(completedAnchor)
-            } else if (label.startsWith('Savings Receipt •')) {
-              savingsAnchors.push(completedAnchor)
-            } else if (label.startsWith('Sukuk Principal •') || label.endsWith(' Principal Receipt')) {
-              principalAnchors.push(completedAnchor)
-            }
+          const resolveAllocationAnchor = (alloc: any) => {
+            const allocationAnchor = normalizeDay(alloc?.haulStartDate)
+            if (allocationAnchor) return allocationAnchor
+            const bucketAnchor = normalizeDay(alloc?.cashBucket?.haulStartDate)
+            if (bucketAnchor) return bucketAnchor
+            if (savingsAnchor) return savingsAnchor
+            return investmentStartAnchor
           }
 
-          if (
-            rewardAnchors.length === 0 &&
-            savingsAnchors.length === 0 &&
-            principalAnchors.length === 0
-          ) {
-            const allocationFunding = await tx.investmentBucketAllocation.findMany({
+          const sortedAllocations = [...allocations].sort((a: any, b: any) => {
+            const aAnchor = resolveAllocationAnchor(a)
+            const bAnchor = resolveAllocationAnchor(b)
+            const at = aAnchor instanceof Date ? aAnchor.getTime() : 0
+            const bt = bAnchor instanceof Date ? bAnchor.getTime() : 0
+            if (at !== bt) return at - bt
+            const ac = a?.createdAt ? new Date(a.createdAt).getTime() : 0
+            const bc = b?.createdAt ? new Date(b.createdAt).getTime() : 0
+            return ac - bc
+          })
+
+          let remainingReduction = Math.max(0, amount)
+          let firstAnchorUsed: Date | null = null
+          const receiptLabel = `${investment.name} Principal Receipt`
+
+          for (const alloc of sortedAllocations) {
+            if (remainingReduction <= 0.0001) break
+
+            const allocRemaining = Math.max(0, Number(alloc.principalRemaining || 0))
+            if (allocRemaining <= 0.0001) continue
+
+            const reduceBy = Math.min(allocRemaining, remainingReduction)
+            const allocationAnchor = resolveAllocationAnchor(alloc)
+            if (!firstAnchorUsed) {
+              firstAnchorUsed = allocationAnchor
+            }
+
+            const existingReceiptBucket = await tx.cashBucket.findFirst({
               where: {
-                investmentId: investment.id,
-                principalAllocated: { gt: 0 },
+                personId: null,
+                label: receiptLabel,
+                haulStartDate: allocationAnchor,
               },
-              select: {
-                cashBucket: {
-                  select: {
-                    label: true,
-                    haulStartDate: true,
-                    movements: {
-                      where: { type: 'CASH_IN' },
-                      select: { date: true },
-                      orderBy: { date: 'asc' },
-                      take: 1,
-                    },
-                  },
-                },
-              },
+              select: { id: true },
             })
 
-            for (const alloc of allocationFunding) {
-              const label = typeof alloc?.cashBucket?.label === 'string' ? alloc.cashBucket.label : ''
-              const anchorRaw = alloc?.cashBucket?.haulStartDate
-                ? new Date(alloc.cashBucket.haulStartDate)
-                : null
-              const refRaw = alloc?.cashBucket?.movements?.[0]?.date
-                ? new Date(alloc.cashBucket.movements[0].date)
-                : date
-              if (!anchorRaw || Number.isNaN(anchorRaw.getTime())) continue
-              if (!refRaw || Number.isNaN(refRaw.getTime())) continue
+            if (existingReceiptBucket?.id) {
+              await tx.cashBucket.update({
+                where: { id: existingReceiptBucket.id },
+                data: { balance: { increment: reduceBy } },
+              })
 
-              const anchor = new Date(anchorRaw.getFullYear(), anchorRaw.getMonth(), anchorRaw.getDate())
-              const referenceDay = new Date(refRaw.getFullYear(), refRaw.getMonth(), refRaw.getDate())
-              const completedAnchor = getLastCompletedHawlAnchor(anchor, referenceDay)
-
-              if (label.startsWith('Circlys Reward Receipt •')) {
-                rewardAnchors.push(completedAnchor)
-              } else if (label.startsWith('Savings Receipt •')) {
-                savingsAnchors.push(completedAnchor)
-              } else if (label.startsWith('Sukuk Principal •') || label.endsWith(' Principal Receipt')) {
-                principalAnchors.push(completedAnchor)
-              }
+              await tx.cashBucketMovement.create({
+                data: {
+                  cashBucketId: existingReceiptBucket.id,
+                  investmentId: investment.id,
+                  amount: reduceBy,
+                  type: 'WITHDRAW_PRINCIPAL',
+                  date,
+                  notes: notes || null,
+                },
+              })
+            } else {
+              await createCashBucket(tx, {
+                amount: reduceBy,
+                haulStartDate: allocationAnchor,
+                label: receiptLabel,
+                date,
+                notes: notes || null,
+                investmentId: investment.id,
+                type: 'WITHDRAW_PRINCIPAL',
+                excludeFromZakat: false,
+                personId: null,
+              })
             }
+
+            await tx.investmentBucketAllocation.update({
+              where: { id: alloc.id },
+              data: {
+                principalRemaining: Math.max(0, allocRemaining - reduceBy),
+                haulStartDate: (alloc as any).haulStartDate || allocationAnchor,
+              } as any,
+            })
+
+            remainingReduction = Math.max(0, remainingReduction - reduceBy)
           }
 
-          const startDay = (() => {
-            const raw = investment.startDate ? new Date(investment.startDate as any) : null
-            if (!raw || Number.isNaN(raw.getTime())) return date
-            return new Date(raw.getFullYear(), raw.getMonth(), raw.getDate())
-          })()
+          if (remainingReduction > 0.0001) {
+            throw new Error('PRINCIPAL_ALLOCATION_MISMATCH')
+          }
 
-          const latestRewardAnchor = rewardAnchors.length > 0
-            ? [...rewardAnchors].sort((a: Date, b: Date) => a.getTime() - b.getTime())[rewardAnchors.length - 1]
-            : null
-          const latestSavingsAnchor = savingsAnchors.length > 0
-            ? [...savingsAnchors].sort((a: Date, b: Date) => a.getTime() - b.getTime())[savingsAnchors.length - 1]
-            : null
-          const latestPrincipalAnchor = principalAnchors.length > 0
-            ? [...principalAnchors].sort((a: Date, b: Date) => a.getTime() - b.getTime())[principalAnchors.length - 1]
-            : null
-          const normalizedSavingsAnchor = savingsAnchor
-            ? getLastCompletedHawlAnchor(savingsAnchor, date)
-            : null
-
-          const derivedAnchor =
-            latestRewardAnchor ||
-            latestSavingsAnchor ||
-            latestPrincipalAnchor ||
-            normalizedSavingsAnchor ||
-            startDay
-
-          principalHaulStart = derivedAnchor
-
-          const derivedIso = `${derivedAnchor.getFullYear()}-${String(derivedAnchor.getMonth() + 1).padStart(2, '0')}-${String(derivedAnchor.getDate()).padStart(2, '0')}`
-          if (invMeta?.savingsHaulStartDate !== derivedIso) {
+          if (!savingsAnchor && firstAnchorUsed) {
+            const derivedIso = `${firstAnchorUsed.getFullYear()}-${String(firstAnchorUsed.getMonth() + 1).padStart(2, '0')}-${String(firstAnchorUsed.getDate()).padStart(2, '0')}`
             await tx.investment.update({
               where: { id: investment.id },
               data: {
@@ -563,43 +541,6 @@ export async function POST(
                 }),
               },
             })
-          }
-
-          await createCashBucket(tx, {
-            amount: amount,
-            haulStartDate: principalHaulStart,
-            label: `${investment.name} Principal Receipt`,
-            date: date,
-            notes: notes || null,
-            investmentId: investment.id,
-            type: 'WITHDRAW_PRINCIPAL',
-            excludeFromZakat: false,
-            personId: null,
-          })
-
-          // Reduce the allocation principal remaining (but don't delete the allocation)
-          const allocations = await tx.investmentBucketAllocation.findMany({
-            where: { investmentId: investment.id },
-            orderBy: { createdAt: 'asc' },
-          })
-
-          let remainingReduction = Math.max(0, amount)
-          for (const alloc of allocations) {
-            if (remainingReduction <= 0.0001) break
-            const allocRemaining = Math.max(0, Number(alloc.principalRemaining || 0))
-            if (allocRemaining <= 0.0001) continue
-
-            const reduceBy = Math.min(allocRemaining, remainingReduction)
-            await tx.investmentBucketAllocation.update({
-              where: { id: alloc.id },
-              data: { principalRemaining: Math.max(0, allocRemaining - reduceBy) },
-            })
-
-            remainingReduction = Math.max(0, remainingReduction - reduceBy)
-          }
-
-          if (remainingReduction > 0.0001) {
-            throw new Error('PRINCIPAL_ALLOCATION_MISMATCH')
           }
         } else {
           // For profit withdrawals, use default logic (Sukuk start date)

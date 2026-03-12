@@ -365,7 +365,25 @@ export async function POST(
               },
             },
           },
-          select: { id: true },
+          select: { id: true, metadata: true },
+        })
+
+        const rewardBucketMetadataObject = (() => {
+          const raw = existingRewardBucket?.metadata
+          if (!raw || typeof raw !== 'string') {
+            return {}
+          }
+          try {
+            const parsed = JSON.parse(raw)
+            return parsed && typeof parsed === 'object' ? parsed : {}
+          } catch {
+            return {}
+          }
+        })()
+        const rewardBucketMetadata = JSON.stringify({
+          ...rewardBucketMetadataObject,
+          firstContributionDate: firstContributionDate.toISOString().split('T')[0],
+          isRoscaReward: true,
         })
 
         const rewardBucket = existingRewardBucket ?? await tx.cashBucket.create({
@@ -375,8 +393,9 @@ export async function POST(
             balance: 0,
             haulStartDate: rewardHawlAnchor,
             excludeFromZakat: false,
+            metadata: rewardBucketMetadata,
           },
-          select: { id: true },
+          select: { id: true, metadata: true },
         })
 
         await tx.cashBucket.update({
@@ -384,6 +403,7 @@ export async function POST(
           data: {
             haulStartDate: rewardHawlAnchor,
             excludeFromZakat: false,
+            metadata: rewardBucketMetadata,
           },
         })
 

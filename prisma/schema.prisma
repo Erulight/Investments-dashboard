@@ -131,6 +131,7 @@ model InvestmentBucketAllocation {
   cashBucketId       String
   principalAllocated Float
   principalRemaining Float
+  haulStartDate      DateTime?
   createdAt          DateTime   @default(now())
   updatedAt          DateTime   @updatedAt
   cashBucket         CashBucket @relation(fields: [cashBucketId], references: [id], onDelete: Cascade)
@@ -139,6 +140,7 @@ model InvestmentBucketAllocation {
   @@unique([investmentId, cashBucketId])
   @@index([investmentId])
   @@index([cashBucketId])
+  @@index([haulStartDate])
 }
 
 model DealParticipant {

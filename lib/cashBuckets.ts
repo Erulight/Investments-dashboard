@@ -255,6 +255,7 @@ export const withdrawFromBuckets = async (
           data: {
             principalAllocated: existing.principalAllocated + used,
             principalRemaining: existing.principalRemaining + used,
+            haulStartDate: (existing as any).haulStartDate || bucket.haulStartDate,
           },
         })
       } else {
@@ -264,6 +265,7 @@ export const withdrawFromBuckets = async (
             cashBucketId: bucket.id,
             principalAllocated: used,
             principalRemaining: used,
+            haulStartDate: bucket.haulStartDate,
           },
         })
       }
@@ -317,6 +319,13 @@ export const creditBucketsForReceipt = async (
 
   const creditToAllocatedBuckets = async (creditAmount: number, reductionAmount: number) => {
     if (creditAmount <= 0) return
+
+    const normalizeDay = (value: unknown): Date | null => {
+      if (!value) return null
+      const raw = value instanceof Date ? value : new Date(value as any)
+      if (Number.isNaN(raw.getTime())) return null
+      return new Date(raw.getFullYear(), raw.getMonth(), raw.getDate())
+    }
 
     // For principal withdrawals from ROSCA-funded Sukuk, use savingsHaulStartDate
     // For profit withdrawals, use investment startDate
@@ -502,7 +511,9 @@ export const creditBucketsForReceipt = async (
 
         if (shouldCreateNewBucket) {
           // Create new bucket for principal withdrawal (not excluded from Zakat)
-          const haulStartDate = originalHaulDate || originalBucket.haulStartDate || date
+          const allocHaulStartDate = normalizeDay((alloc as any)?.haulStartDate)
+          const originalBucketHaulStart = normalizeDay(originalBucket.haulStartDate)
+          const haulStartDate = allocHaulStartDate || originalBucketHaulStart || originalHaulDate || date
           const newBucket = await createCashBucket(tx, {
             amount: cashShare,
             haulStartDate,
@@ -516,7 +527,7 @@ export const creditBucketsForReceipt = async (
 
           await tx.investmentBucketAllocation.update({
             where: { id: alloc.id },
-            data: { cashBucketId: newBucket.id },
+            data: { cashBucketId: newBucket.id, haulStartDate },
           })
         } else {
           // Credit back to the original bucket to preserve haul date
@@ -539,7 +550,9 @@ export const creditBucketsForReceipt = async (
       } else {
         // Original bucket was deleted, create new one with preserved haul date
         // Use originalHaulDate from INVEST_OUT movements if available
-        const haulStartDate = originalHaulDate || (alloc as any).cashBucket?.haulStartDate || date
+        const allocHaulStartDate = normalizeDay((alloc as any)?.haulStartDate)
+        const originalAllocBucketHaulStart = normalizeDay((alloc as any).cashBucket?.haulStartDate)
+        const haulStartDate = allocHaulStartDate || originalAllocBucketHaulStart || originalHaulDate || date
         const newBucket = await createCashBucket(tx, {
           amount: cashShare,
           haulStartDate,
@@ -552,7 +565,7 @@ export const creditBucketsForReceipt = async (
 
         await tx.investmentBucketAllocation.update({
           where: { id: alloc.id },
-          data: { cashBucketId: newBucket.id },
+          data: { cashBucketId: newBucket.id, haulStartDate },
         })
       }
 

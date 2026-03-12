@@ -854,6 +854,7 @@ export default async function ZakatPage() {
           select: {
             investmentId: true,
             cashBucketId: true,
+            haulStartDate: true,
             principalAllocated: true,
             principalRemaining: true,
             cashBucket: {
@@ -930,6 +931,7 @@ export default async function ZakatPage() {
           select: {
             investmentId: true,
             cashBucketId: true,
+            haulStartDate: true,
             cashBucket: {
               select: {
                 id: true,
@@ -1088,7 +1090,7 @@ export default async function ZakatPage() {
           const label = typeof alloc?.cashBucket?.label === 'string' ? alloc.cashBucket.label : ''
           return label.startsWith('Savings Receipt •')
         })
-        .map((alloc: any) => toDate(alloc?.cashBucket?.haulStartDate))
+        .map((alloc: any) => toDate(alloc?.haulStartDate || alloc?.cashBucket?.haulStartDate))
         .filter((d: Date | null): d is Date => Boolean(d && !Number.isNaN(d.getTime())))
         .map((d: Date) => new Date(d.getFullYear(), d.getMonth(), d.getDate()))
       const rewardRoscaAnchorFromAllocations = roscaAllocations
@@ -1096,7 +1098,7 @@ export default async function ZakatPage() {
           const label = typeof alloc?.cashBucket?.label === 'string' ? alloc.cashBucket.label : ''
           return label.startsWith('Circlys Reward Receipt •')
         })
-        .map((alloc: any) => toDate(alloc?.cashBucket?.haulStartDate))
+        .map((alloc: any) => toDate(alloc?.haulStartDate || alloc?.cashBucket?.haulStartDate))
         .filter((d: Date | null): d is Date => Boolean(d && !Number.isNaN(d.getTime())))
         .map((d: Date) => new Date(d.getFullYear(), d.getMonth(), d.getDate()))
       const savingsRoscaAnchorFromInvestOut = savingsRoscaInvestOutAnchorsByInvestmentId.get(sukukInv.id) || []
@@ -1128,7 +1130,7 @@ export default async function ZakatPage() {
       ) || null
 
       const principalAnchorFromAllocations = principalReceiptAllocations
-        .map((alloc: any) => toDate(alloc?.cashBucket?.haulStartDate))
+        .map((alloc: any) => toDate(alloc?.haulStartDate || alloc?.cashBucket?.haulStartDate))
         .filter((d: Date | null): d is Date => Boolean(d && !Number.isNaN(d.getTime())))
         .map((d: Date) => new Date(d.getFullYear(), d.getMonth(), d.getDate()))
       const principalAnchorFromInvestOut = principalInvestOutAnchorsByInvestmentId.get(sukukInv.id) || []
@@ -1177,11 +1179,11 @@ export default async function ZakatPage() {
       //   post-completion Sukuk hawl timelines.
       const hawlStart =
         rewardRoscaAnchor
-          ? getLastCompletedHawlAnchor(rewardRoscaAnchor, rewardReferenceDay)
+          ? rewardRoscaAnchor
           : savingsRoscaAnchor
             ? getLastCompletedHawlAnchor(savingsRoscaAnchor, savingsReferenceDay)
             : principalReceiptAnchor
-              ? getLastCompletedHawlAnchor(principalReceiptAnchor, principalReferenceDay)
+              ? principalReceiptAnchor
               : (existingSavingsAnchor || fallbackDay)
 
       ownerResolvedSukukHawlStartByInvestmentId.set(sukukInv.id, hawlStart)
@@ -1816,6 +1818,8 @@ export default async function ZakatPage() {
             const inv = investmentMap.get(invId)
             const maturityDate = inv?.maturityDate ? new Date(inv.maturityDate) : null
             const isActive = maturityDate && !Number.isNaN(maturityDate.getTime()) && maturityDate.getTime() > now.getTime()
+            const isMatured = maturityDate && !Number.isNaN(maturityDate.getTime()) && maturityDate.getTime() <= now.getTime()
+            const isClosedAndMatured = isDealClosed && Boolean(isMatured)
             
             return {
               investmentId: invId,
@@ -1824,9 +1828,10 @@ export default async function ZakatPage() {
               maturityDate,
               isActive,
               isDealClosed,
+              isClosedAndMatured,
             }
           })
-          .filter((x: any): x is { investmentId: string; investmentName: string; principalRemaining: number; maturityDate: Date | null; isActive: boolean; isDealClosed: boolean } => Boolean(x))
+          .filter((x: any): x is { investmentId: string; investmentName: string; principalRemaining: number; maturityDate: Date | null; isActive: boolean; isDealClosed: boolean; isClosedAndMatured: boolean } => Boolean(x))
 
         const sukukInvestedByAllocations = sukukAllocations.reduce(
           (sum: number, a: { principalRemaining: number }) => sum + a.principalRemaining,
@@ -1896,6 +1901,7 @@ export default async function ZakatPage() {
         // once ROSCA Hawl 1 completes, invested portion continues immediately under Sukuk.
         for (const alloc of sukukAllocations) {
           if (alloc.principalRemaining <= 0.0001) continue
+          if (!alloc.isClosedAndMatured) continue
 
           const continuityStart = startOfDay(firstHaulEnd)
           const elapsedContinuityDays = diffDaysFloor(continuityStart, now)
@@ -1913,8 +1919,7 @@ export default async function ZakatPage() {
               isoDay(periodEnd),
             ])
             const isPaid = movementHasRowPaid(payments, rowKey)
-            const isUpcomingUntilClosure = !alloc.isDealClosed
-            const zakatDue = !isPaid && !isUpcomingUntilClosure ? alloc.principalRemaining * 0.025 : 0
+            const zakatDue = !isPaid ? alloc.principalRemaining * 0.025 : 0
 
             savingsRows.push({
               id: rowKey,
@@ -1932,14 +1937,12 @@ export default async function ZakatPage() {
               receiptsTotal: 0,
               zakatDue,
               isPaid,
-              haulCompleted: !isUpcomingUntilClosure,
+              haulCompleted: true,
               source: alloc.investmentName,
               sourceGroup: `Sukuk Principal • ${alloc.investmentName}`,
               sourceType: 'SUKUK',
               rowKind: 'PRINCIPAL',
-              why: isUpcomingUntilClosure
-                ? `Sukuk principal continuity from ROSCA receipt (${isoDay(periodStart)} to ${isoDay(periodEnd)}). Upcoming: due only after Sukuk is closed.`
-                : `Sukuk principal continuity from ROSCA receipt (${isoDay(periodStart)} to ${isoDay(periodEnd)}). Deal closed: Zakat due now.`,
+              why: `Sukuk principal continuity from ROSCA receipt (${isoDay(periodStart)} to ${isoDay(periodEnd)}). Deal closed and matured: Zakat due now.`,
               lastPayment: lastPayment
                 ? {
                     id: lastPayment.id,
@@ -1996,6 +1999,12 @@ export default async function ZakatPage() {
           if (isPrincipalReceiptMovement && inv?.account?.type === 'SUKUK') {
             const currentPrincipal = Math.max(0, Number(inv?.principalAmount || 0))
             if (currentPrincipal > 0.0001) return null
+            const maturityRaw = inv?.maturityDate ? new Date(inv.maturityDate as any) : null
+            const matured =
+              maturityRaw &&
+              !Number.isNaN(maturityRaw.getTime()) &&
+              maturityRaw.getTime() <= now.getTime()
+            if (!matured) return null
           }
 
           // Principal/profit receipts from ROSCA-funded Sukuk inherit the resolved running
