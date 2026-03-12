@@ -1595,15 +1595,16 @@ export default async function ZakatPage() {
           return {
             time: day.getTime(),
             amount,
+            type: movementType,
           }
         })
-        .filter((x: { time: number; amount: number } | null): x is { time: number; amount: number } => Boolean(x))
+        .filter((x: { time: number; amount: number; type: string } | null): x is { time: number; amount: number; type: string } => Boolean(x))
       const sumHawlOutflowsBetween = (periodStart: Date, periodEnd: Date) => {
         const startTime = startOfDay(periodStart).getTime()
         const endTime = startOfDay(periodEnd).getTime()
         if (!Number.isFinite(startTime) || !Number.isFinite(endTime) || endTime < startTime) return 0
 
-        return hawlOutflowEvents.reduce((sum: number, evt: { time: number; amount: number }) => {
+        return hawlOutflowEvents.reduce((sum: number, evt: { time: number; amount: number; type: string }) => {
           if (evt.time < startTime) return sum
           // Inclusive end boundary so same-day spend/withdrawal is treated as not held for full hawl.
           if (evt.time > endTime) return sum
@@ -1712,9 +1713,23 @@ export default async function ZakatPage() {
         const firstHaulCompleted = now.getTime() >= firstHaulEnd.getTime()
         const firstRowKey = buildRowKey(['ROSCA_RECEIPT', isRewardReceiptBucket ? 'REWARD' : 'SAVINGS', bucket.id])
         const firstIsPaid = movementHasRowPaid(payments, firstRowKey)
+        const firstHawlStartTime = startOfDay(firstHawlStart).getTime()
+        const firstHawlEndTime = startOfDay(firstHaulEnd).getTime()
+        const outflowsBeforeFirstHawlEnd = hawlOutflowEvents.reduce(
+          (sum: number, evt: { time: number; amount: number; type: string }) => {
+            if (evt.time < firstHawlStartTime) return sum
+            if (evt.time > firstHawlEndTime) return sum
+
+            // Savings rollover to Sukuk on hawl-end day starts the next cycle; keep Hawl 1 visible.
+            if (!isRewardReceiptBucket && evt.time === firstHawlEndTime && evt.type === 'INVEST_OUT') return sum
+
+            return sum + evt.amount
+          },
+          0,
+        )
         const withdrawnBeforeFirstHawlEnd = Math.max(
           effectiveSukukInvested,
-          sumHawlOutflowsBetween(firstHawlStart, firstHaulEnd),
+          outflowsBeforeFirstHawlEnd,
         )
         const firstHawlZakatBase = Math.max(0, totalReceived - withdrawnBeforeFirstHawlEnd)
         if (firstHawlZakatBase > 0.01) {
