@@ -4,13 +4,14 @@ import { getCurrentUser } from '@/lib/auth'
 import { prisma } from '@/lib/db'
 import { requireModuleAccess } from '@/lib/rbac'
 import { DISPLAY_CURRENCY_KEY, formatCurrencyAmount, normalizeDisplayCurrency } from '@/lib/currency'
+import { redirect } from 'next/navigation'
 
 export default async function SavingsPage() {
   await requireModuleAccess('savings')
   const user = await getCurrentUser()
   
   if (!user) {
-    return null
+    redirect('/login')
   }
 
   const displayCurrencySetting = await prisma.systemSetting.findUnique({

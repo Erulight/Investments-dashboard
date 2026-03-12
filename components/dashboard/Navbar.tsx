@@ -30,6 +30,7 @@ type PermissionMap = Record<string, boolean>
 const navigation: NavItem[] = [
   { name: 'Dashboard', href: '/dashboard', icon: '📊' },
   { name: 'Cash Ledger', href: '/cash-ledger', roles: ['OWNER', 'PARTNER'], icon: '💵' },
+  { name: 'Personal Ledger', href: '/personal-ledger', roles: ['OWNER'], icon: '📒' },
   { name: 'Debts', href: '/debts', roles: ['OWNER'], icon: '💳' },
   {
     name: 'Zakat',

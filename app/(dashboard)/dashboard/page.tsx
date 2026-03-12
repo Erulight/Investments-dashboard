@@ -1103,14 +1103,18 @@ export default async function DashboardPage({
       const txs = await prisma.transaction.findMany({
         where: {
           accountId: cashAccount.id,
-          ...ownerTxScope,
           date: { gte: yearStart, lt: yearEnd },
           type: {
             in: ['WITHDRAW_PROFIT', 'SELL_PROFIT_ACCRUED', 'PARTNER_COMMISSION'],
           },
-          OR: [
-            { investment: { name: { notIn: DEMO_INVESTMENT_NAMES } } },
-            { investmentId: null },
+          AND: [
+            ownerTxScope,
+            {
+              OR: [
+                { investment: { name: { notIn: DEMO_INVESTMENT_NAMES } } },
+                { investmentId: null },
+              ],
+            },
           ],
         } as any,
         select: { amount: true, type: true, personId: true, description: true, date: true },
@@ -1269,13 +1273,17 @@ export default async function DashboardPage({
     if (user.role === 'OWNER') {
       const txs = await prisma.transaction.findMany({
         where: {
-          ...ownerTxScope,
           date: { lt: yearEnd },
-          OR: [
-            { investment: { name: { notIn: DEMO_INVESTMENT_NAMES } } },
-            { investmentId: null },
+          AND: [
+            ownerTxScope,
+            {
+              OR: [
+                { investment: { name: { notIn: DEMO_INVESTMENT_NAMES } } },
+                { investmentId: null },
+              ],
+            },
           ],
-        },
+        } as any,
         orderBy: { date: 'desc' },
         take,
         select: {

@@ -291,3 +291,20 @@ model Snapshot {
   @@index([createdAt])
   @@index([trigger])
 }
+
+model PersonalTransaction {
+  id          String   @id @default(cuid())
+  date        DateTime
+  type        String   // 'INCOME' | 'EXPENSE'
+  category    String
+  amount      Float
+  currency    String   @default("SAR")
+  description String?
+  notes       String?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  @@index([date])
+  @@index([type])
+  @@index([category])
+}

@@ -2,13 +2,14 @@ import { getCurrentUser } from '@/lib/auth'
 import { prisma } from '@/lib/db'
 import { requireModuleAccess } from '@/lib/rbac'
 import { CryptoPortfolioClient } from '@/components/crypto/CryptoPortfolioClient'
+import { redirect } from 'next/navigation'
 
 export default async function CryptoPage() {
   await requireModuleAccess('crypto')
   const user = await getCurrentUser()
   
   if (!user) {
-    return null
+    redirect('/login')
   }
 
   const portfolio = await prisma.investment.findFirst({

@@ -4,6 +4,7 @@ import { requireModuleAccess } from '@/lib/rbac'
 import { ZakatPageClient } from '@/components/zakat/ZakatPageClient'
 import { recomputeCashSetting } from '@/lib/cashBalance'
 import { DISPLAY_CURRENCY_KEY, formatCurrencyAmount, normalizeDisplayCurrency } from '@/lib/currency'
+import { redirect } from 'next/navigation'
 
 export const dynamic = 'force-dynamic'
 
@@ -245,7 +246,7 @@ export default async function ZakatPage() {
   await requireModuleAccess('zakat')
   const user = await getCurrentUser()
   if (!user) {
-    return null
+    redirect('/login')
   }
   const displayCurrencySetting = await prisma.systemSetting.findUnique({
     where: { key: DISPLAY_CURRENCY_KEY },

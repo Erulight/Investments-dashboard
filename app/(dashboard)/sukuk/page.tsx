@@ -11,6 +11,7 @@ import {
   getCurrencyPrefix,
   normalizeDisplayCurrency,
 } from '@/lib/currency'
+import { redirect } from 'next/navigation'
 
 export const dynamic = 'force-dynamic'
 export const revalidate = 0
@@ -20,7 +21,7 @@ export default async function InvestmentsPage() {
   const user = await getCurrentUser()
   
   if (!user) {
-    return null
+    redirect('/login')
   }
 
   const displayCurrencySetting = await prisma.systemSetting.findUnique({
