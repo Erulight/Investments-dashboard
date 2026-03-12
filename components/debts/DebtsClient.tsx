@@ -337,6 +337,11 @@ export function DebtsClient() {
       <div className="bg-gradient-to-r from-slate-800 to-slate-900 rounded-xl shadow-md p-6 text-white">
         <h1 className="text-2xl font-bold">Debts</h1>
         <p className="text-sm text-slate-400 mt-1">Record external debts, partial payments, and track outstanding balances.</p>
+        <div className="mt-4">
+          <Button size="sm" variant="secondary" onClick={() => router.push('/debts/manual-ledger')}>
+            Open Manual Debt Notes
+          </Button>
+        </div>
         <div className="grid grid-cols-2 lg:grid-cols-6 gap-3 mt-4">
           <AnimatedCard index={0} className="bg-white/5 border border-white/10 p-3" hover={false}>
             <div className="text-[11px] text-slate-400 uppercase tracking-wider">Borrowed</div>
