@@ -1088,7 +1088,12 @@ export default async function ZakatPage() {
           const label = typeof alloc?.cashBucket?.label === 'string' ? alloc.cashBucket.label : ''
           return label.startsWith('Savings Receipt •')
         })
-        .map((alloc: any) => toDate(alloc?.cashBucket?.haulStartDate))
+        .map((alloc: any) => {
+          const firstReceiptRaw = Array.isArray(alloc?.cashBucket?.movements)
+            ? toDate(alloc.cashBucket.movements[0]?.date)
+            : null
+          return firstReceiptRaw || toDate(alloc?.cashBucket?.haulStartDate)
+        })
         .filter((d: Date | null): d is Date => Boolean(d && !Number.isNaN(d.getTime())))
         .map((d: Date) => new Date(d.getFullYear(), d.getMonth(), d.getDate()))
       const rewardRoscaAnchorFromAllocations = roscaAllocations
@@ -1150,8 +1155,14 @@ export default async function ZakatPage() {
         ? new Date(sukukStartRaw.getFullYear(), sukukStartRaw.getMonth(), sukukStartRaw.getDate())
         : fallbackDay
 
-      const rewardRoscaAnchor = rewardRoscaAnchors[0] || relatedRewardReceiptAnchors[0] || sameNameRewardAnchor || null
-      const savingsRoscaAnchor = savingsRoscaAnchors[0] || null
+      const rewardRoscaAnchor = rewardRoscaAnchors.length > 0
+        ? rewardRoscaAnchors[rewardRoscaAnchors.length - 1]
+        : (relatedRewardReceiptAnchors.length > 0
+          ? relatedRewardReceiptAnchors[relatedRewardReceiptAnchors.length - 1]
+          : (sameNameRewardAnchor || null))
+      const savingsRoscaAnchor = savingsRoscaAnchors.length > 0
+        ? savingsRoscaAnchors[savingsRoscaAnchors.length - 1]
+        : null
       const principalReceiptAnchor = principalReceiptAnchors.length > 0
         ? principalReceiptAnchors[principalReceiptAnchors.length - 1]
         : null

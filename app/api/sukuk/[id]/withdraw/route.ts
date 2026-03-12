@@ -443,6 +443,12 @@ export async function POST(
                 select: {
                   label: true,
                   haulStartDate: true,
+                  movements: {
+                    where: { type: 'CASH_IN' },
+                    select: { date: true },
+                    orderBy: { date: 'asc' },
+                    take: 1,
+                  },
                 },
               },
             },
@@ -461,8 +467,17 @@ export async function POST(
             if (!movementRaw || Number.isNaN(movementRaw.getTime())) continue
 
             const anchor = new Date(anchorRaw.getFullYear(), anchorRaw.getMonth(), anchorRaw.getDate())
+            const firstCashInRaw = movement?.cashBucket?.movements?.[0]?.date
+              ? new Date(movement.cashBucket.movements[0].date)
+              : null
+            const firstCashInAnchor = firstCashInRaw && !Number.isNaN(firstCashInRaw.getTime())
+              ? new Date(firstCashInRaw.getFullYear(), firstCashInRaw.getMonth(), firstCashInRaw.getDate())
+              : null
+            const baseAnchor = label.startsWith('Savings Receipt •') && firstCashInAnchor
+              ? firstCashInAnchor
+              : anchor
             const movementDay = new Date(movementRaw.getFullYear(), movementRaw.getMonth(), movementRaw.getDate())
-            const completedAnchor = getLastCompletedHawlAnchor(anchor, movementDay)
+            const completedAnchor = getLastCompletedHawlAnchor(baseAnchor, movementDay)
 
             if (label.startsWith('Circlys Reward Receipt •')) {
               rewardAnchors.push(completedAnchor)
@@ -539,15 +554,12 @@ export async function POST(
           const latestPrincipalAnchor = principalAnchors.length > 0
             ? [...principalAnchors].sort((a: Date, b: Date) => a.getTime() - b.getTime())[principalAnchors.length - 1]
             : null
-          const normalizedSavingsAnchor = savingsAnchor
-            ? getLastCompletedHawlAnchor(savingsAnchor, date)
-            : null
 
           const derivedAnchor =
             latestRewardAnchor ||
             latestSavingsAnchor ||
             latestPrincipalAnchor ||
-            normalizedSavingsAnchor ||
+            savingsAnchor ||
             startDay
 
           principalHaulStart = derivedAnchor
