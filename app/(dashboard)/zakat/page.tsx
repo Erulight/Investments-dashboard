@@ -275,6 +275,7 @@ export default async function ZakatPage() {
   const nisabValue = nisabRaw !== null && Number.isFinite(nisabRaw) && nisabRaw > 0 ? nisabRaw : null
 
   const ownerPersonId = user.role === 'OWNER' ? (user.personId || null) : null
+  const ownerResolvedSukukHawlStartByInvestmentId = new Map<string, Date>()
   const scopeKey = user.role === 'OWNER' ? 'OWNER' : user.personId!
   const nisabMetKey = `NISAB_MET_SINCE:${scopeKey}`
 
@@ -933,6 +934,34 @@ export default async function ZakatPage() {
         })
       : []
 
+    const allOwnerRewardReceiptBuckets = await prisma.cashBucket.findMany({
+      where: {
+        ...(ownerPersonId
+          ? { OR: [{ personId: ownerPersonId }, { personId: null }] }
+          : { personId: null }),
+        label: { startsWith: 'Circlys Reward Receipt •' },
+      },
+      select: {
+        label: true,
+        haulStartDate: true,
+      },
+    })
+
+    const rewardReceiptAnchorBySavingsName = new Map<string, Date>()
+    for (const bucket of allOwnerRewardReceiptBuckets) {
+      const label = typeof bucket?.label === 'string' ? bucket.label : ''
+      const match = label.match(/^Circlys Reward Receipt • (.+)$/)
+      const savingsName = match?.[1]?.trim()
+      if (!savingsName) continue
+      const rawAnchor = toDate(bucket?.haulStartDate)
+      if (!rawAnchor || Number.isNaN(rawAnchor.getTime())) continue
+      const anchorDay = new Date(rawAnchor.getFullYear(), rawAnchor.getMonth(), rawAnchor.getDate())
+      const existing = rewardReceiptAnchorBySavingsName.get(savingsName)
+      if (!existing || anchorDay.getTime() < existing.getTime()) {
+        rewardReceiptAnchorBySavingsName.set(savingsName, anchorDay)
+      }
+    }
+
     const roscaAllocationsByInvestmentId = new Map<string, any[]>()
     for (const alloc of allSukukRoscaAllocations) {
       const investmentId = typeof alloc?.investmentId === 'string' ? alloc.investmentId : null
@@ -1056,6 +1085,19 @@ export default async function ZakatPage() {
         .sort((a: Date, b: Date) => a.getTime() - b.getTime())
       const rewardRoscaAnchors = [...rewardRoscaAnchorFromAllocations, ...rewardRoscaAnchorFromInvestOut]
         .sort((a: Date, b: Date) => a.getTime() - b.getTime())
+      const circlysContributionNames = Array.from(new Set(
+        roscaAllocations
+          .map((alloc: any) => {
+            const label = typeof alloc?.cashBucket?.label === 'string' ? alloc.cashBucket.label : ''
+            const match = label.match(/^Circlys • (.+?) • /)
+            return match?.[1]?.trim() || null
+          })
+          .filter((name: string | null): name is string => Boolean(name))
+      ))
+      const relatedRewardReceiptAnchors = circlysContributionNames
+        .map((name: string) => rewardReceiptAnchorBySavingsName.get(name) || null)
+        .filter((d: Date | null): d is Date => Boolean(d))
+        .sort((a: Date, b: Date) => a.getTime() - b.getTime())
 
       const principalAnchorFromAllocations = principalReceiptAllocations
         .map((alloc: any) => toDate(alloc?.cashBucket?.haulStartDate))
@@ -1080,7 +1122,7 @@ export default async function ZakatPage() {
         ? new Date(sukukStartRaw.getFullYear(), sukukStartRaw.getMonth(), sukukStartRaw.getDate())
         : fallbackDay
 
-      const rewardRoscaAnchor = rewardRoscaAnchors[0] || null
+      const rewardRoscaAnchor = rewardRoscaAnchors[0] || relatedRewardReceiptAnchors[0] || null
       const savingsRoscaAnchor = savingsRoscaAnchors[0] || null
       const principalReceiptAnchor = principalReceiptAnchors[0] || null
       const savingsFundingDates = (savingsRoscaFundingDatesByInvestmentId.get(sukukInv.id) || [])
@@ -1105,6 +1147,8 @@ export default async function ZakatPage() {
             : principalReceiptAnchor
               ? getLastCompletedHawlAnchor(principalReceiptAnchor, principalReferenceDay)
               : (existingSavingsAnchor || fallbackDay)
+
+      ownerResolvedSukukHawlStartByInvestmentId.set(sukukInv.id, hawlStart)
 
       // Persist hawl start in investment metadata
       const hawlIso = hawlStart.toISOString().split('T')[0]
@@ -1853,8 +1897,13 @@ export default async function ZakatPage() {
           if (Number.isNaN(start.getTime())) return null
           const invMetadata = parseMetadata(inv?.metadata)
           const inheritedSavingsHaulStart = toDate(invMetadata?.savingsHaulStartDate)
+          const resolvedOwnerAnchor = user.role === 'OWNER' && inv?.id
+            ? ownerResolvedSukukHawlStartByInvestmentId.get(inv.id as string) || null
+            : null
           const ownerSukukAnchor =
-            inheritedSavingsHaulStart && !Number.isNaN(inheritedSavingsHaulStart.getTime())
+            resolvedOwnerAnchor && !Number.isNaN(resolvedOwnerAnchor.getTime())
+              ? resolvedOwnerAnchor
+              : inheritedSavingsHaulStart && !Number.isNaN(inheritedSavingsHaulStart.getTime())
               ? inheritedSavingsHaulStart
               : start
           const movementType = typeof m?.type === 'string' ? m.type : ''
