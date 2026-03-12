@@ -80,6 +80,12 @@ const receiptTypes = new Set([
   'SELL_RECEIPT',
 ])
 
+const hawlOutflowTypes = new Set([
+  'CASH_OUT',
+  'INVEST_OUT',
+  'DEBT_OUT',
+])
+
 const toDate = (value?: string | Date | null) => {
   if (!value) return null
   if (value instanceof Date) return value
@@ -1572,6 +1578,35 @@ export default async function ZakatPage() {
       const lastPayment = payments[0]
 
       const movements = Array.isArray(bucket.movements) ? bucket.movements : []
+      const hawlOutflowEvents = movements
+        .map((m: any) => {
+          const movementType = typeof m?.type === 'string' ? m.type : ''
+          if (!hawlOutflowTypes.has(movementType)) return null
+
+          const day = movementDay(m)
+          if (!day) return null
+
+          const amount = Math.abs(Number(m?.amount) || 0)
+          if (amount <= 0) return null
+
+          return {
+            time: day.getTime(),
+            amount,
+          }
+        })
+        .filter((x: { time: number; amount: number } | null): x is { time: number; amount: number } => Boolean(x))
+      const sumHawlOutflowsBetween = (periodStart: Date, periodEnd: Date) => {
+        const startTime = startOfDay(periodStart).getTime()
+        const endTime = startOfDay(periodEnd).getTime()
+        if (!Number.isFinite(startTime) || !Number.isFinite(endTime) || endTime < startTime) return 0
+
+        return hawlOutflowEvents.reduce((sum: number, evt: { time: number; amount: number }) => {
+          if (evt.time < startTime) return sum
+          // Inclusive end boundary so same-day spend/withdrawal is treated as not held for full hawl.
+          if (evt.time > endTime) return sum
+          return sum + evt.amount
+        }, 0)
+      }
       const treatCashInAsReceipt = isImmediateReceiptBucket || isRewardReceiptBucket
       const receiptMovements = movements.filter((m: any) => {
         if (!isReceiptMovement(m, treatCashInAsReceipt)) return false
@@ -1660,52 +1695,58 @@ export default async function ZakatPage() {
 
         const effectiveSukukInvested = Math.max(sukukInvestedDuringFirstHawl, sukukInvestedByMetadata)
 
-        // First hawl: ROSCA Hawl 1 from first contribution to receipt completion
-        // BUSINESS RULE: Show FULL receipt amount, NOT reduced by Sukuk investment
+        // First hawl: ROSCA Hawl 1 from first contribution to receipt completion.
+        // Only amount still held through hawl completion is zakatable.
         const firstHaulCompleted = now.getTime() >= firstHaulEnd.getTime()
         const firstRowKey = buildRowKey(['ROSCA_RECEIPT', isRewardReceiptBucket ? 'REWARD' : 'SAVINGS', bucket.id])
         const firstIsPaid = movementHasRowPaid(payments, firstRowKey)
-        const firstHawlZakatBase = totalReceived  // FULL amount, not reduced
-        const firstZakatDue = !firstIsPaid && firstHaulCompleted && firstHawlZakatBase > 0 ? firstHawlZakatBase * 0.025 : 0
+        const withdrawnBeforeFirstHawlEnd = Math.max(
+          effectiveSukukInvested,
+          sumHawlOutflowsBetween(firstHawlStart, firstHaulEnd),
+        )
+        const firstHawlZakatBase = Math.max(0, totalReceived - withdrawnBeforeFirstHawlEnd)
+        if (firstHawlZakatBase > 0.01) {
+          const firstZakatDue = !firstIsPaid && firstHaulCompleted && firstHawlZakatBase > 0 ? firstHawlZakatBase * 0.025 : 0
 
-        savingsRows.push({
-          id: firstRowKey,
-          bucketId: bucket.id,
-          periodIndex: 0,
-          label: `${roscaLabelPrefix} • ${investmentName}`,
-          currency: bucket.currency,
-          balance: firstHawlZakatBase,
-          haulStartDate: isoDay(firstHawlStart),
-          lastZakatPaidDate: bucket.lastZakatPaidDate
-            ? bucket.lastZakatPaidDate.toISOString().split('T')[0]
-            : null,
-          haulCompleteDate: isoDay(firstHaulEnd),
-          idleBase: 0,
-          receiptsTotal: firstHawlZakatBase,
-          zakatDue: firstZakatDue,
-          isPaid: firstIsPaid,
-          haulCompleted: firstHaulCompleted,
-          source: investmentName,
-          sourceGroup: sourceGroupLabel,
-          sourceType: 'CIRCLYS',
-          rowKind: isRewardReceiptBucket ? ('REWARD' as const) : ('RECEIPT' as const),
-          why: effectiveSukukInvested > 0
-            ? `ROSCA Hawl 1: Full receipt ${bucket.currency} ${totalReceived.toLocaleString()} from ${isoDay(firstHawlStart)} to ${isoDay(firstHaulEnd)}. ${effectiveSukukInvested.toLocaleString()} invested in Sukuk.`
-            : `ROSCA Hawl 1: Receipt ${bucket.currency} ${totalReceived.toLocaleString()} from ${isoDay(firstHawlStart)} to ${isoDay(firstHaulEnd)}`,
-          lastPayment: lastPayment
-            ? {
-                id: lastPayment.id,
-                date: new Date(lastPayment.date).toISOString().split('T')[0],
-                amount: Math.abs(Number(lastPayment.amount || 0)),
-              }
-            : null,
-          dueReceipts: [{
-            date: isoDay(receiptDate),
-            amount: totalReceived,
-            type: 'CASH_IN',
-            investmentName,
-          }],
-        })
+          savingsRows.push({
+            id: firstRowKey,
+            bucketId: bucket.id,
+            periodIndex: 0,
+            label: `${roscaLabelPrefix} • ${investmentName}`,
+            currency: bucket.currency,
+            balance: firstHawlZakatBase,
+            haulStartDate: isoDay(firstHawlStart),
+            lastZakatPaidDate: bucket.lastZakatPaidDate
+              ? bucket.lastZakatPaidDate.toISOString().split('T')[0]
+              : null,
+            haulCompleteDate: isoDay(firstHaulEnd),
+            idleBase: 0,
+            receiptsTotal: firstHawlZakatBase,
+            zakatDue: firstZakatDue,
+            isPaid: firstIsPaid,
+            haulCompleted: firstHaulCompleted,
+            source: investmentName,
+            sourceGroup: sourceGroupLabel,
+            sourceType: 'CIRCLYS',
+            rowKind: isRewardReceiptBucket ? ('REWARD' as const) : ('RECEIPT' as const),
+            why: withdrawnBeforeFirstHawlEnd > 0
+              ? `ROSCA Hawl 1: ${bucket.currency} ${totalReceived.toLocaleString()} received from ${isoDay(firstHawlStart)} to ${isoDay(firstHaulEnd)}. ${withdrawnBeforeFirstHawlEnd.toLocaleString()} withdrawn/spent before hawl completion. Zakatable: ${firstHawlZakatBase.toLocaleString()}.`
+              : `ROSCA Hawl 1: Receipt ${bucket.currency} ${totalReceived.toLocaleString()} from ${isoDay(firstHawlStart)} to ${isoDay(firstHaulEnd)}`,
+            lastPayment: lastPayment
+              ? {
+                  id: lastPayment.id,
+                  date: new Date(lastPayment.date).toISOString().split('T')[0],
+                  amount: Math.abs(Number(lastPayment.amount || 0)),
+                }
+              : null,
+            dueReceipts: [{
+              date: isoDay(receiptDate),
+              amount: firstHawlZakatBase,
+              type: 'CASH_IN',
+              investmentName,
+            }],
+          })
+        }
 
         // After first hawl, continue the same hawl timeline.
         // If part of savings was moved into Sukuk principal, continue that portion under Sukuk.
@@ -1768,7 +1809,7 @@ export default async function ZakatPage() {
         )
         const savingsIdleBase = Math.max(0, baseForSecondAndLater - sukukInvestedBase)
 
-        if (firstHaulCompleted && savingsIdleBase > 0) {
+        if (firstHaulCompleted) {
           const idleStart = firstHaulEnd
           const elapsedSinceFirstHawl = diffDaysFloor(idleStart, now)
           const completedIdleHawls = Math.floor(elapsedSinceFirstHawl / 354)
@@ -1778,43 +1819,47 @@ export default async function ZakatPage() {
             const periodEnd = addDays(idleStart, (i + 1) * 354)
             const idleDays = diffDaysFloor(periodStart, periodEnd)
 
-            if (savingsIdleBase > 0) {
-              const rowKey = buildRowKey(['SAVINGS_IDLE', bucket.id, isoDay(periodStart), isoDay(periodEnd)])
-              const isPaid = movementHasRowPaid(payments, rowKey)
-              const zakatDue = !isPaid ? savingsIdleBase * 0.025 : 0
+            const withdrawnBeforePeriodEnd = sumHawlOutflowsBetween(firstHawlStart, periodEnd)
+            const heldForFullHawl = Math.max(0, baseForSecondAndLater - withdrawnBeforePeriodEnd)
+            if (heldForFullHawl <= 0.01) continue
 
-              savingsRows.push({
-                id: rowKey,
-                bucketId: bucket.id,
-                periodIndex: i + 1,
-                label: `Idle • ${roscaLabelPrefix} • ${investmentName} • ${isoDay(periodStart)} → ${isoDay(periodEnd)}`,
-                currency: bucket.currency,
-                balance: savingsIdleBase,
-                haulStartDate: isoDay(periodStart),
-                lastZakatPaidDate: bucket.lastZakatPaidDate
-                  ? bucket.lastZakatPaidDate.toISOString().split('T')[0]
-                  : null,
-                haulCompleteDate: isoDay(periodEnd),
-                idleBase: savingsIdleBase,
-                receiptsTotal: 0,
-                zakatDue,
-                isPaid,
-                haulCompleted: now.getTime() >= periodEnd.getTime(),
-                source: investmentName,
-                sourceGroup: sourceGroupLabel,
-                sourceType: 'CIRCLYS',
-                rowKind: 'IDLE',
-                why: `Cash idle from ${isoDay(periodStart)} to ${isoDay(periodEnd)} (${idleDays} days)`,
-                lastPayment: lastPayment
-                  ? {
-                      id: lastPayment.id,
-                      date: new Date(lastPayment.date).toISOString().split('T')[0],
-                      amount: Math.abs(Number(lastPayment.amount || 0)),
-                    }
-                  : null,
-                dueReceipts: [],
-              })
-            }
+            const rowKey = buildRowKey(['SAVINGS_IDLE', bucket.id, isoDay(periodStart), isoDay(periodEnd)])
+            const isPaid = movementHasRowPaid(payments, rowKey)
+            const zakatDue = !isPaid ? heldForFullHawl * 0.025 : 0
+
+            savingsRows.push({
+              id: rowKey,
+              bucketId: bucket.id,
+              periodIndex: i + 1,
+              label: `Idle • ${roscaLabelPrefix} • ${investmentName} • ${isoDay(periodStart)} → ${isoDay(periodEnd)}`,
+              currency: bucket.currency,
+              balance: heldForFullHawl,
+              haulStartDate: isoDay(periodStart),
+              lastZakatPaidDate: bucket.lastZakatPaidDate
+                ? bucket.lastZakatPaidDate.toISOString().split('T')[0]
+                : null,
+              haulCompleteDate: isoDay(periodEnd),
+              idleBase: heldForFullHawl,
+              receiptsTotal: 0,
+              zakatDue,
+              isPaid,
+              haulCompleted: now.getTime() >= periodEnd.getTime(),
+              source: investmentName,
+              sourceGroup: sourceGroupLabel,
+              sourceType: 'CIRCLYS',
+              rowKind: 'IDLE',
+              why: withdrawnBeforePeriodEnd > 0
+                ? `Cash idle from ${isoDay(periodStart)} to ${isoDay(periodEnd)} (${idleDays} days), reduced by ${withdrawnBeforePeriodEnd.toLocaleString()} withdrawn/spent before hawl end.`
+                : `Cash idle from ${isoDay(periodStart)} to ${isoDay(periodEnd)} (${idleDays} days)`,
+              lastPayment: lastPayment
+                ? {
+                    id: lastPayment.id,
+                    date: new Date(lastPayment.date).toISOString().split('T')[0],
+                    amount: Math.abs(Number(lastPayment.amount || 0)),
+                  }
+                : null,
+              dueReceipts: [],
+            })
           }
         }
 
@@ -1983,12 +2028,16 @@ export default async function ZakatPage() {
 
         const rowKey = buildRowKey(['RECEIPT', bucket.id, r.movementId])
         const isPaid = movementHasRowPaid(payments, rowKey)
-        const zakatBase = r.amount
+        // For receipt rows, hawl completes on receipt day itself.
+        // Only same-day outflows can reduce this row's zakat base.
+        const withdrawnBeforeHawlEnd = sumHawlOutflowsBetween(r.receiptDay, r.receiptDay)
+        const zakatBase = Math.max(0, r.amount - withdrawnBeforeHawlEnd)
+        if (zakatBase <= 0.01) return
         const zakatDue = !isPaid && zakatBase > 0 ? zakatBase * 0.025 : 0
         const dueReceipts = [
           {
             date: isoDay(r.receiptDay),
-            amount: Number(r.movement.amount || 0),
+            amount: zakatBase,
             type: r.movement.type,
             investmentName: r.investmentName,
           },
@@ -2001,6 +2050,9 @@ export default async function ZakatPage() {
           : rowKind === 'PRINCIPAL'
             ? `Principal received on ${isoDay(r.receiptDay)}, investment ran ${daysHeld} days (\u2265354)`
             : `Profit received on ${isoDay(r.receiptDay)}, investment ran ${daysHeld} days (\u2265354)`
+        const whyWithOutflow = withdrawnBeforeHawlEnd > 0
+          ? `${why}. Reduced by ${withdrawnBeforeHawlEnd.toLocaleString()} withdrawn/spent before hawl completion.`
+          : why
         bucketRows.push({
           id: rowKey,
           bucketId: bucket.id,
@@ -2022,7 +2074,7 @@ export default async function ZakatPage() {
           sourceGroup,
           sourceType,
           rowKind,
-          why,
+          why: whyWithOutflow,
           lastPayment: lastPayment
             ? {
                 id: lastPayment.id,
@@ -2036,20 +2088,10 @@ export default async function ZakatPage() {
 
       const completedIdleRows: BucketRow[] = []
       qualifyingReceipts.forEach((r) => {
-        // Check if this receipt was reinvested after receipt date
+        // Check if this receipt was withdrawn/spent after receipt date.
         const receiptTime = r.receiptDay.getTime()
-        const investOutEvents = movements
-          .filter((m: any) => m?.type === 'INVEST_OUT')
-          .map((m: any) => {
-            const movementDate = m?.date ? new Date(m.date) : null
-            const time = movementDate && !Number.isNaN(movementDate.getTime())
-              ? new Date(movementDate.getFullYear(), movementDate.getMonth(), movementDate.getDate()).getTime()
-              : null
-            const amount = Math.abs(Number(m?.amount) || 0)
-            return time != null && amount > 0 ? { time, amount } : null
-          })
-          .filter((x: { time: number; amount: number } | null): x is { time: number; amount: number } => Boolean(x))
-          // Include same-day INVEST_OUT as reinvestment so Sukuk-funded amounts are not treated as idle.
+        const outflowEvents = hawlOutflowEvents
+          // Include same-day outflows so money moved on hawl-end day is not treated as idle.
           .filter((x: { time: number; amount: number }) => x.time >= receiptTime)
 
         // If receipt itself completed the first hawl (>=354), the receipt row already shows Zakat for that period.
@@ -2079,11 +2121,11 @@ export default async function ZakatPage() {
             .filter((q) => q.receiptDay.getTime() < periodEndTime)
             .reduce((s, q) => s + q.amount, 0)
 
-          // Barrier: do not treat amounts already reinvested into Sukuk by this period end as idle.
-          const reinvestedByPeriod = investOutEvents
+          // Barrier: do not treat amounts already withdrawn/spent by this period end as idle.
+          const outflowByPeriod = outflowEvents
             .filter((x: { time: number; amount: number }) => x.time <= periodEndTime)
             .reduce((s: number, x: { time: number; amount: number }) => s + x.amount, 0)
-          const outstandingForReceipt = Math.max(0, r.amount - reinvestedByPeriod)
+          const outstandingForReceipt = Math.max(0, r.amount - outflowByPeriod)
           if (outstandingForReceipt <= 0.01) continue
 
           const balanceAtEnd = Math.max(0, Number(bucket.balance) || 0)
@@ -2156,12 +2198,24 @@ export default async function ZakatPage() {
         for (let i = 0; i < completed; i++) {
           const periodStart = addDays(start, i * 354)
           const periodEnd = addDays(start, (i + 1) * 354)
-          const balanceAtEnd = Math.max(0, Number(bucket.balance) || 0)
-          if (balanceAtEnd <= 0) continue
+          const inflowsByPeriodEnd = movements.reduce((sum: number, m: any) => {
+            const movementType = typeof m?.type === 'string' ? m.type : ''
+            if (movementType === 'ZAKAT_PAID' || hawlOutflowTypes.has(movementType)) return sum
+
+            const day = movementDay(m)
+            if (!day || day.getTime() > startOfDay(periodEnd).getTime()) return sum
+
+            const amount = Math.abs(Number(m?.amount) || 0)
+            if (amount <= 0) return sum
+            return sum + amount
+          }, 0)
+          const withdrawnBeforePeriodEnd = sumHawlOutflowsBetween(start, periodEnd)
+          const heldForFullHawl = Math.max(0, inflowsByPeriodEnd - withdrawnBeforePeriodEnd)
+          if (heldForFullHawl <= 0.01) continue
 
           const rowKey = buildRowKey(['DEPOSIT', bucket.id, isoDay(periodStart), isoDay(periodEnd)])
           const isPaid = movementHasRowPaid(payments, rowKey)
-          const zakatDue = !isPaid ? balanceAtEnd * 0.025 : 0
+          const zakatDue = !isPaid ? heldForFullHawl * 0.025 : 0
           const idleDays = diffDaysFloor(periodStart, periodEnd)
 
           bucketRows.push({
@@ -2176,7 +2230,7 @@ export default async function ZakatPage() {
               ? bucket.lastZakatPaidDate.toISOString().split('T')[0]
               : null,
             haulCompleteDate: isoDay(periodEnd),
-            idleBase: balanceAtEnd,
+            idleBase: heldForFullHawl,
             receiptsTotal: 0,
             zakatDue,
             isPaid,
