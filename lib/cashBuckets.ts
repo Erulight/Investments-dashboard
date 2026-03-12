@@ -590,6 +590,15 @@ export const creditBucketsForReceipt = async (
 
     const investmentName = inv?.name || investmentId
     const bucketLabel = `Profit • ${investmentName}`
+    const investmentStartRaw = inv?.startDate ? new Date(inv.startDate as any) : null
+    const investmentStartHaulDate =
+      investmentStartRaw && !Number.isNaN(investmentStartRaw.getTime())
+        ? new Date(
+            investmentStartRaw.getFullYear(),
+            investmentStartRaw.getMonth(),
+            investmentStartRaw.getDate(),
+          )
+        : date
 
     const existingProfitBucket = await tx.cashBucket.findFirst({
       where: {
@@ -602,7 +611,10 @@ export const creditBucketsForReceipt = async (
     if (existingProfitBucket) {
       await tx.cashBucket.update({
         where: { id: existingProfitBucket.id },
-        data: { balance: { increment: profit } },
+        data: {
+          balance: { increment: profit },
+          haulStartDate: investmentStartHaulDate,
+        },
       })
 
       await tx.cashBucketMovement.create({
@@ -618,32 +630,9 @@ export const creditBucketsForReceipt = async (
       return existingProfitBucket
     }
 
-    // Determine haul start date for profit bucket
-    // Priority: 1) Explicit param, 2) Investment start date, 3) Receipt date
-    let haulStartDate = date
-
-    const explicit = profitHaulStartDate instanceof Date ? profitHaulStartDate : profitHaulStartDate ? new Date(profitHaulStartDate as any) : null
-    const explicitHaulStart = explicit && !Number.isNaN(explicit.getTime())
-      ? new Date(explicit.getFullYear(), explicit.getMonth(), explicit.getDate())
-      : null
-
-    if (explicitHaulStart) {
-      haulStartDate = explicitHaulStart
-    } else {
-      const investmentStart = inv?.startDate ? new Date(inv.startDate as any) : null
-      if (investmentStart && !Number.isNaN(investmentStart.getTime())) {
-        haulStartDate = new Date(
-          investmentStart.getFullYear(),
-          investmentStart.getMonth(),
-          investmentStart.getDate(),
-        )
-      }
-      // Otherwise use receipt date (already set above)
-    }
-
     await createCashBucket(tx, {
       amount: profit,
-      haulStartDate,
+      haulStartDate: investmentStartHaulDate,
       date,
       notes: notes || null,
       investmentId,
