@@ -274,6 +274,7 @@ export default async function ZakatPage() {
   const nisabRaw = nisabSetting ? Number(nisabSetting.value) : null
   const nisabValue = nisabRaw !== null && Number.isFinite(nisabRaw) && nisabRaw > 0 ? nisabRaw : null
 
+  const ownerPersonId = user.role === 'OWNER' ? (user.personId || null) : null
   const scopeKey = user.role === 'OWNER' ? 'OWNER' : user.personId!
   const nisabMetKey = `NISAB_MET_SINCE:${scopeKey}`
 
@@ -808,14 +809,26 @@ export default async function ZakatPage() {
     // Persist anchor in metadata and keep receipt suppression only for fully depleted receipts.
 
     const allSukukInvestments = await prisma.investment.findMany({
-      where: { account: { type: 'SUKUK' } },
+      where: {
+        account: { type: 'SUKUK' },
+        ...(ownerPersonId
+          ? {
+              OR: [
+                { dealParticipants: { some: { personId: ownerPersonId } } },
+                { transactions: { some: { personId: ownerPersonId } } },
+              ],
+            }
+          : {
+              transactions: { some: { personId: null } },
+            }),
+      },
       select: { id: true, metadata: true, startDate: true },
     })
 
     const allSukukCashInvestTxs = await prisma.transaction.findMany({
       where: {
         type: 'CASH_INVEST',
-        personId: null,
+        personId: ownerPersonId,
         investmentId: { not: null },
         investment: { account: { type: 'SUKUK' } },
       },
@@ -827,7 +840,7 @@ export default async function ZakatPage() {
           where: {
             investmentId: { in: allSukukInvestments.map((inv: any) => inv.id) },
             cashBucket: {
-              personId: null,
+              personId: ownerPersonId,
               OR: [
                 { label: { startsWith: 'Savings Receipt •' } },
                 { label: { startsWith: 'Circlys Reward Receipt •' } },
@@ -864,7 +877,7 @@ export default async function ZakatPage() {
             investmentId: { in: allSukukInvestments.map((inv: any) => inv.id) },
             type: 'INVEST_OUT',
             cashBucket: {
-              personId: null,
+              personId: ownerPersonId,
               OR: [
                 { label: { startsWith: 'Savings Receipt •' } },
                 { label: { startsWith: 'Circlys Reward Receipt •' } },
@@ -892,7 +905,7 @@ export default async function ZakatPage() {
           where: {
             investmentId: { in: allSukukInvestments.map((inv: any) => inv.id) },
             cashBucket: {
-              personId: null,
+              personId: ownerPersonId,
               OR: [
                 { label: { startsWith: 'Sukuk Principal •' } },
                 { label: { endsWith: ' Principal Receipt' } },
@@ -1099,7 +1112,7 @@ export default async function ZakatPage() {
       // Profit remains anchored to Sukuk start date.
       await prisma.cashBucket.updateMany({
         where: {
-          personId: null,
+          personId: ownerPersonId,
           label: { startsWith: 'Profit •' },
           movements: { some: { investmentId: sukukInv.id } },
         },
@@ -1127,10 +1140,7 @@ export default async function ZakatPage() {
         ...(user.role === 'OWNER'
           ? [
               {
-                OR: [
-                  { personId: null },                    // Original owner buckets
-                  { personId: user.personId || null },   // Commission buckets with owner's personId
-                ],
+                personId: ownerPersonId,
               },
             ]
           : [
@@ -1225,7 +1235,6 @@ export default async function ZakatPage() {
   }
 
   if (user.role === 'OWNER') {
-    const ownerPersonId = user.personId || null
     const investments = await prisma.investment.findMany({
       where: {
         account: { type: 'SUKUK' },
@@ -1375,7 +1384,7 @@ export default async function ZakatPage() {
   const cashInvestTransactions = await prisma.transaction.findMany({
     where: {
       type: 'CASH_INVEST',
-      ...(user.role === 'OWNER' ? { personId: null } : { personId: user.personId }),
+      ...(user.role === 'OWNER' ? { personId: ownerPersonId } : { personId: user.personId }),
     },
     select: { investmentId: true, amount: true, date: true },
   })
