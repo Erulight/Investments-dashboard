@@ -2000,18 +2000,19 @@ export default async function ZakatPage() {
             if (!matured) return null
           }
 
-          // Principal/profit receipts from ROSCA-funded Sukuk inherit the resolved running
+          // Principal receipts from ROSCA-funded Sukuk inherit the resolved running
           // ROSCA hawl anchor (continuity across cycles).
+          // Profit receipts always use investment.startDate.
           const resolvedRoscaAnchor = ownerSukukAnchor && !Number.isNaN(ownerSukukAnchor.getTime())
             ? ownerSukukAnchor
             : start
-          const eligibilityAnchor = (isCommissionBucket
+          const eligibilityAnchor = isCommissionBucket
             ? bucketStart
-            : (isPrincipalReceiptMovement
-              ? resolvedRoscaAnchor
-              : (isProfitReceiptMovement
-                ? resolvedRoscaAnchor
-                : resolvedRoscaAnchor)))
+            : isProfitReceiptMovement
+              ? start  // ✅ profit always uses investment.startDate
+              : isPrincipalReceiptMovement
+                ? resolvedRoscaAnchor  // ✅ principal keeps ROSCA continuity
+                : resolvedRoscaAnchor
           const eligibilityStart = startOfDay(eligibilityAnchor)
           const duration = diffDaysFloor(eligibilityStart, day)
 
