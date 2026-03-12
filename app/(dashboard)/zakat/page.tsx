@@ -1668,25 +1668,34 @@ export default async function ZakatPage() {
           return sum
         }, 0)
 
-        const sukukInvestedByMetadata = investments.reduce((sum: number, inv: any) => {
-          if (inv?.account?.type !== 'SUKUK') return sum
+        const allocatedSukukInvestmentIds = new Set(
+          (Array.isArray(bucket.allocations) ? bucket.allocations : [])
+            .map((alloc: any) => (typeof alloc?.investment?.id === 'string' ? alloc.investment.id : null))
+            .filter((id: string | null): id is string => Boolean(id)),
+        )
 
-          const meta = parseMetadata(inv?.metadata)
-          const savingsStart = toDate(meta?.savingsHaulStartDate)
-          if (!savingsStart || Number.isNaN(savingsStart.getTime())) return sum
-          if (isoDay(startOfDay(savingsStart)) !== isoDay(firstHawlStart)) return sum
+        const sukukInvestedByMetadata = allocatedSukukInvestmentIds.size > 0
+          ? investments.reduce((sum: number, inv: any) => {
+              if (inv?.account?.type !== 'SUKUK') return sum
+              if (!allocatedSukukInvestmentIds.has(inv.id as string)) return sum
 
-          const investTxs = cashInvestByInvestmentId.get(inv.id) || []
-          const investedInFirstHawl = investTxs.reduce((txSum: number, tx: { amount: number; date: Date }) => {
-            const d = tx.date instanceof Date ? tx.date : new Date(tx.date as any)
-            if (Number.isNaN(d.getTime())) return txSum
-            if (d.getTime() >= firstHaulEnd.getTime()) return txSum
-            const amt = Math.abs(Number(tx.amount) || 0)
-            return txSum + (Number.isFinite(amt) ? amt : 0)
-          }, 0)
+              const meta = parseMetadata(inv?.metadata)
+              const savingsStart = toDate(meta?.savingsHaulStartDate)
+              if (!savingsStart || Number.isNaN(savingsStart.getTime())) return sum
+              if (isoDay(startOfDay(savingsStart)) !== isoDay(firstHawlStart)) return sum
 
-          return sum + investedInFirstHawl
-        }, 0)
+              const investTxs = cashInvestByInvestmentId.get(inv.id) || []
+              const investedInFirstHawl = investTxs.reduce((txSum: number, tx: { amount: number; date: Date }) => {
+                const d = tx.date instanceof Date ? tx.date : new Date(tx.date as any)
+                if (Number.isNaN(d.getTime())) return txSum
+                if (d.getTime() >= firstHaulEnd.getTime()) return txSum
+                const amt = Math.abs(Number(tx.amount) || 0)
+                return txSum + (Number.isFinite(amt) ? amt : 0)
+              }, 0)
+
+              return sum + investedInFirstHawl
+            }, 0)
+          : 0
 
         const effectiveSukukInvested = Math.max(sukukInvestedDuringFirstHawl, sukukInvestedByMetadata)
 
@@ -1861,10 +1870,7 @@ export default async function ZakatPage() {
         // ROSCA-funded Sukuk principal continuity rows:
         // once ROSCA Hawl 1 completes, invested portion continues immediately under Sukuk.
         for (const alloc of sukukAllocations) {
-          const allocInvestment = investmentMap.get(alloc.investmentId)
-          const allocInvestmentPrincipal = Math.max(0, Number(allocInvestment?.principalAmount || 0))
-          const isDealClosed = allocInvestmentPrincipal <= 0.0001
-          if (!isDealClosed) continue
+          if (alloc.principalRemaining <= 0.0001) continue
 
           const continuityStart = startOfDay(firstHaulEnd)
           const elapsedContinuityDays = diffDaysFloor(continuityStart, now)
