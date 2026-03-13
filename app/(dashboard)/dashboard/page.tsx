@@ -535,20 +535,12 @@ export default async function DashboardPage({
         ? totalProfit * (elapsedMs / totalMs)
         : (atMs > startTime ? totalProfit : 0)
 
+      // NOTE: inv.principalAmount and ownerPosition.investedAmount are already reduced by the API
+      // when WITHDRAW_PRINCIPAL happens (see app/api/sukuk/[id]/withdraw/route.ts line 205-207)
+      // So we just use the principal value directly without subtracting withdrawals again
+      const principalOutstanding = Math.max(0, principal)
+      
       const txs = Array.isArray(inv?.transactions) ? inv.transactions : []
-      const principalWithdrawn = txs
-        .filter((tx: any) => tx?.type === 'WITHDRAW_PRINCIPAL')
-        .filter((tx: any) => {
-          if (ownerPersonId && tx?.personId !== ownerPersonId && tx?.personId != null) return false
-          const d = tx?.date instanceof Date ? tx.date : new Date(tx?.date)
-          return !Number.isNaN(d.getTime()) && d.getTime() <= atMs
-        })
-        .reduce((sum: number, tx: any) => {
-          const meta = parseMetadata(tx?.metadata)
-          if (meta?.source === 'PROFIT') return sum
-          return sum + Math.max(0, Math.abs(toFiniteNumber(tx?.amount)))
-        }, 0)
-      const principalOutstanding = Math.max(0, principal - principalWithdrawn)
 
       const receivedFromProfitTx = txs
         .filter((tx: any) => tx?.type === 'WITHDRAW_PROFIT')
