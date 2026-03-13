@@ -579,10 +579,11 @@ export default async function DashboardPage({
       }
     }
 
-    const isActiveSukukDeal = (inv: any, asOf: Date, principalOutstanding: number) => {
-      if (principalOutstanding <= 0) return false
-      const maturity = toDate(inv?.maturityDate)
-      return !maturity || maturity.getTime() >= asOf.getTime()
+    const isActiveSukukDeal = (inv: any, asOf: Date, metrics: ReturnType<typeof getOwnerSukukMetrics>) => {
+      // Match sukuk page logic: include if principal OR receivable > 0.01
+      const principalOutstanding = metrics.principalOutstanding
+      const receivable = metrics.receivable
+      return principalOutstanding > 0.01 || receivable > 0.01
     }
 
     const hasOwnerSellTx = (inv: any) => {
@@ -692,7 +693,7 @@ export default async function DashboardPage({
     const activeSukuk = ownerSukuk.filter((inv: any) => {
       const metrics = ownerSukukMetricsById.get(inv.id)
       if (!metrics) return false
-      return isActiveSukukDeal(inv, now, metrics.principalOutstanding)
+      return isActiveSukukDeal(inv, now, metrics)
     })
 
     const activeNonSukuk = ownerScoped.filter((inv: any) => {
