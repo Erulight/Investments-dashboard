@@ -144,19 +144,17 @@ export function PremiumStatsGrid({
           />
         </div>
 
-        <div onClick={() => cashBreakdown && setShowCashBreakdown(true)} className={cashBreakdown ? 'cursor-pointer' : ''}>
-          <PremiumCashBalanceCard
-            initialCash={cashBalance}
-            settingDelta={cashSettingDelta}
-            trend={cashTrend}
-            sparklineData={cashSparkline}
-            index={1}
-            role={role}
-            currencyPrefix={currencyPrefix}
-            isHidden={allHidden}
-            onToggleHide={() => setAllHidden(!allHidden)}
-          />
-        </div>
+        <PremiumCashBalanceCard
+          initialCash={cashBalance}
+          settingDelta={cashSettingDelta}
+          trend={cashTrend}
+          sparklineData={cashSparkline}
+          index={1}
+          role={role}
+          currencyPrefix={currencyPrefix}
+          isHidden={allHidden}
+          onToggleHide={() => setAllHidden(!allHidden)}
+        />
       
         <div onClick={() => investedBreakdown && setShowInvestedBreakdown(true)} className={investedBreakdown ? 'cursor-pointer' : ''}>
           <PremiumStatsCard
