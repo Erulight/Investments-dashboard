@@ -1,7 +1,31 @@
 'use client'
 
-import { useState, useMemo } from 'react'
+import React from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
+
+function getWarningExplanation(type: string): string {
+  const explanations: Record<string, string> = {
+    MISSING_HAUL_START: "This cash bucket doesn't have a hawl start date (haulStartDate). Without this anchor, the system cannot determine when the 354-day zakat cycle begins, making accurate zakat calculation impossible.",
+    DEBT_BUCKET_LEAKING: "This bucket is marked as a debt bucket (borrowed money) but is still included in zakat calculations. Borrowed money should be excluded from zakat because it's not truly owned wealth—it's a liability that must be repaid.",
+    DOUBLE_COUNTING: "This bucket is allocated to multiple active investments simultaneously. This can cause the same funds to be counted multiple times in zakat calculations, inflating your total zakatable assets incorrectly.",
+    MISSING_SAVINGS_HAUL: "A ROSCA savings bucket is missing its hawl continuity anchor. When ROSCA money is reinvested (e.g., into Sukuk), the hawl anchor should carry forward to prevent resetting the 354-day cycle.",
+    HAWL_JUMPED_BACKWARDS: "The hawl start date moved backwards in time, which violates the zakat clock's forward-only progression. This can happen from data corruption or incorrect manual edits."
+  }
+  return explanations[type] || "Unknown warning type."
+}
+
+function getWarningSolution(type: string): string {
+  const solutions: Record<string, string> = {
+    MISSING_HAUL_START: "Go to the Cash Buckets page, find this bucket, and set its 'Hawl Start Date' to the date when you first acquired these funds. If you're unsure, use the earliest transaction date associated with this bucket.",
+    DEBT_BUCKET_LEAKING: "Go to the Debts page, find the original debt entry, and ensure it's properly linked to this bucket. If the debt is fully repaid, the bucket should be converted to a regular cash bucket. If the debt is still active, ensure the bucket's 'Exclude from Zakat' flag is enabled.",
+    DOUBLE_COUNTING: "Review the bucket's allocations on the Cash Buckets page. If multiple investments are using the same bucket, you need to either: (1) Split the bucket into separate buckets for each investment, or (2) Mark one investment as fully withdrawn and close its allocation.",
+    MISSING_SAVINGS_HAUL: "Check the ROSCA investment details and ensure the 'savingsHaulStartDate' is properly set in the investment metadata. If this was funded from Circlys rewards, verify the reward receipt date and first contribution date are correct.",
+    HAWL_JUMPED_BACKWARDS: "This indicates data corruption. Review the bucket's transaction history on the Cash Buckets page. The hawl start date should never move backwards—only forward when new hawl cycles complete. You may need to manually correct the haulStartDate to the proper forward-progressing date."
+  }
+  return solutions[type] || "Contact support for assistance with this issue."
+}
+
+import { useState, useMemo } from 'react'
 import { formatCurrencyAmount, type DisplayCurrency } from '@/lib/currency'
 
 type Payment = {
@@ -497,13 +521,50 @@ export function ZakatAuditClient({
                         <span className="text-xs text-slate-500 ml-auto">{groupWarnings.length} item{groupWarnings.length !== 1 ? 's' : ''}</span>
                       </div>
                       <div className="divide-y divide-slate-800/40">
-                        {groupWarnings.map((w, wi) => (
-                          <motion.div key={w.id} initial={{ opacity: 0, x: -6 }} animate={{ opacity: 1, x: 0 }} transition={{ delay: wi * 0.04 }}
-                            className="px-4 py-3 text-xs text-slate-300 flex items-start gap-2">
-                            <span className="text-slate-600 font-mono shrink-0">{String(wi + 1).padStart(2, '0')}.</span>
-                            <span>{w.message}</span>
-                          </motion.div>
-                        ))}
+                        {groupWarnings.map((w, wi) => {
+                          const [expanded, setExpanded] = React.useState(false)
+                          const explanation = getWarningExplanation(w.type)
+                          const solution = getWarningSolution(w.type)
+                          
+                          return (
+                            <motion.div key={w.id} initial={{ opacity: 0, x: -6 }} animate={{ opacity: 1, x: 0 }} transition={{ delay: wi * 0.04 }}
+                              className="text-xs">
+                              <div className="px-4 py-3 text-slate-300 flex items-start gap-2">
+                                <span className="text-slate-600 font-mono shrink-0">{String(wi + 1).padStart(2, '0')}.</span>
+                                <div className="flex-1">
+                                  <div className="flex items-start justify-between gap-3">
+                                    <span className="flex-1">{w.message}</span>
+                                    <button
+                                      onClick={() => setExpanded(!expanded)}
+                                      className="shrink-0 px-2 py-1 rounded bg-slate-700/50 hover:bg-slate-700 text-cyan-400 text-[10px] font-semibold transition-colors"
+                                    >
+                                      {expanded ? 'Hide' : 'Explain & Fix'}
+                                    </button>
+                                  </div>
+                                  
+                                  {expanded && (
+                                    <motion.div
+                                      initial={{ opacity: 0, height: 0 }}
+                                      animate={{ opacity: 1, height: 'auto' }}
+                                      exit={{ opacity: 0, height: 0 }}
+                                      className="mt-3 space-y-2 border-l-2 border-cyan-500/30 pl-3"
+                                    >
+                                      <div className="space-y-1">
+                                        <div className="text-[10px] font-semibold text-cyan-400 uppercase tracking-wide">📖 Explanation</div>
+                                        <div className="text-slate-400 leading-relaxed">{explanation}</div>
+                                      </div>
+                                      
+                                      <div className="space-y-1">
+                                        <div className="text-[10px] font-semibold text-emerald-400 uppercase tracking-wide">✅ Solution</div>
+                                        <div className="text-slate-400 leading-relaxed">{solution}</div>
+                                      </div>
+                                    </motion.div>
+                                  )}
+                                </div>
+                              </div>
+                            </motion.div>
+                          )
+                        })}
                       </div>
                     </div>
                   )

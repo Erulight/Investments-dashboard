@@ -7,6 +7,7 @@ import { InvestmentTypeManager } from '@/components/settings/InvestmentTypeManag
 import { NisabSettings } from '@/components/settings/NisabSettings'
 import { CurrencySettings } from '@/components/settings/CurrencySettings'
 import { UserList } from '@/components/users/UserList'
+import { BackupRestore } from '@/components/settings/BackupRestore'
 import { prisma } from '@/lib/db'
 
 export const dynamic = 'force-dynamic'
@@ -211,37 +212,24 @@ export default async function SettingsPage({
           {activeTab === 'maintenance' && (
             <div className="space-y-6">
               <SectionHeader
-                title="Maintenance"
-                description="Reset operations and data housekeeping — use with caution"
+                title="Backup & Restore"
+                description="Download complete backups and restore from previous backups"
               />
+              <BackupRestore />
 
-              <div className="space-y-4">
-                <PartnerReset />
-                <PortfolioReset />
-
-                <div className="rounded-xl border border-blue-100 bg-blue-50/50 dark:border-blue-500/20 dark:bg-blue-500/5 p-5">
-                  <div className="flex items-center justify-between gap-4">
-                    <div className="flex items-center gap-3">
-                      <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-blue-100 dark:bg-blue-500/20 text-xl">
-                        🔄
-                      </div>
-                      <div>
-                        <div className="text-sm font-semibold text-slate-900 dark:text-slate-100">
-                          Restore Points
-                        </div>
-                        <div className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">
-                          Roll back to a previous state if something went wrong
-                        </div>
-                      </div>
-                    </div>
-                    <Link
-                      href="/settings/restore-points"
-                      className="shrink-0 inline-flex items-center gap-1.5 rounded-lg border border-blue-200 bg-white dark:bg-blue-500/10 dark:border-blue-500/30 px-3 py-1.5 text-xs font-semibold text-blue-700 dark:text-blue-400 hover:bg-blue-50 dark:hover:bg-blue-500/20 transition-colors"
-                    >
-                      Manage →
-                    </Link>
-                  </div>
+              <div className="border-t border-slate-100 dark:border-white/10 pt-6">
+                <SectionHeader
+                  title="Reset Operations"
+                  description="Clear specific data — use with caution"
+                />
+                <div className="space-y-4">
+                  <PartnerReset />
+                  <PortfolioReset />
                 </div>
+              </div>
+
+              <div className="border-t border-slate-100 dark:border-white/10 pt-6 space-y-4">
+
               </div>
             </div>
           )}
