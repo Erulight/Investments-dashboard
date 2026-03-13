@@ -28,6 +28,69 @@ function getWarningSolution(type: string): string {
 import { useState, useMemo } from 'react'
 import { formatCurrencyAmount, type DisplayCurrency } from '@/lib/currency'
 
+type WarningType = {
+  id: string
+  type: string
+  message: string
+  bucketLabel?: string | null
+}
+
+function WarningItem({ warning, index }: { warning: WarningType; index: number }) {
+  const [expanded, setExpanded] = useState(false)
+  const explanation = getWarningExplanation(warning.type)
+  const solution = getWarningSolution(warning.type)
+
+  return (
+    <motion.div
+      key={warning.id}
+      initial={{ opacity: 0, x: -6 }}
+      animate={{ opacity: 1, x: 0 }}
+      transition={{ delay: index * 0.04 }}
+      className="text-xs"
+    >
+      <div className="px-4 py-3 text-slate-300 flex items-start gap-2">
+        <span className="text-slate-600 font-mono shrink-0">
+          {String(index + 1).padStart(2, '0')}.
+        </span>
+        <div className="flex-1">
+          <div className="flex items-start justify-between gap-3">
+            <span className="flex-1">{warning.message}</span>
+            <button
+              onClick={() => setExpanded(!expanded)}
+              className="shrink-0 px-2 py-1 rounded bg-slate-700/50 hover:bg-slate-700 text-cyan-400 text-[10px] font-semibold transition-colors"
+            >
+              {expanded ? 'Hide' : 'Explain & Fix'}
+            </button>
+          </div>
+
+          {expanded && (
+            <motion.div
+              initial={{ opacity: 0, height: 0 }}
+              animate={{ opacity: 1, height: 'auto' }}
+              exit={{ opacity: 0, height: 0 }}
+              className="mt-3 space-y-2 border-l-2 border-cyan-500/30 pl-3"
+            >
+              <div className="space-y-1">
+                <div className="text-[10px] font-semibold text-cyan-400 uppercase tracking-wide">
+                  📖 Explanation
+                </div>
+                <div className="text-slate-400 leading-relaxed">{explanation}</div>
+              </div>
+
+              <div className="space-y-1">
+                <div className="text-[10px] font-semibold text-emerald-400 uppercase tracking-wide">
+                  ✅ Solution
+                </div>
+                <div className="text-slate-400 leading-relaxed">{solution}</div>
+              </div>
+            </motion.div>
+          )}
+        </div>
+      </div>
+    </motion.div>
+  )
+}
+
 type Payment = {
   id: string
   amount: number
@@ -72,12 +135,6 @@ type TimelineItem = {
   zakatAmount: number
 }
 
-type Warning = {
-  id: string
-  type: string
-  message: string
-}
-
 type Tab = 'overview' | 'investments' | 'timeline' | 'warnings' | 'history'
 
 const ROWS_PER_PAGE = 25
@@ -110,7 +167,7 @@ export function ZakatAuditClient({
   nextDueDate: string | null
   investmentCards: InvCard[]
   timelines: TimelineItem[]
-  warnings: Warning[]
+  warnings: WarningType[]
   payments: Payment[]
   totalPaid: number
   paidThisYear: number
@@ -521,50 +578,9 @@ export function ZakatAuditClient({
                         <span className="text-xs text-slate-500 ml-auto">{groupWarnings.length} item{groupWarnings.length !== 1 ? 's' : ''}</span>
                       </div>
                       <div className="divide-y divide-slate-800/40">
-                        {groupWarnings.map((w, wi) => {
-                          const [expanded, setExpanded] = React.useState(false)
-                          const explanation = getWarningExplanation(w.type)
-                          const solution = getWarningSolution(w.type)
-                          
-                          return (
-                            <motion.div key={w.id} initial={{ opacity: 0, x: -6 }} animate={{ opacity: 1, x: 0 }} transition={{ delay: wi * 0.04 }}
-                              className="text-xs">
-                              <div className="px-4 py-3 text-slate-300 flex items-start gap-2">
-                                <span className="text-slate-600 font-mono shrink-0">{String(wi + 1).padStart(2, '0')}.</span>
-                                <div className="flex-1">
-                                  <div className="flex items-start justify-between gap-3">
-                                    <span className="flex-1">{w.message}</span>
-                                    <button
-                                      onClick={() => setExpanded(!expanded)}
-                                      className="shrink-0 px-2 py-1 rounded bg-slate-700/50 hover:bg-slate-700 text-cyan-400 text-[10px] font-semibold transition-colors"
-                                    >
-                                      {expanded ? 'Hide' : 'Explain & Fix'}
-                                    </button>
-                                  </div>
-                                  
-                                  {expanded && (
-                                    <motion.div
-                                      initial={{ opacity: 0, height: 0 }}
-                                      animate={{ opacity: 1, height: 'auto' }}
-                                      exit={{ opacity: 0, height: 0 }}
-                                      className="mt-3 space-y-2 border-l-2 border-cyan-500/30 pl-3"
-                                    >
-                                      <div className="space-y-1">
-                                        <div className="text-[10px] font-semibold text-cyan-400 uppercase tracking-wide">📖 Explanation</div>
-                                        <div className="text-slate-400 leading-relaxed">{explanation}</div>
-                                      </div>
-                                      
-                                      <div className="space-y-1">
-                                        <div className="text-[10px] font-semibold text-emerald-400 uppercase tracking-wide">✅ Solution</div>
-                                        <div className="text-slate-400 leading-relaxed">{solution}</div>
-                                      </div>
-                                    </motion.div>
-                                  )}
-                                </div>
-                              </div>
-                            </motion.div>
-                          )
-                        })}
+                        {groupWarnings.map((w, wi) => (
+                          <WarningItem key={w.id} warning={w} index={wi} />
+                        ))}
                       </div>
                     </div>
                   )

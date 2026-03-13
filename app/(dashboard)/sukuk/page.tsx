@@ -185,25 +185,10 @@ export default async function InvestmentsPage() {
   }
 
   const getPrincipalOutstanding = (inv: any) => {
-    const originalPrincipal = getViewerPrincipal(inv)
-    const transactions = Array.isArray(inv.transactions) ? inv.transactions : []
-    
-    const principalWithdrawn = transactions
-      .filter((tx: any) => tx.type === 'WITHDRAW_PRINCIPAL')
-      .reduce((sum: number, tx: any) => {
-        const viewerTx = user.personId
-          ? (tx.personId == null || tx.personId === user.personId)
-          : tx.personId == null
-        if (!viewerTx) return sum
-        
-        const metadata = tx.metadata ? (typeof tx.metadata === 'string' ? JSON.parse(tx.metadata) : tx.metadata) : {}
-        if (metadata?.source === 'PROFIT') return sum
-        
-        const amount = Number(tx.amount)
-        return sum + (Number.isFinite(amount) ? Math.abs(amount) : 0)
-      }, 0)
-    
-    return Math.max(0, originalPrincipal - principalWithdrawn)
+    // NOTE: inv.principalAmount is already reduced by the API when WITHDRAW_PRINCIPAL happens
+    // (see app/api/sukuk/[id]/withdraw/route.ts line 205-207)
+    // So we just return the current principalAmount without subtracting withdrawals again
+    return getViewerPrincipal(inv)
   }
 
   const getViewerReceived = (inv: any) => {
