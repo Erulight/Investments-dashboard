@@ -54,7 +54,7 @@ export function CatMascot() {
           })
 
           if (nearestCard) {
-            const rect = nearestCard.getBoundingClientRect()
+            const rect = (nearestCard as Element).getBoundingClientRect()
             setCatPosition({
               x: rect.right - 60,
               y: rect.top - 40
