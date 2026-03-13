@@ -8,18 +8,19 @@ datasource db {
 }
 
 model User {
-  id               String     @id @default(cuid())
-  email            String     @unique
+  id               String             @id @default(cuid())
+  email            String             @unique
   password         String
   name             String
-  role             String     @default("VIEWER")
-  canEditAsPartner Boolean    @default(false)
-  createdAt        DateTime   @default(now())
-  updatedAt        DateTime   @updatedAt
-  personId         String?    @unique
+  role             String             @default("VIEWER")
+  canEditAsPartner Boolean            @default(false)
+  createdAt        DateTime           @default(now())
+  updatedAt        DateTime           @updatedAt
+  personId         String?            @unique
   permissions      String?
   auditLogs        AuditLog[]
-  person           Person?    @relation(fields: [personId], references: [id])
+  zakatFixHistory  ZakatFixHistory[]
+  person           Person?            @relation(fields: [personId], references: [id])
 
   @@index([email])
 }
@@ -83,6 +84,7 @@ model Investment {
   account             Account                      @relation(fields: [accountId], references: [id], onDelete: Cascade)
   bucketAllocations   InvestmentBucketAllocation[]
   transactions        Transaction[]
+  zakatFixHistory     ZakatFixHistory[]
 
   @@index([accountId])
   @@index([category])
@@ -98,6 +100,7 @@ model CashBucket {
   createdAt         DateTime                     @default(now())
   updatedAt         DateTime                     @updatedAt
   excludeFromZakat  Boolean                      @default(false)
+  zakatFixHistory   ZakatFixHistory[]
   personId          String?
   metadata          String?
   person            Person?                      @relation(fields: [personId], references: [id])
@@ -252,17 +255,18 @@ model SystemSetting {
 }
 
 model Debt {
-  id           String        @id @default(cuid())
-  lenderName   String
-  amount       Float
-  borrowedAt   DateTime
-  notes        String?
-  isArchived   Boolean       @default(false)
-  cashBucketId String?       @unique
-  createdAt    DateTime      @default(now())
-  updatedAt    DateTime      @updatedAt
-  cashBucket   CashBucket?   @relation(fields: [cashBucketId], references: [id])
-  payments     DebtPayment[]
+  id              String            @id @default(cuid())
+  lenderName      String
+  amount          Float
+  borrowedAt      DateTime
+  notes           String?
+  isArchived      Boolean           @default(false)
+  cashBucketId    String?           @unique
+  createdAt       DateTime          @default(now())
+  updatedAt       DateTime          @updatedAt
+  cashBucket      CashBucket?       @relation(fields: [cashBucketId], references: [id])
+  payments        DebtPayment[]
+  zakatFixHistory ZakatFixHistory[]
 
   @@index([borrowedAt])
   @@index([lenderName])
@@ -292,6 +296,32 @@ model Snapshot {
 
   @@index([createdAt])
   @@index([trigger])
+}
+
+model ZakatFixHistory {
+  id           String       @id @default(cuid())
+  userId       String
+  warningId    String
+  warningType  String
+  action       String
+  bucketId     String?
+  investmentId String?
+  debtId       String?
+  status       String       @default("PENDING")
+  oldState     String?
+  newState     String?
+  errorMessage String?
+  createdAt    DateTime     @default(now())
+  appliedAt    DateTime?
+  undoneAt     DateTime?
+  user         User         @relation(fields: [userId], references: [id], onDelete: Cascade)
+  cashBucket   CashBucket?  @relation(fields: [bucketId], references: [id], onDelete: SetNull)
+  investment   Investment?  @relation(fields: [investmentId], references: [id], onDelete: SetNull)
+  debt         Debt?        @relation(fields: [debtId], references: [id], onDelete: SetNull)
+
+  @@index([userId])
+  @@index([status])
+  @@index([createdAt])
 }
 
 model PersonLedgerTransaction {

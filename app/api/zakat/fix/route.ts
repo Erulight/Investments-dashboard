@@ -1,20 +1,15 @@
 import { NextResponse } from 'next/server'
-import { auth } from '@clerk/nextjs'
+import { getCurrentUser } from '@/lib/auth'
 import { prisma } from '@/lib/db'
 
 export async function POST(req: Request) {
   try {
-    const { userId } = auth()
-    if (!userId) {
+    const user = await getCurrentUser()
+    if (!user) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
     }
 
-    const user = await prisma.user.findUnique({
-      where: { clerkId: userId },
-      select: { id: true, role: true, personId: true },
-    })
-
-    if (!user || user.role !== 'OWNER') {
+    if (user.role !== 'OWNER') {
       return NextResponse.json({ error: 'Forbidden - Owner only' }, { status: 403 })
     }
 
@@ -155,17 +150,12 @@ export async function POST(req: Request) {
 // Undo a previously applied fix
 export async function DELETE(req: Request) {
   try {
-    const { userId } = auth()
-    if (!userId) {
+    const user = await getCurrentUser()
+    if (!user) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
     }
 
-    const user = await prisma.user.findUnique({
-      where: { clerkId: userId },
-      select: { id: true, role: true },
-    })
-
-    if (!user || user.role !== 'OWNER') {
+    if (user.role !== 'OWNER') {
       return NextResponse.json({ error: 'Forbidden - Owner only' }, { status: 403 })
     }
 
