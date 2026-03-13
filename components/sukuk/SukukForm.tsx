@@ -38,6 +38,13 @@ export function SukukForm({ mode, initialData, userRole, onSuccess, onCancel }: 
     ? String(Math.max(0, initialCommissionCashRaw))
     : ''
   const isPartnerCreate = mode === 'create' && userRole === 'PARTNER'
+  const isPartnerEdit = mode === 'edit' && userRole === 'PARTNER'
+  
+  // Get partner's commission from myParticipation
+  const myParticipationCommission = initialData?.myParticipation?.commissionFees
+  const initialPartnerCommission = Number.isFinite(myParticipationCommission)
+    ? String(Math.max(0, myParticipationCommission))
+    : ''
 
   const [formData, setFormData] = useState<any>({
     accountId: initialData?.accountId || '',
@@ -54,6 +61,7 @@ export function SukukForm({ mode, initialData, userRole, onSuccess, onCancel }: 
     receivableAmount: initialData?.receivableAmount ?? '',
     partnerCommissionType: initialCommissionType,
     partnerCommissionCash: initialCommissionCash,
+    partnerEditCommission: initialPartnerCommission,
     notes: initialData?.notes || '',
   })
   
@@ -257,6 +265,20 @@ export function SukukForm({ mode, initialData, userRole, onSuccess, onCancel }: 
           setErrors(data.details)
         }
         return
+      }
+
+      // For partner editing their participation, also update commission
+      if (isPartnerEdit && initialData?.myParticipation?.id && formData.partnerEditCommission) {
+        const commissionValue = parseFloat(formData.partnerEditCommission)
+        if (Number.isFinite(commissionValue) && commissionValue >= 0) {
+          await fetch(`/api/deal-participant/${initialData.myParticipation.id}`, {
+            method: 'PATCH',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              commissionFees: commissionValue,
+            }),
+          })
+        }
       }
 
       // Success
@@ -562,6 +584,35 @@ export function SukukForm({ mode, initialData, userRole, onSuccess, onCancel }: 
             Enter expected net profit after fees. APR will be calculated automatically.
           </p>
         </div>
+
+        {isPartnerEdit && (
+          <div className="space-y-3 rounded-xl border border-cyan-200 bg-cyan-50/60 p-4 dark:border-cyan-900/40 dark:bg-cyan-950/20">
+            <h4 className="text-sm font-semibold text-cyan-900 dark:text-cyan-200">Owner Commission</h4>
+            <p className="text-xs text-cyan-800/90 dark:text-cyan-300/90">
+              Commission will be paid to the owner when you close your position.
+            </p>
+            <div>
+              <label htmlFor="partnerEditCommission" className="mb-1 block text-sm font-medium text-slate-700 dark:text-slate-200">
+                Commission Amount
+              </label>
+              <input
+                type="number"
+                id="partnerEditCommission"
+                name="partnerEditCommission"
+                step="0.01"
+                min="0"
+                value={formData.partnerEditCommission}
+                onChange={handleChange}
+                className="w-full rounded-lg border border-slate-200 bg-white px-4 py-2 text-sm text-slate-900 placeholder:text-slate-400 shadow-sm transition-colors focus:border-emerald-500 focus:outline-none focus:ring-2 focus:ring-emerald-500/20 dark:border-white/10 dark:bg-slate-900/60 dark:text-slate-100 dark:placeholder:text-slate-500"
+                placeholder="0.00"
+              />
+              {errors.partnerEditCommission && <p className="text-sm text-red-600 mt-1 dark:text-red-200">{errors.partnerEditCommission}</p>}
+              <p className="mt-1 text-xs text-slate-500 dark:text-slate-400">
+                This commission will be deducted from your profit when you withdraw.
+              </p>
+            </div>
+          </div>
+        )}
 
         {isPartnerCreate && (
           <div className="space-y-3 rounded-xl border border-amber-200 bg-amber-50/60 p-4 dark:border-amber-900/40 dark:bg-amber-950/20">

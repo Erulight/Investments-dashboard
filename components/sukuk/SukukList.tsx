@@ -487,13 +487,18 @@ export function SukukList({ initialSukuk, userRole, ownerPersonId, viewerPersonI
       ? Math.max(0, participationCommissionRaw)
       : 0
 
+    // If participation commission exists, use it (user edited value takes priority)
+    if (fromParticipation > 0) {
+      return round2(fromParticipation)
+    }
+
     const invMeta = parseMetadata(inv?.metadata)
     const planCommissionRaw = Number(invMeta?.partnerCommissionPlan?.amount ?? 0)
     const fromPlan = Number.isFinite(planCommissionRaw)
       ? Math.max(0, planCommissionRaw)
       : 0
 
-    return round2(Math.max(fromBuyTx, fromParticipation, fromPlan))
+    return round2(Math.max(fromBuyTx, fromPlan))
   }
 
   const getOwnerCommissionForDeal = (inv: any) => {
