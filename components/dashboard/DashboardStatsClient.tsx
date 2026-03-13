@@ -1,8 +1,11 @@
 'use client'
 
 import { useState } from 'react'
-import { AnimatedCard } from '@/components/ui/AnimatedCard'
+import { motion, AnimatePresence } from 'framer-motion'
+import { formatCurrencyAmount, type DisplayCurrency } from '@/lib/currency'
 import { StatBreakdownModal } from './StatBreakdownModal'
+import { AnimatedCard } from '@/components/ui/AnimatedCard'
+import { CatMascot } from './CatMascot'
 
 interface DashboardStatsClientProps {
   liquiditySharePct: number
@@ -85,8 +88,9 @@ export function DashboardStatsClient({
 
   return (
     <>
+      <CatMascot />
       <div className={`grid gap-3 ${role === 'OWNER' ? 'grid-cols-2 lg:grid-cols-5' : 'grid-cols-2 lg:grid-cols-3'}`}>
-        <div onClick={() => setShowLiquidityModal(true)} className="cursor-pointer">
+        <div onClick={() => setShowLiquidityModal(true)} className="cursor-pointer" data-card-id="liquidity" data-cat-target="true">
           <AnimatedCard index={2}>
             <div className="p-5">
               <p className="text-xs font-medium text-slate-400 uppercase tracking-wider">Liquidity Share</p>
