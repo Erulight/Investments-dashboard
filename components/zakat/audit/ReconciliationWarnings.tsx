@@ -69,7 +69,7 @@ export function ReconciliationWarnings({ warnings, onRefresh }: ReconciliationWa
   const [fixResults, setFixResults] = useState<Map<string, 'success' | 'error'>>(new Map())
   const [expandedId, setExpandedId] = useState<string | null>(null)
 
-  const handleFixOption = useCallback(async (warningId: string, option: FixOption) => {
+  const handleFixOption = useCallback(async (warningId: string, option: FixOption, skipRefresh = false) => {
     const key = `${warningId}:${option.id}`
     setFixingKey(key)
     try {
@@ -85,7 +85,9 @@ export function ReconciliationWarnings({ warnings, onRefresh }: ReconciliationWa
       })
       if (res.ok) {
         setFixResults(prev => new Map([...prev, [warningId, 'success']]))
-        setTimeout(() => onRefresh(), 600)
+        if (!skipRefresh) {
+          setTimeout(() => onRefresh(), 600)
+        }
       } else {
         setFixResults(prev => new Map([...prev, [warningId, 'error']]))
       }
@@ -97,12 +99,19 @@ export function ReconciliationWarnings({ warnings, onRefresh }: ReconciliationWa
   }, [onRefresh])
 
   const handleFixAllRecommended = useCallback(async () => {
+    let fixedAny = false
     for (const w of warnings) {
       if (fixResults.get(w.id) === 'success') continue
       const rec = w.fixOptions.find(o => o.recommended)
-      if (rec) await handleFixOption(w.id, rec)
+      if (rec) {
+        await handleFixOption(w.id, rec, true)
+        fixedAny = true
+      }
     }
-  }, [warnings, fixResults, handleFixOption])
+    if (fixedAny) {
+      setTimeout(() => onRefresh(), 600)
+    }
+  }, [warnings, fixResults, handleFixOption, onRefresh])
 
   const fixableCount = warnings.filter(w => w.fixOptions.some(o => o.recommended) && fixResults.get(w.id) !== 'success').length
 
