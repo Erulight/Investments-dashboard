@@ -184,6 +184,28 @@ export default async function InvestmentsPage() {
     return Number.isFinite(principalRaw) ? principalRaw : 0
   }
 
+  const getPrincipalOutstanding = (inv: any) => {
+    const originalPrincipal = getViewerPrincipal(inv)
+    const transactions = Array.isArray(inv.transactions) ? inv.transactions : []
+    
+    const principalWithdrawn = transactions
+      .filter((tx: any) => tx.type === 'WITHDRAW_PRINCIPAL')
+      .reduce((sum: number, tx: any) => {
+        const viewerTx = user.personId
+          ? (tx.personId == null || tx.personId === user.personId)
+          : tx.personId == null
+        if (!viewerTx) return sum
+        
+        const metadata = tx.metadata ? (typeof tx.metadata === 'string' ? JSON.parse(tx.metadata) : tx.metadata) : {}
+        if (metadata?.source === 'PROFIT') return sum
+        
+        const amount = Number(tx.amount)
+        return sum + (Number.isFinite(amount) ? Math.abs(amount) : 0)
+      }, 0)
+    
+    return Math.max(0, originalPrincipal - principalWithdrawn)
+  }
+
   const getViewerReceived = (inv: any) => {
     const transactions = Array.isArray(inv.transactions) ? inv.transactions : []
     const profitWithdrawals = transactions.filter((tx: any) => tx.type === 'WITHDRAW_PROFIT')
@@ -427,7 +449,7 @@ export default async function InvestmentsPage() {
   const activeInvestments = displayedInvestments.filter(isActiveDeal)
 
   const totalInvested = activeInvestments.reduce((sum, inv) => {
-    const principal = getViewerPrincipal(inv)
+    const principal = getPrincipalOutstanding(inv)
     return sum + (Number.isFinite(principal) ? principal : 0)
   }, 0)
 
