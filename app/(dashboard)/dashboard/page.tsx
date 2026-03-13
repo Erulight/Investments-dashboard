@@ -799,84 +799,87 @@ export default async function DashboardPage({
         return sum + Math.max(0, toFiniteNumber(inv.realizedProfit)) + Math.max(0, toFiniteNumber(inv.unrealizedProfit))
       }, 0)
 
-    sukukReceivable = ownerSukuk.reduce((sum, inv) => {
-      if (isSoldSukukForOwner(inv)) {
-        const settlement = getOwnerSoldSettlement(inv)
-        return sum + Math.max(0, settlement.pending)
-      }
-      const metrics = ownerSukukMetricsById.get(inv.id)
-      return sum + (metrics ? Math.max(0, metrics.receivable) : 0)
+    // RECEIVABLE: Only from active (non-sold) deals
+    sukukReceivable = ownerSukuk
+      .filter((inv: any) => !isSoldSukukForOwner(inv))
+      .reduce((sum, inv) => {
+        const metrics = ownerSukukMetricsById.get(inv.id)
+        if (!metrics) return sum
+        const netProfit = metrics.accruedProfit
+        const received = metrics.received
+        return sum + Math.max(0, netProfit - received)
+      }, 0)
+
+    // RECEIVED: Active deals received + sold deals settlement received
+    const activeReceived = ownerSukuk
+      .filter((inv: any) => !isSoldSukukForOwner(inv))
+      .reduce((sum, inv) => {
+        const metrics = ownerSukukMetricsById.get(inv.id)
+        return sum + (metrics ? Math.max(0, metrics.received) : 0)
+      }, 0)
+    
+    const soldReceived = ownerSukuk.reduce((sum, inv) => {
+      const settlement = getOwnerSoldSettlement(inv)
+      return sum + Math.max(0, settlement.received)
     }, 0)
-
-    sukukReceivedProfit = ownerSukuk.reduce((sum, inv) => {
-      if (isSoldSukukForOwner(inv)) {
-        const settlement = getOwnerSoldSettlement(inv)
-        // For sold deals: add profit received after sale + profit withdrawn before sale
-        const txs = Array.isArray(inv.transactions) ? inv.transactions : []
-        const sells = txs.filter((tx: any) => tx?.type === 'SELL_TO_PARTNER' && (!ownerPersonId || tx.personId === ownerPersonId))
-        const sellDates = sells.map((tx: any) => {
-          const d = tx?.date instanceof Date ? tx.date : new Date(tx?.date)
-          return Number.isNaN(d.getTime()) ? null : d
-        }).filter(Boolean)
-        const latestSellDate = sellDates.length > 0 ? sellDates.reduce((latest: Date | null, d: Date | null) => {
-          if (!latest || !d) return d || latest
-          return d.getTime() > latest.getTime() ? d : latest
-        }, null) : null
-
-        const profitBeforeSale = latestSellDate ? txs
-          .filter((tx: any) => {
-            if (ownerPersonId && tx?.personId !== ownerPersonId && tx?.personId != null) return false
-            if (tx?.type !== 'WITHDRAW_PROFIT') return false
-            const d = tx?.date instanceof Date ? tx.date : new Date(tx?.date)
-            return !Number.isNaN(d.getTime()) && d.getTime() < latestSellDate.getTime()
-          })
-          .reduce((s: number, tx: any) => s + Math.max(0, Math.abs(toFiniteNumber(tx?.amount))), 0) : 0
-
-        return sum + Math.max(0, settlement.received) + profitBeforeSale
-      }
-      const metrics = ownerSukukMetricsById.get(inv.id)
-      return sum + (metrics ? Math.max(0, metrics.received) : 0)
-    }, 0)
+    
+    sukukReceivedProfit = activeReceived + soldReceived
 
     const commissionSourceSukuk = owned
       .filter((inv) => getAccountType(inv) === 'SUKUK')
 
-    const sukukCommissionFromTx = commissionSourceSukuk
-      .filter((inv) => getAccountType(inv) === 'SUKUK')
-      .reduce((sum, inv) => {
-        const txs = Array.isArray(inv.transactions) ? inv.transactions : []
-        const commission = txs
-          .filter((tx: any) => tx?.type === 'PARTNER_COMMISSION')
-          .filter((tx: any) => {
-            if (ownerPersonId && tx?.personId !== ownerPersonId && tx?.personId != null) return false
-            const d = tx?.date instanceof Date ? tx.date : new Date(tx?.date)
-            return !Number.isNaN(d.getTime()) && d.getTime() <= now.getTime()
-          })
-          .reduce((s: number, tx: any) => s + Math.max(0, Number(tx?.amount) || 0), 0)
-        return sum + commission
-      }, 0)
+    // COMMISSION: Match Sukuk page logic exactly
+    sukukCommissionEarned = commissionSourceSukuk.reduce((sum, inv) => {
+      const txs = Array.isArray(inv.transactions) ? inv.transactions : []
+      
+      // Sell commission from transactions
+      const txSellCommission = txs
+        .filter((tx: any) => tx?.type === 'PARTNER_COMMISSION' && (!ownerPersonId || tx.personId === ownerPersonId))
+        .filter((tx: any) => {
+          const meta = parseMetadata(tx?.metadata)
+          return meta?.source !== 'PARTNER_CREATE_COMMISSION_PAYOUT'
+        })
+        .reduce((acc: number, tx: any) => {
+          const amount = Number(tx?.amount)
+          return acc + (Number.isFinite(amount) ? amount : 0)
+        }, 0)
 
-    const sukukCommissionFromSellMeta = commissionSourceSukuk
-      .filter((inv) => getAccountType(inv) === 'SUKUK')
-      .reduce((sum, inv) => {
-        const txs = Array.isArray(inv.transactions) ? inv.transactions : []
-        const sells = txs
-          .filter((tx: any) => tx?.type === 'SELL_TO_PARTNER' && (!ownerPersonId || tx.personId === ownerPersonId))
-          .map((tx: any) => {
-            const d = tx?.date instanceof Date ? tx.date : new Date(tx?.date)
-            return { d: Number.isNaN(d.getTime()) ? null : d, meta: parseMetadata(tx?.metadata) }
-          })
-          .filter((x: any) => x.d)
-          .sort((a: any, b: any) => (b.d as Date).getTime() - (a.d as Date).getTime())
+      // Create commission from transactions
+      const txCreateCommission = txs
+        .filter((tx: any) => tx?.type === 'PARTNER_COMMISSION' && (!ownerPersonId || tx.personId === ownerPersonId))
+        .filter((tx: any) => {
+          const meta = parseMetadata(tx?.metadata)
+          return meta?.source === 'PARTNER_CREATE_COMMISSION_PAYOUT'
+        })
+        .reduce((acc: number, tx: any) => {
+          const amount = Number(tx?.amount)
+          return acc + (Number.isFinite(amount) ? amount : 0)
+        }, 0)
 
-        const latestSell = sells[0]
-        if (!latestSell) return sum
+      // Commission from sell metadata
+      const sells = txs
+        .filter((tx: any) => tx?.type === 'SELL_TO_PARTNER' && (!ownerPersonId || tx.personId === ownerPersonId))
+        .map((tx: any) => {
+          const d = tx?.date instanceof Date ? tx.date : new Date(tx?.date)
+          return { d: Number.isNaN(d.getTime()) ? null : d, meta: parseMetadata(tx?.metadata) }
+        })
+        .filter((x: any) => x.d)
+        .sort((a: any, b: any) => (b.d as Date).getTime() - (a.d as Date).getTime())
+      
+      const metaSellCommission = sells.length > 0
+        ? Math.max(0, Number(sells[0].meta?.commissionAmount ?? 0))
+        : 0
 
-        const commission = Number(latestSell.meta?.commissionAmount ?? latestSell.meta?.commission ?? 0)
-        return sum + (Number.isFinite(commission) ? Math.max(0, commission) : 0)
-      }, 0)
+      // Create commission from metadata
+      const invMeta = parseMetadata(inv?.metadata)
+      const metaCreateCommission = Math.max(0, Number(invMeta?.partnerCommissionPlan?.amount ?? 0))
 
-    sukukCommissionEarned = round2(Math.max(sukukCommissionFromTx, sukukCommissionFromSellMeta))
+      const sellEffective = Math.max(Math.max(0, txSellCommission), Math.max(0, metaSellCommission))
+      const createEffective = Math.max(Math.max(0, txCreateCommission), Math.max(0, metaCreateCommission))
+
+      return sum + sellEffective + createEffective
+    }, 0)
+    sukukCommissionEarned = round2(sukukCommissionEarned)
 
     // Total Profit = all components combined
     totalProfit = malaaProfit + cryptoProfit + sipProfit + otherProfit + circlysProfit + sukukReceivable + sukukReceivedProfit + sukukCommissionEarned
