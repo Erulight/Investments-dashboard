@@ -243,6 +243,17 @@ export default async function InvestmentsPage() {
   const getPartnerCommissionPaid = (inv: any) => {
     if (user.role !== 'PARTNER' || !user.personId) return 0
     const transactions = Array.isArray(inv.transactions) ? inv.transactions : []
+    
+    const participationCommissionRaw = Number(inv?.myParticipation?.commissionFees)
+    const fromParticipation = Number.isFinite(participationCommissionRaw)
+      ? Math.max(0, participationCommissionRaw)
+      : 0
+
+    // If participation commission exists, use it (user edited value takes priority)
+    if (fromParticipation > 0) {
+      return round2(fromParticipation)
+    }
+
     const fromBuyTx = transactions
       .filter((tx: any) => tx.type === 'BUY_FROM_PARTNER' && tx.personId === user.personId)
       .reduce((sum: number, tx: any) => {
@@ -251,18 +262,13 @@ export default async function InvestmentsPage() {
         return sum + (Number.isFinite(commission) ? Math.max(0, commission) : 0)
       }, 0)
 
-    const participationCommissionRaw = Number(inv?.myParticipation?.commissionFees)
-    const fromParticipation = Number.isFinite(participationCommissionRaw)
-      ? Math.max(0, participationCommissionRaw)
-      : 0
-
     const invMeta = parseMetadata(inv?.metadata)
     const planCommissionRaw = Number(invMeta?.partnerCommissionPlan?.amount ?? 0)
     const fromPlan = Number.isFinite(planCommissionRaw)
       ? Math.max(0, planCommissionRaw)
       : 0
 
-    return round2(Math.max(fromBuyTx, fromParticipation, fromPlan))
+    return round2(Math.max(fromBuyTx, fromPlan))
   }
 
   const getPartnerCreateCommissionPlan = (inv: any) => {
