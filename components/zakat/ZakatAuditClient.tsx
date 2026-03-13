@@ -33,12 +33,166 @@ type WarningType = {
   type: string
   message: string
   bucketLabel?: string | null
+  bucketId?: string
+  balance?: number
+  debtId?: string
+  debtAmount?: number
+  allocations?: Array<{ investmentName: string; principalRemaining: number; investmentId: string }>
+  investmentId?: string
+  investmentName?: string
+  metadata?: any
 }
 
-function WarningItem({ warning, index }: { warning: WarningType; index: number }) {
+function WarningItem({ warning, index, onFix }: { warning: WarningType; index: number; onFix?: (warningId: string, action: string) => Promise<void> }) {
   const [expanded, setExpanded] = useState(false)
+  const [fixing, setFixing] = useState(false)
+  const [showOptions, setShowOptions] = useState(false)
   const explanation = getWarningExplanation(warning.type)
   const solution = getWarningSolution(warning.type)
+
+  const handleFix = async (action: string) => {
+    if (!onFix) return
+    setFixing(true)
+    try {
+      await onFix(warning.id, action)
+    } finally {
+      setFixing(false)
+      setShowOptions(false)
+    }
+  }
+
+  const renderRealDataExample = () => {
+    if (warning.type === 'MISSING_HAUL_START' && warning.bucketLabel && warning.balance !== undefined) {
+      return (
+        <div className="mt-2 p-2 rounded bg-slate-800/40 border border-slate-700/50">
+          <div className="text-[10px] font-semibold text-amber-400 mb-1">📊 YOUR DATA</div>
+          <div className="text-[11px] text-slate-300 space-y-0.5">
+            <div>• Bucket: <span className="text-cyan-400 font-mono">{warning.bucketLabel}</span></div>
+            <div>• Balance: <span className="text-emerald-400 font-mono">{warning.balance.toLocaleString()} SAR</span></div>
+            <div>• Hawl Start: <span className="text-red-400 font-mono">MISSING ⚠️</span></div>
+          </div>
+        </div>
+      )
+    }
+
+    if (warning.type === 'DEBT_BUCKET_LEAKING' && warning.bucketLabel && warning.debtAmount !== undefined) {
+      return (
+        <div className="mt-2 p-2 rounded bg-slate-800/40 border border-slate-700/50">
+          <div className="text-[10px] font-semibold text-amber-400 mb-1">📊 YOUR DATA</div>
+          <div className="text-[11px] text-slate-300 space-y-0.5">
+            <div>• Bucket: <span className="text-cyan-400 font-mono">{warning.bucketLabel}</span></div>
+            <div>• Debt Amount: <span className="text-red-400 font-mono">{warning.debtAmount.toLocaleString()} SAR</span></div>
+            <div>• Current Balance: <span className="text-emerald-400 font-mono">{(warning.balance || 0).toLocaleString()} SAR</span></div>
+            <div>• Exclude from Zakat: <span className="text-red-400 font-mono">NOT SET ⚠️</span></div>
+          </div>
+        </div>
+      )
+    }
+
+    if (warning.type === 'DOUBLE_COUNTING' && warning.allocations && warning.allocations.length > 0) {
+      return (
+        <div className="mt-2 p-2 rounded bg-slate-800/40 border border-slate-700/50">
+          <div className="text-[10px] font-semibold text-amber-400 mb-1">📊 YOUR DATA</div>
+          <div className="text-[11px] text-slate-300 space-y-0.5">
+            <div>• Bucket: <span className="text-cyan-400 font-mono">{warning.bucketLabel}</span></div>
+            <div>• Balance: <span className="text-emerald-400 font-mono">{(warning.balance || 0).toLocaleString()} SAR</span></div>
+            <div className="text-[10px] font-semibold text-red-400 mt-1">⚠️ Allocated to {warning.allocations.length} investments:</div>
+            {warning.allocations.map((a, i) => (
+              <div key={i} className="ml-2">→ {a.investmentName}: <span className="text-amber-400 font-mono">{a.principalRemaining.toLocaleString()} SAR</span></div>
+            ))}
+          </div>
+        </div>
+      )
+    }
+
+    if (warning.type === 'MISSING_SAVINGS_HAUL' && warning.investmentName && warning.metadata?.roscaBuckets) {
+      return (
+        <div className="mt-2 p-2 rounded bg-slate-800/40 border border-slate-700/50">
+          <div className="text-[10px] font-semibold text-amber-400 mb-1">📊 YOUR DATA</div>
+          <div className="text-[11px] text-slate-300 space-y-0.5">
+            <div>• Investment: <span className="text-cyan-400 font-mono">{warning.investmentName}</span></div>
+            <div>• ROSCA Buckets: {warning.metadata.roscaBuckets.map((b: string, i: number) => (
+              <div key={i} className="ml-2 text-purple-400 font-mono">→ {b}</div>
+            ))}</div>
+            <div>• Savings Hawl Start: <span className="text-red-400 font-mono">MISSING ⚠️</span></div>
+          </div>
+        </div>
+      )
+    }
+
+    return null
+  }
+
+  const renderFixOptions = () => {
+    if (warning.type === 'DEBT_BUCKET_LEAKING') {
+      return (
+        <div className="mt-2 space-y-1.5">
+          <div className="text-[10px] font-semibold text-violet-400 uppercase tracking-wide">🛠️ AUTO-FIX OPTIONS</div>
+          <button
+            onClick={() => handleFix('exclude-from-zakat')}
+            disabled={fixing}
+            className="w-full text-left px-3 py-2 rounded bg-gradient-to-r from-emerald-600/20 to-emerald-700/20 border border-emerald-500/40 hover:border-emerald-400/60 text-slate-200 text-[11px] transition-all disabled:opacity-50 disabled:cursor-not-allowed"
+          >
+            <div className="font-semibold">✅ Option 1: Mark bucket as "Exclude from Zakat"</div>
+            <div className="text-slate-400 mt-0.5">Sets excludeFromZakat=true for this debt bucket</div>
+          </button>
+        </div>
+      )
+    }
+
+    if (warning.type === 'DOUBLE_COUNTING' && warning.allocations && warning.allocations.length > 1) {
+      return (
+        <div className="mt-2 space-y-1.5">
+          <div className="text-[10px] font-semibold text-violet-400 uppercase tracking-wide">🛠️ FIX OPTIONS (Manual Review Required)</div>
+          <div className="px-3 py-2 rounded bg-amber-600/10 border border-amber-500/40 text-slate-300 text-[11px]">
+            <div className="font-semibold mb-1">⚠️ This requires manual review</div>
+            <div className="text-slate-400 space-y-1">
+              <div>You need to decide which allocation is correct:</div>
+              {warning.allocations.map((a, i) => (
+                <div key={i} className="ml-2">• {a.investmentName} ({a.principalRemaining.toLocaleString()} SAR)</div>
+              ))}
+              <div className="mt-2 text-amber-400">→ Go to Cash Buckets page to split or close allocations</div>
+            </div>
+          </div>
+        </div>
+      )
+    }
+
+    if (warning.type === 'MISSING_HAUL_START') {
+      return (
+        <div className="mt-2 space-y-1.5">
+          <div className="text-[10px] font-semibold text-violet-400 uppercase tracking-wide">🛠️ FIX OPTIONS (Manual Input Required)</div>
+          <div className="px-3 py-2 rounded bg-blue-600/10 border border-blue-500/40 text-slate-300 text-[11px]">
+            <div className="font-semibold mb-1">ℹ️ You need to provide the hawl start date</div>
+            <div className="text-slate-400 space-y-1">
+              <div>Options:</div>
+              <div className="ml-2">• Use earliest transaction date</div>
+              <div className="ml-2">• Use first contribution date</div>
+              <div className="ml-2">• Set manually in Cash Buckets page</div>
+            </div>
+          </div>
+        </div>
+      )
+    }
+
+    if (warning.type === 'MISSING_SAVINGS_HAUL') {
+      return (
+        <div className="mt-2 space-y-1.5">
+          <div className="text-[10px] font-semibold text-violet-400 uppercase tracking-wide">🛠️ AUTO-FIX OPTIONS</div>
+          <button
+            onClick={() => handleFix('sync-rosca-haul')}
+            disabled={fixing}
+            className="w-full text-left px-3 py-2 rounded bg-gradient-to-r from-emerald-600/20 to-emerald-700/20 border border-emerald-500/40 hover:border-emerald-400/60 text-slate-200 text-[11px] transition-all disabled:opacity-50 disabled:cursor-not-allowed"
+          >
+            <div className="font-semibold">✅ Option 1: Auto-sync from ROSCA bucket</div>
+            <div className="text-slate-400 mt-0.5">Sets savingsHaulStartDate from reward/savings receipt anchor</div>
+          </button>
+        </div>
+      )
+    }
+
+    return null
+  }
 
   return (
     <motion.div
@@ -55,12 +209,23 @@ function WarningItem({ warning, index }: { warning: WarningType; index: number }
         <div className="flex-1">
           <div className="flex items-start justify-between gap-3">
             <span className="flex-1">{warning.message}</span>
-            <button
-              onClick={() => setExpanded(!expanded)}
-              className="shrink-0 px-2 py-1 rounded bg-slate-700/50 hover:bg-slate-700 text-cyan-400 text-[10px] font-semibold transition-colors"
-            >
-              {expanded ? 'Hide' : 'Explain & Fix'}
-            </button>
+            <div className="flex gap-1.5">
+              <button
+                onClick={() => setExpanded(!expanded)}
+                className="shrink-0 px-2 py-1 rounded bg-slate-700/50 hover:bg-slate-700 text-cyan-400 text-[10px] font-semibold transition-colors"
+              >
+                {expanded ? 'Hide' : 'Review'}
+              </button>
+              {(warning.type === 'DEBT_BUCKET_LEAKING' || warning.type === 'MISSING_SAVINGS_HAUL') && (
+                <button
+                  onClick={() => { setExpanded(true); setShowOptions(true); }}
+                  disabled={fixing}
+                  className="shrink-0 px-2 py-1 rounded bg-gradient-to-r from-emerald-600/50 to-emerald-700/50 hover:from-emerald-600/70 hover:to-emerald-700/70 text-white text-[10px] font-semibold transition-all disabled:opacity-50"
+                >
+                  {fixing ? 'Fixing...' : '🛠️ Fix'}
+                </button>
+              )}
+            </div>
           </div>
 
           {expanded && (
@@ -77,12 +242,16 @@ function WarningItem({ warning, index }: { warning: WarningType; index: number }
                 <div className="text-slate-400 leading-relaxed">{explanation}</div>
               </div>
 
+              {renderRealDataExample()}
+
               <div className="space-y-1">
                 <div className="text-[10px] font-semibold text-emerald-400 uppercase tracking-wide">
-                  ✅ Solution
+                  ✅ Solution Steps
                 </div>
                 <div className="text-slate-400 leading-relaxed">{solution}</div>
               </div>
+
+              {showOptions && renderFixOptions()}
             </motion.div>
           )}
         </div>
@@ -135,7 +304,7 @@ type TimelineItem = {
   zakatAmount: number
 }
 
-type Tab = 'overview' | 'investments' | 'timeline' | 'warnings' | 'history'
+type Tab = 'overview' | 'investments' | 'timeline' | 'warnings' | 'history' | 'fixes'
 
 const ROWS_PER_PAGE = 25
 const ZAKAT_RATE = 0.025
@@ -178,6 +347,68 @@ export function ZakatAuditClient({
   const [yearFilter, setYearFilter] = useState<number | 'all'>('all')
   const [page, setPage] = useState(1)
   const [expandedInv, setExpandedInv] = useState<Set<string>>(new Set())
+  const [toast, setToast] = useState<{ message: string; type: 'success' | 'error' } | null>(null)
+  const [fixHistory, setFixHistory] = useState<Array<{ fixId: string; warningId: string; message: string }>>([])
+
+  const handleFix = async (warningId: string, action: string) => {
+    const warning = warnings.find(w => w.id === warningId)
+    if (!warning) return
+
+    try {
+      const response = await fetch('/api/zakat/fix', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          warningId,
+          action,
+          bucketId: warning.bucketId,
+          investmentId: warning.investmentId,
+          debtId: warning.debtId,
+        }),
+      })
+
+      const result = await response.json()
+
+      if (!response.ok) {
+        throw new Error(result.error || 'Failed to apply fix')
+      }
+
+      setToast({ message: result.message || 'Fix applied successfully!', type: 'success' })
+      setFixHistory(prev => [...prev, { fixId: result.fixId, warningId, message: result.message }])
+
+      // Reload page after short delay to show updated warnings
+      setTimeout(() => window.location.reload(), 1500)
+    } catch (error: any) {
+      setToast({ message: error.message || 'Failed to apply fix', type: 'error' })
+    }
+  }
+
+  const handleUndo = async (fixId: string) => {
+    try {
+      const response = await fetch(`/api/zakat/fix?fixId=${fixId}`, { method: 'DELETE' })
+      const result = await response.json()
+
+      if (!response.ok) {
+        throw new Error(result.error || 'Failed to undo fix')
+      }
+
+      setToast({ message: 'Fix undone successfully!', type: 'success' })
+      setFixHistory(prev => prev.filter(f => f.fixId !== fixId))
+
+      // Reload page after short delay
+      setTimeout(() => window.location.reload(), 1500)
+    } catch (error: any) {
+      setToast({ message: error.message || 'Failed to undo fix', type: 'error' })
+    }
+  }
+
+  // Auto-dismiss toast after 5 seconds
+  React.useEffect(() => {
+    if (toast) {
+      const timer = setTimeout(() => setToast(null), 5000)
+      return () => clearTimeout(timer)
+    }
+  }, [toast])
 
   const money = (n: number) => formatCurrencyAmount(n, displayCurrency, 'SAR')
   const fmtDate = (d: string | null | undefined) => {
@@ -257,7 +488,8 @@ export function ZakatAuditClient({
     { id: 'investments', label: 'Investments', badge: investmentCards.length },
     { id: 'timeline', label: 'Timeline', badge: timelines.length },
     { id: 'warnings', label: 'Warnings', badge: warnings.length },
-    { id: 'history', label: 'History', badge: payments.length },
+    { id: 'history', label: 'Payment History', badge: payments.length },
+    ...(fixHistory.length > 0 ? [{ id: 'fixes', label: '🛠️ Fixes', badge: fixHistory.length }] : []),
   ]
 
   return (
@@ -578,10 +810,10 @@ export function ZakatAuditClient({
                         <span className="text-xs text-slate-500 ml-auto">{groupWarnings.length} item{groupWarnings.length !== 1 ? 's' : ''}</span>
                       </div>
                       <div className="divide-y divide-slate-800/40">
-                        {groupWarnings.map((w, wi) => (
-                          <WarningItem key={w.id} warning={w} index={wi} />
-                        ))}
-                      </div>
+                      {groupWarnings.map((w, wi) => (
+                        <WarningItem key={w.id} warning={w} index={wi} onFix={handleFix} />
+                      ))}
+                    </div>
                     </div>
                   )
                 })}
@@ -648,6 +880,90 @@ export function ZakatAuditClient({
           </motion.div>
         )}
 
+        {/* ─── FIXES TAB ──────────────────────────────── */}
+        {activeTab === 'fixes' && fixHistory.length > 0 && (
+          <motion.div key="fixes" initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0 }} transition={{ duration: 0.3 }} className="space-y-3">
+            <div className="rounded-xl bg-gradient-to-br from-violet-500/10 to-purple-500/10 border border-violet-500/30 p-4">
+              <div className="flex items-center gap-2 mb-2">
+                <span className="text-lg">🛠️</span>
+                <h3 className="text-sm font-semibold text-violet-300">Applied Fixes</h3>
+              </div>
+              <p className="text-xs text-slate-400">
+                These automatic fixes have been applied to resolve zakat audit warnings. You can undo any fix to revert the changes.
+              </p>
+            </div>
+
+            {fixHistory.map((fix, index) => (
+              <motion.div
+                key={fix.fixId}
+                initial={{ opacity: 0, y: 10 }}
+                animate={{ opacity: 1, y: 0 }}
+                transition={{ delay: index * 0.05 }}
+                className="rounded-xl bg-slate-900/80 border border-slate-700/50 p-4"
+              >
+                <div className="flex items-start justify-between gap-4">
+                  <div className="flex-1">
+                    <div className="flex items-center gap-2 mb-1">
+                      <span className="text-emerald-400 text-sm">✅</span>
+                      <span className="text-xs font-mono text-slate-500">Fix #{index + 1}</span>
+                    </div>
+                    <p className="text-sm text-slate-200">{fix.message}</p>
+                    <p className="text-xs text-slate-500 mt-1">Warning ID: {fix.warningId}</p>
+                  </div>
+                  <button
+                    onClick={() => handleUndo(fix.fixId)}
+                    className="shrink-0 px-3 py-1.5 rounded-lg bg-amber-600/20 border border-amber-500/40 text-amber-300 text-xs font-semibold hover:bg-amber-600/30 transition-all"
+                  >
+                    ↩️ Undo
+                  </button>
+                </div>
+              </motion.div>
+            ))}
+
+            <div className="rounded-xl bg-amber-500/10 border border-amber-500/30 p-3">
+              <div className="flex items-start gap-2 text-xs text-slate-300">
+                <span className="text-amber-400">⚠️</span>
+                <div>
+                  <span className="font-semibold text-amber-400">Note:</span> Undoing a fix will revert the database changes. 
+                  The page will reload to show the restored warning.
+                </div>
+              </div>
+            </div>
+          </motion.div>
+        )}
+
+      </AnimatePresence>
+
+      {/* Toast Notification */}
+      <AnimatePresence>
+        {toast && (
+          <motion.div
+            initial={{ opacity: 0, y: -20 }}
+            animate={{ opacity: 1, y: 0 }}
+            exit={{ opacity: 0, y: -20 }}
+            className="fixed top-4 right-4 z-50 max-w-md"
+          >
+            <div className={`rounded-lg px-4 py-3 shadow-lg border ${
+              toast.type === 'success'
+                ? 'bg-emerald-500/20 border-emerald-500/40 text-emerald-300'
+                : 'bg-red-500/20 border-red-500/40 text-red-300'
+            }`}>
+              <div className="flex items-start gap-3">
+                <span className="text-xl">{toast.type === 'success' ? '✅' : '❌'}</span>
+                <div className="flex-1">
+                  <div className="text-sm font-semibold">{toast.type === 'success' ? 'Success!' : 'Error'}</div>
+                  <div className="text-xs mt-0.5 opacity-90">{toast.message}</div>
+                </div>
+                <button
+                  onClick={() => setToast(null)}
+                  className="text-slate-400 hover:text-slate-200 transition-colors"
+                >
+                  ✕
+                </button>
+              </div>
+            </div>
+          </motion.div>
+        )}
       </AnimatePresence>
     </div>
   )

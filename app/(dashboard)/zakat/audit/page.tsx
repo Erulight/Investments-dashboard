@@ -231,7 +231,20 @@ export default async function ZakatAuditPage() {
     })
 
   // ── Section D: Warnings ──────────────────────────────────────────────────
-  const warnings: Array<{ id: string; type: string; message: string }> = []
+  const warnings: Array<{
+    id: string
+    type: string
+    message: string
+    bucketId?: string
+    bucketLabel?: string
+    balance?: number
+    debtId?: string
+    debtAmount?: number
+    allocations?: Array<{ investmentName: string; principalRemaining: number; investmentId: string }>
+    investmentId?: string
+    investmentName?: string
+    metadata?: any
+  }> = []
 
   for (const b of cashBuckets) {
     if (!b.haulStartDate) {
@@ -239,13 +252,22 @@ export default async function ZakatAuditPage() {
         id: `no-haul-${b.id}`,
         type: 'MISSING_HAUL_START',
         message: `Bucket missing haulStartDate — ${b.label || b.id.slice(0, 8)}`,
+        bucketId: b.id,
+        bucketLabel: b.label || 'Unnamed Bucket',
+        balance: Number(b.balance || 0),
       })
     }
     if ((b as any).debt?.id) {
+      const debt = (b as any).debt
       warnings.push({
         id: `debt-${b.id}`,
         type: 'DEBT_BUCKET_LEAKING',
         message: `Debt bucket leaking into zakat — ${b.label || b.id.slice(0, 8)}`,
+        bucketId: b.id,
+        bucketLabel: b.label || 'Unnamed Bucket',
+        balance: Number(b.balance || 0),
+        debtId: debt.id,
+        debtAmount: Number(debt.amount || 0),
       })
     }
     const activeAllocs = b.allocations.filter((a) => Number(a.principalRemaining) > 0.01)
@@ -254,6 +276,14 @@ export default async function ZakatAuditPage() {
         id: `dbl-${b.id}`,
         type: 'DOUBLE_COUNTING',
         message: `Possible double counting — "${b.label || b.id.slice(0, 8)}" allocated to ${activeAllocs.length} active investments`,
+        bucketId: b.id,
+        bucketLabel: b.label || 'Unnamed Bucket',
+        balance: Number(b.balance || 0),
+        allocations: activeAllocs.map((a) => ({
+          investmentName: a.investment?.name || 'Unknown',
+          principalRemaining: Number(a.principalRemaining || 0),
+          investmentId: a.investment?.id || '',
+        })),
       })
     }
   }
@@ -266,10 +296,19 @@ export default async function ZakatAuditPage() {
         return lbl.startsWith('Savings Receipt •') || lbl.startsWith('Circlys Reward Receipt •')
       })
       if (isRosca && !meta?.savingsHaulStartDate) {
+        const roscaBuckets = inv.bucketAllocations
+          .filter((a) => {
+            const lbl = a.cashBucket?.label || ''
+            return lbl.startsWith('Savings Receipt •') || lbl.startsWith('Circlys Reward Receipt •')
+          })
+          .map((a) => a.cashBucket?.label || 'Unknown')
         warnings.push({
           id: `no-savings-haul-${inv.id}`,
           type: 'MISSING_SAVINGS_HAUL',
           message: `ROSCA funded Sukuk missing savingsHaulStartDate — ${inv.name}`,
+          investmentId: inv.id,
+          investmentName: inv.name,
+          metadata: { roscaBuckets, currentMeta: meta },
         })
       }
     } catch {}
