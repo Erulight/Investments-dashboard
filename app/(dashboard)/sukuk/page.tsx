@@ -446,15 +446,25 @@ export default async function InvestmentsPage() {
         .filter((inv: any) => !isSoldDealForOwner(inv))
         .reduce((sum, inv) => sum + getNetProfit(inv), 0)
 
-      // Only count sold deals where owner has/had ACTUAL participation (exclude partner-only deals)
+      // Include deals where owner had participation OR has sell transactions
+      // (e.g., Safaqa: owner had 0 principal but sold to partner and earned profit)
       const ownerInvestments = investments.filter((inv: any) => {
         const participants = Array.isArray(inv.dealParticipants) ? inv.dealParticipants : []
         if (participants.length === 0) return true
+        
         const ownerParticipation = participants.find((p: any) => p?.personId === user.personId)
-        // Must exist AND have positive invested amount (exclude zero-principal partner-only deals)
         if (!ownerParticipation) return false
+        
+        // Include if owner has current/historical principal > 0
         const invested = Number(ownerParticipation.investedAmount || 0)
-        return invested > 0
+        if (invested > 0) return true
+        
+        // OR include if owner has sell transactions (earned profit before selling to partner)
+        const transactions = Array.isArray(inv.transactions) ? inv.transactions : []
+        const hasOwnerSell = transactions.some((tx: any) => 
+          tx.type === 'SELL_TO_PARTNER' && tx.personId === user.personId
+        )
+        return hasOwnerSell
       })
       const soldTarget = ownerInvestments.reduce((sum, inv) => sum + getOwnerSoldSettlement(inv).target, 0)
       return round2(activeProfit + soldTarget)
@@ -470,14 +480,24 @@ export default async function InvestmentsPage() {
 
     if (user.role !== 'OWNER' || !user.personId) return round2(activeReceived)
 
-    // Only count sold deals where owner has/had ACTUAL participation (exclude partner-only deals)
+    // Include deals where owner had participation OR has sell transactions
     const ownerInvestments = investments.filter((inv: any) => {
       const participants = Array.isArray(inv.dealParticipants) ? inv.dealParticipants : []
       if (participants.length === 0) return true
+      
       const ownerParticipation = participants.find((p: any) => p?.personId === user.personId)
       if (!ownerParticipation) return false
+      
+      // Include if owner has current/historical principal > 0
       const invested = Number(ownerParticipation.investedAmount || 0)
-      return invested > 0
+      if (invested > 0) return true
+      
+      // OR include if owner has sell transactions (received profit before selling to partner)
+      const transactions = Array.isArray(inv.transactions) ? inv.transactions : []
+      const hasOwnerSell = transactions.some((tx: any) => 
+        tx.type === 'SELL_TO_PARTNER' && tx.personId === user.personId
+      )
+      return hasOwnerSell
     })
     const soldReceived = ownerInvestments.reduce((sum, inv) => sum + getOwnerSoldSettlement(inv).received, 0)
     return round2(activeReceived + soldReceived)
