@@ -22,6 +22,7 @@ import {
 import { PageTransition } from '@/components/animations/PageTransition'
 import { AnimatedList, AnimatedListItem } from '@/components/animations/AnimatedList'
 import { AnimatedStatCard } from '@/components/animations/AnimatedCard'
+import { DashboardStatsClient } from '@/components/dashboard/DashboardStatsClient'
 
 export const dynamic = 'force-dynamic'
 
@@ -1520,61 +1521,36 @@ export default async function DashboardPage({
         currencyPrefix={currencyPrefix}
       />
 
-      <div className={`grid gap-3 ${user.role === 'OWNER' ? 'grid-cols-2 lg:grid-cols-5' : 'grid-cols-2 lg:grid-cols-3'}`}>
-        <AnimatedCard index={2}>
-          <div className="p-5">
-            <p className="text-xs font-medium text-slate-400 uppercase tracking-wider">Liquidity Share</p>
-            <div className="text-2xl font-bold text-cyan-400 mt-2 tabular-nums">{liquiditySharePct.toFixed(1)}%</div>
-            <p className="text-xs text-slate-500 mt-1">Cash / Total Portfolio</p>
-          </div>
-        </AnimatedCard>
-
-        <AnimatedCard index={3}>
-          <div className="p-5">
-            <p className="text-xs font-medium text-slate-400 uppercase tracking-wider">Avg Monthly Cashflow</p>
-            <div className={`text-2xl font-bold mt-2 tabular-nums ${avgMonthlyCashflow >= 0 ? 'text-emerald-400' : 'text-red-400'}`}>
-              {money(round2(Math.abs(avgMonthlyCashflow)))}
-            </div>
-            <p className="text-xs text-slate-500 mt-1">{avgMonthlyCashflow >= 0 ? 'Net inflow trend' : 'Net outflow trend'}</p>
-          </div>
-        </AnimatedCard>
-
-        <AnimatedCard index={4}>
-          <div className="p-5">
-            <p className="text-xs font-medium text-slate-400 uppercase tracking-wider">Cash Runway</p>
-            <div className="text-2xl font-bold text-indigo-400 mt-2 tabular-nums">
-              {cashRunwayMonths === null ? 'Stable' : `${round2(cashRunwayMonths).toFixed(1)}m`}
-            </div>
-            <p className="text-xs text-slate-500 mt-1">Based on average monthly outflow</p>
-          </div>
-        </AnimatedCard>
-
-        {user.role === 'OWNER' && (
-          <AnimatedCard index={5}>
-            <div className="p-5">
-              <p className="text-xs font-medium text-slate-400 uppercase tracking-wider">Cash Sync Health</p>
-              <div className={`text-2xl font-bold mt-2 tabular-nums ${Math.abs(cashSettingDelta) > 0.01 ? 'text-amber-400' : 'text-emerald-400'}`}>
-                {Math.abs(cashSettingDelta) > 0.01
-                  ? `${cashSettingDelta > 0 ? '+' : ''}${money(Math.abs(round2(cashSettingDelta)))}`
-                  : 'Synced'}
-              </div>
-              <p className="text-xs text-slate-500 mt-1">Setting vs bucket balance drift</p>
-            </div>
-          </AnimatedCard>
-        )}
-
-        {user.role === 'OWNER' && (
-          <AnimatedCard index={6}>
-            <div className="p-5">
-              <p className="text-xs font-medium text-slate-400 uppercase tracking-wider">Top Allocation Concentration</p>
-              <div className={`text-2xl font-bold mt-2 tabular-nums ${topTypeConcentrationPct > 60 ? 'text-amber-400' : 'text-emerald-400'}`}>
-                {topTypeConcentrationPct.toFixed(1)}%
-              </div>
-              <p className="text-xs text-slate-500 mt-1">Largest asset class share</p>
-            </div>
-          </AnimatedCard>
-        )}
-      </div>
+      <DashboardStatsClient
+        liquiditySharePct={liquiditySharePct}
+        cashBalance={cashBalance}
+        displayedValue={displayedValue}
+        avgMonthlyCashflow={avgMonthlyCashflow}
+        monthlyCashflowData={monthlyCashflow.map((point: any) => ({
+          month: point.month,
+          value: Number(point.value) || 0,
+        }))}
+        cashRunwayMonths={cashRunwayMonths}
+        avgMonthlyOutflow={avgMonthlyOutflow}
+        cashSettingDelta={cashSettingDelta}
+        topTypeConcentrationPct={topTypeConcentrationPct}
+        typeBreakdowns={typeBreakdowns.map((item: any) => ({
+          type: item.type,
+          value: Number(item.value) || 0,
+        }))}
+        activeInvestmentsCount={activeInvestments}
+        roscaDebt={roscaDebt}
+        netWorth={displayedValue - roscaDebt}
+        totalInvested={totalInvested}
+        totalValue={displayedValue}
+        sukukValue={sukukValue}
+        malaaValue={malaaValue}
+        cryptoValue={cryptoValue}
+        circlysOngoingSaved={circlysOngoingSaved}
+        sipValue={sipValue}
+        money={money}
+        role={user.role as 'OWNER' | 'PARTNER'}
+      />
 
 
       {user.role === 'PARTNER' && user.personId && (
@@ -1613,84 +1589,6 @@ export default async function DashboardPage({
                 {yearlyReturnPercentage >= 0 ? '+' : ''}{Math.abs(yearlyReturnPercentage).toFixed(2)}%
               </div>
               <p className="text-xs text-slate-500 mt-1">Based on invested</p>
-            </div>
-          </AnimatedCard>
-        </div>
-      )}
-
-      {/* Second Row: Deals + Debt + Net Worth */}
-      <div className="grid grid-cols-2 gap-3 lg:grid-cols-4 items-start auto-rows-min">
-        <AnimatedCard index={4}>
-          <div className="p-6">
-            <p className="text-xs font-medium text-slate-400 uppercase tracking-wider">Active Deals</p>
-            <div className="text-2xl font-bold text-amber-400 mt-2">{activeInvestments}</div>
-            <p className="text-xs text-slate-500 mt-1">Across all types</p>
-          </div>
-        </AnimatedCard>
-
-        {user.role === 'OWNER' && roscaDebt > 0 && (
-          <AnimatedCard index={5}>
-            <div className="p-6">
-              <p className="text-xs font-medium text-red-400 uppercase tracking-wider">ROSCA Remaining</p>
-              <div className="text-2xl font-bold text-red-500 mt-2 tabular-nums">
-                {money(roscaDebt)}
-              </div>
-              <p className="text-xs text-red-400 mt-1">Unpaid commitments</p>
-            </div>
-          </AnimatedCard>
-        )}
-
-        <AnimatedCard index={6}>
-          <div className="p-6">
-            <p className="text-xs font-medium text-slate-400 uppercase tracking-wider">Net Worth</p>
-            <div className={`text-2xl font-bold mt-2 tabular-nums ${netWorth >= 0 ? 'text-emerald-400' : 'text-red-400'}`}>
-              {money(netWorth)}
-            </div>
-            <p className="text-xs text-slate-500 mt-1">Portfolio − Debt</p>
-          </div>
-        </AnimatedCard>
-      </div>
-
-      {/* Third Row: Key Totals */}
-      {user.role === 'OWNER' && (
-        <div className="grid grid-cols-2 gap-3 lg:grid-cols-4 items-start auto-rows-min">
-          <AnimatedCard index={7}>
-            <div className="p-6">
-              <p className="text-xs font-medium text-slate-400 uppercase tracking-wider">Sukuk Total</p>
-              <div className="text-2xl font-bold text-indigo-400 mt-2 tabular-nums">
-                {money(sukukInvested)}
-              </div>
-              <p className="text-xs text-slate-500 mt-1">Invested {money(sukukInvested)}</p>
-            </div>
-          </AnimatedCard>
-
-          <AnimatedCard index={8}>
-            <div className="p-6">
-              <p className="text-xs font-medium text-slate-400 uppercase tracking-wider">Circlys Ongoing</p>
-              <div className="text-2xl font-bold text-pink-400 mt-2 tabular-nums">
-                {money(circlysOngoingSaved)}
-              </div>
-              <p className="text-xs text-slate-500 mt-1">Saved (not received)</p>
-            </div>
-          </AnimatedCard>
-
-          <AnimatedCard index={9}>
-            <div className="p-6">
-              <p className="text-xs font-medium text-slate-400 uppercase tracking-wider">SIP Total</p>
-              <div className="text-2xl font-bold text-teal-400 mt-2 tabular-nums">
-                {money(sipValue)}
-              </div>
-              <p className="text-xs text-slate-500 mt-1">Current value</p>
-            </div>
-          </AnimatedCard>
-
-          <AnimatedCard index={10}>
-            <div className="p-6">
-              <p className="text-xs font-medium text-slate-400 uppercase tracking-wider">Crypto Total</p>
-              <div className="text-2xl font-bold text-orange-400 mt-2 tabular-nums">
-                {money(cryptoValue)}
-              </div>
-              <p className="text-xs text-slate-500 mt-1">Current value</p>
             </div>
           </AnimatedCard>
         </div>
