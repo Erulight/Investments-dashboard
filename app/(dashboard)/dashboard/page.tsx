@@ -994,7 +994,8 @@ export default async function DashboardPage({
         : getOwnerPrincipalShare(inv)
       existing.invested += invested
       if (t === 'SUKUK') {
-        existing.value += ownerSukukMetricsById.get(inv.id)?.value || 0
+        const metrics = ownerSukukMetricsById.get(inv.id)
+        existing.value += (metrics ? (metrics.principalOutstanding + metrics.receivable) : 0)
       } else {
         const currentValue = Math.max(0, toFiniteNumber(inv.currentValue))
         const ownerPrincipal = getOwnerPrincipalShare(inv)
