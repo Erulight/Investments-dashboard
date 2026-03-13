@@ -398,7 +398,7 @@ export function DashboardStatsClient({
         items={[
           { label: 'Principal Outstanding', value: money(sukukInvested), icon: '💰', description: 'Active invested amount', color: 'emerald' },
           { label: 'Receivable Profit', value: money(sukukReceivable), icon: '📈', description: 'Accrued but not received', color: 'cyan' },
-          { label: 'Current Value', value: money(sukukValue), icon: '📊', description: 'Principal + receivable', color: 'purple' },
+          { label: 'Current Value', value: money(sukukInvested + sukukReceivable), icon: '📊', description: 'Principal + receivable', color: 'purple' },
         ]}
       />
 
