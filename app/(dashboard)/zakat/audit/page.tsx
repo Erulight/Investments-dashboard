@@ -608,14 +608,11 @@ export default async function ZakatAuditPage() {
 
   // ━━━ RENDER ━━━
   return (
-    <div className="space-y-6" style={{ background: 'linear-gradient(to bottom, #0a1628, #0d1b2a)' }}>
-      <div className="bg-gradient-to-r from-[#0a1628] to-[#0d1b2a] rounded-xl shadow-md p-6 border border-slate-700/40">
-        <div className="flex items-center gap-3 mb-1">
-          <span className="text-2xl">🕌</span>
-          <h1 className="text-2xl font-bold text-slate-100">Zakat Audit & Verification</h1>
-        </div>
-        <p className="text-sm text-slate-400">
-          Complete audit of all zakat calculations, hawl timelines, reconciliation checks, and system health verification.
+    <div className="space-y-6">
+      <div>
+        <h1 className="text-xl font-bold text-slate-100">Zakat Audit & Verification</h1>
+        <p className="text-xs text-slate-400 mt-1">
+          Complete review of all zakat calculations, hawl timelines, and reconciliation checks.
         </p>
       </div>
 
