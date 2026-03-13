@@ -1130,17 +1130,51 @@ export default async function DashboardPage({
       return sum + Math.max(0, toFiniteNumber(p?.currentValue))
     }, 0)
 
-    // For partners, totalProfit = accrued profit-to-date.
-    totalProfit = participants.reduce((sum: number, p: any) => {
-      const investment = p?.investment
-      const accountType = getAccountType(investment)
-      if (!accountType) return sum
-      if (accountType === 'SUKUK') {
-        const m = getPartnerSukukMetrics(investment, p, now)
-        return sum + Math.max(0, toFiniteNumber(m.profitAccrued))
-      }
-      return sum + toFiniteNumber(p?.profit)
+    // For partners, calculate profit breakdown
+    const partnerSukuk = participants.filter((p: any) => getAccountType(p?.investment) === 'SUKUK')
+    
+    // Sukuk receivable and received
+    sukukReceivable = partnerSukuk.reduce((sum: number, p: any) => {
+      const m = getPartnerSukukMetrics(p?.investment, p, now)
+      return sum + Math.max(0, toFiniteNumber(m.receivable))
     }, 0)
+    
+    sukukReceivedProfit = partnerSukuk.reduce((sum: number, p: any) => {
+      const m = getPartnerSukukMetrics(p?.investment, p, now)
+      return sum + Math.max(0, toFiniteNumber(m.received))
+    }, 0)
+    
+    // Commission paid by partners
+    sukukCommissionEarned = partnerSukuk.reduce((sum: number, p: any) => {
+      return sum + Math.max(0, toFiniteNumber(p?.commissionFees))
+    }, 0)
+    
+    // Other profit sources
+    malaaProfit = participants
+      .filter((p: any) => getAccountType(p?.investment) === 'MALAA')
+      .reduce((sum: number, p: any) => sum + toFiniteNumber(p?.profit), 0)
+    
+    cryptoProfit = participants
+      .filter((p: any) => getAccountType(p?.investment) === 'CRYPTO')
+      .reduce((sum: number, p: any) => sum + toFiniteNumber(p?.profit), 0)
+    
+    sipProfit = participants
+      .filter((p: any) => getAccountType(p?.investment) === 'SIP')
+      .reduce((sum: number, p: any) => sum + toFiniteNumber(p?.profit), 0)
+    
+    circlysProfit = participants
+      .filter((p: any) => getAccountType(p?.investment) === 'CIRCLYS')
+      .reduce((sum: number, p: any) => sum + toFiniteNumber(p?.profit), 0)
+    
+    otherProfit = participants
+      .filter((p: any) => {
+        const t = getAccountType(p?.investment)
+        return t && !['SUKUK', 'MALAA', 'CRYPTO', 'SIP', 'CIRCLYS'].includes(t)
+      })
+      .reduce((sum: number, p: any) => sum + toFiniteNumber(p?.profit), 0)
+    
+    // Total profit
+    totalProfit = malaaProfit + cryptoProfit + sipProfit + otherProfit + circlysProfit + sukukReceivable + sukukReceivedProfit
 
     activeInvestments = participants.filter((p: any) => {
       const investment = p?.investment

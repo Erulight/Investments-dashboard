@@ -1725,7 +1725,10 @@ export function SukukList({ initialSukuk, userRole, ownerPersonId, viewerPersonI
 
       setCommissionEditTarget(null)
       setCommissionForm({ commissionFees: '' })
-      window.location.reload()
+      setActionLoading(false)
+      
+      // Force a full page reload to refresh all data
+      window.location.href = window.location.pathname
     } catch (error) {
       setActionError('An error occurred while updating commission')
       setActionLoading(false)
@@ -2298,23 +2301,35 @@ export function SukukList({ initialSukuk, userRole, ownerPersonId, viewerPersonI
                               <Icon><EditIcon /></Icon>
                             </Button>
 
-                            <Button
-                              size="sm"
-                              variant="ghost"
-                              onClick={() => openWithdrawModal(inv)}
-                              disabled={actionLoading || (isSoldDealForOwner && !partnerClosed) || isPendingCommissionPayout}
-                              title={
-                                isSoldDealForOwner && !partnerClosed
-                                  ? 'Waiting for partner to close'
-                                  : isPendingCommissionPayout
-                                    ? 'Waiting for partner commission payout'
+                            {isPendingCommissionPayout ? (
+                              <Button
+                                size="sm"
+                                variant="primary"
+                                onClick={() => openWithdrawModal(inv, metrics)}
+                                disabled={actionLoading}
+                                title="Receive Commission"
+                                aria-label="Receive Commission"
+                                className="h-8 px-3 py-0 shrink-0 text-xs bg-cyan-600 hover:bg-cyan-700"
+                              >
+                                💰 Receive
+                              </Button>
+                            ) : (
+                              <Button
+                                size="sm"
+                                variant="ghost"
+                                onClick={() => openWithdrawModal(inv, metrics)}
+                                disabled={actionLoading || (isSoldDealForOwner && !partnerClosed)}
+                                title={
+                                  isSoldDealForOwner && !partnerClosed
+                                    ? 'Waiting for partner to close'
                                     : 'Withdraw'
-                              }
-                              aria-label="Withdraw"
-                              className="h-8 w-8 px-0 py-0 shrink-0"
-                            >
-                              <Icon><WithdrawIcon /></Icon>
-                            </Button>
+                                }
+                                aria-label="Withdraw"
+                                className="h-8 w-8 px-0 py-0 shrink-0"
+                              >
+                                <Icon><WithdrawIcon /></Icon>
+                              </Button>
+                            )}
 
                             <Button
                               size="sm"
