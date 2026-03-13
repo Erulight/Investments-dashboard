@@ -37,6 +37,44 @@ type HistoryItem = {
   investedAmount?: number
 }
 
+type HoldingRow = {
+  id: string
+  name: string
+  assetType: string
+  cost: number
+  currentValue: number
+  allocationPct: number
+}
+
+type HoldingDraftRow = {
+  id: string
+  name: string
+  assetType: string
+  cost: string
+  currentValue: string
+}
+
+type ZakatBaseRow = {
+  key: string
+  label: string
+  value: number
+}
+
+type ZakatBreakdownRow = {
+  hijriYear: number
+  startAt: Date
+  startValue: number
+  endAt: Date
+  endValue: number
+  basePct: number
+  zakatable: number
+  zakatDue: number
+  paidAmount: number
+  dueAfterPayment: number
+  periodKey: string
+  canPay: boolean
+}
+
 const safeNumber = (value: unknown, fallback = 0) => {
   const n = typeof value === 'number' ? value : Number(value)
   return Number.isFinite(n) ? n : fallback
@@ -64,6 +102,23 @@ const getRangeStart = (range: RangeKey, now: Date) => {
   if (range === 'month') return new Date(n.getTime() - 30 * 24 * 60 * 60 * 1000)
   if (range === 'year') return new Date(n.getTime() - 365 * 24 * 60 * 60 * 1000)
   return null
+}
+
+const addDays = (date: Date, days: number) => {
+  const next = new Date(date)
+  next.setDate(next.getDate() + days)
+  return next
+}
+
+const getHijriYear = (date: Date) => {
+  try {
+    const parts = new Intl.DateTimeFormat('en-US-u-ca-islamic', { year: 'numeric' }).formatToParts(date)
+    const yearPart = parts.find((p) => p.type === 'year')?.value
+    const year = yearPart ? Number(yearPart) : NaN
+    return Number.isFinite(year) ? year : null
+  } catch {
+    return null
+  }
 }
 
 function NeonLineChart({ points, range }: { points: { at: Date; value: number }[]; range: RangeKey }) {
@@ -253,7 +308,10 @@ export default function MalaaPortfolioRedesigned({ investment, userRole }: Malaa
   const [showEditForm, setShowEditForm] = useState(false)
   const [showValueForm, setShowValueForm] = useState(false)
   const [showInvestForm, setShowInvestForm] = useState(false)
+  const [showHoldingsForm, setShowHoldingsForm] = useState(false)
   const [isLoading, setIsLoading] = useState(false)
+  const [isSavingHoldings, setIsSavingHoldings] = useState(false)
+  const [isSavingZakatBase, setIsSavingZakatBase] = useState(false)
   const [valueForm, setValueForm] = useState<{ date: string; currentValue: string }>({
     date: new Date().toISOString().split('T')[0],
     currentValue: '',
@@ -262,6 +320,13 @@ export default function MalaaPortfolioRedesigned({ investment, userRole }: Malaa
     date: new Date().toISOString().split('T')[0],
     amount: '',
   })
+  const [holdingsDraft, setHoldingsDraft] = useState<HoldingDraftRow[]>([])
+  const [zakatBaseDraft, setZakatBaseDraft] = useState<Record<string, string>>({})
+  const [showZakatPayForm, setShowZakatPayForm] = useState(false)
+  const [zakatPayTarget, setZakatPayTarget] = useState<ZakatBreakdownRow | null>(null)
+  const [zakatPayAmount, setZakatPayAmount] = useState('')
+  const [zakatPayDate, setZakatPayDate] = useState(new Date().toISOString().split('T')[0])
+  const [isPayingZakat, setIsPayingZakat] = useState(false)
 
   const meta = useMemo(() => parseMeta(inv), [inv])
   const investedAmount = Number(meta.investedAmount ?? inv?.principalAmount ?? 0)
@@ -311,6 +376,401 @@ export default function MalaaPortfolioRedesigned({ investment, userRole }: Malaa
 
     return last ? formatGregorianAndHijriDate(last.at) : ''
   }, [meta.history])
+
+  const transactionLogRows = useMemo(() => {
+    const history: any[] = Array.isArray((meta as any).history) ? ((meta as any).history as any[]) : []
+    const payments: any[] = Array.isArray((meta as any).zakatPayments) ? ((meta as any).zakatPayments as any[]) : []
+
+    const historyRows = history
+      .map((h: any) => {
+        const at = new Date(h?.at)
+        if (Number.isNaN(at.getTime())) return null
+        return {
+          key: `h_${String(h?.at || '')}_${String(h?.action || '')}_${String(h?.amount || '')}`,
+          at,
+          action: String(h?.action || ''),
+          amount: safeNumber(h?.amount, 0),
+          investedAmount: safeNumber(h?.investedAmount, NaN),
+          currentValue: safeNumber(h?.currentValue, NaN),
+        }
+      })
+      .filter((x): x is {
+        key: string
+        at: Date
+        action: string
+        amount: number
+        investedAmount: number
+        currentValue: number
+      } => !!x)
+
+    const paymentRows = payments
+      .map((p: any) => {
+        const at = new Date(p?.date)
+        if (Number.isNaN(at.getTime())) return null
+        return {
+          key: `z_${String(p?.id || '')}`,
+          at,
+          action: 'ZAKAT_PAID',
+          amount: safeNumber(p?.amount, 0),
+          investedAmount: NaN,
+          currentValue: NaN,
+        }
+      })
+      .filter((x): x is {
+        key: string
+        at: Date
+        action: string
+        amount: number
+        investedAmount: number
+        currentValue: number
+      } => !!x)
+
+    return [...historyRows, ...paymentRows]
+      .sort((a, b) => b.at.getTime() - a.at.getTime())
+      .slice(0, 200)
+  }, [meta])
+
+  const zakatBreakdown = useMemo(() => {
+    const history: HistoryItem[] = Array.isArray(meta.history) ? meta.history : []
+    const valuePoints = history
+      .map((h) => {
+        const at = new Date(h.at)
+        const value = safeNumber(h.currentValue, NaN)
+        if (Number.isNaN(at.getTime()) || !Number.isFinite(value)) return null
+        const hijriYear = getHijriYear(at)
+        if (!hijriYear) return null
+        return { hijriYear, at, value }
+      })
+      .filter((x): x is { hijriYear: number; at: Date; value: number } => !!x)
+      .sort((a, b) => a.at.getTime() - b.at.getTime())
+
+    const payments = Array.isArray((meta as any).zakatPayments)
+      ? ((meta as any).zakatPayments as any[])
+      : []
+    const paidByPeriodKey = new Map<string, number>()
+    for (const p of payments) {
+      const key = typeof p?.periodKey === 'string' ? p.periodKey : ''
+      if (!key) continue
+      const amount = safeNumber(p?.amount, 0)
+      if (amount <= 0) continue
+      paidByPeriodKey.set(key, (paidByPeriodKey.get(key) || 0) + amount)
+    }
+
+    const zakatBaseByAssetType = (meta.zakatBaseByAssetType || {}) as Record<string, number>
+    const holdings = Array.isArray(meta.holdings) ? meta.holdings : []
+
+    const effectiveBasePct = (() => {
+      if (!holdings.length) return 0
+      const total = holdings.reduce((acc: number, h: any) => acc + Math.max(0, safeNumber(h?.currentValue, 0)), 0)
+      if (total <= 0) return 0
+      const weighted = holdings.reduce((acc: number, h: any) => {
+        const holdingValue = Math.max(0, safeNumber(h?.currentValue, 0))
+        const assetType = String(h?.assetType || '')
+        const base = safeNumber(zakatBaseByAssetType[assetType], 0)
+        const allocationPct = (holdingValue / total) * 100
+        return acc + (allocationPct * base) / 100
+      }, 0)
+      return Math.max(0, Math.min(100, weighted))
+    })()
+
+    const rows: ZakatBreakdownRow[] = (() => {
+      if (valuePoints.length === 0) return []
+
+      const hawlAnchorAt = (() => {
+        const investedDates = history
+          .filter((h) => typeof h?.action === 'string' && h.action === 'INVEST')
+          .map((h) => new Date(h.at))
+          .filter((d) => !Number.isNaN(d.getTime()))
+          .sort((a, b) => a.getTime() - b.getTime())
+
+        if (investedDates.length > 0) return investedDates[0]
+        return valuePoints[0].at
+      })()
+
+      const firstAt = startOfDay(hawlAnchorAt)
+      const lastAt = startOfDay(valuePoints[valuePoints.length - 1].at)
+      const now = startOfDay(new Date())
+
+      const periods: Array<{ startAt: Date; endAt: Date }> = []
+      let cursor = new Date(firstAt)
+      while (cursor.getTime() <= lastAt.getTime() || cursor.getTime() <= now.getTime()) {
+        const endAt = addDays(cursor, 354)
+        periods.push({ startAt: cursor, endAt })
+        cursor = addDays(cursor, 354)
+        if (periods.length > 30) break
+        if (cursor.getTime() > now.getTime() && cursor.getTime() > lastAt.getTime()) break
+      }
+
+      const getEndPoint = (startAt: Date, endAt: Date) => {
+        for (let i = valuePoints.length - 1; i >= 0; i--) {
+          const p = valuePoints[i]
+          if (p.at.getTime() > endAt.getTime()) continue
+          if (p.at.getTime() < startAt.getTime()) break
+          return p
+        }
+        return null
+      }
+
+      const getStartPoint = (startAt: Date, endAt: Date) => {
+        for (let i = 0; i < valuePoints.length; i++) {
+          const p = valuePoints[i]
+          if (p.at.getTime() < startAt.getTime()) continue
+          if (p.at.getTime() > endAt.getTime()) break
+          return p
+        }
+        return null
+      }
+
+      return periods
+        .map((period) => {
+          const startPoint = getStartPoint(period.startAt, period.endAt)
+          const endPoint = getEndPoint(period.startAt, period.endAt)
+          if (!endPoint || !startPoint) return null
+
+          const hijriYear = getHijriYear(period.startAt)
+          if (!hijriYear) return null
+
+          const endValue = endPoint.value
+          const zakatable = (endValue * effectiveBasePct) / 100
+          const zakatDue = zakatable * 0.025
+
+          const periodKey = `${period.startAt.toISOString().split('T')[0]}_${period.endAt.toISOString().split('T')[0]}`
+          const paidAmount = paidByPeriodKey.get(periodKey) || 0
+          const completed = now.getTime() >= period.endAt.getTime()
+          const dueIfCompleted = completed ? zakatDue : 0
+          const dueAfterPayment = Math.max(0, dueIfCompleted - paidAmount)
+
+          return {
+            hijriYear,
+            startAt: period.startAt,
+            startValue: startPoint.value,
+            endAt: period.endAt,
+            endValue,
+            basePct: effectiveBasePct,
+            zakatable,
+            zakatDue: dueIfCompleted,
+            paidAmount,
+            dueAfterPayment,
+            periodKey,
+            canPay: completed && dueAfterPayment > 0,
+          } satisfies ZakatBreakdownRow
+        })
+        .filter((x): x is ZakatBreakdownRow => !!x)
+    })()
+
+    return {
+      rows,
+      effectiveBasePct,
+      hasHoldings: holdings.length > 0,
+      hasHistory: valuePoints.length > 0,
+    }
+  }, [meta.history, meta.zakatBaseByAssetType, meta.holdings, (meta as any).zakatPayments])
+
+  const holdingsSummary = useMemo(() => {
+    const holdings = Array.isArray(meta.holdings) ? meta.holdings : []
+    const normalized = holdings
+      .map((h: any) => ({
+        id: String(h?.id || ''),
+        name: String(h?.name || ''),
+        assetType: String(h?.assetType || ''),
+        cost: Math.max(0, safeNumber(h?.cost, 0)),
+        currentValue: Math.max(0, safeNumber(h?.currentValue, 0)),
+      }))
+      .filter((h: any) => h.assetType)
+
+    const total = normalized.reduce((acc: number, h: any) => acc + h.currentValue, 0)
+    const costTotal = normalized.reduce((acc: number, h: any) => acc + h.cost, 0)
+    const rows: HoldingRow[] = normalized
+      .map((h: any): HoldingRow => ({
+        ...h,
+        allocationPct: total > 0 ? (h.currentValue / total) * 100 : 0,
+      }))
+      .sort((a: any, b: any) => b.allocationPct - a.allocationPct)
+
+    return { rows, total, costTotal }
+  }, [meta.holdings])
+
+  const zakatBaseRows = useMemo(() => {
+    const base = (meta.zakatBaseByAssetType || {}) as Record<string, number>
+    const keys = Object.keys(base)
+    const ordered = keys.length
+      ? keys
+      : [
+          'us_stocks',
+          'developed_emerging_stocks',
+          'local_equity',
+          'real_estate',
+          'money_market',
+          'commodities',
+        ]
+
+    return ordered.map((k): ZakatBaseRow => ({
+      key: k,
+      label: k.replace(/_/g, ' ').replace(/\b\w/g, (c) => c.toUpperCase()),
+      value: Number(base[k] ?? 0),
+    }))
+  }, [meta.zakatBaseByAssetType])
+
+  const openHoldingsEditor = () => {
+    const holdings = Array.isArray((meta as any).holdings) ? ((meta as any).holdings as any[]) : []
+    const next: HoldingDraftRow[] = holdings
+      .map((h: any): HoldingDraftRow => ({
+        id: typeof h?.id === 'string' && h.id ? h.id : crypto.randomUUID(),
+        name: String(h?.name || ''),
+        assetType: String(h?.assetType || ''),
+        cost: String(safeNumber(h?.cost, 0)),
+        currentValue: String(safeNumber(h?.currentValue, 0)),
+      }))
+      .filter((h) => h.assetType)
+
+    setHoldingsDraft(next)
+    setShowHoldingsForm(true)
+  }
+
+  const addHoldingDraft = () => {
+    setHoldingsDraft((prev: HoldingDraftRow[]) => [
+      ...prev,
+      {
+        id: crypto.randomUUID(),
+        name: '',
+        assetType: 'us_stocks',
+        cost: '0',
+        currentValue: '0',
+      },
+    ])
+  }
+
+  const removeHoldingDraft = (id: string) => {
+    setHoldingsDraft((prev: HoldingDraftRow[]) => prev.filter((h: HoldingDraftRow) => h.id !== id))
+  }
+
+  const saveHoldings = async () => {
+    if (!inv) return
+    if (isSavingHoldings) return
+
+    setIsSavingHoldings(true)
+    try {
+      const payload = holdingsDraft.map((h: HoldingDraftRow) => ({
+        id: h.id,
+        name: String(h.name || '').trim(),
+        assetType: String(h.assetType || '').trim(),
+        cost: Math.max(0, Number(h.cost) || 0),
+        currentValue: Math.max(0, Number(h.currentValue) || 0),
+      }))
+
+      const response = await fetch('/api/sip/update-holdings', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ sipId: inv.id, holdings: payload }),
+      })
+
+      if (!response.ok) {
+        const error = await response.json().catch(() => ({}))
+        throw new Error(error.error || 'Failed to save holdings')
+      }
+
+      const updated = await response.json()
+      setInv(updated)
+      setShowHoldingsForm(false)
+    } catch (error) {
+      console.error('Save holdings error:', error)
+      alert(error instanceof Error ? error.message : 'Failed to save holdings')
+    } finally {
+      setIsSavingHoldings(false)
+    }
+  }
+
+  const openZakatBaseEditor = () => {
+    const next: Record<string, string> = {}
+    for (const row of zakatBaseRows) {
+      next[row.key] = String(row.value ?? 0)
+    }
+    setZakatBaseDraft(next)
+  }
+
+  const saveZakatBase = async () => {
+    if (!inv) return
+    setIsSavingZakatBase(true)
+    try {
+      const payload: Record<string, number> = {}
+      for (const [k, v] of Object.entries(zakatBaseDraft)) {
+        const n = parseFloat(String(v))
+        payload[k] = Number.isFinite(n) ? n : 0
+      }
+
+      const response = await fetch('/api/sip/update-zakat-base', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ sipId: inv.id, zakatBaseByAssetType: payload }),
+      })
+
+      if (!response.ok) {
+        const error = await response.json().catch(() => ({}))
+        throw new Error(error.error || 'Failed to save zakat base')
+      }
+
+      const updated = await response.json()
+      setInv(updated)
+    } catch (error) {
+      console.error('Save zakat base error:', error)
+      alert(error instanceof Error ? error.message : 'Failed to save zakat base')
+    } finally {
+      setIsSavingZakatBase(false)
+    }
+  }
+
+  const openZakatPay = (row: ZakatBreakdownRow) => {
+    setZakatPayTarget(row)
+    setZakatPayAmount(row.dueAfterPayment.toFixed(2))
+    setZakatPayDate(new Date().toISOString().split('T')[0])
+    setShowZakatPayForm(true)
+  }
+
+  const submitZakatPay = async (event: FormEvent) => {
+    event.preventDefault()
+    if (!inv || !zakatPayTarget) return
+    const amount = Number(zakatPayAmount)
+    if (!Number.isFinite(amount) || amount <= 0) {
+      alert('Enter a valid amount')
+      return
+    }
+    const date = zakatPayDate ? new Date(zakatPayDate) : new Date()
+    if (Number.isNaN(date.getTime())) {
+      alert('Invalid date')
+      return
+    }
+
+    setIsPayingZakat(true)
+    try {
+      const response = await fetch('/api/sip/pay-zakat', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          sipId: inv.id,
+          periodKey: zakatPayTarget.periodKey,
+          periodStartAt: zakatPayTarget.startAt.toISOString(),
+          periodEndAt: zakatPayTarget.endAt.toISOString(),
+          amount,
+          date: date.toISOString(),
+        }),
+      })
+
+      if (!response.ok) {
+        const error = await response.json().catch(() => ({}))
+        throw new Error(error.error || 'Failed to pay zakat')
+      }
+
+      const updated = await response.json()
+      setInv(updated)
+      setShowZakatPayForm(false)
+      setZakatPayTarget(null)
+    } catch (error) {
+      console.error('Pay zakat error:', error)
+      alert(error instanceof Error ? error.message : 'Failed to pay zakat')
+    } finally {
+      setIsPayingZakat(false)
+    }
+  }
 
   const handleSubmitCurrentValue = async (e: FormEvent) => {
     e.preventDefault()
@@ -740,6 +1200,291 @@ export default function MalaaPortfolioRedesigned({ investment, userRole }: Malaa
             </motion.div>
           ))}
         </div>
+
+        {/* Tabs Section */}
+        <motion.div
+          initial={{ opacity: 0, y: 20 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ delay: 0.7 }}
+          className="relative overflow-hidden rounded-3xl bg-gradient-to-br from-slate-900/90 via-purple-900/30 to-slate-900/90 border border-purple-500/20 p-6 backdrop-blur-xl"
+        >
+          <div className="relative z-10">
+            {/* Tab Buttons */}
+            <div className="flex gap-3 mb-6">
+              {([
+                { key: 'performance', label: 'Performance', icon: '📊' },
+                { key: 'zakat', label: 'Zakat & Purif.', icon: '☪️' },
+                { key: 'logs', label: 'Logs', icon: '📜' },
+              ] as const).map((tab) => (
+                <motion.button
+                  key={tab.key}
+                  whileHover={{ scale: 1.05 }}
+                  whileTap={{ scale: 0.95 }}
+                  onClick={() => setActiveTab(tab.key)}
+                  className={`px-6 py-3 rounded-full font-bold text-sm transition-all ${
+                    activeTab === tab.key
+                      ? 'bg-gradient-to-r from-purple-600 to-fuchsia-600 text-white shadow-lg shadow-purple-500/50'
+                      : 'bg-slate-800/50 text-slate-400 hover:text-white hover:bg-slate-700/50 border border-slate-700/50'
+                  }`}
+                >
+                  <span className="mr-2">{tab.icon}</span>
+                  {tab.label}
+                </motion.button>
+              ))}
+            </div>
+
+            {/* Performance Tab */}
+            {activeTab === 'performance' && (
+              <motion.div
+                initial={{ opacity: 0, y: 10 }}
+                animate={{ opacity: 1, y: 0 }}
+                className="space-y-6"
+              >
+                {/* Holdings Section */}
+                <div className="rounded-2xl bg-gradient-to-br from-slate-800/50 to-purple-900/20 border border-purple-500/20 p-6">
+                  <div className="flex items-center justify-between mb-4">
+                    <div>
+                      <h3 className="text-lg font-bold text-white flex items-center gap-2">
+                        <span>📈</span> Holdings & Allocation
+                      </h3>
+                      <p className="text-sm text-slate-400 mt-1">Allocation % derived from holding values</p>
+                    </div>
+                    {userRole === 'OWNER' && (
+                      <motion.button
+                        whileHover={{ scale: 1.05 }}
+                        whileTap={{ scale: 0.95 }}
+                        onClick={openHoldingsEditor}
+                        className="px-4 py-2 bg-gradient-to-r from-purple-600 to-fuchsia-600 text-white rounded-lg font-semibold shadow-lg hover:shadow-purple-500/50 transition-all"
+                      >
+                        Edit Holdings
+                      </motion.button>
+                    )}
+                  </div>
+
+                  {holdingsSummary.rows.length === 0 ? (
+                    <p className="text-slate-400 text-sm">No holdings yet.</p>
+                  ) : (
+                    <div className="overflow-x-auto">
+                      <table className="w-full text-sm">
+                        <thead>
+                          <tr className="text-left text-xs uppercase tracking-wider text-slate-500 border-b border-slate-700/50">
+                            <th className="py-3 pr-4">Holding</th>
+                            <th className="py-3 pr-4">Asset Type</th>
+                            <th className="py-3 pr-4 text-right">Cost</th>
+                            <th className="py-3 pr-4 text-right">Value</th>
+                            <th className="py-3 text-right">Allocation</th>
+                          </tr>
+                        </thead>
+                        <tbody className="divide-y divide-slate-700/30">
+                          {holdingsSummary.rows.map((h: HoldingRow) => (
+                            <tr key={h.id || `${h.assetType}-${h.name}`} className="hover:bg-purple-500/5 transition-colors">
+                              <td className="py-3 pr-4 font-medium text-white">{h.name || '-'}</td>
+                              <td className="py-3 pr-4 text-slate-300">{h.assetType}</td>
+                              <td className="py-3 pr-4 text-right tabular-nums text-slate-300">{formatCurrency(h.cost)}</td>
+                              <td className="py-3 pr-4 text-right tabular-nums text-white font-semibold">{formatCurrency(h.currentValue)}</td>
+                              <td className="py-3 text-right tabular-nums text-purple-400 font-semibold">{h.allocationPct.toFixed(2)}%</td>
+                            </tr>
+                          ))}
+                          <tr className="font-bold border-t-2 border-purple-500/30">
+                            <td className="py-3 pr-4 text-white" colSpan={2}>Total</td>
+                            <td className="py-3 pr-4 text-right tabular-nums text-white">{formatCurrency(holdingsSummary.costTotal)}</td>
+                            <td className="py-3 pr-4 text-right tabular-nums text-emerald-400">{formatCurrency(holdingsSummary.total)}</td>
+                            <td className="py-3 text-right tabular-nums text-purple-400">100.00%</td>
+                          </tr>
+                        </tbody>
+                      </table>
+                    </div>
+                  )}
+                </div>
+              </motion.div>
+            )}
+
+            {/* Zakat Tab */}
+            {activeTab === 'zakat' && (
+              <motion.div
+                initial={{ opacity: 0, y: 10 }}
+                animate={{ opacity: 1, y: 0 }}
+                className="space-y-6"
+              >
+                {/* Zakat Base */}
+                <div className="rounded-2xl bg-gradient-to-br from-slate-800/50 to-purple-900/20 border border-purple-500/20 p-6">
+                  <div className="flex items-center justify-between mb-4">
+                    <div>
+                      <h3 className="text-lg font-bold text-white flex items-center gap-2">
+                        <span>⚖️</span> Zakat Base % (by Asset Type)
+                      </h3>
+                      <p className="text-sm text-slate-400 mt-1">Edit when scholar guidance changes</p>
+                    </div>
+                    {userRole === 'OWNER' && (
+                      <div className="flex gap-2">
+                        <motion.button
+                          whileHover={{ scale: 1.05 }}
+                          whileTap={{ scale: 0.95 }}
+                          onClick={openZakatBaseEditor}
+                          className="px-4 py-2 bg-slate-700 text-white rounded-lg font-semibold hover:bg-slate-600 transition-all"
+                        >
+                          Reset
+                        </motion.button>
+                        <motion.button
+                          whileHover={{ scale: 1.05 }}
+                          whileTap={{ scale: 0.95 }}
+                          onClick={saveZakatBase}
+                          disabled={isSavingZakatBase}
+                          className="px-4 py-2 bg-gradient-to-r from-purple-600 to-fuchsia-600 text-white rounded-lg font-semibold shadow-lg hover:shadow-purple-500/50 transition-all disabled:opacity-50"
+                        >
+                          {isSavingZakatBase ? 'Saving...' : 'Save'}
+                        </motion.button>
+                      </div>
+                    )}
+                  </div>
+
+                  <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
+                    {zakatBaseRows.map((row: ZakatBaseRow) => {
+                      const draftValue = zakatBaseDraft[row.key]
+                      const shown = typeof draftValue === 'string' ? draftValue : String(row.value ?? 0)
+                      return (
+                        <div key={row.key} className="flex items-center justify-between bg-slate-800/50 rounded-lg p-3 border border-slate-700/50">
+                          <span className="text-sm text-slate-300 font-medium">{row.label}</span>
+                          {userRole === 'OWNER' ? (
+                            <input
+                              type="number"
+                              min="0"
+                              max="100"
+                              step="0.01"
+                              value={shown}
+                              onChange={(e) =>
+                                setZakatBaseDraft((prev) => ({
+                                  ...prev,
+                                  [row.key]: e.target.value,
+                                }))
+                              }
+                              className="w-20 px-2 py-1 bg-slate-700 border border-slate-600 rounded text-white text-sm text-right focus:outline-none focus:ring-2 focus:ring-purple-500"
+                            />
+                          ) : (
+                            <span className="text-slate-300 font-semibold tabular-nums">{Number(row.value ?? 0).toFixed(2)}%</span>
+                          )}
+                        </div>
+                      )
+                    })}
+                  </div>
+                </div>
+
+                {/* Zakat Breakdown */}
+                <div className="rounded-2xl bg-gradient-to-br from-slate-800/50 to-purple-900/20 border border-purple-500/20 p-6">
+                  <h3 className="text-lg font-bold text-white mb-2 flex items-center gap-2">
+                    <span>📅</span> Hijri Yearly (Hawl) Breakdown
+                  </h3>
+                  <p className="text-sm text-slate-400 mb-4">
+                    {zakatBreakdown.hasHistory
+                      ? 'Uses your value history and calculates zakat based on end-of-year value.'
+                      : 'Add value updates to generate yearly zakat breakdown.'}
+                  </p>
+
+                  {!zakatBreakdown.hasHoldings && (
+                    <div className="mb-4 bg-amber-500/10 border border-amber-500/30 rounded-lg p-3 text-sm text-amber-300">
+                      ⚠️ Effective zakat base is 0% because holdings/allocations are not set yet.
+                    </div>
+                  )}
+
+                  {zakatBreakdown.rows.length > 0 && (
+                    <div className="overflow-x-auto">
+                      <table className="w-full text-sm">
+                        <thead>
+                          <tr className="text-left text-xs uppercase tracking-wider text-slate-500 border-b border-slate-700/50">
+                            <th className="py-3 pr-4">Hijri Year</th>
+                            <th className="py-3 pr-4">Start</th>
+                            <th className="py-3 pr-4">End</th>
+                            <th className="py-3 pr-4 text-right">Base %</th>
+                            <th className="py-3 pr-4 text-right">End Value</th>
+                            <th className="py-3 pr-4 text-right">Zakatable</th>
+                            <th className="py-3 pr-4 text-right">Zakat</th>
+                            <th className="py-3 pr-4 text-right">Paid</th>
+                            <th className="py-3 text-right">Due</th>
+                          </tr>
+                        </thead>
+                        <tbody className="divide-y divide-slate-700/30">
+                          {zakatBreakdown.rows.map((r: ZakatBreakdownRow) => (
+                            <tr key={r.periodKey} className="hover:bg-purple-500/5 transition-colors">
+                              <td className="py-3 pr-4 font-semibold text-white">{r.hijriYear}</td>
+                              <td className="py-3 pr-4 text-slate-400 text-xs">{formatGregorianAndHijriDate(r.startAt) || '-'}</td>
+                              <td className="py-3 pr-4 text-slate-400 text-xs">{formatGregorianAndHijriDate(r.endAt) || '-'}</td>
+                              <td className="py-3 pr-4 text-right tabular-nums text-slate-300">{r.basePct.toFixed(2)}%</td>
+                              <td className="py-3 pr-4 text-right tabular-nums text-white">{formatCurrency(r.endValue)}</td>
+                              <td className="py-3 pr-4 text-right tabular-nums text-slate-300">{formatCurrency(r.zakatable)}</td>
+                              <td className="py-3 pr-4 text-right tabular-nums text-purple-400">{formatCurrency(r.zakatDue)}</td>
+                              <td className="py-3 pr-4 text-right tabular-nums text-slate-300">{formatCurrency(r.paidAmount)}</td>
+                              <td className="py-3 text-right">
+                                <div className="flex items-center justify-end gap-2">
+                                  <span className={`font-semibold tabular-nums ${r.dueAfterPayment > 0 ? 'text-amber-400' : 'text-emerald-400'}`}>
+                                    {formatCurrency(r.dueAfterPayment)}
+                                  </span>
+                                  {userRole === 'OWNER' && r.canPay && (
+                                    <motion.button
+                                      whileHover={{ scale: 1.05 }}
+                                      whileTap={{ scale: 0.95 }}
+                                      onClick={() => openZakatPay(r)}
+                                      className="px-2 py-1 bg-emerald-500/20 border border-emerald-500/30 rounded text-xs font-semibold text-emerald-300 hover:bg-emerald-500/30 transition-all"
+                                    >
+                                      Pay
+                                    </motion.button>
+                                  )}
+                                </div>
+                              </td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    </div>
+                  )}
+                </div>
+              </motion.div>
+            )}
+
+            {/* Logs Tab */}
+            {activeTab === 'logs' && (
+              <motion.div
+                initial={{ opacity: 0, y: 10 }}
+                animate={{ opacity: 1, y: 0 }}
+              >
+                <div className="rounded-2xl bg-gradient-to-br from-slate-800/50 to-purple-900/20 border border-purple-500/20 p-6">
+                  <h3 className="text-lg font-bold text-white mb-2 flex items-center gap-2">
+                    <span>📜</span> Transaction Log
+                  </h3>
+                  <p className="text-sm text-slate-400 mb-4">
+                    {transactionLogRows.length > 0 ? 'Latest 200 events.' : 'No history yet.'}
+                  </p>
+
+                  {transactionLogRows.length > 0 && (
+                    <div className="overflow-x-auto">
+                      <table className="w-full text-sm">
+                        <thead>
+                          <tr className="text-left text-xs uppercase tracking-wider text-slate-500 border-b border-slate-700/50">
+                            <th className="py-3 pr-4">Date</th>
+                            <th className="py-3 pr-4">Action</th>
+                            <th className="py-3 pr-4 text-right">Amount</th>
+                            <th className="py-3 pr-4 text-right">Invested</th>
+                            <th className="py-3 text-right">Value</th>
+                          </tr>
+                        </thead>
+                        <tbody className="divide-y divide-slate-700/30">
+                          {transactionLogRows.map((r) => (
+                            <tr key={r.key} className="hover:bg-purple-500/5 transition-colors">
+                              <td className="py-3 pr-4 text-slate-400 text-xs">{formatGregorianAndHijriDate(r.at) || '-'}</td>
+                              <td className="py-3 pr-4 font-semibold text-white">{r.action || '-'}</td>
+                              <td className="py-3 pr-4 text-right tabular-nums text-slate-300">{r.amount ? formatCurrency(r.amount) : '-'}</td>
+                              <td className="py-3 pr-4 text-right tabular-nums text-slate-300">{Number.isFinite(r.investedAmount) ? formatCurrency(r.investedAmount) : '-'}</td>
+                              <td className="py-3 text-right tabular-nums text-purple-400 font-semibold">{Number.isFinite(r.currentValue) ? formatCurrency(r.currentValue) : '-'}</td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    </div>
+                  )}
+                </div>
+              </motion.div>
+            )}
+          </div>
+        </motion.div>
       </div>
 
       {/* Modals */}
@@ -903,6 +1648,237 @@ export default function MalaaPortfolioRedesigned({ investment, userRole }: Malaa
                   notes: inv.notes,
                 }}
               />
+            </motion.div>
+          </motion.div>
+        )}
+
+        {showHoldingsForm && (
+          <motion.div
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center z-50 p-4"
+            onClick={() => setShowHoldingsForm(false)}
+          >
+            <motion.div
+              initial={{ scale: 0.9, y: 20 }}
+              animate={{ scale: 1, y: 0 }}
+              exit={{ scale: 0.9, y: 20 }}
+              onClick={(e) => e.stopPropagation()}
+              className="bg-slate-900 border border-purple-500/30 rounded-2xl p-8 max-w-4xl w-full max-h-[90vh] overflow-y-auto shadow-2xl"
+            >
+              <div className="flex justify-between items-center mb-6">
+                <h2 className="text-2xl font-bold text-white">Edit Holdings</h2>
+                <button
+                  onClick={() => setShowHoldingsForm(false)}
+                  className="text-slate-400 hover:text-white transition-colors text-2xl"
+                >
+                  ✕
+                </button>
+              </div>
+
+              <div className="mb-4 rounded-lg border border-purple-500/30 bg-purple-900/20 p-3 text-sm text-slate-300">
+                <div className="font-semibold text-white">💡 How this works</div>
+                <div className="mt-1">- Holdings values represent your <span className="font-semibold text-purple-300">current market value</span> breakdown.</div>
+                <div className="mt-1">- Invested amount is your <span className="font-semibold text-purple-300">cost basis</span> (can be different).</div>
+              </div>
+
+              <div className="flex justify-end mb-3">
+                <motion.button
+                  whileHover={{ scale: 1.05 }}
+                  whileTap={{ scale: 0.95 }}
+                  onClick={addHoldingDraft}
+                  className="px-4 py-2 bg-slate-700 text-white rounded-lg font-semibold hover:bg-slate-600 transition-all"
+                >
+                  + Add Holding
+                </motion.button>
+              </div>
+
+              <div className="space-y-3">
+                {holdingsDraft.length === 0 ? (
+                  <div className="text-sm text-slate-400">No holdings added yet.</div>
+                ) : (
+                  holdingsDraft.map((h: HoldingDraftRow, idx: number) => (
+                    <div key={h.id} className="grid grid-cols-1 md:grid-cols-12 gap-3 items-end border border-purple-500/30 bg-slate-800/50 rounded-xl p-4">
+                      <div className="md:col-span-4">
+                        <label className="block text-xs font-semibold text-slate-400 mb-1">Name</label>
+                        <input
+                          value={h.name}
+                          onChange={(e) =>
+                            setHoldingsDraft((prev) =>
+                              prev.map((x) => (x.id === h.id ? { ...x, name: e.target.value } : x))
+                            )
+                          }
+                          className="w-full rounded-lg border border-slate-600 bg-slate-700 px-3 py-2 text-sm text-white outline-none focus:border-purple-500 focus:ring-2 focus:ring-purple-500/50"
+                          placeholder="e.g., SPUS / REIT / Cash"
+                        />
+                      </div>
+
+                      <div className="md:col-span-3">
+                        <label className="block text-xs font-semibold text-slate-400 mb-1">Asset Type</label>
+                        <select
+                          value={h.assetType}
+                          onChange={(e) =>
+                            setHoldingsDraft((prev) =>
+                              prev.map((x) => (x.id === h.id ? { ...x, assetType: e.target.value } : x))
+                            )
+                          }
+                          className="w-full rounded-lg border border-slate-600 bg-slate-700 px-3 py-2 text-sm text-white outline-none focus:border-purple-500 focus:ring-2 focus:ring-purple-500/50"
+                        >
+                          <option value="us_stocks">US Stocks</option>
+                          <option value="developed_emerging_stocks">Developed/Emerging Stocks</option>
+                          <option value="local_equity">Local Equity</option>
+                          <option value="real_estate">Real Estate</option>
+                          <option value="money_market">Money Market</option>
+                          <option value="commodities">Commodities</option>
+                        </select>
+                      </div>
+
+                      <div className="md:col-span-2">
+                        <label className="block text-xs font-semibold text-slate-400 mb-1">Cost</label>
+                        <input
+                          type="number"
+                          min="0"
+                          step="0.01"
+                          value={h.cost}
+                          onChange={(e) =>
+                            setHoldingsDraft((prev) =>
+                              prev.map((x) => (x.id === h.id ? { ...x, cost: e.target.value } : x))
+                            )
+                          }
+                          className="w-full rounded-lg border border-slate-600 bg-slate-700 px-3 py-2 text-sm text-white outline-none focus:border-purple-500 focus:ring-2 focus:ring-purple-500/50"
+                        />
+                      </div>
+
+                      <div className="md:col-span-2">
+                        <label className="block text-xs font-semibold text-slate-400 mb-1">Value</label>
+                        <input
+                          type="number"
+                          min="0"
+                          step="0.01"
+                          value={h.currentValue}
+                          onChange={(e) =>
+                            setHoldingsDraft((prev) =>
+                              prev.map((x) => (x.id === h.id ? { ...x, currentValue: e.target.value } : x))
+                            )
+                          }
+                          className="w-full rounded-lg border border-slate-600 bg-slate-700 px-3 py-2 text-sm text-white outline-none focus:border-purple-500 focus:ring-2 focus:ring-purple-500/50"
+                        />
+                      </div>
+
+                      <div className="md:col-span-1 flex justify-end">
+                        <motion.button
+                          whileHover={{ scale: 1.05 }}
+                          whileTap={{ scale: 0.95 }}
+                          onClick={() => removeHoldingDraft(h.id)}
+                          className="px-3 py-2 rounded-lg bg-red-500/20 border border-red-500/30 text-red-300 hover:bg-red-500/30 text-sm font-semibold transition-all"
+                        >
+                          Remove
+                        </motion.button>
+                      </div>
+
+                      <div className="md:col-span-12 text-xs text-slate-500">Holding #{idx + 1}</div>
+                    </div>
+                  ))
+                )}
+              </div>
+
+              <div className="flex justify-end gap-3 pt-6 border-t border-slate-700 mt-6">
+                <motion.button
+                  whileHover={{ scale: 1.02 }}
+                  whileTap={{ scale: 0.98 }}
+                  onClick={() => setShowHoldingsForm(false)}
+                  className="px-6 py-3 bg-slate-700 text-white font-semibold rounded-xl hover:bg-slate-600 transition-all"
+                >
+                  Cancel
+                </motion.button>
+                <motion.button
+                  whileHover={{ scale: 1.02 }}
+                  whileTap={{ scale: 0.98 }}
+                  disabled={isSavingHoldings}
+                  onClick={saveHoldings}
+                  className="px-6 py-3 bg-gradient-to-r from-purple-600 to-fuchsia-600 text-white font-bold rounded-xl hover:shadow-lg hover:shadow-purple-500/50 transition-all disabled:opacity-50"
+                >
+                  {isSavingHoldings ? 'Saving...' : 'Save Holdings'}
+                </motion.button>
+              </div>
+            </motion.div>
+          </motion.div>
+        )}
+
+        {showZakatPayForm && zakatPayTarget && (
+          <motion.div
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center z-50 p-4"
+            onClick={() => !isPayingZakat && setShowZakatPayForm(false)}
+          >
+            <motion.div
+              initial={{ scale: 0.9, y: 20 }}
+              animate={{ scale: 1, y: 0 }}
+              exit={{ scale: 0.9, y: 20 }}
+              onClick={(e) => e.stopPropagation()}
+              className="bg-slate-900 border border-purple-500/30 rounded-2xl p-8 max-w-md w-full shadow-2xl"
+            >
+              <div className="flex justify-between items-center mb-6">
+                <h2 className="text-2xl font-bold text-white">Pay Zakat</h2>
+                <button
+                  onClick={() => !isPayingZakat && setShowZakatPayForm(false)}
+                  className="text-slate-400 hover:text-white transition-colors text-2xl"
+                  disabled={isPayingZakat}
+                >
+                  ✕
+                </button>
+              </div>
+
+              <form onSubmit={submitZakatPay} className="space-y-4">
+                <div className="text-sm text-slate-300 bg-purple-900/20 border border-purple-500/30 rounded-lg p-3">
+                  <span className="font-semibold text-purple-300">Period:</span> {formatGregorianAndHijriDate(zakatPayTarget.startAt)} → {formatGregorianAndHijriDate(zakatPayTarget.endAt)}
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-slate-300 mb-2">Date</label>
+                  <input
+                    type="date"
+                    value={zakatPayDate}
+                    onChange={(e) => setZakatPayDate(e.target.value)}
+                    className="w-full px-4 py-3 bg-slate-800 border border-slate-700 rounded-xl text-white focus:outline-none focus:ring-2 focus:ring-purple-500"
+                  />
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-slate-300 mb-2">Amount</label>
+                  <input
+                    type="number"
+                    min="0"
+                    step="0.01"
+                    value={zakatPayAmount}
+                    onChange={(e) => setZakatPayAmount(e.target.value)}
+                    className="w-full px-4 py-3 bg-slate-800 border border-slate-700 rounded-xl text-white focus:outline-none focus:ring-2 focus:ring-purple-500"
+                  />
+                </div>
+
+                <div className="flex gap-3 pt-4">
+                  <motion.button
+                    whileHover={{ scale: 1.02 }}
+                    whileTap={{ scale: 0.98 }}
+                    type="button"
+                    onClick={() => setShowZakatPayForm(false)}
+                    disabled={isPayingZakat}
+                    className="flex-1 px-6 py-3 bg-slate-700 text-white font-semibold rounded-xl hover:bg-slate-600 transition-all disabled:opacity-50"
+                  >
+                    Cancel
+                  </motion.button>
+                  <motion.button
+                    whileHover={{ scale: 1.02 }}
+                    whileTap={{ scale: 0.98 }}
+                    type="submit"
+                    disabled={isPayingZakat}
+                    className="flex-1 px-6 py-3 bg-gradient-to-r from-emerald-600 to-green-600 text-white font-bold rounded-xl hover:shadow-lg hover:shadow-emerald-500/50 transition-all disabled:opacity-50"
+                  >
+                    {isPayingZakat ? 'Paying...' : 'Pay'}
+                  </motion.button>
+                </div>
+              </form>
             </motion.div>
           </motion.div>
         )}

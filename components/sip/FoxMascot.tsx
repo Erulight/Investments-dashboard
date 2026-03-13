@@ -68,8 +68,8 @@ export function FoxMascot({ profit, isLoading }: FoxMascotProps) {
   }, [profit])
 
   useEffect(() => {
-    // Random movement every 5-8 seconds
-    const interval = setInterval(() => {
+    // Random movement every 3-4 seconds
+    const moveInterval = setInterval(() => {
       const newX = Math.random() * 100 - 50
       const newY = Math.random() * 30 - 15
       setPosition({ x: newX, y: newY })
@@ -85,9 +85,9 @@ export function FoxMascot({ profit, isLoading }: FoxMascotProps) {
         setIsJumping(true)
         setTimeout(() => setIsJumping(false), 600)
       }
-    }, Math.random() * 3000 + 5000)
+    }, 3500) // Fixed interval for consistent movement
 
-    return () => clearInterval(interval)
+    return () => clearInterval(moveInterval)
   }, [])
 
   const foxColor = mood === 'happy' ? '#34d399' : mood === 'sad' ? '#f87171' : '#fbbf24'
