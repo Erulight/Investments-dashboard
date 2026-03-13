@@ -745,15 +745,23 @@ export default async function DashboardPage({
     }, 0)
     totalValue = nonSukukValue + sukukPrincipalValue
 
+    // Calculate Malaa value first (SIP is consolidated into Malaa)
+    malaaValue = ownerScoped
+      .filter((inv) => getAccountType(inv) === 'MALAA' || getAccountType(inv) === 'SIP')
+      .reduce((sum, inv) => sum + Math.max(0, toFiniteNumber(inv.currentValue)), 0)
+
     // Break down profit by investment type for detailed tracking
     // Note: SIP is consolidated into Malaa per user clarification
-    malaaProfit = ownerScoped.reduce((sum, inv) => {
+    // Malaa profit = current value - total invested
+    const malaaInvested = ownerScoped.reduce((sum, inv) => {
       const accountType = getAccountType(inv)
       if (accountType !== 'MALAA' && accountType !== 'SIP') return sum
       const pos = getOwnerPosition(inv)
-      if (pos) return sum + toFiniteNumber(pos.profit)
-      return sum + toFiniteNumber(inv.realizedProfit) + toFiniteNumber(inv.unrealizedProfit)
+      if (pos) return sum + toFiniteNumber(pos.investedAmount)
+      return sum + toFiniteNumber(inv.principalAmount)
     }, 0)
+    
+    malaaProfit = round2(Math.max(0, malaaValue - malaaInvested))
 
     cryptoProfit = ownerScoped.reduce((sum, inv) => {
       const accountType = getAccountType(inv)
@@ -795,31 +803,75 @@ export default async function DashboardPage({
         return sum + Math.max(0, toFiniteNumber(inv.realizedProfit)) + Math.max(0, toFiniteNumber(inv.unrealizedProfit))
       }, 0)
 
-    // RECEIVABLE: Only from active (non-sold) deals
-    sukukReceivable = ownerSukuk
-      .filter((inv: any) => !isSoldSukukForOwner(inv))
-      .reduce((sum, inv) => {
-        const metrics = ownerSukukMetricsById.get(inv.id)
-        if (!metrics) return sum
-        const netProfit = metrics.accruedProfit
-        const received = metrics.received
-        return sum + Math.max(0, netProfit - received)
-      }, 0)
+    // Helper: Get net profit for Sukuk (matches Sukuk page getNetProfit)
+    const getSukukNetProfitForDashboard = (inv: any) => {
+      const principal = inv.myParticipation?.investedAmount ?? inv.principalAmount
+      const investment = Number.isFinite(principal) ? principal : 0
+      const apr = Number.isFinite(inv.interestRate) ? inv.interestRate : 0
+      const fees = Number.isFinite(inv.fees) ? inv.fees : 0
+      const participationRatio = inv.principalAmount > 0 && investment > 0
+        ? Math.min(1, investment / inv.principalAmount)
+        : 0
+      const startBasis = inv.myParticipation?.acquiredAt ?? inv.startDate
+      const totalMonthsFull = getPeriodMonths(inv.startDate, inv.maturityDate)
+      const periodMonths = getPeriodMonths(startBasis, inv.maturityDate)
+      const periodYears = periodMonths ? periodMonths / 12 : 0
+      const grossProfit = investment > 0 && apr > 0 && periodYears > 0
+        ? investment * (apr / 100) * periodYears
+        : 0
 
-    // RECEIVED: Active deals received + sold deals settlement received
-    const activeReceived = ownerSukuk
+      const manualReceivableFull = Number.isFinite(inv.receivableAmount) ? inv.receivableAmount : null
+      const manualReceivable = manualReceivableFull !== null && manualReceivableFull > 0
+        ? (inv.myParticipation
+            ? (manualReceivableFull * participationRatio) * (totalMonthsFull > 0 ? Math.min(1, Math.max(0, periodMonths / totalMonthsFull)) : 1)
+            : manualReceivableFull)
+        : null
+      if (manualReceivable !== null) {
+        return round2(Math.max(0, manualReceivable))
+      }
+      const timeRatio = inv.myParticipation && totalMonthsFull > 0
+        ? Math.min(1, Math.max(0, periodMonths / totalMonthsFull))
+        : 1
+      const proratedFees = inv.myParticipation
+        ? (fees * participationRatio) * timeRatio
+        : fees
+      return round2(Math.max(0, grossProfit - proratedFees))
+    }
+
+    // Helper: Get received profit for Sukuk (matches Sukuk page getViewerReceived)
+    const getSukukReceivedForDashboard = (inv: any) => {
+      const totalReceivedRaw = Number(inv.totalReceived)
+      if (Number.isFinite(totalReceivedRaw)) return totalReceivedRaw
+      
+      const txs = Array.isArray(inv.transactions) ? inv.transactions : []
+      return txs
+        .filter((tx: any) => tx?.type === 'WITHDRAW_PROFIT')
+        .filter((tx: any) => {
+          if (!ownerPersonId) return tx?.personId == null
+          return tx?.personId == null || tx?.personId === ownerPersonId
+        })
+        .reduce((s: number, tx: any) => {
+          const amount = Number(tx?.amount)
+          return s + (Number.isFinite(amount) ? amount : 0)
+        }, 0)
+    }
+
+    // RECEIVABLE & RECEIVED: Match Sukuk page logic exactly
+    const activeNetProfit = ownerSukuk
       .filter((inv: any) => !isSoldSukukForOwner(inv))
-      .reduce((sum, inv) => {
-        const metrics = ownerSukukMetricsById.get(inv.id)
-        return sum + (metrics ? Math.max(0, metrics.received) : 0)
-      }, 0)
+      .reduce((sum, inv) => sum + getSukukNetProfitForDashboard(inv), 0)
+    
+    const activeReceivedFromInv = ownerSukuk
+      .filter((inv: any) => !isSoldSukukForOwner(inv))
+      .reduce((sum, inv) => sum + getSukukReceivedForDashboard(inv), 0)
     
     const soldReceived = ownerSukuk.reduce((sum, inv) => {
       const settlement = getOwnerSoldSettlement(inv)
       return sum + Math.max(0, settlement.received)
     }, 0)
     
-    sukukReceivedProfit = activeReceived + soldReceived
+    sukukReceivedProfit = round2(activeReceivedFromInv + soldReceived)
+    sukukReceivable = round2(Math.max(0, activeNetProfit - activeReceivedFromInv))
 
     const commissionSourceSukuk = owned
       .filter((inv) => getAccountType(inv) === 'SUKUK')
@@ -888,12 +940,8 @@ export default async function DashboardPage({
         return sum + (metrics ? metrics.value : 0)
       }, 0)
     totalValue += sukukReceivable
-    // SIP value is now consolidated into Malaa
-    malaaValue = ownerScoped
-      .filter((inv) => getAccountType(inv) === 'MALAA' || getAccountType(inv) === 'SIP')
-      .reduce((sum, inv) => sum + Math.max(0, toFiniteNumber(inv.currentValue)), 0)
     
-    sipValue = 0 // Consolidated into Malaa
+    sipValue = 0 // Consolidated into Malaa (value already calculated earlier)
 
     cryptoValue = ownerScoped
       .filter((inv) => getAccountType(inv) === 'CRYPTO')
