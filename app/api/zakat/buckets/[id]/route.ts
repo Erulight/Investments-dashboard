@@ -2,6 +2,57 @@ import { NextRequest, NextResponse } from 'next/server'
 import { prisma } from '@/lib/db'
 import { requireAuth } from '@/lib/rbac'
 
+export async function PATCH(
+  req: NextRequest,
+  { params }: { params: Promise<{ id: string }> }
+) {
+  try {
+    const user = await requireAuth(['OWNER'])
+    const { id } = await params
+    const body = await req.json()
+
+    const bucket = await prisma.cashBucket.findUnique({
+      where: { id },
+      select: { id: true, label: true },
+    })
+
+    if (!bucket) {
+      return NextResponse.json({ error: 'Bucket not found' }, { status: 404 })
+    }
+
+    const updateData: Record<string, unknown> = {}
+
+    if (body.haulStartDate !== undefined) {
+      const date = new Date(body.haulStartDate)
+      if (isNaN(date.getTime())) {
+        return NextResponse.json({ error: 'Invalid haulStartDate' }, { status: 400 })
+      }
+      updateData.haulStartDate = date
+    }
+
+    if (body.excludeFromZakat !== undefined) {
+      updateData.excludeFromZakat = Boolean(body.excludeFromZakat)
+    }
+
+    if (Object.keys(updateData).length === 0) {
+      return NextResponse.json({ error: 'No valid fields to update' }, { status: 400 })
+    }
+
+    const updated = await prisma.cashBucket.update({
+      where: { id },
+      data: updateData,
+      select: { id: true, label: true, haulStartDate: true, excludeFromZakat: true },
+    })
+
+    return NextResponse.json({ success: true, bucket: updated })
+  } catch (error) {
+    if (error instanceof Error && (error.message === 'Unauthorized' || error.message === 'Forbidden')) {
+      return NextResponse.json({ error: error.message }, { status: 401 })
+    }
+    return NextResponse.json({ error: 'Failed to update bucket' }, { status: 500 })
+  }
+}
+
 export async function GET(
   req: NextRequest,
   { params }: { params: Promise<{ id: string }> }
