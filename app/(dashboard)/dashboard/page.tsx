@@ -1548,7 +1548,7 @@ export default async function DashboardPage({
         cryptoValue={cryptoValue}
         circlysOngoingSaved={circlysOngoingSaved}
         sipValue={sipValue}
-        money={money}
+        currencyPrefix={currencyPrefix}
         role={user.role as 'OWNER' | 'PARTNER'}
       />
 

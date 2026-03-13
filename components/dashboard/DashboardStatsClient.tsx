@@ -25,7 +25,7 @@ interface DashboardStatsClientProps {
   cryptoValue: number
   circlysOngoingSaved: number
   sipValue: number
-  money: (value: number) => string
+  currencyPrefix: string
   role: 'OWNER' | 'PARTNER'
 }
 
@@ -50,7 +50,7 @@ export function DashboardStatsClient({
   cryptoValue,
   circlysOngoingSaved,
   sipValue,
-  money,
+  currencyPrefix,
   role,
 }: DashboardStatsClientProps) {
   const [showLiquidityModal, setShowLiquidityModal] = useState(false)
@@ -65,6 +65,15 @@ export function DashboardStatsClient({
   const [showCirclysModal, setShowCirclysModal] = useState(false)
 
   const round2 = (n: number) => Math.round(n * 100) / 100
+  
+  const money = (value: number) => {
+    const amount = Number.isFinite(value) ? value : 0
+    const formatted = amount.toLocaleString(undefined, {
+      minimumFractionDigits: 2,
+      maximumFractionDigits: 2,
+    })
+    return `${formatted} ${currencyPrefix}`
+  }
 
   return (
     <>
