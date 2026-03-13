@@ -477,7 +477,10 @@ export default async function InvestmentsPage() {
       return round2(activeProfit + soldTarget)
     }
 
-    return round2(displayedInvestments.reduce((sum, inv) => sum + getNetProfit(inv), 0))
+    // Partner: Total profit = receivable (future) + received (withdrawn)
+    const receivable = displayedInvestments.reduce((sum, inv) => sum + getNetProfit(inv), 0)
+    const received = displayedInvestments.reduce((sum, inv) => sum + getViewerReceived(inv), 0)
+    return round2(receivable + received)
   })()
 
   const totalWithdrawn = (() => {
