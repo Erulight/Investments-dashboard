@@ -160,6 +160,8 @@ export default async function DashboardPage({
 
   // ROSCA / Circlys debt tracking
   let roscaDebt = 0
+  let roscaPlans: Array<{ name: string; remaining: number; paid: number; total: number }> = []
+  let ongoingPlans: Array<{ name: string; saved: number; toReceive: number; isCompleted: boolean }> = []
 
   let sukukInvested = 0
   let sukukValue = 0
@@ -1036,8 +1038,6 @@ export default async function DashboardPage({
 
     // Calculate ROSCA / Circlys remaining payback debt.
     const roscaInvestments = investments.filter((inv: any) => getAccountType(inv) === 'CIRCLYS')
-    const roscaPlans: Array<{ name: string; remaining: number; paid: number; total: number }> = []
-    const ongoingPlans: Array<{ name: string; saved: number; toReceive: number; isCompleted: boolean }> = []
     
     for (const inv of roscaInvestments) {
       const meta = parseMetadata(inv.metadata)
