@@ -971,6 +971,9 @@ export default async function DashboardPage({
         }
         return sum
       }, 0)
+    
+    // Add Circlys ongoing to total portfolio value
+    totalValue += circlysOngoingSaved
 
     const activeNonSukukInvested = activeNonSukuk.reduce((sum: number, inv: any) => {
       const accountType = getAccountType(inv)
