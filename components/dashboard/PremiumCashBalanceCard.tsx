@@ -206,11 +206,11 @@ export function PremiumCashBalanceCard({
         delay: index * 0.15,
         ease: [0.22, 1, 0.36, 1],
       }}
-      whileHover={{ scale: 1.02, y: -4 }}
-      onMouseMove={handleMouseMove}
-      onMouseEnter={() => setIsHovered(true)}
-      onMouseLeave={() => setIsHovered(false)}
-      className="relative group cursor-pointer"
+      whileHover={showForm ? {} : { scale: 1.02, y: -4 }}
+      onMouseMove={showForm ? undefined : handleMouseMove}
+      onMouseEnter={showForm ? undefined : () => setIsHovered(true)}
+      onMouseLeave={showForm ? undefined : () => setIsHovered(false)}
+      className={`relative group ${showForm ? '' : 'cursor-pointer'}`}
       style={{
         transformStyle: 'preserve-3d',
       }}
