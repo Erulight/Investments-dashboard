@@ -1521,11 +1521,11 @@ export default async function DashboardPage({
         }}
         portfolioBreakdown={{
           cash: toDisplayAmount(cashBalance),
-          sukuk: toDisplayAmount(sukukValue),
+          sukuk: toDisplayAmount(sukukInvested + sukukReceivable),
           malaa: toDisplayAmount(malaaValue),
           crypto: toDisplayAmount(cryptoValue),
           circlys: toDisplayAmount(circlysOngoingSaved),
-          other: toDisplayAmount(Math.max(0, displayedValue - cashBalance - sukukValue - malaaValue - cryptoValue - circlysOngoingSaved)),
+          other: toDisplayAmount(Math.max(0, displayedValue - cashBalance - (sukukInvested + sukukReceivable) - malaaValue - cryptoValue - circlysOngoingSaved)),
         }}
         cashBreakdown={{
           available: toDisplayAmount(cashBalance),
