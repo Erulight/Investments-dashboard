@@ -17,6 +17,8 @@ interface DashboardStatsClientProps {
   typeBreakdowns: Array<{ type: string; value: number }>
   activeInvestmentsCount: number
   roscaDebt: number
+  roscaPlans: Array<{ name: string; remaining: number; paid: number; total: number }>
+  ongoingPlans: Array<{ name: string; saved: number; toReceive: number; isCompleted: boolean }>
   netWorth: number
   totalInvested: number
   totalValue: number
@@ -44,6 +46,8 @@ export function DashboardStatsClient({
   typeBreakdowns,
   activeInvestmentsCount,
   roscaDebt,
+  roscaPlans,
+  ongoingPlans,
   netWorth,
   totalInvested,
   totalValue,
@@ -347,13 +351,21 @@ export function DashboardStatsClient({
       <StatBreakdownModal
         isOpen={showRoscaModal}
         onClose={() => setShowRoscaModal(false)}
-        title="ROSCA Debt"
+        title="ROSCA Remaining"
         emoji="🔴"
-        subtitle="Outstanding ROSCA commitments"
+        subtitle="Outstanding commitments per plan"
         accentColor="red"
-        items={[
-          { label: 'Total Remaining', value: money(roscaDebt), icon: '💳', description: 'Unpaid commitments', color: 'red' },
+        items={roscaPlans.length > 0 ? roscaPlans.map(plan => ({
+          label: plan.name,
+          value: money(plan.remaining),
+          icon: '💳',
+          description: `Paid: ${money(plan.paid)} / ${money(plan.total)}`,
+          color: 'red' as const,
+        })) : [
+          { label: 'No Outstanding Commitments', value: '—', icon: '✅', description: 'All plans paid', color: 'green' as const },
         ]}
+        totalLabel="Total Remaining"
+        totalValue={money(roscaDebt)}
       />
 
       <StatBreakdownModal
@@ -389,16 +401,22 @@ export function DashboardStatsClient({
       <StatBreakdownModal
         isOpen={showCirclysModal}
         onClose={() => setShowCirclysModal(false)}
-        title="Circlys ROSCA"
+        title="Circlys Ongoing"
         emoji="🎯"
-        subtitle="Ongoing savings circles"
+        subtitle="Savings per plan"
         accentColor="amber"
-        items={[
-          { label: 'Saved (Not Received)', value: money(circlysOngoingSaved), icon: '💰', description: 'Contributed but not distributed', color: 'amber' },
+        items={ongoingPlans.length > 0 ? ongoingPlans.map(plan => ({
+          label: plan.name,
+          value: money(plan.saved),
+          icon: plan.isCompleted ? '✅' : '⏳',
+          description: `To receive: ${money(plan.toReceive)} ${plan.isCompleted ? '(Completed)' : '(Ongoing)'}`,
+          color: plan.isCompleted ? 'green' as const : 'amber' as const,
+        })) : [
+          { label: 'No Ongoing Plans', value: '—', icon: '�', description: 'Start a new ROSCA', color: 'slate' as const },
         ]}
+        totalLabel="Total Saved"
+        totalValue={money(circlysOngoingSaved)}
       />
     </>
-  )
-}
   )
 }

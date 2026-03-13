@@ -103,17 +103,27 @@ export function CirclysClient({ initialInvestments, userRole, displayCurrency }:
           monthly: number
           reward: number
           bookingFee: number
+          paid: number
+          remaining: number
         },
         inv: any
       ) => {
         const meta = parseRoscaMetadata(inv)
+        const monthlyContribution = Number(meta.monthlyContribution || 0)
+        const monthsPaid = Number(meta.monthsPaid || 0)
+        const totalMonths = Number(meta.totalMonths || 0)
+        const paid = monthlyContribution * monthsPaid
+        const remaining = monthlyContribution * Math.max(0, totalMonths - monthsPaid)
+        
         acc.currency = acc.currency || String(inv.account?.currency || 'SAR')
-        acc.monthly += Number(meta.monthlyContribution || 0)
+        acc.monthly += monthlyContribution
         acc.reward += Number(meta.totalRewardPaid || 0)
         acc.bookingFee += Number(meta.bookingFee || 0)
+        acc.paid += paid
+        acc.remaining += remaining
         return acc
       },
-      { currency: '', monthly: 0, reward: 0, bookingFee: 0 }
+      { currency: '', monthly: 0, reward: 0, bookingFee: 0, paid: 0, remaining: 0 }
     )
   }, [filteredInvestments])
 
@@ -390,6 +400,8 @@ export function CirclysClient({ initialInvestments, userRole, displayCurrency }:
                     <TableHead className="font-semibold text-slate-700 dark:text-slate-200">Account</TableHead>
                     <TableHead className="text-right font-semibold text-slate-700 dark:text-slate-200">Monthly</TableHead>
                     <TableHead className="text-center font-semibold text-slate-700 dark:text-slate-200">Progress</TableHead>
+                    <TableHead className="text-right font-semibold text-slate-700 dark:text-slate-200">Paid</TableHead>
+                    <TableHead className="text-right font-semibold text-slate-700 dark:text-slate-200">Remaining</TableHead>
                     <TableHead className="text-center font-semibold text-slate-700 dark:text-slate-200">Receipt</TableHead>
                     <TableHead className="text-right font-semibold text-slate-700 dark:text-slate-200">Reward Earned</TableHead>
                     <TableHead className="text-right font-semibold text-slate-700 dark:text-slate-200">Booking Fee</TableHead>
@@ -452,6 +464,18 @@ export function CirclysClient({ initialInvestments, userRole, displayCurrency }:
                             </div>
                             <span className="text-[11px] tabular-nums text-slate-500 dark:text-slate-400">{monthsPaid}/{totalMo}</span>
                           </div>
+                        </TableCell>
+                        <TableCell className="text-right font-semibold tabular-nums text-emerald-700 dark:text-emerald-300">
+                          {money(
+                            Number(meta.monthlyContribution || 0) * monthsPaid,
+                            normalizeDisplayCurrency(inv.account?.currency),
+                          )}
+                        </TableCell>
+                        <TableCell className="text-right font-semibold tabular-nums text-red-700 dark:text-red-300">
+                          {money(
+                            Number(meta.monthlyContribution || 0) * Math.max(0, totalMo - monthsPaid),
+                            normalizeDisplayCurrency(inv.account?.currency),
+                          )}
                         </TableCell>
                         <TableCell className="text-center">
                           {receiptMonth ? (
@@ -524,6 +548,12 @@ export function CirclysClient({ initialInvestments, userRole, displayCurrency }:
                         {money(tableTotals.monthly, normalizeDisplayCurrency(tableTotals.currency))}
                       </TableCell>
                       <TableCell>{null}</TableCell>
+                      <TableCell className="text-right font-semibold tabular-nums whitespace-nowrap text-emerald-700 dark:text-emerald-300">
+                        {money(tableTotals.paid, normalizeDisplayCurrency(tableTotals.currency))}
+                      </TableCell>
+                      <TableCell className="text-right font-semibold tabular-nums whitespace-nowrap text-red-700 dark:text-red-300">
+                        {money(tableTotals.remaining, normalizeDisplayCurrency(tableTotals.currency))}
+                      </TableCell>
                       <TableCell>{null}</TableCell>
                       <TableCell className="text-right font-semibold tabular-nums whitespace-nowrap text-emerald-700 dark:text-emerald-300">
                         +{money(tableTotals.reward, normalizeDisplayCurrency(tableTotals.currency))}

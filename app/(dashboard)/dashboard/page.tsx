@@ -1036,14 +1036,37 @@ export default async function DashboardPage({
 
     // Calculate ROSCA / Circlys remaining payback debt.
     const roscaInvestments = investments.filter((inv: any) => getAccountType(inv) === 'CIRCLYS')
+    const roscaPlans: Array<{ name: string; remaining: number; paid: number; total: number }> = []
+    const ongoingPlans: Array<{ name: string; saved: number; toReceive: number; isCompleted: boolean }> = []
+    
     for (const inv of roscaInvestments) {
       const meta = parseMetadata(inv.metadata)
       const monthlyContribution = Math.max(0, toFiniteNumber(meta?.monthlyContribution))
       const totalMonths = Math.max(0, toFiniteNumber(meta?.totalMonths))
+      const monthsPaid = Math.max(0, toFiniteNumber(meta?.monthsPaid))
       const totalPaid = Math.max(0, toFiniteNumber(meta?.totalPaid))
       const totalRequired = monthlyContribution * totalMonths
-      if (totalRequired > totalPaid) {
-        roscaDebt += (totalRequired - totalPaid)
+      const remaining = Math.max(0, totalRequired - totalPaid)
+      const hasReceived = Boolean(meta?.received?.date)
+      
+      if (remaining > 0) {
+        roscaDebt += remaining
+        roscaPlans.push({
+          name: inv.name || 'Unnamed Plan',
+          remaining: round2(remaining),
+          paid: round2(totalPaid),
+          total: round2(totalRequired),
+        })
+      }
+      
+      // For ongoing plans (not yet received)
+      if (!hasReceived && monthsPaid > 0) {
+        ongoingPlans.push({
+          name: inv.name || 'Unnamed Plan',
+          saved: round2(totalPaid),
+          toReceive: round2(totalRequired),
+          isCompleted: monthsPaid >= totalMonths,
+        })
       }
     }
   } else if (user.role === 'PARTNER' && user.personId) {
@@ -1533,6 +1556,8 @@ export default async function DashboardPage({
         }))}
         activeInvestmentsCount={activeInvestments}
         roscaDebt={roscaDebt}
+        roscaPlans={roscaPlans || []}
+        ongoingPlans={ongoingPlans || []}
         netWorth={displayedValue - roscaDebt}
         totalInvested={totalInvested}
         totalValue={displayedValue}
