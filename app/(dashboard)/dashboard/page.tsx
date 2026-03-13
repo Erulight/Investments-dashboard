@@ -23,6 +23,7 @@ import { PageTransition } from '@/components/animations/PageTransition'
 import { AnimatedList, AnimatedListItem } from '@/components/animations/AnimatedList'
 import { AnimatedStatCard } from '@/components/animations/AnimatedCard'
 import { DashboardStatsClient } from '@/components/dashboard/DashboardStatsClient'
+import { LiveMarketTicker } from '@/components/dashboard/LiveMarketTicker'
 
 export const dynamic = 'force-dynamic'
 
@@ -1492,6 +1493,9 @@ export default async function DashboardPage({
           </div>
         </div>
       </AnimatedStatCard>
+
+      {/* Live Market Ticker */}
+      <LiveMarketTicker />
 
       {/* Premium Stats Grid */}
       <PremiumStatsGrid
