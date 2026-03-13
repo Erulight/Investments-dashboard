@@ -112,7 +112,7 @@ export async function GET() {
 
     const dbUser = await prisma.user.findUnique({
       where: { id: user.id },
-      select: { id: true },
+      select: { id: true, marketTickerPreferences: true },
     })
 
     if (!dbUser) {
@@ -120,8 +120,16 @@ export async function GET() {
     }
 
     let enabledSymbols = DEFAULT_ENABLED
-    // marketTickerPreferences will be available after migration
-    // For now, use defaults
+    if (dbUser.marketTickerPreferences) {
+      try {
+        const prefs = JSON.parse(dbUser.marketTickerPreferences as string)
+        if (Array.isArray(prefs.enabled)) {
+          enabledSymbols = prefs.enabled
+        }
+      } catch {
+        // Use defaults if parsing fails
+      }
+    }
 
     const assets: MarketAsset[] = []
 

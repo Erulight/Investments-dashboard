@@ -8,6 +8,7 @@ import { NisabSettings } from '@/components/settings/NisabSettings'
 import { CurrencySettings } from '@/components/settings/CurrencySettings'
 import { UserList } from '@/components/users/UserList'
 import { BackupRestore } from '@/components/settings/BackupRestore'
+import { MarketTickerSettings } from '@/components/settings/MarketTickerSettings'
 import { prisma } from '@/lib/db'
 
 export const dynamic = 'force-dynamic'
@@ -22,6 +23,7 @@ type NavTab = {
 const TABS: NavTab[] = [
   { id: 'investments', label: 'Investments',    icon: '📈', description: 'Types & platforms'   },
   { id: 'zakat',       label: 'Zakat & Nisab',  icon: '🕌', description: 'Thresholds & currency' },
+  { id: 'display',     label: 'Display',        icon: '🎨', description: 'Market ticker & UI'    },
   { id: 'recovery',    label: 'Recovery Rates', icon: '📊', description: 'Default recovery rates' },
   { id: 'maintenance', label: 'Maintenance',    icon: '🔧', description: 'Reset & housekeeping'  },
   { id: 'users',       label: 'Users & Access', icon: '👥', description: 'Users & permissions'   },
@@ -148,6 +150,17 @@ export default async function SettingsPage({
                 />
                 <CurrencySettings />
               </div>
+            </div>
+          )}
+
+          {/* ── Display ── */}
+          {activeTab === 'display' && (
+            <div className="space-y-6">
+              <SectionHeader
+                title="Live Market Ticker"
+                description="Configure which market assets appear in the dashboard ticker"
+              />
+              <MarketTickerSettings />
             </div>
           )}
 
