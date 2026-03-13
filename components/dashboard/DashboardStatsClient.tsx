@@ -201,7 +201,7 @@ export function DashboardStatsClient({
             <AnimatedCard index={0}>
               <div className="p-6">
                 <p className="text-xs font-medium text-slate-400 uppercase tracking-wider">Sukuk Total</p>
-                <div className="text-2xl font-bold text-purple-400 mt-2 tabular-nums">{money(round2(sukukValue))}</div>
+                <div className="text-2xl font-bold text-purple-400 mt-2 tabular-nums">{money(round2(sukukInvested + sukukReceivable))}</div>
                 <p className="text-xs text-slate-500 mt-1">Invested {money(sukukInvested)}</p>
               </div>
             </AnimatedCard>
