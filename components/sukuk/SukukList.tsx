@@ -127,6 +127,10 @@ export function SukukList({ initialSukuk, userRole, ownerPersonId, viewerPersonI
   const [actionError, setActionError] = useState('')
   const [actionLoading, setActionLoading] = useState(false)
   const [returnModalOpen, setReturnModalOpen] = useState(false)
+  const [commissionEditTarget, setCommissionEditTarget] = useState<any>(null)
+  const [commissionForm, setCommissionForm] = useState({
+    commissionFees: '',
+  })
   const [returnInvestment, setReturnInvestment] = useState<any>(null)
   const [filters, setFilters] = useState({
     platforms: [] as string[],
@@ -1426,6 +1430,7 @@ export function SukukList({ initialSukuk, userRole, ownerPersonId, viewerPersonI
 
       const hasPrincipal = withdrawForm.type === 'PRINCIPAL' || withdrawForm.type === 'BOTH'
       const hasProfit = withdrawForm.type === 'PROFIT' || withdrawForm.type === 'BOTH'
+      const hasCommission = withdrawForm.type === 'COMMISSION'
 
       const principalAmount = hasPrincipal ? Number(withdrawForm.principalAmount) : 0
       const profitAmount = hasProfit ? Number(withdrawForm.profitAmount) : 0
@@ -1443,6 +1448,34 @@ export function SukukList({ initialSukuk, userRole, ownerPersonId, viewerPersonI
         setActionLoading(false)
         return
       }
+
+      if (hasCommission) {
+        const res = await fetch(`/api/sukuk/${withdrawTarget.inv.id}/receive-commission`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            date: isoDate,
+            notes: withdrawForm.notes,
+          }),
+        })
+        const data = await res.json().catch(() => ({}))
+        if (!res.ok) {
+          setActionError(data.error || 'Failed to receive commission')
+          setActionLoading(false)
+          return
+        }
+        setWithdrawTarget(null)
+        setWithdrawForm({
+          type: 'BOTH',
+          principalAmount: '',
+          profitAmount: '',
+          date: formatDateInput(new Date()),
+          notes: '',
+        })
+        window.location.reload()
+        return
+      }
+
       const requests: { source: 'PRINCIPAL' | 'PROFIT'; amount: number }[] = []
       if (hasProfit && profitAmount > 0) {
         requests.push({ source: 'PROFIT', amount: profitAmount })
@@ -1649,6 +1682,54 @@ export function SukukList({ initialSukuk, userRole, ownerPersonId, viewerPersonI
   const handleEdit = (sukukItem: any) => {
     setEditingSukuk(sukukItem)
     setIsEditModalOpen(true)
+  }
+
+  const handleOpenCommissionEdit = (inv: any) => {
+    const myParticipation = inv.myParticipation
+    setCommissionEditTarget({ inv, participation: myParticipation })
+    setCommissionForm({
+      commissionFees: String(myParticipation?.commissionFees || '0'),
+    })
+    setActionError('')
+  }
+
+  const handleCommissionEdit = async (e: React.FormEvent) => {
+    e.preventDefault()
+    if (!commissionEditTarget?.participation) return
+
+    setActionLoading(true)
+    setActionError('')
+
+    try {
+      const commissionValue = Number(commissionForm.commissionFees)
+      if (!Number.isFinite(commissionValue) || commissionValue < 0) {
+        setActionError('Invalid commission value')
+        setActionLoading(false)
+        return
+      }
+
+      const res = await fetch(`/api/deal-participant/${commissionEditTarget.participation.id}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          commissionFees: commissionValue,
+        }),
+      })
+
+      const data = await res.json().catch(() => ({}))
+      if (!res.ok) {
+        setActionError(data.error || 'Failed to update commission')
+        setActionLoading(false)
+        return
+      }
+
+      setCommissionEditTarget(null)
+      setCommissionForm({ commissionFees: '' })
+      window.location.reload()
+    } catch (error) {
+      setActionError('An error occurred while updating commission')
+      setActionLoading(false)
+    }
   }
 
   const handleDelete = async (id: string) => {
@@ -2288,6 +2369,19 @@ export function SukukList({ initialSukuk, userRole, ownerPersonId, viewerPersonI
                               <Icon><EditIcon /></Icon>
                             </Button>
 
+                            {inv.myParticipation && (
+                              <Button
+                                size="sm"
+                                variant="secondary"
+                                onClick={() => handleOpenCommissionEdit(inv)}
+                                title="Edit Commission"
+                                aria-label="Edit Commission"
+                                className="h-8 px-2 py-0 shrink-0 text-xs"
+                              >
+                                💰
+                              </Button>
+                            )}
+
                             <Button
                               size="sm"
                               variant="secondary"
@@ -2592,22 +2686,28 @@ export function SukukList({ initialSukuk, userRole, ownerPersonId, viewerPersonI
                 )
               }
 
-              return (
-                <select
-                  value={withdrawForm.type}
-                  onChange={(e) =>
-                    setWithdrawForm((prev) => ({
-                      ...prev,
-                      type: e.target.value as 'PRINCIPAL' | 'PROFIT' | 'BOTH' | 'COMMISSION',
-                    }))
-                  }
-                  className="w-full rounded-lg border border-slate-200 bg-white px-4 py-2 text-sm text-slate-900 shadow-sm transition-colors focus:border-emerald-500 focus:outline-none focus:ring-2 focus:ring-emerald-500/20 dark:border-white/10 dark:bg-slate-900/60 dark:text-slate-100"
-                >
-                  <option value="PRINCIPAL">Principal</option>
-                  <option value="PROFIT">Profit</option>
-                  <option value="BOTH">Principal + Profit</option>
-                </select>
-              )
+              {(() => {
+                const commissionState = getOwnerCommissionDealState(withdrawTarget.inv)
+                const hasPendingCommission = userRole === 'OWNER' && commissionState.pending > 0.01
+
+                return (
+                  <select
+                    value={withdrawForm.type}
+                    onChange={(e) =>
+                      setWithdrawForm((prev) => ({
+                        ...prev,
+                        type: e.target.value as 'PRINCIPAL' | 'PROFIT' | 'BOTH' | 'COMMISSION',
+                      }))
+                    }
+                    className="w-full rounded-lg border border-slate-200 bg-white px-4 py-2 text-sm text-slate-900 shadow-sm transition-colors focus:border-emerald-500 focus:outline-none focus:ring-2 focus:ring-emerald-500/20 dark:border-white/10 dark:bg-slate-900/60 dark:text-slate-100"
+                  >
+                    <option value="PRINCIPAL">Principal</option>
+                    <option value="PROFIT">Profit</option>
+                    <option value="BOTH">Principal + Profit</option>
+                    {hasPendingCommission && <option value="COMMISSION">Commission</option>}
+                  </select>
+                )
+              })()}
             })()}
           </div>
 
@@ -2672,6 +2772,25 @@ export function SukukList({ initialSukuk, userRole, ownerPersonId, viewerPersonI
             </div>
           )}
 
+          {withdrawForm.type === 'COMMISSION' && withdrawTarget && (() => {
+            const commissionState = getOwnerCommissionDealState(withdrawTarget.inv)
+            const commissionAmount = commissionState.pending
+
+            return (
+              <div>
+                <label className="mb-1 block text-sm font-medium text-slate-700 dark:text-slate-200">
+                  Commission Amount
+                </label>
+                <div className="w-full rounded-lg border border-slate-200 bg-slate-50 px-4 py-2 text-sm text-slate-700 dark:border-white/10 dark:bg-slate-900/60 dark:text-slate-300">
+                  {commissionAmount.toFixed(2)}
+                </div>
+                <div className="mt-1 text-[11px] text-slate-500 dark:text-slate-400">
+                  Commission from partner deal. Full amount will be received.
+                </div>
+              </div>
+            )
+          })()}
+
           <div>
             <label className="mb-1 block text-sm font-medium text-slate-700 dark:text-slate-200">
               Notes
@@ -2689,18 +2808,22 @@ export function SukukList({ initialSukuk, userRole, ownerPersonId, viewerPersonI
             const dateLabel = withdrawForm.date || formatDateInput(new Date())
             const hasPrincipal = withdrawForm.type === 'PRINCIPAL' || withdrawForm.type === 'BOTH'
             const hasProfit = withdrawForm.type === 'PROFIT' || withdrawForm.type === 'BOTH'
+            const hasCommissionType = withdrawForm.type === 'COMMISSION'
             const principalAmount = Number(withdrawForm.principalAmount || 0) || 0
             const profitAmount = Number(withdrawForm.profitAmount || 0) || 0
 
             const isSoldDealForOwner = isSoldDealForOwnerView(withdrawTarget.inv)
             const isCommissionOnlyClose = isOwnerCommissionOnlyClose(withdrawTarget.inv)
             const partnerClosed = Boolean(withdrawTarget.inv?.partnerClosed)
-            const commissionAmount = isSoldDealForOwner
-              ? Math.max(0, Number(withdrawTarget.metrics?.commissionEarned || 0))
-              : Math.max(0, Number(withdrawTarget.metrics?.commissionEarned || 0))
+            const commissionState = getOwnerCommissionDealState(withdrawTarget.inv)
+            const commissionAmount = hasCommissionType 
+              ? commissionState.pending
+              : (isSoldDealForOwner
+                  ? Math.max(0, Number(withdrawTarget.metrics?.commissionEarned || 0))
+                  : Math.max(0, Number(withdrawTarget.metrics?.commissionEarned || 0)))
             const showProfitLine = hasProfit && !isCommissionOnlyClose && (profitAmount > 0 || !(userRole === 'OWNER' && isSoldDealForOwner))
 
-            if (!hasPrincipal && !hasProfit && !isCommissionOnlyClose) return null
+            if (!hasPrincipal && !hasProfit && !isCommissionOnlyClose && !hasCommissionType) return null
 
             return (
               <div className="rounded-lg border border-slate-200 bg-slate-50 p-3 text-xs text-slate-700 dark:border-white/10 dark:bg-white/5 dark:text-slate-200">
@@ -2716,7 +2839,12 @@ export function SukukList({ initialSukuk, userRole, ownerPersonId, viewerPersonI
                       Profit: {currencyLabel} {profitAmount.toFixed(2)} on {dateLabel}
                     </li>
                   )}
-                  {userRole === 'OWNER' && (isSoldDealForOwner || isCommissionOnlyClose) && (!isSoldDealForOwner || partnerClosed) && commissionAmount > 0 && (
+                  {hasCommissionType && commissionAmount > 0 && (
+                    <li>
+                      Commission: {currencyLabel} {commissionAmount.toFixed(2)} on {dateLabel}
+                    </li>
+                  )}
+                  {!hasCommissionType && userRole === 'OWNER' && (isSoldDealForOwner || isCommissionOnlyClose) && (!isSoldDealForOwner || partnerClosed) && commissionAmount > 0 && (
                     <li>
                       Commission: {currencyLabel} {commissionAmount.toFixed(2)}
                     </li>
@@ -2946,6 +3074,71 @@ export function SukukList({ initialSukuk, userRole, ownerPersonId, viewerPersonI
             </Button>
           </div>
         </div>
+      </Modal>
+
+      {/* Commission Edit Modal */}
+      <Modal
+        isOpen={Boolean(commissionEditTarget)}
+        onClose={() => {
+          setCommissionEditTarget(null)
+          setCommissionForm({ commissionFees: '' })
+          setActionError('')
+        }}
+        title="Edit Commission"
+      >
+        <form onSubmit={handleCommissionEdit} className="space-y-4">
+          {actionError && (
+            <div className="rounded-lg border border-red-200 bg-red-50 p-3 text-sm text-red-700">
+              {actionError}
+            </div>
+          )}
+
+          {commissionEditTarget && (
+            <div className="rounded-lg border border-slate-200 bg-slate-50 p-3 text-sm text-slate-700 dark:border-white/10 dark:bg-white/5 dark:text-slate-200">
+              <p className="font-semibold mb-1">{commissionEditTarget.inv?.name}</p>
+              <p className="text-xs text-slate-500 dark:text-slate-400">
+                Update the commission you'll pay to the owner when closing this deal
+              </p>
+            </div>
+          )}
+
+          <div>
+            <label className="mb-1 block text-sm font-medium text-slate-700 dark:text-slate-200">
+              Commission Amount
+            </label>
+            <input
+              type="number"
+              min="0"
+              step="0.01"
+              value={commissionForm.commissionFees}
+              onChange={(e) => setCommissionForm({ commissionFees: e.target.value })}
+              className="w-full rounded-lg border border-slate-200 bg-white px-4 py-2 text-sm text-slate-900 placeholder:text-slate-400 shadow-sm transition-colors focus:border-emerald-500 focus:outline-none focus:ring-2 focus:ring-emerald-500/20 dark:border-white/10 dark:bg-slate-900/60 dark:text-slate-100 dark:placeholder:text-slate-500"
+              placeholder="0.00"
+              required
+            />
+            <p className="mt-1 text-xs text-slate-500 dark:text-slate-400">
+              This commission will be paid to the owner when you close your position
+            </p>
+          </div>
+
+          <div className="flex justify-end gap-3">
+            <Button
+              type="button"
+              variant="secondary"
+              onClick={() => {
+                setCommissionEditTarget(null)
+                setCommissionForm({ commissionFees: '' })
+                setActionError('')
+              }}
+              disabled={actionLoading}
+            >
+              Cancel
+            </Button>
+            <Button type="submit" variant="primary" disabled={actionLoading}>
+              {actionLoading ? 'Saving...' : 'Save Commission'}
+            </Button>
+          </div>
+        </form>
       </Modal>
     </>
   )
