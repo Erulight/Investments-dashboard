@@ -11,43 +11,37 @@ export async function PUT(
     const { id } = await params
     const body = await req.json().catch(() => ({}))
 
-    const existing = await prisma.personalTransaction.findUnique({ where: { id } })
+    const existing = await prisma.personLedgerTransaction.findUnique({ where: { id } })
     if (!existing) {
       return NextResponse.json({ error: 'Transaction not found' }, { status: 404 })
     }
 
     const date = body.date ? new Date(body.date) : null
     const type = typeof body.type === 'string' ? body.type.trim().toUpperCase() : ''
-    const category = typeof body.category === 'string' ? body.category.trim() : ''
     const amount = Number(body.amount)
     const currency = typeof body.currency === 'string' && body.currency.trim() ? body.currency.trim().toUpperCase() : 'SAR'
-    const description = typeof body.description === 'string' ? body.description.trim() : null
     const notes = typeof body.notes === 'string' ? body.notes.trim() : null
 
     if (!date || Number.isNaN(date.getTime())) {
       return NextResponse.json({ error: 'Valid date is required' }, { status: 400 })
     }
-    if (!['INCOME', 'EXPENSE'].includes(type)) {
-      return NextResponse.json({ error: 'Type must be INCOME or EXPENSE' }, { status: 400 })
-    }
-    if (!category) {
-      return NextResponse.json({ error: 'Category is required' }, { status: 400 })
+    if (!['GIVEN', 'RECEIVED'].includes(type)) {
+      return NextResponse.json({ error: 'Type must be GIVEN or RECEIVED' }, { status: 400 })
     }
     if (!Number.isFinite(amount) || amount <= 0) {
       return NextResponse.json({ error: 'Amount must be a positive number' }, { status: 400 })
     }
 
-    const updated = await prisma.personalTransaction.update({
+    const updated = await prisma.personLedgerTransaction.update({
       where: { id },
       data: {
         date,
         type,
-        category,
         amount,
         currency,
-        description: description || null,
         notes: notes || null,
       },
+      include: { person: true },
     })
 
     return NextResponse.json({ transaction: updated })
@@ -68,12 +62,12 @@ export async function DELETE(
     await requireAuth(['OWNER'])
     const { id } = await params
 
-    const existing = await prisma.personalTransaction.findUnique({ where: { id } })
+    const existing = await prisma.personLedgerTransaction.findUnique({ where: { id } })
     if (!existing) {
       return NextResponse.json({ error: 'Transaction not found' }, { status: 404 })
     }
 
-    await prisma.personalTransaction.delete({ where: { id } })
+    await prisma.personLedgerTransaction.delete({ where: { id } })
     return NextResponse.json({ success: true })
   } catch (error) {
     console.error('Personal ledger DELETE error:', error)

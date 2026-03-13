@@ -25,16 +25,17 @@ model User {
 }
 
 model Person {
-  id               String            @id @default(cuid())
-  name             String
-  email            String?
-  phone            String?
-  createdAt        DateTime          @default(now())
-  updatedAt        DateTime          @updatedAt
-  cashBuckets      CashBucket[]
-  dealParticipants DealParticipant[]
-  transactions     Transaction[]
-  user             User?
+  id                       String                    @id @default(cuid())
+  name                     String
+  email                    String?
+  phone                    String?
+  createdAt                DateTime                  @default(now())
+  updatedAt                DateTime                  @updatedAt
+  cashBuckets              CashBucket[]
+  dealParticipants         DealParticipant[]
+  transactions             Transaction[]
+  personLedgerTransactions PersonLedgerTransaction[]
+  user                     User?
 
   @@index([email])
 }
@@ -293,19 +294,19 @@ model Snapshot {
   @@index([trigger])
 }
 
-model PersonalTransaction {
-  id          String   @id @default(cuid())
-  date        DateTime
-  type        String   // 'INCOME' | 'EXPENSE'
-  category    String
-  amount      Float
-  currency    String   @default("SAR")
-  description String?
-  notes       String?
-  createdAt   DateTime @default(now())
-  updatedAt   DateTime @updatedAt
+model PersonLedgerTransaction {
+  id        String   @id @default(cuid())
+  personId  String
+  date      DateTime
+  type      String   // 'GIVEN' | 'RECEIVED'
+  amount    Float
+  currency  String   @default("SAR")
+  notes     String?
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  person    Person   @relation(fields: [personId], references: [id], onDelete: Cascade)
 
+  @@index([personId])
   @@index([date])
   @@index([type])
-  @@index([category])
 }
