@@ -20,12 +20,17 @@ export async function GET() {
 
     const defaultPrefs = {
       enabled: ['BTC', 'ETH', 'S&P', 'USD/SAR', 'OIL'],
+      custom: [],
     }
 
     let prefs = defaultPrefs
     if (dbUser.marketTickerPreferences) {
       try {
-        prefs = JSON.parse(dbUser.marketTickerPreferences as string)
+        const parsed = JSON.parse(dbUser.marketTickerPreferences as string)
+        prefs = {
+          enabled: parsed.enabled || defaultPrefs.enabled,
+          custom: parsed.custom || [],
+        }
       } catch {
         // Use defaults
       }
@@ -46,20 +51,23 @@ export async function POST(request: Request) {
     }
 
     const body = await request.json()
-    const { enabled } = body
+    const { enabled, custom } = body
 
     if (!Array.isArray(enabled)) {
-      return NextResponse.json({ error: 'Invalid preferences format' }, { status: 400 })
+      return NextResponse.json({ error: 'Invalid enabled format' }, { status: 400 })
     }
 
-    const preferences = JSON.stringify({ enabled })
+    const preferences = JSON.stringify({ 
+      enabled,
+      custom: Array.isArray(custom) ? custom : []
+    })
 
     await prisma.user.update({
       where: { id: user.id },
       data: { marketTickerPreferences: preferences },
     })
 
-    return NextResponse.json({ success: true, preferences: { enabled } })
+    return NextResponse.json({ success: true, preferences: { enabled, custom: custom || [] } })
   } catch (error) {
     console.error('Update market ticker preferences error:', error)
     return NextResponse.json({ error: 'Failed to update preferences' }, { status: 500 })

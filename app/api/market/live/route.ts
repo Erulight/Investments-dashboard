@@ -12,10 +12,24 @@ interface MarketAsset {
 
 const DEFAULT_ENABLED = ['BTC', 'ETH', 'S&P', 'USD/SAR', 'OIL']
 
+const COIN_ID_MAP: Record<string, string> = {
+  BTC: 'bitcoin',
+  ETH: 'ethereum',
+  BNB: 'binancecoin',
+  SOL: 'solana',
+  XRP: 'ripple',
+  ADA: 'cardano',
+  DOGE: 'dogecoin',
+  AVAX: 'avalanche-2',
+  DOT: 'polkadot',
+  MATIC: 'matic-network',
+  LINK: 'chainlink',
+  UNI: 'uniswap',
+}
+
 async function fetchCryptoPrice(symbol: string): Promise<{ price: number; change24h: number } | null> {
   try {
-    const coinId = symbol === 'BTC' ? 'bitcoin' : symbol === 'ETH' ? 'ethereum' : null
-    if (!coinId) return null
+    const coinId = COIN_ID_MAP[symbol] || symbol.toLowerCase()
 
     const response = await fetch(
       `https://api.coingecko.com/api/v3/simple/price?ids=${coinId}&vs_currencies=usd&include_24hr_change=true`,
@@ -34,10 +48,10 @@ async function fetchCryptoPrice(symbol: string): Promise<{ price: number; change
   }
 }
 
-async function fetchForexRate(): Promise<{ price: number; change24h: number } | null> {
+async function fetchForexRate(from: string = 'USD', to: string = 'SAR'): Promise<{ price: number; change24h: number } | null> {
   try {
     const response = await fetch(
-      'https://api.exchangerate-api.com/v4/latest/USD',
+      `https://api.exchangerate-api.com/v4/latest/${from}`,
       { next: { revalidate: 3600 } }
     )
     
@@ -45,7 +59,7 @@ async function fetchForexRate(): Promise<{ price: number; change24h: number } | 
     const data = await response.json()
     
     return {
-      price: data.rates?.SAR || 3.75,
+      price: data.rates?.[to] || 3.75,
       change24h: 0,
     }
   } catch {
@@ -120,11 +134,15 @@ export async function GET() {
     }
 
     let enabledSymbols = DEFAULT_ENABLED
+    let customAssets: any[] = []
     if (dbUser.marketTickerPreferences) {
       try {
         const prefs = JSON.parse(dbUser.marketTickerPreferences as string)
         if (Array.isArray(prefs.enabled)) {
           enabledSymbols = prefs.enabled
+        }
+        if (Array.isArray(prefs.custom)) {
+          customAssets = prefs.custom
         }
       } catch {
         // Use defaults if parsing fails
@@ -133,64 +151,66 @@ export async function GET() {
 
     const assets: MarketAsset[] = []
 
-    // Fetch BTC
-    const btcData = await fetchCryptoPrice('BTC')
-    if (btcData) {
-      assets.push({
-        symbol: 'BTC',
-        name: 'Bitcoin',
-        price: btcData.price,
-        change24h: btcData.change24h,
-        enabled: enabledSymbols.includes('BTC'),
-      })
+    // Helper to fetch crypto by symbol
+    const fetchCryptoBySymbol = async (symbol: string, name: string) => {
+      const data = await fetchCryptoPrice(symbol)
+      if (data) {
+        return {
+          symbol,
+          name,
+          price: data.price,
+          change24h: data.change24h,
+          enabled: enabledSymbols.includes(symbol),
+        }
+      }
+      return null
     }
 
-    // Fetch ETH
-    const ethData = await fetchCryptoPrice('ETH')
-    if (ethData) {
-      assets.push({
-        symbol: 'ETH',
-        name: 'Ethereum',
-        price: ethData.price,
-        change24h: ethData.change24h,
-        enabled: enabledSymbols.includes('ETH'),
-      })
-    }
-
-    // Fetch S&P 500
-    const spData = await fetchSPIndex()
-    if (spData) {
-      assets.push({
-        symbol: 'S&P',
-        name: 'S&P 500',
-        price: spData.price,
-        change24h: spData.change24h,
-        enabled: enabledSymbols.includes('S&P'),
-      })
-    }
-
-    // Fetch USD/SAR
-    const forexData = await fetchForexRate()
-    if (forexData) {
-      assets.push({
-        symbol: 'USD/SAR',
-        name: 'USD to SAR',
-        price: forexData.price,
-        change24h: forexData.change24h,
-        enabled: enabledSymbols.includes('USD/SAR'),
-      })
-    }
-
-    // Fetch Brent Oil
-    const oilData = await fetchBrentOil()
-    if (oilData) {
-      assets.push({
-        symbol: 'OIL',
-        name: 'Brent Crude',
-        price: oilData.price,
-        change24h: oilData.change24h,
-        enabled: enabledSymbols.includes('OIL'),
-      })
+    // Fetch all enabled assets (defaults + custom)
+    const allSymbols = new Set([...DEFAULT_ENABLED, ...customAssets.map((a: any) => a.symbol)])
+    
+    for (const symbol of allSymbols) {
+      // Find asset info from custom or use symbol as fallback
+      const customAsset = customAssets.find((a: any) => a.symbol === symbol)
+      
+      if (symbol === 'BTC' || symbol === 'ETH' || (customAsset && customAsset.type === 'crypto')) {
+        const assetName = customAsset?.name || symbol
+        const cryptoData = await fetchCryptoBySymbol(symbol, assetName)
+        if (cryptoData) assets.push(cryptoData)
+      } else if (symbol === 'S&P') {
+        const spData = await fetchSPIndex()
+        if (spData) {
+          assets.push({
+            symbol: 'S&P',
+            name: 'S&P 500',
+            price: spData.price,
+            change24h: spData.change24h,
+            enabled: enabledSymbols.includes('S&P'),
+          })
+        }
+      } else if (symbol === 'USD/SAR') {
+        const forexData = await fetchForexRate('USD', 'SAR')
+        if (forexData) {
+          assets.push({
+            symbol: 'USD/SAR',
+            name: 'USD to SAR',
+            price: forexData.price,
+            change24h: 0,
+            enabled: enabledSymbols.includes('USD/SAR'),
+          })
+        }
+      } else if (symbol === 'OIL') {
+        const oilData = await fetchBrentOil()
+        if (oilData) {
+          assets.push({
+            symbol: 'OIL',
+            name: 'Brent Crude',
+            price: oilData.price,
+            change24h: oilData.change24h,
+            enabled: enabledSymbols.includes('OIL'),
+          })
+        }
+      }
     }
 
     return NextResponse.json({ assets })
