@@ -2280,6 +2280,17 @@ export function SukukList({ initialSukuk, userRole, ownerPersonId, viewerPersonI
                             <Button
                               size="sm"
                               variant="secondary"
+                              onClick={() => handleEdit(inv)}
+                              title="Edit"
+                              aria-label="Edit"
+                              className="h-8 w-8 px-0 py-0 shrink-0"
+                            >
+                              <Icon><EditIcon /></Icon>
+                            </Button>
+
+                            <Button
+                              size="sm"
+                              variant="secondary"
                               onClick={() => handleReceiveAndClose(inv, metrics)}
                               disabled={actionLoading || !canPartnerReceiveClose}
                               title={canPartnerReceiveClose ? 'Receive & Close' : 'Nothing left to close'}
