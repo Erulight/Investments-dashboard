@@ -617,10 +617,10 @@ export default async function InvestmentsPage() {
     : 0
 
   const platformTotals: Array<[string, number]> = Array.from(
-    displayedInvestments
+    activeInvestments
       .reduce((map: Map<string, number>, inv: any) => {
         const platform = inv.account?.name || 'Unknown'
-        const principal = getViewerPrincipal(inv)
+        const principal = getPrincipalOutstanding(inv)
         const invested = Number.isFinite(principal) ? principal : 0
         map.set(platform, (map.get(platform) ?? 0) + invested)
         return map

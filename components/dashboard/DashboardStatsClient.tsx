@@ -21,6 +21,7 @@ interface DashboardStatsClientProps {
   totalInvested: number
   totalValue: number
   sukukValue: number
+  sukukInvested: number
   malaaValue: number
   cryptoValue: number
   circlysOngoingSaved: number
@@ -46,6 +47,7 @@ export function DashboardStatsClient({
   totalInvested,
   totalValue,
   sukukValue,
+  sukukInvested,
   malaaValue,
   cryptoValue,
   circlysOngoingSaved,
@@ -190,7 +192,7 @@ export function DashboardStatsClient({
               <div className="p-6">
                 <p className="text-xs font-medium text-slate-400 uppercase tracking-wider">Sukuk Total</p>
                 <div className="text-2xl font-bold text-purple-400 mt-2 tabular-nums">{money(round2(sukukValue))}</div>
-                <p className="text-xs text-slate-500 mt-1">Invested {money(totalInvested)}</p>
+                <p className="text-xs text-slate-500 mt-1">Invested {money(sukukInvested)}</p>
               </div>
             </AnimatedCard>
           </div>
