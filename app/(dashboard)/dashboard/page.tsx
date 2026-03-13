@@ -166,6 +166,7 @@ export default async function DashboardPage({
   let sipValue = 0
   let circlysOngoingSaved = 0
   let cryptoValue = 0
+  let malaaValue = 0
   
   // Profit breakdown components
   let malaaProfit = 0
@@ -745,9 +746,10 @@ export default async function DashboardPage({
     totalValue = nonSukukValue + sukukPrincipalValue
 
     // Break down profit by investment type for detailed tracking
+    // Note: SIP is consolidated into Malaa per user clarification
     malaaProfit = ownerScoped.reduce((sum, inv) => {
       const accountType = getAccountType(inv)
-      if (accountType !== 'MALAA') return sum
+      if (accountType !== 'MALAA' && accountType !== 'SIP') return sum
       const pos = getOwnerPosition(inv)
       if (pos) return sum + toFiniteNumber(pos.profit)
       return sum + toFiniteNumber(inv.realizedProfit) + toFiniteNumber(inv.unrealizedProfit)
@@ -761,17 +763,11 @@ export default async function DashboardPage({
       return sum + toFiniteNumber(inv.realizedProfit) + toFiniteNumber(inv.unrealizedProfit)
     }, 0)
 
-    sipProfit = ownerScoped.reduce((sum, inv) => {
-      const accountType = getAccountType(inv)
-      if (accountType !== 'SIP') return sum
-      const pos = getOwnerPosition(inv)
-      if (pos) return sum + toFiniteNumber(pos.profit)
-      return sum + toFiniteNumber(inv.realizedProfit) + toFiniteNumber(inv.unrealizedProfit)
-    }, 0)
+    sipProfit = 0 // Consolidated into Malaa
 
     otherProfit = ownerScoped.reduce((sum, inv) => {
       const accountType = getAccountType(inv)
-      if (!accountType || accountType === 'SUKUK' || accountType === 'MALAA' || accountType === 'CRYPTO' || accountType === 'SIP') return sum
+      if (!accountType || accountType === 'SUKUK' || accountType === 'MALAA' || accountType === 'SIP' || accountType === 'CRYPTO') return sum
       const pos = getOwnerPosition(inv)
       if (pos) return sum + toFiniteNumber(pos.profit)
       return sum + toFiniteNumber(inv.realizedProfit) + toFiniteNumber(inv.unrealizedProfit)
@@ -884,11 +880,20 @@ export default async function DashboardPage({
     // Total Profit = all components combined
     totalProfit = malaaProfit + cryptoProfit + sipProfit + otherProfit + circlysProfit + sukukReceivable + sukukReceivedProfit + sukukCommissionEarned
 
-    sukukValue = sukukInvested + sukukReceivable
+    // Sukuk Total: Match Sukuk page - all active deals value (principal outstanding + receivable)
+    sukukValue = ownerSukuk
+      .filter((inv: any) => !isSoldSukukForOwner(inv))
+      .reduce((sum, inv) => {
+        const metrics = ownerSukukMetricsById.get(inv.id)
+        return sum + (metrics ? metrics.value : 0)
+      }, 0)
     totalValue += sukukReceivable
-    sipValue = ownerScoped
-      .filter((inv) => getAccountType(inv) === 'SIP')
+    // SIP value is now consolidated into Malaa
+    malaaValue = ownerScoped
+      .filter((inv) => getAccountType(inv) === 'MALAA' || getAccountType(inv) === 'SIP')
       .reduce((sum, inv) => sum + Math.max(0, toFiniteNumber(inv.currentValue)), 0)
+    
+    sipValue = 0 // Consolidated into Malaa
 
     cryptoValue = ownerScoped
       .filter((inv) => getAccountType(inv) === 'CRYPTO')
@@ -1444,6 +1449,25 @@ export default async function DashboardPage({
           cryptoProfit: toDisplayAmount(cryptoProfit),
           sipProfit: toDisplayAmount(sipProfit),
           otherProfit: toDisplayAmount(otherProfit),
+        }}
+        portfolioBreakdown={{
+          cash: toDisplayAmount(cashBalance),
+          sukuk: toDisplayAmount(sukukValue),
+          malaa: toDisplayAmount(malaaValue),
+          crypto: toDisplayAmount(cryptoValue),
+          circlys: toDisplayAmount(circlysOngoingSaved),
+          other: toDisplayAmount(Math.max(0, displayedValue - cashBalance - sukukValue - malaaValue - cryptoValue - circlysOngoingSaved)),
+        }}
+        cashBreakdown={{
+          available: toDisplayAmount(cashBalance),
+          setting: toDisplayAmount(cashSettingDelta),
+        }}
+        investedBreakdown={{
+          sukuk: toDisplayAmount(sukukInvested),
+          malaa: toDisplayAmount(malaaValue),
+          crypto: toDisplayAmount(cryptoValue),
+          circlys: toDisplayAmount(circlysOngoingSaved),
+          other: toDisplayAmount(Math.max(0, totalInvested - sukukInvested - malaaValue - cryptoValue - circlysOngoingSaved)),
         }}
         currencyPrefix={currencyPrefix}
       />
