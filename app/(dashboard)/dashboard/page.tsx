@@ -1134,6 +1134,17 @@ export default async function DashboardPage({
     // For partners, calculate profit breakdown
     const partnerSukuk = participants.filter((p: any) => getAccountType(p?.investment) === 'SUKUK')
     
+    // Sukuk invested (principal) and total value
+    sukukInvested = partnerSukuk.reduce((sum: number, p: any) => {
+      const m = getPartnerSukukMetrics(p?.investment, p, now)
+      return sum + Math.max(0, toFiniteNumber(m.principal))
+    }, 0)
+    
+    sukukValue = partnerSukuk.reduce((sum: number, p: any) => {
+      const m = getPartnerSukukMetrics(p?.investment, p, now)
+      return sum + Math.max(0, toFiniteNumber(m.value))
+    }, 0)
+    
     // Sukuk receivable and received (total net profit - withdrawn)
     sukukReceivable = partnerSukuk.reduce((sum: number, p: any) => {
       const m = getPartnerSukukMetrics(p?.investment, p, now)
@@ -1576,11 +1587,11 @@ export default async function DashboardPage({
         }}
         portfolioBreakdown={{
           cash: toDisplayAmount(cashBalance),
-          sukuk: toDisplayAmount(sukukInvested + sukukReceivable),
+          sukuk: toDisplayAmount(sukukValue),
           malaa: toDisplayAmount(malaaValue),
           crypto: toDisplayAmount(cryptoValue),
           circlys: toDisplayAmount(circlysOngoingSaved),
-          other: toDisplayAmount(Math.max(0, displayedValue - cashBalance - (sukukInvested + sukukReceivable) - malaaValue - cryptoValue - circlysOngoingSaved)),
+          other: toDisplayAmount(Math.max(0, displayedValue - cashBalance - sukukValue - malaaValue - cryptoValue - circlysOngoingSaved)),
         }}
         cashBreakdown={{
           available: toDisplayAmount(cashBalance),
@@ -1647,9 +1658,9 @@ export default async function DashboardPage({
             <div className="p-6">
               <p className="text-xs font-medium text-slate-400 uppercase tracking-wider">Receivable</p>
               <div className="text-2xl font-bold text-sky-400 mt-2 tabular-nums">
-                {money(round2(Math.max(0, totalValue - totalInvested)))}
+                {money(round2(sukukReceivable))}
               </div>
-              <p className="text-xs text-slate-500 mt-1">Accrued - received</p>
+              <p className="text-xs text-slate-500 mt-1">Pending profit</p>
             </div>
           </AnimatedCard>
           <AnimatedCard index={2}>
