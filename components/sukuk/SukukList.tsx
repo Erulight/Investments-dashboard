@@ -530,9 +530,21 @@ export function SukukList({ initialSukuk, userRole, ownerPersonId, viewerPersonI
     }
 
     const transactions = Array.isArray(inv?.transactions) ? inv.transactions : []
+    
+    // Get commission from dealParticipant (edited value) or fall back to metadata (original plan)
+    const partnerList = Array.isArray(inv?.dealParticipants) ? inv.dealParticipants : []
+    const partnerParticipants = partnerList.filter((p: any) => !ownerPersonId || p.personId !== ownerPersonId)
+    const commissionFromParticipants = partnerParticipants.reduce((sum: number, p: any) => {
+      const commission = Number(p?.commissionFees ?? 0)
+      return sum + (Number.isFinite(commission) ? Math.max(0, commission) : 0)
+    }, 0)
+    
     const invMeta = parseMetadata(inv?.metadata)
     const plannedRaw = Number(invMeta?.partnerCommissionPlan?.amount ?? 0)
-    const target = round2(Number.isFinite(plannedRaw) ? Math.max(0, plannedRaw) : 0)
+    const commissionFromMetadata = round2(Number.isFinite(plannedRaw) ? Math.max(0, plannedRaw) : 0)
+    
+    // Prioritize participant commission (edited) over metadata (original)
+    const target = commissionFromParticipants > 0 ? round2(commissionFromParticipants) : commissionFromMetadata
 
     const ownerCommissionTxs = transactions
       .filter((tx: any) => tx?.type === 'PARTNER_COMMISSION')

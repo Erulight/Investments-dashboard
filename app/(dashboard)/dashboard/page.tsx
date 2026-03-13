@@ -1144,9 +1144,10 @@ export default async function DashboardPage({
       return sum + Math.max(0, toFiniteNumber(m.received))
     }, 0)
     
-    // Commission paid by partners
+    // Commission paid by partners (use metrics to get accurate commission)
     sukukCommissionEarned = partnerSukuk.reduce((sum: number, p: any) => {
-      return sum + Math.max(0, toFiniteNumber(p?.commissionFees))
+      const m = getPartnerSukukMetrics(p?.investment, p, now)
+      return sum + Math.max(0, toFiniteNumber(m.commissionPaid))
     }, 0)
     
     // Other profit sources
