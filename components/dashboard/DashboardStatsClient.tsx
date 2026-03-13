@@ -22,6 +22,7 @@ interface DashboardStatsClientProps {
   totalValue: number
   sukukValue: number
   sukukInvested: number
+  sukukReceivable: number
   malaaValue: number
   cryptoValue: number
   circlysOngoingSaved: number
@@ -47,6 +48,7 @@ export function DashboardStatsClient({
   totalInvested,
   totalValue,
   sukukValue,
+  sukukReceivable,
   sukukInvested,
   malaaValue,
   cryptoValue,
@@ -102,7 +104,7 @@ export function DashboardStatsClient({
           </AnimatedCard>
         </div>
 
-        <div onClick={() => setShowRunwayModal(true)} className="cursor-pointer">
+        <div onClick={() => setShowRunwayModal(true)} className="cursor-pointer" data-card-id="runway" data-cat-target="true">
           <AnimatedCard index={4}>
             <div className="p-5">
               <p className="text-xs font-medium text-slate-400 uppercase tracking-wider">Cash Runway</p>
@@ -115,7 +117,7 @@ export function DashboardStatsClient({
         </div>
 
         {role === 'OWNER' && (
-          <div onClick={() => setShowSyncModal(true)} className="cursor-pointer">
+          <div onClick={() => setShowSyncModal(true)} className="cursor-pointer" data-card-id="sync" data-cat-target="true">
             <AnimatedCard index={5}>
               <div className="p-5">
                 <p className="text-xs font-medium text-slate-400 uppercase tracking-wider">Cash Sync Health</p>
@@ -131,7 +133,7 @@ export function DashboardStatsClient({
         )}
 
         {role === 'OWNER' && (
-          <div onClick={() => setShowConcentrationModal(true)} className="cursor-pointer">
+          <div onClick={() => setShowConcentrationModal(true)} className="cursor-pointer" data-card-id="concentration" data-cat-target="true">
             <AnimatedCard index={6}>
               <div className="p-5">
                 <p className="text-xs font-medium text-slate-400 uppercase tracking-wider">Top Allocation Concentration</p>
@@ -147,7 +149,7 @@ export function DashboardStatsClient({
 
       {/* Second Row Stats */}
       <div className="grid grid-cols-2 gap-3 lg:grid-cols-4 items-start auto-rows-min mt-3">
-        <div onClick={() => setShowDealsModal(true)} className="cursor-pointer">
+        <div onClick={() => setShowDealsModal(true)} className="cursor-pointer" data-card-id="deals" data-cat-target="true">
           <AnimatedCard index={4}>
             <div className="p-6">
               <p className="text-xs font-medium text-slate-400 uppercase tracking-wider">Active Deals</p>
@@ -158,7 +160,7 @@ export function DashboardStatsClient({
         </div>
 
         {role === 'OWNER' && roscaDebt > 0 && (
-          <div onClick={() => setShowRoscaModal(true)} className="cursor-pointer">
+          <div onClick={() => setShowRoscaModal(true)} className="cursor-pointer" data-card-id="rosca" data-cat-target="true">
             <AnimatedCard index={5}>
               <div className="p-6">
                 <p className="text-xs font-medium text-red-400 uppercase tracking-wider">ROSCA Remaining</p>
@@ -171,7 +173,7 @@ export function DashboardStatsClient({
           </div>
         )}
 
-        <div onClick={() => setShowNetWorthModal(true)} className="cursor-pointer">
+        <div onClick={() => setShowNetWorthModal(true)} className="cursor-pointer" data-card-id="networth" data-cat-target="true">
           <AnimatedCard index={6}>
             <div className="p-6">
               <p className="text-xs font-medium text-slate-400 uppercase tracking-wider">Net Worth</p>
@@ -187,7 +189,7 @@ export function DashboardStatsClient({
       {/* Asset Type Stats */}
       <div className="grid grid-cols-2 gap-3 lg:grid-cols-4 mt-3">
         {sukukValue > 0 && (
-          <div onClick={() => setShowSukukModal(true)} className="cursor-pointer">
+          <div onClick={() => setShowSukukModal(true)} className="cursor-pointer" data-card-id="sukuk" data-cat-target="true">
             <AnimatedCard index={0}>
               <div className="p-6">
                 <p className="text-xs font-medium text-slate-400 uppercase tracking-wider">Sukuk Total</p>
@@ -378,6 +380,8 @@ export function DashboardStatsClient({
         subtitle="Islamic bond investments"
         accentColor="purple"
         items={[
+          { label: 'Principal Outstanding', value: money(sukukInvested), icon: '💰', description: 'Active invested amount', color: 'emerald' },
+          { label: 'Receivable Profit', value: money(sukukReceivable), icon: '📈', description: 'Accrued but not received', color: 'cyan' },
           { label: 'Current Value', value: money(sukukValue), icon: '📊', description: 'Principal + receivable', color: 'purple' },
         ]}
       />
@@ -394,5 +398,7 @@ export function DashboardStatsClient({
         ]}
       />
     </>
+  )
+}
   )
 }

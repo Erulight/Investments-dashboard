@@ -1538,6 +1538,7 @@ export default async function DashboardPage({
         totalValue={displayedValue}
         sukukValue={sukukValue}
         sukukInvested={sukukInvested}
+        sukukReceivable={sukukReceivable}
         malaaValue={malaaValue}
         cryptoValue={cryptoValue}
         circlysOngoingSaved={circlysOngoingSaved}
