@@ -811,7 +811,28 @@ export default async function DashboardPage({
     sukukReceivedProfit = ownerSukuk.reduce((sum, inv) => {
       if (isSoldSukukForOwner(inv)) {
         const settlement = getOwnerSoldSettlement(inv)
-        return sum + Math.max(0, settlement.received)
+        // For sold deals: add profit received after sale + profit withdrawn before sale
+        const txs = Array.isArray(inv.transactions) ? inv.transactions : []
+        const sells = txs.filter((tx: any) => tx?.type === 'SELL_TO_PARTNER' && (!ownerPersonId || tx.personId === ownerPersonId))
+        const sellDates = sells.map((tx: any) => {
+          const d = tx?.date instanceof Date ? tx.date : new Date(tx?.date)
+          return Number.isNaN(d.getTime()) ? null : d
+        }).filter(Boolean)
+        const latestSellDate = sellDates.length > 0 ? sellDates.reduce((latest: Date | null, d: Date | null) => {
+          if (!latest || !d) return d || latest
+          return d.getTime() > latest.getTime() ? d : latest
+        }, null) : null
+
+        const profitBeforeSale = latestSellDate ? txs
+          .filter((tx: any) => {
+            if (ownerPersonId && tx?.personId !== ownerPersonId && tx?.personId != null) return false
+            if (tx?.type !== 'WITHDRAW_PROFIT') return false
+            const d = tx?.date instanceof Date ? tx.date : new Date(tx?.date)
+            return !Number.isNaN(d.getTime()) && d.getTime() < latestSellDate.getTime()
+          })
+          .reduce((s: number, tx: any) => s + Math.max(0, Math.abs(toFiniteNumber(tx?.amount))), 0) : 0
+
+        return sum + Math.max(0, settlement.received) + profitBeforeSale
       }
       const metrics = ownerSukukMetricsById.get(inv.id)
       return sum + (metrics ? Math.max(0, metrics.received) : 0)
