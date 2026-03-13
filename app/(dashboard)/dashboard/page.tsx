@@ -476,8 +476,14 @@ export default async function DashboardPage({
         return Number.isFinite(ownerPrincipal) ? Math.max(0, ownerPrincipal) : 0
       }
 
-      // If no owner position in dealParticipants, owner has no principal in this deal.
-      // Do NOT fallback to inv.principalAmount as it may be a partner deal.
+      // Legacy deals may not have participants; in that case fallback to investment principal.
+      const participants = Array.isArray(inv.dealParticipants) ? inv.dealParticipants : []
+      if (participants.length === 0) {
+        const principal = Number(inv.principalAmount)
+        return Number.isFinite(principal) ? Math.max(0, principal) : 0
+      }
+
+      // Partner-only / transferred deals should not count in owner principal metrics.
       return 0
     }
 
@@ -595,13 +601,16 @@ export default async function DashboardPage({
 
     const hasOwnerReceivedProfit = (inv: any) => {
       const txs = Array.isArray(inv.transactions) ? inv.transactions : []
-      // Only check for owner's profit withdrawal transactions
-      // Do NOT check totalReceived as it could be partner's profit
-      return txs.some((tx: any) => {
+      // Check for any profit receipt transactions (WITHDRAW_PROFIT or totalReceived > 0)
+      const hasWithdrawProfit = txs.some((tx: any) => {
         if (tx?.type !== 'WITHDRAW_PROFIT') return false
         if (ownerPersonId && tx?.personId !== ownerPersonId && tx?.personId != null) return false
         return Math.abs(Number(tx?.amount) || 0) > 0
       })
+      if (hasWithdrawProfit) return true
+      // Also check if investment has totalReceived > 0 (matured deals)
+      const totalReceived = Number(inv.totalReceived)
+      return Number.isFinite(totalReceived) && totalReceived > 0
     }
 
     const isSoldSukukForOwner = (inv: any) => {

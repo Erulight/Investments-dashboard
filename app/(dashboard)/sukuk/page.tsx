@@ -426,7 +426,7 @@ export default async function InvestmentsPage() {
 
   const activeInvestments = displayedInvestments.filter(isActiveDeal)
 
-  const totalInvested = displayedInvestments.reduce((sum, inv) => {
+  const totalInvested = activeInvestments.reduce((sum, inv) => {
     const principal = getViewerPrincipal(inv)
     return sum + (Number.isFinite(principal) ? principal : 0)
   }, 0)
