@@ -441,12 +441,22 @@ export default async function InvestmentsPage() {
 
   const totalNetProfit = (() => {
     // Owner: include realized profit + commission from sold deals even after ownership is removed
-    if (user.role === 'OWNER') {
+    if (user.role === 'OWNER' && user.personId) {
       const activeProfit = displayedInvestments
         .filter((inv: any) => !isSoldDealForOwner(inv))
         .reduce((sum, inv) => sum + getNetProfit(inv), 0)
 
-      const soldTarget = investments.reduce((sum, inv) => sum + getOwnerSoldSettlement(inv).target, 0)
+      // Only count sold deals where owner has/had ACTUAL participation (exclude partner-only deals)
+      const ownerInvestments = investments.filter((inv: any) => {
+        const participants = Array.isArray(inv.dealParticipants) ? inv.dealParticipants : []
+        if (participants.length === 0) return true
+        const ownerParticipation = participants.find((p: any) => p?.personId === user.personId)
+        // Must exist AND have positive invested amount (exclude zero-principal partner-only deals)
+        if (!ownerParticipation) return false
+        const invested = Number(ownerParticipation.investedAmount || 0)
+        return invested > 0
+      })
+      const soldTarget = ownerInvestments.reduce((sum, inv) => sum + getOwnerSoldSettlement(inv).target, 0)
       return round2(activeProfit + soldTarget)
     }
 
@@ -460,7 +470,16 @@ export default async function InvestmentsPage() {
 
     if (user.role !== 'OWNER' || !user.personId) return round2(activeReceived)
 
-    const soldReceived = investments.reduce((sum, inv) => sum + getOwnerSoldSettlement(inv).received, 0)
+    // Only count sold deals where owner has/had ACTUAL participation (exclude partner-only deals)
+    const ownerInvestments = investments.filter((inv: any) => {
+      const participants = Array.isArray(inv.dealParticipants) ? inv.dealParticipants : []
+      if (participants.length === 0) return true
+      const ownerParticipation = participants.find((p: any) => p?.personId === user.personId)
+      if (!ownerParticipation) return false
+      const invested = Number(ownerParticipation.investedAmount || 0)
+      return invested > 0
+    })
+    const soldReceived = ownerInvestments.reduce((sum, inv) => sum + getOwnerSoldSettlement(inv).received, 0)
     return round2(activeReceived + soldReceived)
   })()
 
@@ -510,7 +529,18 @@ export default async function InvestmentsPage() {
 
   const totalPendingFromSoldDeals = (() => {
     if (user.role !== 'OWNER' || !user.personId) return 0
-    return round2(investments.reduce((sum, inv) => sum + getOwnerSoldSettlement(inv).pending, 0))
+    // Only count deals where owner has/had ACTUAL participation (exclude partner-only deals)
+    const ownerInvestments = investments.filter((inv: any) => {
+      const participants = Array.isArray(inv.dealParticipants) ? inv.dealParticipants : []
+      // If no participants, it's a legacy owner-only deal
+      if (participants.length === 0) return true
+      // Must exist AND have positive invested amount
+      const ownerParticipation = participants.find((p: any) => p?.personId === user.personId)
+      if (!ownerParticipation) return false
+      const invested = Number(ownerParticipation.investedAmount || 0)
+      return invested > 0
+    })
+    return round2(ownerInvestments.reduce((sum, inv) => sum + getOwnerSoldSettlement(inv).pending, 0))
   })()
 
   const totalReceivable = (() => {
