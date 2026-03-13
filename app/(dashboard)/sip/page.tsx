@@ -2,7 +2,7 @@ import { redirect } from 'next/navigation'
 import { getCurrentUser } from '@/lib/auth'
 import { requireModuleAccess } from '@/lib/rbac'
 import { prisma } from '@/lib/db'
-import SIPPortfolioClient from '@/components/sip/SIPPortfolioClient'
+import MalaaPortfolioRedesigned from '@/components/sip/MalaaPortfolioRedesigned'
 
 export const dynamic = 'force-dynamic'
 
@@ -46,8 +46,6 @@ export default async function SIPPage() {
     : undefined
 
   return (
-    <div className="p-6">
-      <SIPPortfolioClient investment={transformedInvestment} userRole={user.role} />
-    </div>
+    <MalaaPortfolioRedesigned investment={transformedInvestment} userRole={user.role} />
   )
 }
