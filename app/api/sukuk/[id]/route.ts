@@ -116,7 +116,7 @@ export async function PUT(
   { params }: { params: Promise<{ id: string }> }
 ) {
   try {
-    const user = await requireAuth(['OWNER'])
+    const user = await requireAuth(['OWNER', 'PARTNER'])
     const { id } = await params
     
     const body = await req.json()
@@ -138,6 +138,9 @@ export async function PUT(
     // Check if sukuk exists
     const existingSukuk = await prisma.investment.findUnique({
       where: { id },
+      include: {
+        dealParticipants: true,
+      },
     })
     
     if (!existingSukuk) {
@@ -145,6 +148,20 @@ export async function PUT(
         { error: 'Sukuk not found' },
         { status: 404 }
       )
+    }
+
+    // PARTNER validation: ensure they can only edit deals they participate in
+    if (user.role === 'PARTNER' && user.personId) {
+      const hasParticipation = existingSukuk.dealParticipants.some(
+        (p: any) => p.personId === user.personId
+      )
+      
+      if (!hasParticipation) {
+        return NextResponse.json(
+          { error: 'Forbidden: You can only edit Sukuk deals you participate in' },
+          { status: 403 }
+        )
+      }
     }
 
     const principalDelta = data.principalAmount !== undefined
