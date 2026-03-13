@@ -5,6 +5,17 @@ import { motion } from 'framer-motion'
 import { PremiumStatsCard } from './PremiumStatsCard'
 import { PremiumCashBalanceCard } from './PremiumCashBalanceCard'
 
+interface ProfitBreakdown {
+  sukukReceivable: number
+  sukukReceived: number
+  commission: number
+  savingsRewards: number
+  malaaProfit: number
+  cryptoProfit: number
+  sipProfit: number
+  otherProfit: number
+}
+
 interface StatsData {
   portfolioValue: number
   cashBalance: number
@@ -21,6 +32,7 @@ interface StatsData {
   profitSparkline?: number[]
   role?: 'OWNER' | 'PARTNER'
   currencyPrefix?: string
+  profitBreakdown?: ProfitBreakdown
 }
 
 export function PremiumStatsGrid({
@@ -39,8 +51,10 @@ export function PremiumStatsGrid({
   profitSparkline,
   role = 'OWNER',
   currencyPrefix = 'SAR',
+  profitBreakdown,
 }: StatsData) {
   const [allHidden, setAllHidden] = useState(false)
+  const [showBreakdown, setShowBreakdown] = useState(false)
 
   return (
     <div className="space-y-4">
@@ -122,20 +136,284 @@ export function PremiumStatsGrid({
           onToggleHide={() => setAllHidden(!allHidden)}
         />
       
-        <PremiumStatsCard
-          title="Total Profit"
-          value={totalProfit}
-          subtitle="Realized & unrealized"
-          trend={profitTrend}
-          trendLabel={profitTrend !== undefined ? `${profitTrend >= 0 ? '↑' : '↓'} ${Math.abs(profitTrend).toFixed(2)}% ROI` : undefined}
-          sparklineData={profitSparkline}
-          accentColor="green"
-          index={3}
-          prefix={currencyPrefix}
-          isHidden={allHidden}
-          onToggleHide={() => setAllHidden(!allHidden)}
-        />
+        <div onClick={() => profitBreakdown && setShowBreakdown(true)} className={profitBreakdown ? 'cursor-pointer' : ''}>
+          <PremiumStatsCard
+            title="Total Profit"
+            value={totalProfit}
+            subtitle="Realized & unrealized"
+            trend={profitTrend}
+            trendLabel={profitTrend !== undefined ? `${profitTrend >= 0 ? '↑' : '↓'} ${Math.abs(profitTrend).toFixed(2)}% ROI` : undefined}
+            sparklineData={profitSparkline}
+            accentColor="green"
+            index={3}
+            prefix={currencyPrefix}
+            isHidden={allHidden}
+            onToggleHide={() => setAllHidden(!allHidden)}
+          />
+        </div>
       </div>
+
+      {/* Profit Breakdown Modal */}
+      {showBreakdown && profitBreakdown && (
+        <motion.div
+          initial={{ opacity: 0 }}
+          animate={{ opacity: 1 }}
+          exit={{ opacity: 0 }}
+          onClick={() => setShowBreakdown(false)}
+          className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm"
+        >
+          <motion.div
+            initial={{ scale: 0.9, opacity: 0, y: 20 }}
+            animate={{ scale: 1, opacity: 1, y: 0 }}
+            exit={{ scale: 0.9, opacity: 0, y: 20 }}
+            transition={{ type: 'spring', duration: 0.5 }}
+            onClick={(e) => e.stopPropagation()}
+            className="bg-gradient-to-br from-slate-900 via-slate-800 to-slate-900 rounded-2xl shadow-2xl w-full max-w-2xl border-2 border-emerald-500/30 overflow-hidden"
+          >
+            {/* Header */}
+            <div className="relative px-8 py-6 bg-gradient-to-r from-emerald-500/20 to-cyan-500/20 border-b border-emerald-500/30">
+              <div className="absolute inset-0 bg-[url('/grid.svg')] opacity-10" />
+              <div className="relative flex items-center justify-between">
+                <div>
+                  <h2 className="text-2xl font-bold bg-gradient-to-r from-emerald-400 to-cyan-400 bg-clip-text text-transparent drop-shadow-lg">
+                    💰 Profit Breakdown
+                  </h2>
+                  <p className="text-sm text-slate-400 mt-1">Detailed view of all profit sources</p>
+                </div>
+                <button
+                  onClick={() => setShowBreakdown(false)}
+                  className="w-10 h-10 rounded-full flex items-center justify-center bg-slate-800/50 hover:bg-slate-700/50 border border-slate-600/50 hover:border-emerald-500/50 transition-all duration-300 group"
+                >
+                  <svg className="w-5 h-5 text-slate-400 group-hover:text-emerald-400 transition-colors" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                  </svg>
+                </button>
+              </div>
+            </div>
+
+            {/* Content */}
+            <div className="px-8 py-6 max-h-[70vh] overflow-y-auto">
+              <div className="space-y-3">
+                {/* Sukuk Receivable */}
+                <motion.div
+                  initial={{ x: -20, opacity: 0 }}
+                  animate={{ x: 0, opacity: 1 }}
+                  transition={{ delay: 0.1 }}
+                  className="group relative p-4 rounded-xl bg-gradient-to-r from-purple-500/10 to-purple-600/10 border border-purple-500/20 hover:border-purple-400/40 transition-all duration-300"
+                >
+                  <div className="absolute inset-0 bg-gradient-to-r from-purple-500/5 to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-300 rounded-xl" />
+                  <div className="relative flex items-center justify-between">
+                    <div className="flex items-center gap-3">
+                      <div className="w-10 h-10 rounded-lg bg-purple-500/20 flex items-center justify-center">
+                        <span className="text-lg">📊</span>
+                      </div>
+                      <div>
+                        <p className="text-sm font-semibold text-slate-200">Sukuk Receivable</p>
+                        <p className="text-xs text-slate-500">Pending profit from active deals</p>
+                      </div>
+                    </div>
+                    <div className="text-right">
+                      <p className="text-lg font-bold text-purple-400 tabular-nums">{profitBreakdown.sukukReceivable.toLocaleString('en-US', { minimumFractionDigits: 2 })} {currencyPrefix}</p>
+                    </div>
+                  </div>
+                </motion.div>
+
+                {/* Sukuk Received */}
+                <motion.div
+                  initial={{ x: -20, opacity: 0 }}
+                  animate={{ x: 0, opacity: 1 }}
+                  transition={{ delay: 0.15 }}
+                  className="group relative p-4 rounded-xl bg-gradient-to-r from-emerald-500/10 to-emerald-600/10 border border-emerald-500/20 hover:border-emerald-400/40 transition-all duration-300"
+                >
+                  <div className="absolute inset-0 bg-gradient-to-r from-emerald-500/5 to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-300 rounded-xl" />
+                  <div className="relative flex items-center justify-between">
+                    <div className="flex items-center gap-3">
+                      <div className="w-10 h-10 rounded-lg bg-emerald-500/20 flex items-center justify-center">
+                        <span className="text-lg">✅</span>
+                      </div>
+                      <div>
+                        <p className="text-sm font-semibold text-slate-200">Sukuk Received</p>
+                        <p className="text-xs text-slate-500">Profit already withdrawn</p>
+                      </div>
+                    </div>
+                    <div className="text-right">
+                      <p className="text-lg font-bold text-emerald-400 tabular-nums">{profitBreakdown.sukukReceived.toLocaleString('en-US', { minimumFractionDigits: 2 })} {currencyPrefix}</p>
+                    </div>
+                  </div>
+                </motion.div>
+
+                {/* Commission */}
+                <motion.div
+                  initial={{ x: -20, opacity: 0 }}
+                  animate={{ x: 0, opacity: 1 }}
+                  transition={{ delay: 0.2 }}
+                  className="group relative p-4 rounded-xl bg-gradient-to-r from-cyan-500/10 to-cyan-600/10 border border-cyan-500/20 hover:border-cyan-400/40 transition-all duration-300"
+                >
+                  <div className="absolute inset-0 bg-gradient-to-r from-cyan-500/5 to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-300 rounded-xl" />
+                  <div className="relative flex items-center justify-between">
+                    <div className="flex items-center gap-3">
+                      <div className="w-10 h-10 rounded-lg bg-cyan-500/20 flex items-center justify-center">
+                        <span className="text-lg">💼</span>
+                      </div>
+                      <div>
+                        <p className="text-sm font-semibold text-slate-200">Commission</p>
+                        <p className="text-xs text-slate-500">Partnership earnings</p>
+                      </div>
+                    </div>
+                    <div className="text-right">
+                      <p className="text-lg font-bold text-cyan-400 tabular-nums">{profitBreakdown.commission.toLocaleString('en-US', { minimumFractionDigits: 2 })} {currencyPrefix}</p>
+                    </div>
+                  </div>
+                </motion.div>
+
+                {/* Savings Rewards */}
+                <motion.div
+                  initial={{ x: -20, opacity: 0 }}
+                  animate={{ x: 0, opacity: 1 }}
+                  transition={{ delay: 0.25 }}
+                  className="group relative p-4 rounded-xl bg-gradient-to-r from-yellow-500/10 to-yellow-600/10 border border-yellow-500/20 hover:border-yellow-400/40 transition-all duration-300"
+                >
+                  <div className="absolute inset-0 bg-gradient-to-r from-yellow-500/5 to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-300 rounded-xl" />
+                  <div className="relative flex items-center justify-between">
+                    <div className="flex items-center gap-3">
+                      <div className="w-10 h-10 rounded-lg bg-yellow-500/20 flex items-center justify-center">
+                        <span className="text-lg">🎁</span>
+                      </div>
+                      <div>
+                        <p className="text-sm font-semibold text-slate-200">Savings Rewards</p>
+                        <p className="text-xs text-slate-500">Circlys ROSCA earnings</p>
+                      </div>
+                    </div>
+                    <div className="text-right">
+                      <p className="text-lg font-bold text-yellow-400 tabular-nums">{profitBreakdown.savingsRewards.toLocaleString('en-US', { minimumFractionDigits: 2 })} {currencyPrefix}</p>
+                    </div>
+                  </div>
+                </motion.div>
+
+                {/* Malaa Profit */}
+                <motion.div
+                  initial={{ x: -20, opacity: 0 }}
+                  animate={{ x: 0, opacity: 1 }}
+                  transition={{ delay: 0.3 }}
+                  className="group relative p-4 rounded-xl bg-gradient-to-r from-blue-500/10 to-blue-600/10 border border-blue-500/20 hover:border-blue-400/40 transition-all duration-300"
+                >
+                  <div className="absolute inset-0 bg-gradient-to-r from-blue-500/5 to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-300 rounded-xl" />
+                  <div className="relative flex items-center justify-between">
+                    <div className="flex items-center gap-3">
+                      <div className="w-10 h-10 rounded-lg bg-blue-500/20 flex items-center justify-center">
+                        <span className="text-lg">🏦</span>
+                      </div>
+                      <div>
+                        <p className="text-sm font-semibold text-slate-200">Malaa Profit</p>
+                        <p className="text-xs text-slate-500">Malaa Capital investments</p>
+                      </div>
+                    </div>
+                    <div className="text-right">
+                      <p className="text-lg font-bold text-blue-400 tabular-nums">{profitBreakdown.malaaProfit.toLocaleString('en-US', { minimumFractionDigits: 2 })} {currencyPrefix}</p>
+                    </div>
+                  </div>
+                </motion.div>
+
+                {/* Crypto Profit */}
+                <motion.div
+                  initial={{ x: -20, opacity: 0 }}
+                  animate={{ x: 0, opacity: 1 }}
+                  transition={{ delay: 0.35 }}
+                  className="group relative p-4 rounded-xl bg-gradient-to-r from-orange-500/10 to-orange-600/10 border border-orange-500/20 hover:border-orange-400/40 transition-all duration-300"
+                >
+                  <div className="absolute inset-0 bg-gradient-to-r from-orange-500/5 to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-300 rounded-xl" />
+                  <div className="relative flex items-center justify-between">
+                    <div className="flex items-center gap-3">
+                      <div className="w-10 h-10 rounded-lg bg-orange-500/20 flex items-center justify-center">
+                        <span className="text-lg">₿</span>
+                      </div>
+                      <div>
+                        <p className="text-sm font-semibold text-slate-200">Crypto Profit</p>
+                        <p className="text-xs text-slate-500">Cryptocurrency gains</p>
+                      </div>
+                    </div>
+                    <div className="text-right">
+                      <p className="text-lg font-bold text-orange-400 tabular-nums">{profitBreakdown.cryptoProfit.toLocaleString('en-US', { minimumFractionDigits: 2 })} {currencyPrefix}</p>
+                    </div>
+                  </div>
+                </motion.div>
+
+                {/* SIP Profit */}
+                {profitBreakdown.sipProfit > 0 && (
+                  <motion.div
+                    initial={{ x: -20, opacity: 0 }}
+                    animate={{ x: 0, opacity: 1 }}
+                    transition={{ delay: 0.4 }}
+                    className="group relative p-4 rounded-xl bg-gradient-to-r from-pink-500/10 to-pink-600/10 border border-pink-500/20 hover:border-pink-400/40 transition-all duration-300"
+                  >
+                    <div className="absolute inset-0 bg-gradient-to-r from-pink-500/5 to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-300 rounded-xl" />
+                    <div className="relative flex items-center justify-between">
+                      <div className="flex items-center gap-3">
+                        <div className="w-10 h-10 rounded-lg bg-pink-500/20 flex items-center justify-center">
+                          <span className="text-lg">📈</span>
+                        </div>
+                        <div>
+                          <p className="text-sm font-semibold text-slate-200">SIP Profit</p>
+                          <p className="text-xs text-slate-500">Systematic investment plans</p>
+                        </div>
+                      </div>
+                      <div className="text-right">
+                        <p className="text-lg font-bold text-pink-400 tabular-nums">{profitBreakdown.sipProfit.toLocaleString('en-US', { minimumFractionDigits: 2 })} {currencyPrefix}</p>
+                      </div>
+                    </div>
+                  </motion.div>
+                )}
+
+                {/* Other Profit */}
+                {profitBreakdown.otherProfit > 0 && (
+                  <motion.div
+                    initial={{ x: -20, opacity: 0 }}
+                    animate={{ x: 0, opacity: 1 }}
+                    transition={{ delay: 0.45 }}
+                    className="group relative p-4 rounded-xl bg-gradient-to-r from-slate-500/10 to-slate-600/10 border border-slate-500/20 hover:border-slate-400/40 transition-all duration-300"
+                  >
+                    <div className="absolute inset-0 bg-gradient-to-r from-slate-500/5 to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-300 rounded-xl" />
+                    <div className="relative flex items-center justify-between">
+                      <div className="flex items-center gap-3">
+                        <div className="w-10 h-10 rounded-lg bg-slate-500/20 flex items-center justify-center">
+                          <span className="text-lg">💡</span>
+                        </div>
+                        <div>
+                          <p className="text-sm font-semibold text-slate-200">Other Profit</p>
+                          <p className="text-xs text-slate-500">Other investment sources</p>
+                        </div>
+                      </div>
+                      <div className="text-right">
+                        <p className="text-lg font-bold text-slate-400 tabular-nums">{profitBreakdown.otherProfit.toLocaleString('en-US', { minimumFractionDigits: 2 })} {currencyPrefix}</p>
+                      </div>
+                    </div>
+                  </motion.div>
+                )}
+              </div>
+
+              {/* Total Summary */}
+              <motion.div
+                initial={{ y: 20, opacity: 0 }}
+                animate={{ y: 0, opacity: 1 }}
+                transition={{ delay: 0.5 }}
+                className="mt-6 p-6 rounded-xl bg-gradient-to-r from-emerald-500/20 to-cyan-500/20 border-2 border-emerald-500/40"
+              >
+                <div className="flex items-center justify-between">
+                  <div>
+                    <p className="text-sm font-medium text-slate-400 uppercase tracking-wider">Total Profit</p>
+                    <p className="text-xs text-slate-500 mt-1">Sum of all sources</p>
+                  </div>
+                  <div className="text-right">
+                    <p className="text-3xl font-bold bg-gradient-to-r from-emerald-400 to-cyan-400 bg-clip-text text-transparent tabular-nums">
+                      {totalProfit.toLocaleString('en-US', { minimumFractionDigits: 2 })} {currencyPrefix}
+                    </p>
+                  </div>
+                </div>
+              </motion.div>
+            </div>
+          </motion.div>
+        </motion.div>
+      )}
     </div>
   )
 }

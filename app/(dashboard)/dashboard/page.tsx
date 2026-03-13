@@ -166,6 +166,15 @@ export default async function DashboardPage({
   let sipValue = 0
   let circlysOngoingSaved = 0
   let cryptoValue = 0
+  
+  // Profit breakdown components
+  let malaaProfit = 0
+  let cryptoProfit = 0
+  let sipProfit = 0
+  let otherProfit = 0
+  let circlysProfit = 0
+  let sukukReceivedProfit = 0
+  let sukukCommissionEarned = 0
 
   // Owner Sukuk principal lookup for portfolio chart (populated inside owner block)
   const ownerSukukPrincipalById = new Map<string, number>()
@@ -735,20 +744,43 @@ export default async function DashboardPage({
     }, 0)
     totalValue = nonSukukValue + sukukPrincipalValue
 
-    const nonSukukOwnedProfit = ownerScoped.reduce(
-      (sum, inv) => {
-        const accountType = getAccountType(inv)
-        if (!accountType || accountType === 'SUKUK') return sum
+    // Break down profit by investment type for detailed tracking
+    malaaProfit = ownerScoped.reduce((sum, inv) => {
+      const accountType = getAccountType(inv)
+      if (accountType !== 'MALAA') return sum
+      const pos = getOwnerPosition(inv)
+      if (pos) return sum + toFiniteNumber(pos.profit)
+      return sum + toFiniteNumber(inv.realizedProfit) + toFiniteNumber(inv.unrealizedProfit)
+    }, 0)
 
-        const pos = getOwnerPosition(inv)
-        if (pos) return sum + toFiniteNumber(pos.profit)
-        return sum + toFiniteNumber(inv.realizedProfit) + toFiniteNumber(inv.unrealizedProfit)
-      },
-      0
-    )
+    cryptoProfit = ownerScoped.reduce((sum, inv) => {
+      const accountType = getAccountType(inv)
+      if (accountType !== 'CRYPTO') return sum
+      const pos = getOwnerPosition(inv)
+      if (pos) return sum + toFiniteNumber(pos.profit)
+      return sum + toFiniteNumber(inv.realizedProfit) + toFiniteNumber(inv.unrealizedProfit)
+    }, 0)
+
+    sipProfit = ownerScoped.reduce((sum, inv) => {
+      const accountType = getAccountType(inv)
+      if (accountType !== 'SIP') return sum
+      const pos = getOwnerPosition(inv)
+      if (pos) return sum + toFiniteNumber(pos.profit)
+      return sum + toFiniteNumber(inv.realizedProfit) + toFiniteNumber(inv.unrealizedProfit)
+    }, 0)
+
+    otherProfit = ownerScoped.reduce((sum, inv) => {
+      const accountType = getAccountType(inv)
+      if (!accountType || accountType === 'SUKUK' || accountType === 'MALAA' || accountType === 'CRYPTO' || accountType === 'SIP') return sum
+      const pos = getOwnerPosition(inv)
+      if (pos) return sum + toFiniteNumber(pos.profit)
+      return sum + toFiniteNumber(inv.realizedProfit) + toFiniteNumber(inv.unrealizedProfit)
+    }, 0)
+
+    const nonSukukOwnedProfit = malaaProfit + cryptoProfit + sipProfit + otherProfit
 
     // Add CIRCLYS rewards separately (excluded from ownerScoped).
-    const circlysProfit = investments
+    circlysProfit = investments
       .filter((inv: any) => getAccountType(inv) === 'CIRCLYS')
       .reduce((sum, inv) => {
         const pos = getOwnerPosition(inv)
@@ -776,7 +808,7 @@ export default async function DashboardPage({
       return sum + (metrics ? Math.max(0, metrics.receivable) : 0)
     }, 0)
 
-    const sukukReceivedProfit = ownerSukuk.reduce((sum, inv) => {
+    sukukReceivedProfit = ownerSukuk.reduce((sum, inv) => {
       if (isSoldSukukForOwner(inv)) {
         const settlement = getOwnerSoldSettlement(inv)
         return sum + Math.max(0, settlement.received)
@@ -823,10 +855,10 @@ export default async function DashboardPage({
         return sum + (Number.isFinite(commission) ? Math.max(0, commission) : 0)
       }, 0)
 
-    const sukukCommissionEarned = round2(Math.max(sukukCommissionFromTx, sukukCommissionFromSellMeta))
+    sukukCommissionEarned = round2(Math.max(sukukCommissionFromTx, sukukCommissionFromSellMeta))
 
-    // Total Profit = receivable + received + commission (plus non-Sukuk/Circlys profit)
-    totalProfit = nonSukukOwnedProfit + circlysProfit + sukukReceivable + sukukReceivedProfit + sukukCommissionEarned
+    // Total Profit = all components combined
+    totalProfit = malaaProfit + cryptoProfit + sipProfit + otherProfit + circlysProfit + sukukReceivable + sukukReceivedProfit + sukukCommissionEarned
 
     sukukValue = sukukInvested + sukukReceivable
     totalValue += sukukReceivable
@@ -1379,6 +1411,16 @@ export default async function DashboardPage({
         portfolioSparkline={portfolioSparkline}
         cashSparkline={cashSparkline}
         role={user.role as 'OWNER' | 'PARTNER'}
+        profitBreakdown={{
+          sukukReceivable: toDisplayAmount(sukukReceivable),
+          sukukReceived: toDisplayAmount(sukukReceivedProfit),
+          commission: toDisplayAmount(sukukCommissionEarned),
+          savingsRewards: toDisplayAmount(circlysProfit),
+          malaaProfit: toDisplayAmount(malaaProfit),
+          cryptoProfit: toDisplayAmount(cryptoProfit),
+          sipProfit: toDisplayAmount(sipProfit),
+          otherProfit: toDisplayAmount(otherProfit),
+        }}
         currencyPrefix={currencyPrefix}
       />
 
