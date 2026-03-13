@@ -54,7 +54,11 @@ export default async function ZakatAuditPage() {
       },
     }),
     prisma.investment.findMany({
-      where: user.role === 'OWNER' ? {} : { dealParticipants: { some: { personId: user.personId } } },
+      where: user.role === 'OWNER' 
+        ? {} 
+        : user.personId 
+          ? { dealParticipants: { some: { personId: user.personId } } } 
+          : { id: 'none' },
       include: {
         account: { select: { type: true, currency: true } },
         transactions: {
@@ -78,7 +82,11 @@ export default async function ZakatAuditPage() {
     prisma.investment.findMany({
       where: {
         account: { type: 'SUKUK' },
-        ...(user.role === 'OWNER' ? {} : { dealParticipants: { some: { personId: user.personId } } }),
+        ...(user.role === 'OWNER' 
+          ? {} 
+          : user.personId 
+            ? { dealParticipants: { some: { personId: user.personId } } } 
+            : { id: 'none' }),
       },
       select: {
         id: true,
@@ -92,7 +100,11 @@ export default async function ZakatAuditPage() {
     prisma.investment.findMany({
       where: {
         account: { type: 'CRYPTO' },
-        ...(user.role === 'OWNER' ? {} : { dealParticipants: { some: { personId: user.personId } } }),
+        ...(user.role === 'OWNER' 
+          ? {} 
+          : user.personId 
+            ? { dealParticipants: { some: { personId: user.personId } } } 
+            : { id: 'none' }),
       },
       select: { currentValue: true },
     }),
