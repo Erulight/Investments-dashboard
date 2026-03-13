@@ -14,6 +14,17 @@ export type WarningType =
   | 'CONTRIBUTION_NOT_EXCLUDED'
   | 'BUCKET_NEGATIVE_BALANCE'
 
+export interface FixOption {
+  id: string
+  label: string
+  description: string
+  recommended: boolean
+  action: string
+  bucketId?: string
+  investmentId?: string
+  payload?: Record<string, unknown>
+}
+
 export interface Warning {
   id: string
   type: WarningType
@@ -24,11 +35,15 @@ export interface Warning {
   investmentId?: string
   bucketLabel?: string
   investmentName?: string
-  fixable: boolean
+  explanation: string
+  example: string
+  fixOptions: FixOption[]
+  details?: string
+  // legacy compat
+  fixable?: boolean
   fixAction?: string
   fixDescription?: string
   fixPayload?: Record<string, unknown>
-  details?: string
 }
 
 interface ReconciliationWarningsProps {
@@ -36,57 +51,60 @@ interface ReconciliationWarningsProps {
   onRefresh: () => void
 }
 
-const sev = {
-  error: { dot: 'bg-red-500', text: 'text-red-400', badge: 'bg-red-500/15 text-red-300' },
-  warning: { dot: 'bg-amber-500', text: 'text-amber-400', badge: 'bg-amber-500/15 text-amber-300' },
-  info: { dot: 'bg-blue-500', text: 'text-blue-400', badge: 'bg-blue-500/15 text-blue-300' },
+const sevStyle = {
+  error: { dot: 'bg-red-500', badge: 'bg-red-500/15 text-red-300', ring: 'ring-red-500/20' },
+  warning: { dot: 'bg-amber-500', badge: 'bg-amber-500/15 text-amber-300', ring: 'ring-amber-500/20' },
+  info: { dot: 'bg-blue-500', badge: 'bg-blue-500/15 text-blue-300', ring: 'ring-blue-500/20' },
 }
 
+const Spinner = () => (
+  <svg className="animate-spin h-3.5 w-3.5" fill="none" viewBox="0 0 24 24">
+    <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+    <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
+  </svg>
+)
+
 export function ReconciliationWarnings({ warnings, onRefresh }: ReconciliationWarningsProps) {
-  const [fixingIds, setFixingIds] = useState<Set<string>>(new Set())
+  const [fixingKey, setFixingKey] = useState<string | null>(null)
   const [fixResults, setFixResults] = useState<Map<string, 'success' | 'error'>>(new Map())
   const [expandedId, setExpandedId] = useState<string | null>(null)
 
-  const handleFix = useCallback(async (warning: Warning) => {
-    if (!warning.fixable || !warning.fixAction) return
-    setFixingIds(prev => new Set([...prev, warning.id]))
+  const handleFixOption = useCallback(async (warningId: string, option: FixOption) => {
+    const key = `${warningId}:${option.id}`
+    setFixingKey(key)
     try {
-      let res: Response
-      if (warning.fixAction === 'SET_HAUL_START' && warning.bucketId) {
-        res = await fetch(`/api/zakat/buckets/${warning.bucketId}`, {
-          method: 'PATCH',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ haulStartDate: new Date().toISOString(), ...(warning.fixPayload || {}) }),
-        })
-      } else if (warning.fixAction === 'EXCLUDE_BUCKET' && warning.bucketId) {
-        res = await fetch(`/api/zakat/buckets/${warning.bucketId}`, {
-          method: 'PATCH',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ excludeFromZakat: true }),
-        })
-      } else if (warning.fixAction === 'SET_SAVINGS_HAUL' && warning.investmentId) {
-        res = await fetch(`/api/sukuk/${warning.investmentId}`, {
-          method: 'PUT',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ metadata: JSON.stringify(warning.fixPayload || {}) }),
-        })
-      } else {
-        setFixResults(prev => new Map([...prev, [warning.id, 'error']])); return
-      }
+      const res = await fetch('/api/zakat/audit-fix', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          action: option.action,
+          bucketId: option.bucketId,
+          investmentId: option.investmentId,
+          payload: option.payload,
+        }),
+      })
       if (res.ok) {
-        setFixResults(prev => new Map([...prev, [warning.id, 'success']]))
-        setTimeout(() => onRefresh(), 500)
+        setFixResults(prev => new Map([...prev, [warningId, 'success']]))
+        setTimeout(() => onRefresh(), 600)
       } else {
-        setFixResults(prev => new Map([...prev, [warning.id, 'error']]))
+        setFixResults(prev => new Map([...prev, [warningId, 'error']]))
       }
     } catch {
-      setFixResults(prev => new Map([...prev, [warning.id, 'error']]))
+      setFixResults(prev => new Map([...prev, [warningId, 'error']]))
     } finally {
-      setFixingIds(prev => { const next = new Set(prev); next.delete(warning.id); return next })
+      setFixingKey(null)
     }
   }, [onRefresh])
 
-  const fixableCount = warnings.filter(w => w.fixable && w.fixAction).length
+  const handleFixAllRecommended = useCallback(async () => {
+    for (const w of warnings) {
+      if (fixResults.get(w.id) === 'success') continue
+      const rec = w.fixOptions.find(o => o.recommended)
+      if (rec) await handleFixOption(w.id, rec)
+    }
+  }, [warnings, fixResults, handleFixOption])
+
+  const fixableCount = warnings.filter(w => w.fixOptions.some(o => o.recommended) && fixResults.get(w.id) !== 'success').length
 
   if (warnings.length === 0) {
     return (
@@ -115,57 +133,43 @@ export function ReconciliationWarnings({ warnings, onRefresh }: ReconciliationWa
         </div>
         {fixableCount > 0 && (
           <button
-            onClick={async () => { for (const w of warnings.filter(w => w.fixable && w.fixAction)) await handleFix(w) }}
-            className="rounded-lg bg-[#c9a84c]/15 border border-[#c9a84c]/30 px-3 py-1.5 text-xs font-semibold text-[#c9a84c] hover:bg-[#c9a84c]/25 transition-colors"
+            onClick={handleFixAllRecommended}
+            disabled={!!fixingKey}
+            className="rounded-lg bg-[#c9a84c]/15 border border-[#c9a84c]/30 px-3 py-1.5 text-xs font-semibold text-[#c9a84c] hover:bg-[#c9a84c]/25 transition-colors disabled:opacity-50 flex items-center gap-1.5"
           >
-            Fix All ({fixableCount})
+            {fixingKey ? <Spinner /> : null}
+            Fix All Recommended ({fixableCount})
           </button>
         )}
       </div>
 
       {warnings.map(warning => {
-        const s = sev[warning.severity]
-        const isFixing = fixingIds.has(warning.id)
+        const s = sevStyle[warning.severity]
         const fixResult = fixResults.get(warning.id)
         const isOpen = expandedId === warning.id
+        const hasFixOptions = warning.fixOptions.length > 0
 
         return (
           <Card key={warning.id} className="!p-0 overflow-hidden">
+            {/* Header */}
             <div
               className="flex items-start gap-3 px-5 py-4 cursor-pointer hover:bg-white/[0.01] transition-colors"
               onClick={() => setExpandedId(isOpen ? null : warning.id)}
             >
-              <span className={`mt-0.5 h-2 w-2 rounded-full ${s.dot} shrink-0`} />
+              <span className={`mt-1 h-2.5 w-2.5 rounded-full ${s.dot} shrink-0`} />
               <div className="flex-1 min-w-0">
-                <div className="flex items-center gap-2 mb-0.5">
+                <div className="flex items-center gap-2 mb-0.5 flex-wrap">
                   <span className={`inline-flex items-center rounded-full px-2 py-0.5 text-[10px] font-semibold ${s.badge}`}>
                     {warning.severity.toUpperCase()}
                   </span>
-                  {warning.bucketLabel && <span className="text-[10px] text-slate-500 truncate">{warning.bucketLabel}</span>}
-                  {warning.investmentName && <span className="text-[10px] text-slate-500 truncate">{warning.investmentName}</span>}
+                  {warning.bucketLabel && <span className="text-[10px] text-slate-500">{warning.bucketLabel}</span>}
+                  {warning.investmentName && <span className="text-[10px] text-slate-500">{warning.investmentName}</span>}
                 </div>
                 <h4 className="text-sm font-semibold text-slate-200">{warning.title}</h4>
                 <p className="text-xs text-slate-400 mt-0.5 leading-relaxed">{warning.description}</p>
               </div>
 
               <div className="flex items-center gap-2 shrink-0 mt-1">
-                {warning.fixable && !fixResult && (
-                  <button
-                    onClick={(e) => { e.stopPropagation(); handleFix(warning) }}
-                    disabled={isFixing}
-                    className="rounded-lg bg-[#c9a84c]/15 border border-[#c9a84c]/30 px-3 py-1.5 text-xs font-semibold text-[#c9a84c] hover:bg-[#c9a84c]/25 transition-colors disabled:opacity-50"
-                  >
-                    {isFixing ? (
-                      <span className="flex items-center gap-1">
-                        <svg className="animate-spin h-3 w-3" fill="none" viewBox="0 0 24 24">
-                          <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
-                          <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
-                        </svg>
-                        Fixing...
-                      </span>
-                    ) : 'Auto Fix'}
-                  </button>
-                )}
                 {fixResult === 'success' && (
                   <span className="text-xs text-emerald-400 font-semibold flex items-center gap-1">
                     <svg className="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
@@ -175,28 +179,108 @@ export function ReconciliationWarnings({ warnings, onRefresh }: ReconciliationWa
                   </span>
                 )}
                 {fixResult === 'error' && <span className="text-xs text-red-400 font-semibold">Failed</span>}
+                {!fixResult && hasFixOptions && (
+                  <span className="text-[10px] text-[#c9a84c]/70 font-semibold">{warning.fixOptions.length} fix option{warning.fixOptions.length > 1 ? 's' : ''}</span>
+                )}
                 <svg className={`h-4 w-4 text-slate-500 transition-transform duration-200 ${isOpen ? 'rotate-180' : ''}`} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
                   <path strokeLinecap="round" strokeLinejoin="round" d="M19.5 8.25l-7.5 7.5-7.5-7.5" />
                 </svg>
               </div>
             </div>
 
+            {/* Expanded Details */}
             {isOpen && (
-              <div className="border-t border-white/5 px-5 py-3 space-y-2.5">
+              <div className="border-t border-white/5">
+                {/* Explanation */}
+                <div className="px-5 py-3 bg-white/[0.01]">
+                  <p className="text-[10px] font-semibold uppercase tracking-wider text-slate-500 mb-1.5">What does this mean?</p>
+                  <p className="text-xs text-slate-300 leading-relaxed">{warning.explanation}</p>
+                </div>
+
+                {/* Example */}
+                <div className="px-5 py-3 border-t border-white/5">
+                  <p className="text-[10px] font-semibold uppercase tracking-wider text-slate-500 mb-1.5">Example</p>
+                  <div className="rounded-lg bg-slate-700/30 px-3 py-2.5">
+                    <p className="text-xs text-slate-300 leading-relaxed italic">{warning.example}</p>
+                  </div>
+                </div>
+
+                {/* Technical Details */}
                 {warning.details && (
-                  <div>
-                    <p className="text-[10px] font-semibold uppercase tracking-wider text-slate-500 mb-1">Details</p>
-                    <p className="text-xs text-slate-300 leading-relaxed">{warning.details}</p>
+                  <div className="px-5 py-3 border-t border-white/5">
+                    <p className="text-[10px] font-semibold uppercase tracking-wider text-slate-500 mb-1.5">Technical Details</p>
+                    <p className="text-xs text-slate-400 leading-relaxed font-mono">{warning.details}</p>
                   </div>
                 )}
-                {warning.fixDescription && (
-                  <div>
-                    <p className="text-[10px] font-semibold uppercase tracking-wider text-slate-500 mb-1">How to Resolve</p>
-                    <p className="text-xs text-slate-300 leading-relaxed">{warning.fixDescription}</p>
+
+                {/* Fix Options */}
+                {hasFixOptions && fixResult !== 'success' && (
+                  <div className="px-5 py-4 border-t border-white/5 bg-white/[0.015]">
+                    <p className="text-[10px] font-semibold uppercase tracking-wider text-slate-500 mb-3">
+                      Choose a fix option
+                    </p>
+                    <div className="space-y-2.5">
+                      {warning.fixOptions.map(option => {
+                        const optKey = `${warning.id}:${option.id}`
+                        const isFixingThis = fixingKey === optKey
+                        return (
+                          <div
+                            key={option.id}
+                            className={`rounded-lg border transition-all ${
+                              option.recommended
+                                ? 'border-[#c9a84c]/30 bg-[#c9a84c]/[0.04]'
+                                : 'border-white/5 bg-white/[0.02]'
+                            }`}
+                          >
+                            <div className="flex items-start gap-3 px-4 py-3">
+                              <div className="flex-1 min-w-0">
+                                <div className="flex items-center gap-2 mb-0.5">
+                                  <span className="text-xs font-semibold text-slate-200">{option.label}</span>
+                                  {option.recommended && (
+                                    <span className="inline-flex items-center gap-1 rounded-full bg-[#c9a84c]/15 px-2 py-0.5 text-[9px] font-bold text-[#c9a84c] uppercase tracking-wider">
+                                      <svg className="h-2.5 w-2.5" fill="currentColor" viewBox="0 0 20 20">
+                                        <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.857-9.809a.75.75 0 00-1.214-.882l-3.483 4.79-1.88-1.88a.75.75 0 10-1.06 1.061l2.5 2.5a.75.75 0 001.137-.089l4-5.5z" clipRule="evenodd" />
+                                      </svg>
+                                      Recommended
+                                    </span>
+                                  )}
+                                </div>
+                                <p className="text-xs text-slate-400 leading-relaxed">{option.description}</p>
+                              </div>
+                              <button
+                                onClick={(e) => { e.stopPropagation(); handleFixOption(warning.id, option) }}
+                                disabled={!!fixingKey}
+                                className={`shrink-0 rounded-lg px-3.5 py-2 text-xs font-semibold transition-colors disabled:opacity-50 flex items-center gap-1.5 ${
+                                  option.recommended
+                                    ? 'bg-[#c9a84c]/20 border border-[#c9a84c]/40 text-[#c9a84c] hover:bg-[#c9a84c]/30'
+                                    : 'bg-slate-700/50 border border-slate-600/30 text-slate-300 hover:bg-slate-700/70'
+                                }`}
+                              >
+                                {isFixingThis ? <><Spinner /> Fixing...</> : 'Apply Fix'}
+                              </button>
+                            </div>
+                          </div>
+                        )
+                      })}
+                    </div>
                   </div>
                 )}
+
+                {/* Fixed state */}
+                {fixResult === 'success' && (
+                  <div className="px-5 py-3 border-t border-white/5 bg-emerald-500/[0.03]">
+                    <div className="flex items-center gap-2">
+                      <svg className="h-4 w-4 text-emerald-400" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                        <path strokeLinecap="round" strokeLinejoin="round" d="M9 12.75L11.25 15 15 9.75M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                      </svg>
+                      <span className="text-xs font-semibold text-emerald-400">This issue has been fixed. The page will refresh to reflect the changes.</span>
+                    </div>
+                  </div>
+                )}
+
+                {/* IDs footer */}
                 {(warning.bucketId || warning.investmentId) && (
-                  <div className="flex items-center gap-4 pt-1">
+                  <div className="px-5 py-2 border-t border-white/5 flex items-center gap-4">
                     {warning.bucketId && (
                       <div>
                         <span className="text-[10px] text-slate-500">Bucket: </span>

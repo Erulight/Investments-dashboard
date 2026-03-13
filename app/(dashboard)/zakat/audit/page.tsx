@@ -336,17 +336,50 @@ export default async function ZakatAuditPage() {
 
   const totalDue = bucketRows.reduce((s, r) => s + (r.isPaid ? 0 : Math.max(0, r.zakatDue)), 0)
 
-  // ━━━ SECTION 4: DEEP RECONCILIATION WARNINGS ━━━
+  // ━━━ SECTION 4: DEEP RECONCILIATION WARNINGS WITH FIX OPTIONS ━━━
   const warnings: Warning[] = []
 
   // CHECK 1: Buckets missing haulStartDate
   for (const b of healthBuckets) {
     if (!b.haulStartDate || isNaN(new Date(b.haulStartDate as any).getTime())) {
-      const earliestMovement = allBucketsIncludingExcluded.find(ab => ab.id === b.id)
-        ?.movements?.filter((m: any) => m.type === 'CASH_IN')
-        ?.map((m: any) => new Date(m.date || m.createdAt))
-        ?.filter((d: Date) => !isNaN(d.getTime()))
-        ?.sort((a: Date, b: Date) => a.getTime() - b.getTime())[0]
+      const fullBucket = allBucketsIncludingExcluded.find(ab => ab.id === b.id)
+      const cashInMovements = fullBucket?.movements?.filter((m: any) => m.type === 'CASH_IN') || []
+      const earliestCashIn = cashInMovements
+        .map((m: any) => new Date(m.date || m.createdAt))
+        .filter((d: Date) => !isNaN(d.getTime()))
+        .sort((a: Date, b: Date) => a.getTime() - b.getTime())[0]
+
+      const bucketBalance = Number(b.balance || 0).toFixed(2)
+      const fixOpts: Warning['fixOptions'] = []
+
+      if (earliestCashIn) {
+        fixOpts.push({
+          id: 'use-earliest-cash-in',
+          label: `Set to earliest deposit date (${isoDay(earliestCashIn)})`,
+          description: `Uses the date of the first CASH_IN movement found in this bucket. This is the most accurate option because it reflects when money first entered the bucket.`,
+          recommended: true,
+          action: 'SET_HAUL_START',
+          bucketId: b.id,
+          payload: { haulStartDate: isoDay(earliestCashIn) },
+        })
+      }
+      fixOpts.push({
+        id: 'use-today',
+        label: 'Set to today\'s date',
+        description: `Sets the hawl start to today. This means the 354-day cycle starts now and zakat won't be due for ~1 year. Use this only if you cannot determine when the money was first received.`,
+        recommended: !earliestCashIn,
+        action: 'SET_HAUL_START',
+        bucketId: b.id,
+        payload: { haulStartDate: isoDay(now) },
+      })
+      fixOpts.push({
+        id: 'exclude-bucket',
+        label: 'Exclude this bucket from zakat',
+        description: `Permanently removes this bucket from all zakat calculations. Use this if the money is not zakatable (e.g. operational funds, temporary holds).`,
+        recommended: false,
+        action: 'EXCLUDE_BUCKET',
+        bucketId: b.id,
+      })
 
       warnings.push({
         id: `missing-haul-${b.id}`,
@@ -356,13 +389,10 @@ export default async function ZakatAuditPage() {
         description: `Cash bucket "${b.label || b.id.slice(0, 8)}" has no haulStartDate set. Zakat cannot be calculated for this money.`,
         bucketId: b.id,
         bucketLabel: b.label || undefined,
-        fixable: true,
-        fixAction: 'SET_HAUL_START',
-        fixDescription: earliestMovement
-          ? `Auto-fix will set haulStartDate to the earliest CASH_IN movement date (${isoDay(earliestMovement)}). This assumes the money has been held since that date.`
-          : 'Auto-fix will set haulStartDate to today. You should manually correct this to the actual date the money was first received.',
-        fixPayload: earliestMovement ? { haulStartDate: isoDay(earliestMovement) } : undefined,
-        details: `Bucket balance: ${Number(b.balance || 0).toFixed(2)}. Without a hawl start date, the system cannot determine when this money completes a lunar year cycle.`,
+        explanation: `Every cash bucket needs a "hawl start date" — the date when the money was first received and held. The zakat clock (hawl) runs for 354 days (one lunar year) from this date. Without it, the system cannot determine when zakat becomes due on this money.`,
+        example: `If you received SAR 10,000 on January 1, 2025, the hawl start date should be 2025-01-01. After 354 days (~December 21, 2025), zakat of SAR 250 (2.5%) becomes due on that amount if it's still held.`,
+        fixOptions: fixOpts,
+        details: `Bucket balance: ${bucketBalance}. ${cashInMovements.length} CASH_IN movement(s) found. ${earliestCashIn ? `Earliest: ${isoDay(earliestCashIn)}` : 'No deposit history available.'}`,
       })
     }
   }
@@ -370,6 +400,7 @@ export default async function ZakatAuditPage() {
   // CHECK 2: Debt buckets leaking into zakat
   for (const b of healthBuckets) {
     if ((b as any).debt?.id) {
+      const bucketBalance = Number(b.balance || 0).toFixed(2)
       warnings.push({
         id: `debt-bucket-${b.id}`,
         type: 'DEBT_IN_ZAKAT',
@@ -378,38 +409,86 @@ export default async function ZakatAuditPage() {
         description: `Bucket "${b.label || b.id.slice(0, 8)}" is linked to a debt but not excluded from zakat. Debt money should not be zakatable.`,
         bucketId: b.id,
         bucketLabel: b.label || undefined,
-        fixable: true,
-        fixAction: 'EXCLUDE_BUCKET',
-        fixDescription: 'Auto-fix will mark this bucket as excluded from zakat calculations. Debt-linked buckets represent money owed, not owned.',
-        details: `This bucket has balance ${Number(b.balance || 0).toFixed(2)} and is linked to a debt. Islamic scholars agree that money owed to others should not count toward zakatable wealth.`,
+        explanation: `This bucket is linked to a debt record, meaning it represents money that is owed to someone else — not money you own. In Islamic finance, debts owed are deducted from zakatable wealth. Including this bucket inflates your zakat calculation incorrectly.`,
+        example: `If you owe someone SAR 5,000 and this bucket tracks that debt, it should NOT be counted as your wealth. The system should exclude it so your zakat is calculated only on money you truly own.`,
+        fixOptions: [
+          {
+            id: 'exclude-from-zakat',
+            label: 'Exclude this debt bucket from zakat',
+            description: 'Marks this bucket as excluded from all zakat calculations. This is the correct action for any bucket that represents money owed to others.',
+            recommended: true,
+            action: 'EXCLUDE_BUCKET',
+            bucketId: b.id,
+          },
+          {
+            id: 'zero-and-exclude',
+            label: 'Zero balance and exclude',
+            description: 'Sets the bucket balance to 0 and excludes it from zakat. Use this if the debt has been settled but the bucket was not cleaned up.',
+            recommended: false,
+            action: 'EXCLUDE_BUCKET',
+            bucketId: b.id,
+          },
+        ],
+        details: `Bucket balance: ${bucketBalance}. This bucket is linked to debt ID. Scholars agree that money owed to others should not count toward zakatable wealth.`,
       })
     }
   }
 
   // CHECK 3: ROSCA funded Sukuk missing savingsHaulStartDate
   for (const inv of sukukInvestments) {
-    const isRoscaFunded = inv.bucketAllocations?.some((a: any) => {
+    const roscaAllocations = (inv.bucketAllocations || []).filter((a: any) => {
       const label = a.cashBucket?.label || ''
       return label.startsWith('Savings Receipt •') || label.startsWith('Circlys Reward Receipt •')
     })
+    const isRoscaFunded = roscaAllocations.length > 0
 
     if (isRoscaFunded) {
       const meta = parseMetadata(inv.metadata)
       if (!meta?.savingsHaulStartDate) {
-        const firstAllocation = inv.bucketAllocations
-          ?.filter((a: any) => {
-            const label = a.cashBucket?.label || ''
-            return label.startsWith('Savings Receipt •') || label.startsWith('Circlys Reward Receipt •')
-          })
-          ?.sort((a: any, b: any) => {
-            const aDate = toDate(a.cashBucket?.haulStartDate)?.getTime() || Infinity
-            const bDate = toDate(b.cashBucket?.haulStartDate)?.getTime() || Infinity
-            return aDate - bDate
-          })[0]
-
-        const suggestedDate = firstAllocation?.cashBucket?.haulStartDate
-          ? isoDay(new Date(firstAllocation.cashBucket.haulStartDate))
+        const sortedAllocs = [...roscaAllocations].sort((a: any, b: any) => {
+          const aDate = toDate(a.cashBucket?.haulStartDate)?.getTime() || Infinity
+          const bDate = toDate(b.cashBucket?.haulStartDate)?.getTime() || Infinity
+          return aDate - bDate
+        })
+        const firstAlloc = sortedAllocs[0]
+        const suggestedDate = firstAlloc?.cashBucket?.haulStartDate
+          ? isoDay(new Date(firstAlloc.cashBucket.haulStartDate))
           : null
+        const bucketLabels = roscaAllocations.map((a: any) => a.cashBucket?.label).filter(Boolean).join(', ')
+        const invStartDate = inv.startDate ? isoDay(new Date(inv.startDate)) : null
+
+        const fixOpts: Warning['fixOptions'] = []
+        if (suggestedDate) {
+          fixOpts.push({
+            id: 'use-bucket-haul',
+            label: `Set to funding bucket date (${suggestedDate})`,
+            description: `Copies the hawl start date from the ROSCA funding bucket. This preserves the original savings hawl continuity — zakat counting continues from when the savings began, not when the Sukuk was purchased.`,
+            recommended: true,
+            action: 'SET_SAVINGS_HAUL',
+            investmentId: inv.id,
+            payload: { savingsHaulStartDate: suggestedDate },
+          })
+        }
+        if (invStartDate) {
+          fixOpts.push({
+            id: 'use-investment-start',
+            label: `Set to investment start date (${invStartDate})`,
+            description: `Uses the Sukuk purchase date. This breaks hawl continuity — the 354-day clock restarts from the investment date. Only use this if the savings plan was recently started.`,
+            recommended: false,
+            action: 'SET_SAVINGS_HAUL',
+            investmentId: inv.id,
+            payload: { savingsHaulStartDate: invStartDate },
+          })
+        }
+        fixOpts.push({
+          id: 'use-today',
+          label: 'Set to today',
+          description: 'Starts the hawl clock from today. Only use this as a last resort when no other date is available.',
+          recommended: false,
+          action: 'SET_SAVINGS_HAUL',
+          investmentId: inv.id,
+          payload: { savingsHaulStartDate: isoDay(now) },
+        })
 
         warnings.push({
           id: `missing-savings-haul-${inv.id}`,
@@ -419,13 +498,10 @@ export default async function ZakatAuditPage() {
           description: `Sukuk "${inv.name}" was funded from ROSCA savings but has no savingsHaulStartDate in metadata. Hawl continuity will be broken.`,
           investmentId: inv.id,
           investmentName: inv.name,
-          fixable: !!suggestedDate,
-          fixAction: suggestedDate ? 'SET_SAVINGS_HAUL' : undefined,
-          fixDescription: suggestedDate
-            ? `Auto-fix will set savingsHaulStartDate to ${suggestedDate} (from the funding bucket's hawl date). This preserves hawl continuity from savings → sukuk.`
-            : 'Cannot auto-fix: no funding bucket hawl date found. Manually set savingsHaulStartDate in the investment metadata.',
-          fixPayload: suggestedDate ? { ...(meta || {}), savingsHaulStartDate: suggestedDate } : undefined,
-          details: `This Sukuk was funded from ROSCA buckets (${inv.bucketAllocations?.map((a: any) => a.cashBucket?.label).filter(Boolean).join(', ')}). Without savingsHaulStartDate, principal receipt rows will fall back to the investment start date instead of maintaining continuity from the savings contribution.`,
+          explanation: `When you save money monthly in a Circlys/ROSCA plan and then invest it in Sukuk, the zakat hawl (354-day cycle) should continue from when you first started saving — not restart when the Sukuk was purchased. The "savingsHaulStartDate" field stores this continuity anchor. Without it, the system treats the Sukuk purchase date as the start, which means you could lose months of already-completed hawl progress.`,
+          example: `You started saving SAR 1,000/month in Jan 2024. By Dec 2024, the savings matured (SAR 12,000) and were invested in Sukuk "Ridwan". The hawl should count from Jan 2024 (savings start), not Dec 2024 (Sukuk purchase). Without the anchor, you'd wait an extra 11 months before zakat is due.`,
+          fixOptions: fixOpts,
+          details: `Funded from: ${bucketLabels}. ${suggestedDate ? `Suggested anchor: ${suggestedDate} (from bucket).` : 'No bucket hawl date found.'} Investment start: ${invStartDate || 'unknown'}.`,
         })
       }
     }
@@ -435,7 +511,35 @@ export default async function ZakatAuditPage() {
   for (const b of healthBuckets) {
     const activeAllocs = b.allocations.filter((a: any) => Number(a.principalRemaining) > 0.01)
     if (activeAllocs.length > 1) {
-      const investmentNames = activeAllocs.map((a: any) => a.investment?.name || 'Unknown').join(', ')
+      const allocDetails = activeAllocs.map((a: any) => ({
+        name: a.investment?.name || 'Unknown',
+        id: a.investment?.id || '',
+        amount: Number(a.principalRemaining || 0),
+      }))
+      const totalAllocated = allocDetails.reduce((s, a) => s + a.amount, 0)
+      const bucketBalance = Number(b.balance || 0)
+
+      // Determine which investment has the largest allocation (likely the "real" one)
+      const largestAlloc = [...allocDetails].sort((a, b) => b.amount - a.amount)[0]
+
+      const fixOpts: Warning['fixOptions'] = allocDetails.map((alloc, idx) => ({
+        id: `keep-${alloc.id}`,
+        label: `Keep allocation to "${alloc.name}" (${alloc.amount.toFixed(2)})`,
+        description: `Closes all other allocations and keeps only this investment's claim on the bucket. The other ${activeAllocs.length - 1} allocation(s) will have principalRemaining set to 0.`,
+        recommended: alloc.id === largestAlloc.id,
+        action: 'CLOSE_EXTRA_ALLOCATIONS',
+        bucketId: b.id,
+        payload: { keepInvestmentId: alloc.id },
+      }))
+      fixOpts.push({
+        id: 'exclude-bucket',
+        label: 'Exclude this bucket from zakat entirely',
+        description: 'If the allocations are all stale or incorrect, exclude the bucket from zakat calculations to prevent any double counting.',
+        recommended: false,
+        action: 'EXCLUDE_BUCKET',
+        bucketId: b.id,
+      })
+
       warnings.push({
         id: `double-count-${b.id}`,
         type: 'DOUBLE_COUNTING',
@@ -444,9 +548,10 @@ export default async function ZakatAuditPage() {
         description: `Bucket "${b.label || b.id.slice(0, 8)}" is allocated to ${activeAllocs.length} active investments. The same money may be counted multiple times.`,
         bucketId: b.id,
         bucketLabel: b.label || undefined,
-        fixable: false,
-        fixDescription: `Review the allocations for this bucket. Investments: ${investmentNames}. Ensure each allocation represents distinct money, not the same funds counted twice.`,
-        details: `Active allocations: ${activeAllocs.map((a: any) => `${a.investment?.name}: ${Number(a.principalRemaining || 0).toFixed(2)}`).join('; ')}. Total allocated: ${activeAllocs.reduce((s: number, a: any) => s + Number(a.principalRemaining || 0), 0).toFixed(2)}, bucket balance: ${Number(b.balance || 0).toFixed(2)}.`,
+        explanation: `A single cash bucket should normally fund only one active investment at a time. When the same bucket is allocated to multiple investments with remaining principal, the system may count the same money twice for zakat — once for each investment's receipt/profit rows. This inflates your zakat obligation.`,
+        example: `Bucket "Profit • ABC Company" has SAR 5,000. It's allocated to both "Sukuk A" (SAR 3,000 remaining) and "Sukuk B" (SAR 4,000 remaining). Total allocation SAR 7,000 exceeds the bucket balance of SAR 5,000 — some money is being counted twice.`,
+        fixOptions: fixOpts,
+        details: `Allocations: ${allocDetails.map(a => `${a.name}: ${a.amount.toFixed(2)}`).join('; ')}. Total allocated: ${totalAllocated.toFixed(2)}, bucket balance: ${bucketBalance.toFixed(2)}. ${totalAllocated > bucketBalance + 0.01 ? 'OVER-ALLOCATED!' : 'Within balance limits.'}`,
       })
     }
   }
@@ -455,25 +560,57 @@ export default async function ZakatAuditPage() {
   for (const b of healthBuckets) {
     const bucketHaulTime = b.haulStartDate ? new Date(b.haulStartDate as any).getTime() : null
     if (!bucketHaulTime) continue
+    const bucketHaulStr = new Date(b.haulStartDate as any).toISOString().split('T')[0]
 
     for (const alloc of b.allocations) {
       if (alloc.investment?.account?.type !== 'SUKUK') continue
       const meta = parseMetadata(alloc.investment.metadata)
-      const savedHaul = meta?.savingsHaulStartDate ? new Date(meta.savingsHaulStartDate).getTime() : null
+      const savedHaulStr = meta?.savingsHaulStartDate as string | undefined
+      const savedHaul = savedHaulStr ? new Date(savedHaulStr).getTime() : null
       if (savedHaul && savedHaul < bucketHaulTime - 86400000 * 30) {
+        const gapDays = Math.abs(Math.round((bucketHaulTime - savedHaul) / 86400000))
+
         warnings.push({
           id: `hawl-backwards-${b.id}-${alloc.investment.id}`,
           type: 'HAWL_JUMPED_BACKWARDS',
           severity: 'warning',
           title: 'Hawl Clock Jumped Backwards',
-          description: `Investment "${alloc.investment.name}" has savingsHaulStartDate earlier than its funding bucket "${b.label || b.id.slice(0, 8)}". This suggests a continuity error.`,
+          description: `Investment "${alloc.investment.name}" has savingsHaulStartDate (${savedHaulStr}) earlier than its funding bucket "${b.label || b.id.slice(0, 8)}" haulStartDate (${bucketHaulStr}). Gap: ${gapDays} days.`,
           bucketId: b.id,
           bucketLabel: b.label || undefined,
           investmentId: alloc.investment.id,
           investmentName: alloc.investment.name,
-          fixable: false,
-          fixDescription: `The investment's savingsHaulStartDate (${meta.savingsHaulStartDate}) is more than 30 days before the funding bucket's haulStartDate (${b.haulStartDate ? new Date(b.haulStartDate as any).toISOString().split('T')[0] : '?'}). Check if the continuity anchor was set incorrectly. Normally the investment anchor should be >= the bucket anchor.`,
-          details: `Bucket haulStartDate: ${b.haulStartDate ? new Date(b.haulStartDate as any).toISOString().split('T')[0] : 'missing'}, Investment savingsHaulStartDate: ${meta.savingsHaulStartDate}. Gap: ${Math.abs(Math.round((bucketHaulTime - savedHaul) / 86400000))} days.`,
+          explanation: `Normally, when savings fund a Sukuk, the investment's savingsHaulStartDate should be equal to or later than the funding bucket's haulStartDate. If the investment date is earlier, it means the zakat clock was set to a date before the money existed in the bucket — the hawl "jumped backwards" in time. This usually happens when the continuity anchor was incorrectly copied from an older savings cycle.`,
+          example: `Bucket "Profit • ${b.label || 'XYZ'}" has haulStartDate of ${bucketHaulStr}. But the Sukuk "${alloc.investment.name}" has savingsHaulStartDate of ${savedHaulStr}, which is ${gapDays} days earlier. This means the investment thinks the hawl started before the bucket even received the money.`,
+          fixOptions: [
+            {
+              id: 'sync-from-bucket',
+              label: `Update investment to use bucket date (${bucketHaulStr})`,
+              description: `Sets the investment's savingsHaulStartDate to match the bucket's haulStartDate. This is the safest fix — it ensures the hawl starts from when the money was actually in the bucket.`,
+              recommended: true,
+              action: 'SYNC_HAUL_FROM_BUCKET',
+              bucketId: b.id,
+              investmentId: alloc.investment.id,
+            },
+            {
+              id: 'sync-from-investment',
+              label: `Update bucket to use investment date (${savedHaulStr})`,
+              description: `Sets the bucket's haulStartDate to match the investment's savingsHaulStartDate. Use this only if you're sure the bucket date is wrong and the investment date is the correct original anchor.`,
+              recommended: false,
+              action: 'SYNC_HAUL_FROM_INVESTMENT',
+              bucketId: b.id,
+              investmentId: alloc.investment.id,
+            },
+            {
+              id: 'remove-anchor',
+              label: 'Remove savingsHaulStartDate from investment',
+              description: 'Deletes the continuity anchor entirely. The system will fall back to the investment start date for hawl calculation. Use this if the anchor is completely wrong.',
+              recommended: false,
+              action: 'REMOVE_SAVINGS_HAUL',
+              investmentId: alloc.investment.id,
+            },
+          ],
+          details: `Bucket haulStartDate: ${bucketHaulStr}. Investment savingsHaulStartDate: ${savedHaulStr}. Gap: ${gapDays} days. The investment anchor should be >= bucket anchor.`,
         })
       }
     }
@@ -491,8 +628,9 @@ export default async function ZakatAuditPage() {
         title: 'Zakat Amount Verification',
         description: `Row "${row.label || row.source}" has zakat ${row.zakatDue.toFixed(2)} but expected ${expectedZakat.toFixed(2)} (balance × 2.5%).`,
         bucketId: row.bucketId,
-        fixable: false,
-        fixDescription: `The difference of ${Math.abs(row.zakatDue - expectedZakat).toFixed(2)} may be due to withdrawals or outflows that reduced the taxable base during the hawl period.`,
+        explanation: `The system calculates zakat as 2.5% of the zakatable balance at the end of each 354-day hawl cycle. If the computed zakat doesn't match the simple formula (balance × 2.5%), it may mean that the balance changed during the period due to withdrawals, additions, or other movements.`,
+        example: `A bucket had SAR 40,000 at the start of the hawl, but SAR 10,000 was withdrawn midway. The system might use the lower balance (SAR 30,000) for zakat calculation, giving SAR 750 instead of SAR 1,000.`,
+        fixOptions: [],
         details: `Idle base: ${row.idleBase.toFixed(2)}, Receipts: ${row.receiptsTotal.toFixed(2)}, Computed zakat: ${row.zakatDue.toFixed(2)}, Expected (simple): ${expectedZakat.toFixed(2)}.`,
       })
     }
@@ -515,17 +653,37 @@ export default async function ZakatAuditPage() {
     )
 
     if (hasDueRows) {
+      const principalAllocBuckets = (inv.bucketAllocations || [])
+        .filter((a: any) => Number(a.principalRemaining) > 0.01)
+        .map((a: any) => ({
+          bucketId: a.cashBucket?.id,
+          label: a.cashBucket?.label || 'Unknown',
+          amount: Number(a.principalRemaining || 0),
+        }))
+
+      const fixOpts: Warning['fixOptions'] = principalAllocBuckets
+        .filter((pb: any) => pb.bucketId)
+        .map((pb: any) => ({
+          id: `exclude-${pb.bucketId}`,
+          label: `Exclude bucket "${pb.label}" from zakat`,
+          description: `Excludes the funding bucket (balance used for this Sukuk's principal) from zakat while the Sukuk is active. The principal will be captured when the Sukuk matures.`,
+          recommended: true,
+          action: 'EXCLUDE_BUCKET',
+          bucketId: pb.bucketId,
+        }))
+
       warnings.push({
         id: `active-sukuk-due-${inv.id}`,
         type: 'ACTIVE_SUKUK_IN_DUE',
         severity: 'warning',
         title: 'Active Sukuk Has Due Zakat Rows',
-        description: `Sukuk "${inv.name}" is still active (matures ${maturity ? isoDay(maturity) : 'unknown'}) but has principal zakat rows showing as due. Active Sukuk principal is typically not zakatable until maturity.`,
+        description: `Sukuk "${inv.name}" is still active (matures ${maturity ? isoDay(maturity) : 'unknown'}) but has principal zakat rows showing as due.`,
         investmentId: inv.id,
         investmentName: inv.name,
-        fixable: false,
-        fixDescription: 'Review whether this Sukuk\'s principal should appear in zakat rows while still active. If ROSCA-funded, only the idle savings portion should be zakatable before maturity.',
-        details: `Principal: ${Number(inv.principalAmount || 0).toFixed(2)}, Maturity: ${maturity ? isoDay(maturity) : 'not set'}, Active allocations: ${inv.bucketAllocations?.filter((a: any) => Number(a.principalRemaining) > 0.01).length || 0}.`,
+        explanation: `When money is invested in an active Sukuk, the principal is "locked up" and not accessible to you. Many scholars hold that locked-up principal in active investments is not zakatable until the investment matures and you regain access to the money. However, profits received during the active period ARE zakatable.`,
+        example: `You invested SAR 50,000 in Sukuk "Ridwan" maturing in Dec 2025. While the Sukuk is active, the SAR 50,000 principal should not appear as zakatable. But if you receive SAR 2,000 in profit, that profit IS zakatable once its own hawl completes.`,
+        fixOptions: fixOpts,
+        details: `Principal: ${Number(inv.principalAmount || 0).toFixed(2)}, Maturity: ${maturity ? isoDay(maturity) : 'not set'}, Active allocations: ${principalAllocBuckets.length}. Funding buckets: ${principalAllocBuckets.map(pb => `${pb.label} (${pb.amount.toFixed(2)})`).join(', ')}.`,
       })
     }
   }
@@ -535,6 +693,7 @@ export default async function ZakatAuditPage() {
     const label = b.label || ''
     const isContribution = label.startsWith('Circlys •') && !label.includes('Receipt') && !label.includes('Reward')
     if (isContribution && !b.excludeFromZakat) {
+      const bucketBalance = Number(b.balance || 0).toFixed(2)
       warnings.push({
         id: `contribution-not-excluded-${b.id}`,
         type: 'CONTRIBUTION_NOT_EXCLUDED',
@@ -543,10 +702,19 @@ export default async function ZakatAuditPage() {
         description: `Savings contribution bucket "${b.label}" is not excluded from zakat. These represent money being saved, which should not be double-counted.`,
         bucketId: b.id,
         bucketLabel: b.label || undefined,
-        fixable: true,
-        fixAction: 'EXCLUDE_BUCKET',
-        fixDescription: 'Auto-fix will mark this bucket as excluded from zakat. Monthly contribution buckets represent savings installments — the receipt bucket (created when savings mature) is the correct source for zakat.',
-        details: `Balance: ${Number(b.balance || 0).toFixed(2)}. Monthly contributions are excluded because they will be captured as a single Savings Receipt or Reward Receipt when the plan matures.`,
+        explanation: `Monthly contribution buckets (labeled "Circlys • ...") track your monthly savings installments. When the savings plan matures, a "Savings Receipt" or "Reward Receipt" bucket is created with the full amount. If both the contribution bucket AND the receipt bucket are included in zakat, the same money gets counted twice.`,
+        example: `You save SAR 1,000/month for 12 months into "Circlys • Plan A". After maturity, a "Savings Receipt • Plan A" bucket is created with SAR 12,000. If both are in zakat, you'd pay zakat on SAR 24,000 instead of SAR 12,000.`,
+        fixOptions: [
+          {
+            id: 'exclude-from-zakat',
+            label: 'Exclude from zakat calculations',
+            description: 'Marks this contribution bucket as excluded. The receipt bucket (created at maturity) will be the correct source for zakat. This prevents double-counting.',
+            recommended: true,
+            action: 'EXCLUDE_BUCKET',
+            bucketId: b.id,
+          },
+        ],
+        details: `Balance: ${bucketBalance}. This is a monthly contribution bucket. The corresponding receipt/reward bucket should be the one tracked for zakat.`,
       })
     }
   }
@@ -563,9 +731,27 @@ export default async function ZakatAuditPage() {
         description: `Bucket "${b.label || b.id.slice(0, 8)}" has a negative balance of ${balance.toFixed(2)}. This may indicate a processing error.`,
         bucketId: b.id,
         bucketLabel: b.label || undefined,
-        fixable: false,
-        fixDescription: 'Review the bucket movements to find the cause of the negative balance. This often happens when a withdrawal exceeds the bucket balance, or when movements are processed out of order.',
-        details: `Current balance: ${balance.toFixed(2)}. Negative balances should not exist in the zakat system as they represent phantom money.`,
+        explanation: `A cash bucket should never have a negative balance — it would mean more money was withdrawn than existed. This usually indicates a bug in transaction processing, a duplicate withdrawal, or movements processed out of order. A negative balance can skew zakat calculations because the system might try to compute 2.5% of a negative number.`,
+        example: `Bucket "Profit • XYZ" received SAR 3,000 in profit. Then two withdrawals of SAR 2,000 each were processed (perhaps a duplicate), leaving a balance of -SAR 1,000. The second withdrawal should not have been allowed.`,
+        fixOptions: [
+          {
+            id: 'zero-balance',
+            label: 'Reset balance to zero',
+            description: 'Sets the bucket balance to 0. Use this if the negative balance is due to a processing error and the money has already been accounted for elsewhere.',
+            recommended: true,
+            action: 'ZERO_BUCKET_BALANCE',
+            bucketId: b.id,
+          },
+          {
+            id: 'exclude-bucket',
+            label: 'Exclude from zakat',
+            description: 'Excludes this bucket from zakat calculations. The negative balance won\'t affect zakat, but the bucket will still exist for tracking purposes.',
+            recommended: false,
+            action: 'EXCLUDE_BUCKET',
+            bucketId: b.id,
+          },
+        ],
+        details: `Current balance: ${balance.toFixed(2)}. This should be investigated and corrected.`,
       })
     }
   }
