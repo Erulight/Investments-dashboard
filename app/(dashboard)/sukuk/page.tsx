@@ -128,6 +128,7 @@ export default async function InvestmentsPage() {
     investments = participants.map((p: any) => ({
       ...p.investment,
       myParticipation: {
+        id: p.id,
         investedAmount: p.investedAmount,
         currentValue: p.currentValue,
         profit: p.profit,
