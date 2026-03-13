@@ -342,6 +342,7 @@ export default async function DashboardPage({
       received: withdrawnProfit,
       receivable,
       profitAccrued: accruedProfit,
+      netProfitTotal,
       feesHeld,
       commissionPaid,
     }
@@ -1133,10 +1134,11 @@ export default async function DashboardPage({
     // For partners, calculate profit breakdown
     const partnerSukuk = participants.filter((p: any) => getAccountType(p?.investment) === 'SUKUK')
     
-    // Sukuk receivable and received
+    // Sukuk receivable and received (total net profit - withdrawn)
     sukukReceivable = partnerSukuk.reduce((sum: number, p: any) => {
       const m = getPartnerSukukMetrics(p?.investment, p, now)
-      return sum + Math.max(0, toFiniteNumber(m.receivable))
+      const totalReceivable = Math.max(0, toFiniteNumber(m.netProfitTotal) - toFiniteNumber(m.received))
+      return sum + totalReceivable
     }, 0)
     
     sukukReceivedProfit = partnerSukuk.reduce((sum: number, p: any) => {
