@@ -39,10 +39,14 @@ export default async function DashboardPage({
   }
 
   const yearParam = searchParams?.year
-  const parsedYear = yearParam ? Number(yearParam) : NaN
-  const selectedYear = Number.isFinite(parsedYear) ? parsedYear : new Date().getFullYear()
-  const yearStart = new Date(selectedYear, 0, 1)
-  const yearEnd = new Date(selectedYear + 1, 0, 1)
+  const currentYear = new Date().getFullYear()
+  const isAllYears = !yearParam || yearParam === 'all'
+  const parsedYear = yearParam && yearParam !== 'all' ? Number(yearParam) : NaN
+  const selectedYear = Number.isFinite(parsedYear) ? parsedYear : currentYear
+  const yearStart = isAllYears ? new Date(2020, 0, 1) : new Date(selectedYear, 0, 1)
+  const yearEnd = isAllYears ? new Date(currentYear + 1, 0, 1) : new Date(selectedYear + 1, 0, 1)
+  const isCurrentYear = selectedYear === currentYear
+  const displayYear = isAllYears ? 'all' : selectedYear
 
   const getOutstandingDebtsAt = async (atExclusive: Date) => {
     if (user.role !== 'OWNER') return 0
@@ -93,6 +97,9 @@ export default async function DashboardPage({
     ? ({ OR: [{ personId: null }, { personId: user.personId }] } as any)
     : ({ personId: null } as any)
 
+  // For historical years, calculate cash balance at end of year; for current year, use live balance
+  const cashBalanceDate = isCurrentYear || isAllYears ? new Date() : yearEnd
+  
   const ownerBucketCash = user.role === 'OWNER'
     ? await getBucketCashBalance(prisma, null)
     : 0
@@ -101,10 +108,14 @@ export default async function DashboardPage({
     user.role === 'OWNER' && cashAccount
       ? (
           await prisma.transaction.aggregate({
-            where: { accountId: cashAccount.id, ...ownerTxScope },
+            where: { 
+              accountId: cashAccount.id, 
+              ...ownerTxScope,
+              date: { lt: cashBalanceDate }
+            },
             _sum: { amount: true },
           })
-        )._sum.amount || 0
+        )?._sum?.amount || 0
       : 0
 
   const cashOffset =
@@ -1485,11 +1496,14 @@ export default async function DashboardPage({
         <div className="flex items-center justify-between">
           <div>
             <h1 className="text-2xl font-bold">Welcome back, {user.name}</h1>
-            <p className="text-sm text-slate-400 mt-1">Portfolio overview for {selectedYear}</p>
+            <p className="text-sm text-slate-400 mt-1">
+              Portfolio overview {isAllYears ? 'for all years' : `for ${selectedYear}`}
+              {!isCurrentYear && !isAllYears && ' (end of year snapshot)'}
+            </p>
           </div>
           <div className="flex items-center gap-3">
             <ReportButton selectedYear={selectedYear} />
-            <YearFilter selectedYear={selectedYear} />
+            <YearFilter selectedYear={displayYear} />
           </div>
         </div>
       </AnimatedStatCard>
