@@ -496,7 +496,9 @@ export default async function InvestmentsPage() {
         return hasOwnerSell
       })
       const soldTarget = ownerInvestments.reduce((sum, inv) => sum + getOwnerSoldSettlement(inv).target, 0)
-      return round2(activeProfit + soldTarget)
+      
+      // Include commission earned in total return
+      return round2(activeProfit + soldTarget + totalCommissionEarned)
     }
 
     // Partner: Total profit = receivable (future) + received (withdrawn)
