@@ -1549,22 +1549,92 @@ export default async function DashboardPage({
   return (
     <PageTransition className="space-y-4">
       <TradingChartOverlay />
-      {/* Header */}
-      <AnimatedStatCard index={0} className="bg-gradient-to-r from-slate-800/80 to-slate-900/80 backdrop-blur-sm rounded-xl shadow-md p-6 text-white border border-slate-700/50">
-        <div className="flex items-center justify-between">
-          <div>
-            <h1 className="text-2xl font-bold">Welcome back, {user.name}</h1>
-            <p className="text-sm text-slate-400 mt-1">
-              Portfolio overview {isAllYears ? 'for all years' : `for ${selectedYear}`}
-              {!isCurrentYear && !isAllYears && ' (end of year snapshot)'}
-            </p>
-          </div>
-          <div className="flex items-center gap-3">
-            <ReportButton selectedYear={selectedYear} />
-            <YearFilter selectedYear={displayYear} />
+      {/* Header - Redesigned with animations */}
+      <AnimatedStatCard index={0} className="relative overflow-hidden rounded-2xl shadow-2xl border border-slate-700/50">
+        {/* Animated gradient background */}
+        <div className="absolute inset-0 bg-gradient-to-br from-slate-800/95 via-slate-900/95 to-slate-950/95 backdrop-blur-md" />
+        
+        {/* Animated accent overlay */}
+        <div className="absolute inset-0 bg-gradient-to-r from-cyan-500/10 via-purple-500/10 to-pink-500/10 animate-[gradient_8s_ease-in-out_infinite] opacity-50" 
+             style={{ backgroundSize: '200% 200%' }} />
+        
+        {/* Subtle grid pattern */}
+        <div className="absolute inset-0 opacity-[0.02]" 
+             style={{ backgroundImage: 'linear-gradient(rgba(255,255,255,0.1) 1px, transparent 1px), linear-gradient(90deg, rgba(255,255,255,0.1) 1px, transparent 1px)', backgroundSize: '50px 50px' }} />
+        
+        {/* Glowing orbs */}
+        <div className="absolute -top-20 -right-20 w-64 h-64 bg-cyan-500/20 rounded-full blur-3xl animate-pulse" />
+        <div className="absolute -bottom-20 -left-20 w-64 h-64 bg-purple-500/20 rounded-full blur-3xl animate-pulse" style={{ animationDelay: '1s' }} />
+        
+        {/* Content */}
+        <div className="relative z-10 p-6 text-white">
+          <div className="flex items-center justify-between">
+            <div className="space-y-2">
+              {/* Animated welcome text */}
+              <div className="flex items-center gap-3">
+                <div className="animate-[wave_2s_ease-in-out_infinite]">
+                  <span className="text-3xl">👋</span>
+                </div>
+                <h1 className="text-3xl font-bold bg-gradient-to-r from-white via-cyan-100 to-purple-100 bg-clip-text text-transparent animate-[shimmer_3s_ease-in-out_infinite]"
+                    style={{ backgroundSize: '200% 100%' }}>
+                  Welcome back, {user.name}
+                </h1>
+              </div>
+              
+              {/* Subtitle with stagger animation */}
+              <div className="flex items-center gap-2 text-sm text-slate-300/90">
+                <div className="w-1 h-1 rounded-full bg-cyan-400 animate-pulse" />
+                <p className="animate-[fadeIn_0.8s_ease-in-out_0.3s_both]">
+                  Portfolio overview {isAllYears ? 'for all years' : `for ${selectedYear}`}
+                  {!isCurrentYear && !isAllYears && ' (end of year snapshot)'}
+                </p>
+              </div>
+              
+              {/* Performance indicator */}
+              <div className="flex items-center gap-2 mt-2 animate-[fadeIn_0.8s_ease-in-out_0.6s_both]">
+                <div className={`flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-semibold backdrop-blur-sm ${
+                  portfolioTrend >= 0 
+                    ? 'bg-emerald-500/20 text-emerald-300 border border-emerald-500/30' 
+                    : 'bg-rose-500/20 text-rose-300 border border-rose-500/30'
+                }`}>
+                  <span className="animate-pulse">{portfolioTrend >= 0 ? '📈' : '📉'}</span>
+                  <span>{portfolioTrend >= 0 ? '+' : ''}{portfolioTrend.toFixed(2)}%</span>
+                </div>
+              </div>
+            </div>
+            
+            {/* Actions */}
+            <div className="flex items-center gap-3 animate-[fadeIn_0.8s_ease-in-out_0.4s_both]">
+              <ReportButton selectedYear={selectedYear} />
+              <YearFilter selectedYear={displayYear} />
+            </div>
           </div>
         </div>
+        
+        {/* Bottom accent line */}
+        <div className="absolute bottom-0 left-0 right-0 h-0.5 bg-gradient-to-r from-cyan-500 via-purple-500 to-pink-500 animate-[shimmer_3s_ease-in-out_infinite]"
+             style={{ backgroundSize: '200% 100%' }} />
       </AnimatedStatCard>
+      
+      <style jsx>{`
+        @keyframes gradient {
+          0%, 100% { background-position: 0% 50%; }
+          50% { background-position: 100% 50%; }
+        }
+        @keyframes shimmer {
+          0%, 100% { background-position: 0% 50%; }
+          50% { background-position: 200% 50%; }
+        }
+        @keyframes wave {
+          0%, 100% { transform: rotate(0deg); }
+          25% { transform: rotate(20deg); }
+          75% { transform: rotate(-20deg); }
+        }
+        @keyframes fadeIn {
+          from { opacity: 0; transform: translateY(10px); }
+          to { opacity: 1; transform: translateY(0); }
+        }
+      `}</style>
 
       {/* Live Market Ticker */}
       <LiveMarketTicker />
