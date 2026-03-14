@@ -331,14 +331,19 @@ export default async function InvestmentsPage() {
 
   const getOwnerSoldSettlement = (inv: any) => {
     if (user.role !== 'OWNER' || !user.personId) {
-      return { target: 0, received: 0, pending: 0 }
+      return { target: 0, received: 0, pending: 0, commission: 0, commissionReceived: 0, commissionPending: 0 }
     }
 
-    const target = round2(Math.max(0, getOwnerRealizedFromSellMeta(inv).profit))
-    if (target <= 0) return { target: 0, received: 0, pending: 0 }
+    const profitTarget = round2(Math.max(0, getOwnerRealizedFromSellMeta(inv).profit))
+    const commissionTarget = round2(Math.max(0, getOwnerRealizedFromSellMeta(inv).commission))
+    const target = profitTarget + commissionTarget
+    
+    if (target <= 0) return { target: 0, received: 0, pending: 0, commission: commissionTarget, commissionReceived: 0, commissionPending: commissionTarget }
 
     const transactions = Array.isArray(inv.transactions) ? inv.transactions : []
-    const receivedRaw = transactions.reduce((sum: number, tx: any) => {
+    
+    // Calculate profit received
+    const profitReceivedRaw = transactions.reduce((sum: number, tx: any) => {
       if (tx?.personId !== user.personId) return sum
 
       if (tx.type === 'SELL_PROFIT_ACCRUED') {
@@ -355,10 +360,27 @@ export default async function InvestmentsPage() {
 
       return sum
     }, 0)
+    
+    // Calculate commission received
+    const commissionReceivedRaw = transactions.reduce((sum: number, tx: any) => {
+      if (tx?.personId !== user.personId) return sum
+      if (tx.type !== 'PARTNER_COMMISSION') return sum
+      
+      const meta = parseMetadata(tx.metadata)
+      // Only count commission from this specific investment
+      if (meta?.investmentId && meta.investmentId !== inv.id) return sum
+      
+      const amount = Number(tx.amount)
+      return sum + (Number.isFinite(amount) ? Math.max(0, amount) : 0)
+    }, 0)
 
-    const received = round2(Math.min(target, Math.max(0, receivedRaw)))
+    const profitReceived = round2(Math.min(profitTarget, Math.max(0, profitReceivedRaw)))
+    const commissionReceived = round2(Math.min(commissionTarget, Math.max(0, commissionReceivedRaw)))
+    const received = profitReceived + commissionReceived
     const pending = round2(Math.max(0, target - received))
-    return { target, received, pending }
+    const commissionPending = round2(Math.max(0, commissionTarget - commissionReceived))
+    
+    return { target, received, pending, commission: commissionTarget, commissionReceived, commissionPending }
   }
 
   const getNetProfit = (inv: any) => {

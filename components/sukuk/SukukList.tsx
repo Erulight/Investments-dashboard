@@ -2194,6 +2194,12 @@ export function SukukList({ initialSukuk, userRole, ownerPersonId, viewerPersonI
                   const isPendingCommissionPayout = Boolean(
                     commissionDealState?.isPartnerIssued && commissionDealState.pending > 0.01
                   )
+                  
+                  // Check if sold deal has pending commission/profit to receive
+                  const hasSoldDealPending = isSoldDealForOwner && partnerClosed && (
+                    Number(metrics.receivable || 0) > 0.01 || 
+                    Number(metrics.commissionEarned || 0) > 0.01
+                  )
 
                   const partnerNames = userRole === 'OWNER'
                     ? participantList
@@ -2327,6 +2333,18 @@ export function SukukList({ initialSukuk, userRole, ownerPersonId, viewerPersonI
                                 title="Receive Commission"
                                 aria-label="Receive Commission"
                                 className="h-8 px-3 py-0 shrink-0 text-xs bg-cyan-600 hover:bg-cyan-700"
+                              >
+                                💰 Receive
+                              </Button>
+                            ) : hasSoldDealPending ? (
+                              <Button
+                                size="sm"
+                                variant="primary"
+                                onClick={() => openWithdrawModal(inv, metrics)}
+                                disabled={actionLoading}
+                                title="Receive Profit & Commission"
+                                aria-label="Receive Profit & Commission"
+                                className="h-8 px-3 py-0 shrink-0 text-xs bg-emerald-600 hover:bg-emerald-700"
                               >
                                 💰 Receive
                               </Button>
