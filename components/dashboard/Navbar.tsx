@@ -1,8 +1,9 @@
 'use client'
 
 import { usePathname, useRouter } from 'next/navigation'
-import { useEffect, useMemo, useState } from 'react'
-import { motion } from 'framer-motion'
+import { useEffect, useMemo, useState, useRef } from 'react'
+import { motion, AnimatePresence } from 'framer-motion'
+import { MonkeyMascot } from './MonkeyMascot'
 
 type Role = 'OWNER' | 'PARTNER'
 
@@ -126,6 +127,8 @@ export function Navbar({ user, activeAccountTypes, notifications }: NavbarProps)
   const [notificationsOpen, setNotificationsOpen] = useState(false)
   const [dismissLoading, setDismissLoading] = useState<string | null>(null)
   const [notifError, setNotifError] = useState('')
+  const [hoveredNotificationType, setHoveredNotificationType] = useState<string | null>(null)
+  const notifPanelRef = useRef<HTMLDivElement>(null)
   const [zakatHealth, setZakatHealth] = useState<'OK' | 'WARNINGS' | null>(null)
 
   const permissionMap = useMemo(() => parsePermissionMap(user.permissions), [user.permissions])
@@ -379,6 +382,9 @@ export function Navbar({ user, activeAccountTypes, notifications }: NavbarProps)
           <div className="flex items-center space-x-2 sm:space-x-3">
             {/* Notification bell */}
             <div className="relative">
+              {/* Monkey mascot */}
+              <MonkeyMascot isOpen={notificationsOpen} hoveredType={hoveredNotificationType} />
+              
               <button
                 type="button"
                 className="w-8 h-8 rounded-full flex items-center justify-center text-xs bg-slate-900/5 dark:bg-white/10 text-slate-700 dark:text-slate-200 hover:bg-slate-900/10 dark:hover:bg-white/15 transition-colors relative"
@@ -392,8 +398,16 @@ export function Navbar({ user, activeAccountTypes, notifications }: NavbarProps)
                   </span>
                 )}
               </button>
+              <AnimatePresence>
               {notificationsOpen && unreadCount > 0 && (
-                <div className="absolute right-0 mt-2 w-80 max-w-xs sm:max-w-sm rounded-lg bg-white dark:bg-slate-900 shadow-xl ring-1 ring-black/10 dark:ring-white/10 z-[10000]">
+                <motion.div
+                  ref={notifPanelRef}
+                  initial={{ opacity: 0, y: -20, scale: 0.95 }}
+                  animate={{ opacity: 1, y: 0, scale: 1 }}
+                  exit={{ opacity: 0, y: -20, scale: 0.95 }}
+                  transition={{ duration: 0.3, ease: 'easeOut' }}
+                  className="absolute right-0 mt-2 w-80 max-w-xs sm:max-w-sm rounded-lg bg-white dark:bg-slate-900 shadow-xl ring-1 ring-black/10 dark:ring-white/10 z-[10000]"
+                >
                   <div className="px-3 py-2 border-b border-slate-200 dark:border-slate-800 flex items-center justify-between">
                     <span className="text-xs font-semibold text-slate-800 dark:text-slate-100">
                       Notifications
@@ -402,9 +416,30 @@ export function Navbar({ user, activeAccountTypes, notifications }: NavbarProps)
                       {unreadCount} pending
                     </span>
                   </div>
-                  <div className="max-h-80 overflow-y-auto py-1">
-                    {sortedNotifications.map((n) => (
-                      <div key={n.key} className="px-3 py-2.5 border-b border-slate-100 dark:border-slate-800 last:border-b-0">
+                  <motion.div 
+                    className="max-h-80 overflow-y-auto py-1"
+                    initial={{ maxHeight: 0 }}
+                    animate={{ maxHeight: 320 }}
+                    exit={{ maxHeight: 0 }}
+                    transition={{ duration: 0.4, delay: 0.1 }}
+                  >
+                    {sortedNotifications.map((n, idx) => {
+                      const notifType = n.message.toLowerCase().includes('commission') ? 'commission' 
+                        : n.message.toLowerCase().includes('maturity') || n.message.toLowerCase().includes('mature') ? 'maturity'
+                        : n.message.toLowerCase().includes('zakat') ? 'zakat'
+                        : n.message.toLowerCase().includes('partner') ? 'partner'
+                        : 'default'
+                      
+                      return (
+                      <motion.div 
+                        key={n.key} 
+                        className="px-3 py-2.5 border-b border-slate-100 dark:border-slate-800 last:border-b-0 hover:bg-slate-50 dark:hover:bg-slate-800/50 transition-colors cursor-pointer"
+                        initial={{ opacity: 0, x: -20 }}
+                        animate={{ opacity: 1, x: 0 }}
+                        transition={{ delay: idx * 0.08 }}
+                        onMouseEnter={() => setHoveredNotificationType(notifType)}
+                        onMouseLeave={() => setHoveredNotificationType(null)}
+                      >
                         <div className="text-xs text-slate-800 dark:text-slate-100 mb-1">
                           {n.message}
                         </div>
@@ -445,16 +480,18 @@ export function Navbar({ user, activeAccountTypes, notifications }: NavbarProps)
                             {dismissLoading === n.investmentId ? 'Dismissing…' : 'Dismiss'}
                           </button>
                         </div>
-                      </div>
-                    ))}
-                  </div>
+                      </motion.div>
+                    )})}
+
+                  </motion.div>
                   {notifError && (
                     <div className="px-3 py-2 text-[11px] text-red-600 bg-red-50 dark:bg-red-950/40 border-t border-red-200/80 dark:border-red-800/60">
                       {notifError}
                     </div>
                   )}
-                </div>
+                </motion.div>
               )}
+              </AnimatePresence>
             </div>
 
             {/* User info & role badge */}
