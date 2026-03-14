@@ -1120,17 +1120,6 @@ export default async function DashboardPage({
       return sum + Math.max(0, toFiniteNumber(p?.investedAmount))
     }, 0)
 
-    totalValue = participants.reduce((sum: number, p: any) => {
-      const investment = p?.investment
-      const accountType = getAccountType(investment)
-      if (!accountType) return sum
-      if (accountType === 'SUKUK') {
-        const m = getPartnerSukukMetrics(investment, p, now)
-        return sum + Math.max(0, toFiniteNumber(m.value))
-      }
-      return sum + Math.max(0, toFiniteNumber(p?.currentValue))
-    }, 0)
-
     // For partners, calculate profit breakdown
     const partnerSukuk = participants.filter((p: any) => getAccountType(p?.investment) === 'SUKUK')
     
@@ -1151,6 +1140,21 @@ export default async function DashboardPage({
       const totalReceivable = Math.max(0, toFiniteNumber(m.netProfitTotal) - toFiniteNumber(m.received))
       return sum + totalReceivable
     }, 0)
+
+    // Total value = sum of all non-SUKUK + (SUKUK principal + receivable to match portfolio breakdown)
+    totalValue = participants.reduce((sum: number, p: any) => {
+      const investment = p?.investment
+      const accountType = getAccountType(investment)
+      if (!accountType) return sum
+      if (accountType === 'SUKUK') {
+        // Skip SUKUK here, we'll add sukukInvested + sukukReceivable below
+        return sum
+      }
+      return sum + Math.max(0, toFiniteNumber(p?.currentValue))
+    }, 0)
+    
+    // Add SUKUK as principal + receivable to match portfolio breakdown
+    totalValue += sukukInvested + sukukReceivable
     
     sukukReceivedProfit = partnerSukuk.reduce((sum: number, p: any) => {
       const m = getPartnerSukukMetrics(p?.investment, p, now)
