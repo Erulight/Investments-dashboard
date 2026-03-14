@@ -168,15 +168,14 @@ export function ReceivableByYearCard({
 
                             {/* Liquid fill (clipped to beaker shape) */}
                             <motion.rect
-                              x="10"
-                              y="10"
-                              width="80"
-                              height="110"
+                              x="20"
+                              width="60"
                               fill={`url(#gradient-${index})`}
                               clipPath={`url(#beaker-clip-${index})`}
-                              initial={{ y: 120 }}
+                              initial={{ y: 110, height: 0 }}
                               animate={{ 
-                                y: isInView ? 110 - pct : 120
+                                y: isInView ? 110 - pct : 110,
+                                height: isInView ? pct : 0
                               }}
                               transition={{ 
                                 duration: 2,
