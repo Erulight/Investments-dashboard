@@ -1215,7 +1215,9 @@ export default async function DashboardPage({
       existing.invested += invested
       if (t === 'SUKUK') {
         const m = getPartnerSukukMetrics(p?.investment, p, now)
-        existing.value += Math.max(0, toFiniteNumber(m.value))
+        // Use principal + total receivable (not accrued), matching portfolio breakdown
+        const totalReceivable = Math.max(0, toFiniteNumber(m.netProfitTotal) - toFiniteNumber(m.received))
+        existing.value += Math.max(0, toFiniteNumber(m.principal) + totalReceivable)
       } else {
         existing.value += Math.max(0, toFiniteNumber(p?.currentValue))
       }
@@ -1587,11 +1589,11 @@ export default async function DashboardPage({
         }}
         portfolioBreakdown={{
           cash: toDisplayAmount(cashBalance),
-          sukuk: toDisplayAmount(sukukValue),
+          sukuk: toDisplayAmount(sukukInvested + sukukReceivable),
           malaa: toDisplayAmount(malaaValue),
           crypto: toDisplayAmount(cryptoValue),
           circlys: toDisplayAmount(circlysOngoingSaved),
-          other: toDisplayAmount(Math.max(0, displayedValue - cashBalance - sukukValue - malaaValue - cryptoValue - circlysOngoingSaved)),
+          other: toDisplayAmount(Math.max(0, displayedValue - cashBalance - (sukukInvested + sukukReceivable) - malaaValue - cryptoValue - circlysOngoingSaved)),
         }}
         cashBreakdown={{
           available: toDisplayAmount(cashBalance),
