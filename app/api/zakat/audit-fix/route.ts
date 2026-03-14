@@ -4,7 +4,7 @@ import { requireAuth } from '@/lib/rbac'
 
 export async function POST(req: NextRequest) {
   try {
-    await requireAuth(['OWNER'])
+    const user = await requireAuth(['OWNER'])
     const body = await req.json()
     const { action, bucketId, investmentId, payload } = body as {
       action: string
@@ -23,6 +23,21 @@ export async function POST(req: NextRequest) {
       if (isNaN(date.getTime())) {
         return NextResponse.json({ error: 'Invalid date' }, { status: 400 })
       }
+      
+      // Verify user owns this bucket
+      const bucket = await prisma.cashBucket.findFirst({
+        where: { 
+          id: bucketId,
+          OR: [
+            { personId: user.personId },
+            { personId: null } // Allow null personId buckets for partners
+          ]
+        }
+      })
+      if (!bucket) {
+        return NextResponse.json({ error: 'Bucket not found or access denied' }, { status: 404 })
+      }
+      
       const updated = await prisma.cashBucket.update({
         where: { id: bucketId },
         data: { haulStartDate: date },
@@ -32,6 +47,20 @@ export async function POST(req: NextRequest) {
     }
 
     if (action === 'EXCLUDE_BUCKET' && bucketId) {
+      // Verify user owns this bucket
+      const bucket = await prisma.cashBucket.findFirst({
+        where: { 
+          id: bucketId,
+          OR: [
+            { personId: user.personId },
+            { personId: null } // Allow null personId buckets for partners
+          ]
+        }
+      })
+      if (!bucket) {
+        return NextResponse.json({ error: 'Bucket not found or access denied' }, { status: 404 })
+      }
+      
       const updated = await prisma.cashBucket.update({
         where: { id: bucketId },
         data: { excludeFromZakat: true },
@@ -41,6 +70,20 @@ export async function POST(req: NextRequest) {
     }
 
     if (action === 'ZERO_BUCKET_BALANCE' && bucketId) {
+      // Verify user owns this bucket
+      const bucket = await prisma.cashBucket.findFirst({
+        where: { 
+          id: bucketId,
+          OR: [
+            { personId: user.personId },
+            { personId: null } // Allow null personId buckets for partners
+          ]
+        }
+      })
+      if (!bucket) {
+        return NextResponse.json({ error: 'Bucket not found or access denied' }, { status: 404 })
+      }
+      
       const updated = await prisma.cashBucket.update({
         where: { id: bucketId },
         data: { balance: 0 },
@@ -51,12 +94,19 @@ export async function POST(req: NextRequest) {
 
     // ── INVESTMENT METADATA ACTIONS ──
     if (action === 'SET_SAVINGS_HAUL' && investmentId) {
-      const inv = await prisma.investment.findUnique({
-        where: { id: investmentId },
+      // Verify user owns this investment
+      const inv = await prisma.investment.findFirst({
+        where: { 
+          id: investmentId,
+          OR: [
+            { account: { personId: user.personId } },
+            { dealParticipants: { some: { personId: user.personId } } }
+          ]
+        },
         select: { id: true, metadata: true },
       })
       if (!inv) {
-        return NextResponse.json({ error: 'Investment not found' }, { status: 404 })
+        return NextResponse.json({ error: 'Investment not found or access denied' }, { status: 404 })
       }
 
       let meta: Record<string, unknown> = {}
@@ -79,12 +129,19 @@ export async function POST(req: NextRequest) {
     }
 
     if (action === 'REMOVE_SAVINGS_HAUL' && investmentId) {
-      const inv = await prisma.investment.findUnique({
-        where: { id: investmentId },
+      // Verify user owns this investment
+      const inv = await prisma.investment.findFirst({
+        where: { 
+          id: investmentId,
+          OR: [
+            { account: { personId: user.personId } },
+            { dealParticipants: { some: { personId: user.personId } } }
+          ]
+        },
         select: { id: true, metadata: true },
       })
       if (!inv) {
-        return NextResponse.json({ error: 'Investment not found' }, { status: 404 })
+        return NextResponse.json({ error: 'Investment not found or access denied' }, { status: 404 })
       }
 
       let meta: Record<string, unknown> = {}

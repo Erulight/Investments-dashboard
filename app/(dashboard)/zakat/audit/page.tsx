@@ -107,11 +107,44 @@ export default async function ZakatAuditPage() {
     allZakatPayments,
     healthBuckets,
   ] = await Promise.all([
-    // Active zakat buckets
+    // Active zakat buckets (exact same logic as main zakat page)
     prisma.cashBucket.findMany({
       where: {
-        excludeFromZakat: false,
-        ...personScope,
+        AND: [
+          {
+            OR: [
+              { excludeFromZakat: false },
+              // Always include ROSCA receipt buckets regardless of excludeFromZakat flag
+              // because they need to show hawl 1 completed row even after full investment
+              { label: { startsWith: 'Savings Receipt •' } },
+              { label: { startsWith: 'Circlys Reward Receipt •' } },
+            ],
+          },
+          ...(user.role === 'OWNER'
+            ? [
+                {
+                  OR: [
+                    { personId: null },
+                    { personId: ownerPersonId },
+                  ],
+                },
+              ]
+            : [
+                {
+                  personId: user.personId,
+                  OR: [
+                    { label: null },
+                    {
+                      AND: [
+                        { NOT: { label: 'Partner Commission' } },
+                        { NOT: { label: { startsWith: 'Debt •' } } },
+                        { NOT: { label: { startsWith: 'Debt Refund •' } } },
+                      ],
+                    },
+                  ],
+                },
+              ]),
+        ],
       },
       include: {
         movements: { orderBy: { date: 'desc' as const } },
@@ -184,7 +217,11 @@ export default async function ZakatAuditPage() {
     }),
     // Health check buckets — all non-excluded with debt info (scoped to current user)
     prisma.cashBucket.findMany({
-      where: { excludeFromZakat: false, ...personScope },
+      where: { 
+        excludeFromZakat: false, 
+        debt: null, // Exclude debt buckets from health checks
+        ...personScope 
+      },
       select: {
         id: true, label: true, haulStartDate: true, balance: true,
         debt: { select: { id: true } },
@@ -231,6 +268,36 @@ export default async function ZakatAuditPage() {
       if (isNaN(pDate.getTime())) return false
       return pDate.getTime() >= periodStart.getTime() && pDate.getTime() <= addDays(periodEnd, 90).getTime()
     })
+  }
+
+  // Helper: calculate hawl outflow barriers (money withdrawn during hawl reduces zakat base)
+  const calculateHawlOutflows = (movements: any[], haulStart: Date, haulEnd: Date) => {
+    const hawlOutflowTypes = new Set(['CASH_OUT', 'INVEST_OUT', 'WITHDRAW_PRINCIPAL', 'WITHDRAW_PROFIT', 'TRANSFER_OUT'])
+    
+    return movements
+      .map((m: any) => {
+        const movementType = typeof m?.type === 'string' ? m.type : ''
+        if (!hawlOutflowTypes.has(movementType)) return null
+
+        const mDate = new Date(m.date)
+        if (isNaN(mDate.getTime())) return null
+        if (mDate.getTime() < haulStart.getTime() || mDate.getTime() > haulEnd.getTime()) return null
+
+        const amount = Math.abs(Number(m?.amount) || 0)
+        if (amount <= 0) return null
+
+        return { time: mDate.getTime(), amount, type: movementType }
+      })
+      .filter((x: any): x is { time: number; amount: number; type: string } => Boolean(x))
+      .reduce((sum, evt) => sum + evt.amount, 0)
+  }
+
+  // Helper: calculate proper zakat base accounting for outflows
+  const calculateZakatBase = (balance: number, movements: any[], haulStart: Date, haulEnd: Date) => {
+    const outflows = calculateHawlOutflows(movements, haulStart, haulEnd)
+    // If money was withdrawn during hawl, it reduces the zakatable base
+    // But never go below current balance
+    return Math.max(balance, balance + outflows * 0.5) // Conservative 50% reduction for outflows
   }
 
   // ━━━ BUILD BUCKET ROWS (mirrors main zakat page logic) ━━━
@@ -285,7 +352,8 @@ export default async function ZakatAuditPage() {
       const startDay = new Date(haulStart.getFullYear(), haulStart.getMonth(), haulStart.getDate())
       const periodEnd = addDays(startDay, 354)
       const haulCompleted = now.getTime() >= periodEnd.getTime()
-      const zakatDue = !isPaid && haulCompleted ? balance * 0.025 : 0
+      const zakatBase = calculateZakatBase(balance, movements, startDay, periodEnd)
+      const zakatDue = !isPaid && haulCompleted ? zakatBase * 0.025 : 0
 
       const rows: BucketRow[] = [{
         id: firstRowKey,
@@ -323,7 +391,8 @@ export default async function ZakatAuditPage() {
           const cycleCompleted = now.getTime() >= pEnd.getTime()
           const rowKey = `SAVINGS_IDLE|${bucket.id}|${isoDay(pStart)}|${isoDay(pEnd)}`
           const cyclePaid = movementHasRowPaid(payments, rowKey)
-          const cycleZakat = !cyclePaid && cycleCompleted ? balance * 0.025 : 0
+          const cycleZakatBase = calculateZakatBase(balance, movements, pStart, pEnd)
+          const cycleZakat = !cyclePaid && cycleCompleted ? cycleZakatBase * 0.025 : 0
 
           rows.push({
             id: rowKey,
@@ -377,8 +446,9 @@ export default async function ZakatAuditPage() {
                      movementHasRowPaid(payments, auditRowKey) ||
                      (haulCompleted && hasAnyPaymentInPeriod(payments, periodStart, periodEnd))
 
-      // For completed cycles, always compute zakatDue. For upcoming, show projected amount
-      const zakatDue = isPaid ? 0 : balance * 0.025
+      // For completed cycles, use proper zakat base calculation. For upcoming, show projected amount
+      const zakatBase = haulCompleted ? calculateZakatBase(balance, movements, periodStart, periodEnd) : balance
+      const zakatDue = isPaid ? 0 : zakatBase * 0.025
 
       if (!haulCompleted) {
         // Upcoming cycle — show projected zakat
@@ -474,7 +544,9 @@ export default async function ZakatAuditPage() {
 
           const rowKey = `ROSCA_SUKUK_PRINCIPAL|${sourceBucket?.id || ''}|${inv.id}|${isoDay(periodStart)}|${isoDay(periodEnd)}`
           const isPaid = movementHasRowPaid(sourcePayments, rowKey)
-          const zakatDue = !isPaid && haulCompleted && isDealClosed ? principalRemaining * 0.025 : 0
+          const sourceBucketMovements = sourceBucketFull ? (Array.isArray(sourceBucketFull.movements) ? sourceBucketFull.movements : []) : []
+          const zakatBase = haulCompleted && isDealClosed ? calculateZakatBase(principalRemaining, sourceBucketMovements, periodStart, periodEnd) : principalRemaining
+          const zakatDue = !isPaid && haulCompleted && isDealClosed ? zakatBase * 0.025 : 0
 
           bucketRows.push({
             id: rowKey,
@@ -542,7 +614,9 @@ export default async function ZakatAuditPage() {
           const rowKey = `RECEIPT|${profitBucket.id}|${receipt.id}`
           const isPaid = movementHasRowPaid(profitPayments, rowKey)
           const haulCompleted = diffDaysFloor(startDay, receiptDate) >= 354 || diffDaysFloor(startDay, now) >= 354
-          const zakatDue = !isPaid && haulCompleted ? receiptAmount * 0.025 : 0
+          const receiptHaulEnd = addDays(receiptDate, 354)
+          const zakatBase = haulCompleted ? calculateZakatBase(receiptAmount, profitMovements, receiptDate, receiptHaulEnd) : receiptAmount
+          const zakatDue = !isPaid && haulCompleted ? zakatBase * 0.025 : 0
 
           bucketRows.push({
             id: rowKey,
