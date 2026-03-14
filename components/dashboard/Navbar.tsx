@@ -385,19 +385,28 @@ export function Navbar({ user, activeAccountTypes, notifications }: NavbarProps)
               {/* Monkey mascot */}
               <MonkeyMascot isOpen={notificationsOpen} hoveredType={hoveredNotificationType} />
               
-              <button
+              <motion.button
                 type="button"
-                className="w-8 h-8 rounded-full flex items-center justify-center text-xs bg-slate-900/5 dark:bg-white/10 text-slate-700 dark:text-slate-200 hover:bg-slate-900/10 dark:hover:bg-white/15 transition-colors relative"
+                className="relative w-10 h-10 rounded-xl flex items-center justify-center bg-gradient-to-br from-cyan-500/20 to-purple-500/20 border border-cyan-500/30 hover:border-cyan-400/60 transition-all duration-300 group"
                 aria-label="Notifications"
                 onClick={() => setNotificationsOpen((prev) => !prev)}
+                whileHover={{ scale: 1.05 }}
+                whileTap={{ scale: 0.95 }}
               >
-                <span className="text-sm">🔔</span>
+                <svg className="w-5 h-5 text-cyan-400 group-hover:text-cyan-300 transition-colors" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 17h5l-1.405-1.405A2.032 2.032 0 0118 14.158V11a6.002 6.002 0 00-4-5.659V5a2 2 0 10-4 0v.341C7.67 6.165 6 8.388 6 11v3.159c0 .538-.214 1.055-.595 1.436L4 17h5m6 0v1a3 3 0 11-6 0v-1m6 0H9" />
+                </svg>
                 {unreadCount > 0 && (
-                  <span className="absolute -top-1 -right-1 min-w-[16px] h-4 px-1 rounded-full bg-red-600 text-[10px] font-bold text-white flex items-center justify-center">
+                  <motion.span
+                    initial={{ scale: 0 }}
+                    animate={{ scale: 1 }}
+                    className="absolute -top-1 -right-1 min-w-[18px] h-[18px] px-1 rounded-full bg-gradient-to-r from-red-500 to-pink-500 text-[10px] font-bold text-white flex items-center justify-center shadow-lg shadow-red-500/50"
+                  >
                     {unreadCount > 9 ? '9+' : unreadCount}
-                  </span>
+                  </motion.span>
                 )}
-              </button>
+                <div className="absolute inset-0 rounded-xl bg-cyan-400/20 blur-xl opacity-0 group-hover:opacity-100 transition-opacity duration-300" />
+              </motion.button>
               <AnimatePresence>
               {notificationsOpen && unreadCount > 0 && (
                 <motion.div
@@ -406,15 +415,25 @@ export function Navbar({ user, activeAccountTypes, notifications }: NavbarProps)
                   animate={{ opacity: 1, y: 0, scale: 1 }}
                   exit={{ opacity: 0, y: -20, scale: 0.95 }}
                   transition={{ duration: 0.3, ease: 'easeOut' }}
-                  className="absolute right-0 mt-2 w-80 max-w-xs sm:max-w-sm rounded-lg bg-white dark:bg-slate-900 shadow-xl ring-1 ring-black/10 dark:ring-white/10 z-[10000]"
+                  className="absolute right-0 mt-3 w-96 max-w-md rounded-2xl bg-gradient-to-br from-slate-900 via-slate-800 to-slate-900 border-2 border-cyan-500/30 shadow-2xl shadow-cyan-500/20 z-[10000] overflow-hidden"
                 >
-                  <div className="px-3 py-2 border-b border-slate-200 dark:border-slate-800 flex items-center justify-between">
-                    <span className="text-xs font-semibold text-slate-800 dark:text-slate-100">
-                      Notifications
-                    </span>
-                    <span className="text-[11px] text-slate-500 dark:text-slate-400">
-                      {unreadCount} pending
-                    </span>
+                  {/* Glow effects */}
+                  <div className="absolute inset-0 bg-gradient-to-br from-cyan-500/5 via-transparent to-purple-500/5 pointer-events-none" />
+                  <div className="absolute -top-24 -right-24 w-48 h-48 bg-cyan-500/10 rounded-full blur-3xl pointer-events-none" />
+                  <div className="absolute -bottom-24 -left-24 w-48 h-48 bg-purple-500/10 rounded-full blur-3xl pointer-events-none" />
+                  {/* Header */}
+                  <div className="relative px-4 py-3 border-b border-cyan-500/20 bg-gradient-to-r from-slate-800/50 to-slate-900/50 backdrop-blur-sm">
+                    <div className="flex items-center justify-between">
+                      <div className="flex items-center gap-2">
+                        <div className="w-2 h-2 rounded-full bg-cyan-400 animate-pulse shadow-lg shadow-cyan-400/50" />
+                        <span className="text-sm font-bold bg-gradient-to-r from-cyan-400 to-purple-400 bg-clip-text text-transparent">
+                          Notifications
+                        </span>
+                      </div>
+                      <span className="text-xs font-semibold text-cyan-400/80 px-2 py-1 rounded-full bg-cyan-400/10 border border-cyan-400/20">
+                        {unreadCount} pending
+                      </span>
+                    </div>
                   </div>
                   <motion.div 
                     className="max-h-80 overflow-y-auto py-1"
@@ -433,31 +452,35 @@ export function Navbar({ user, activeAccountTypes, notifications }: NavbarProps)
                       return (
                       <motion.div 
                         key={n.key} 
-                        className="px-3 py-2.5 border-b border-slate-100 dark:border-slate-800 last:border-b-0 hover:bg-slate-50 dark:hover:bg-slate-800/50 transition-colors cursor-pointer"
+                        className="relative px-4 py-3 border-b border-cyan-500/10 last:border-b-0 hover:bg-gradient-to-r hover:from-cyan-500/10 hover:to-purple-500/10 transition-all duration-300 cursor-pointer group"
                         initial={{ opacity: 0, x: -20 }}
                         animate={{ opacity: 1, x: 0 }}
                         transition={{ delay: idx * 0.08 }}
                         onMouseEnter={() => setHoveredNotificationType(notifType)}
                         onMouseLeave={() => setHoveredNotificationType(null)}
                       >
-                        <div className="text-xs text-slate-800 dark:text-slate-100 mb-1">
+                        {/* Notification type icon */}
+                        <div className="absolute left-4 top-3 w-1 h-full bg-gradient-to-b from-cyan-400 to-purple-400 rounded-full opacity-0 group-hover:opacity-100 transition-opacity" />
+                        
+                        <div className="text-sm font-medium text-slate-100 mb-1.5 group-hover:text-cyan-300 transition-colors">
                           {n.message}
                         </div>
                         {n.amounts && (n.amounts.profit || n.amounts.commission) && (
-                          <div className="text-[11px] text-slate-500 dark:text-slate-400 mb-1">
+                          <div className="flex items-center gap-2 mb-2 flex-wrap">
                             {n.amounts.profit && (
-                              <span>SAR {n.amounts.profit.toLocaleString(undefined, { maximumFractionDigits: 2 })} profit</span>
+                              <span className="text-xs font-semibold text-emerald-400 bg-emerald-400/10 px-2 py-1 rounded-lg border border-emerald-400/20">
+                                💰 {n.amounts.profit.toLocaleString(undefined, { maximumFractionDigits: 2 })} SAR
+                              </span>
                             )}
-                            {n.amounts.profit && n.amounts.commission && <span> • </span>}
                             {n.amounts.commission && (
-                              <span>
-                                SAR {n.amounts.commission.toLocaleString(undefined, { maximumFractionDigits: 2 })} commission
+                              <span className="text-xs font-semibold text-amber-400 bg-amber-400/10 px-2 py-1 rounded-lg border border-amber-400/20">
+                                💵 {n.amounts.commission.toLocaleString(undefined, { maximumFractionDigits: 2 })} SAR
                               </span>
                             )}
                           </div>
                         )}
-                        <div className="flex items-center justify-between gap-2 mt-1">
-                          <button
+                        <div className="flex items-center gap-2">
+                          <motion.button
                             type="button"
                             onClick={() => {
                               setNotificationsOpen(false)
@@ -467,27 +490,38 @@ export function Navbar({ user, activeAccountTypes, notifications }: NavbarProps)
                                 window.location.href = `/sukuk?receive=${receive}&from=${from}`
                               }
                             }}
-                            className="flex-1 inline-flex items-center justify-center rounded-md bg-emerald-600 px-2.5 py-1.5 text-[11px] font-semibold text-white hover:bg-emerald-700"
+                            className="flex-1 inline-flex items-center justify-center gap-1.5 rounded-xl bg-gradient-to-r from-emerald-500 to-cyan-500 px-4 py-2 text-xs font-bold text-white shadow-lg shadow-emerald-500/30 hover:shadow-emerald-500/50 transition-all"
+                            whileHover={{ scale: 1.02 }}
+                            whileTap={{ scale: 0.98 }}
                           >
-                            Receive Now
-                          </button>
-                          <button
+                            <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M5 13l4 4L19 7" />
+                            </svg>
+                            Receive
+                          </motion.button>
+                          <motion.button
                             type="button"
                             onClick={() => handleDismissNotification(n.investmentId)}
                             disabled={dismissLoading === n.investmentId}
-                            className="inline-flex items-center justify-center rounded-md border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-900 px-2.5 py-1.5 text-[11px] font-semibold text-slate-700 dark:text-slate-200 hover:bg-slate-50 dark:hover:bg-slate-800 disabled:opacity-60"
+                            className="inline-flex items-center justify-center rounded-xl border border-slate-600/50 bg-slate-800/50 px-3 py-2 text-xs font-semibold text-slate-300 hover:bg-slate-700/50 hover:border-slate-500/50 disabled:opacity-40 transition-all"
+                            whileHover={{ scale: 1.02 }}
+                            whileTap={{ scale: 0.98 }}
                           >
-                            {dismissLoading === n.investmentId ? 'Dismissing…' : 'Dismiss'}
-                          </button>
+                            {dismissLoading === n.investmentId ? '...' : '✕'}
+                          </motion.button>
                         </div>
                       </motion.div>
                     )})}
 
                   </motion.div>
                   {notifError && (
-                    <div className="px-3 py-2 text-[11px] text-red-600 bg-red-50 dark:bg-red-950/40 border-t border-red-200/80 dark:border-red-800/60">
-                      {notifError}
-                    </div>
+                    <motion.div
+                      initial={{ opacity: 0, y: -10 }}
+                      animate={{ opacity: 1, y: 0 }}
+                      className="px-4 py-2.5 text-xs font-medium text-red-400 bg-red-500/10 border-t border-red-500/20"
+                    >
+                      ⚠️ {notifError}
+                    </motion.div>
                   )}
                 </motion.div>
               )}

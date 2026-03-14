@@ -98,7 +98,7 @@ export function MonkeyMascot({
                 ease: "easeInOut" 
               } : { duration: 0.2 }
             }}
-            className="absolute top-12 right-10 z-50"
+            className="absolute top-12 right-10 z-[10001]"
           >
             {/* Speech bubble */}
             <motion.div
