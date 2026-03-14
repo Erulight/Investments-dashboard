@@ -129,6 +129,7 @@ export function Navbar({ user, activeAccountTypes, notifications }: NavbarProps)
   const [notifError, setNotifError] = useState('')
   const [hoveredNotificationType, setHoveredNotificationType] = useState<string | null>(null)
   const notifPanelRef = useRef<HTMLDivElement>(null)
+  const [panelHeight, setPanelHeight] = useState(0)
   const [zakatHealth, setZakatHealth] = useState<'OK' | 'WARNINGS' | null>(null)
 
   const permissionMap = useMemo(() => parsePermissionMap(user.permissions), [user.permissions])
@@ -383,7 +384,7 @@ export function Navbar({ user, activeAccountTypes, notifications }: NavbarProps)
             {/* Notification bell */}
             <div className="relative">
               {/* Monkey mascot */}
-              <MonkeyMascot isOpen={notificationsOpen} hoveredType={hoveredNotificationType} />
+              <MonkeyMascot isOpen={notificationsOpen} hoveredType={hoveredNotificationType} panelHeight={panelHeight} />
               
               <motion.button
                 type="button"
@@ -415,6 +416,11 @@ export function Navbar({ user, activeAccountTypes, notifications }: NavbarProps)
                   animate={{ opacity: 1, y: 0, scale: 1 }}
                   exit={{ opacity: 0, y: -20, scale: 0.95 }}
                   transition={{ duration: 0.3, ease: 'easeOut' }}
+                  onAnimationComplete={() => {
+                    if (notifPanelRef.current) {
+                      setPanelHeight(notifPanelRef.current.offsetHeight)
+                    }
+                  }}
                   className="absolute right-0 mt-3 w-96 max-w-md rounded-2xl bg-gradient-to-br from-slate-900 via-slate-800 to-slate-900 border-2 border-cyan-500/30 shadow-2xl shadow-cyan-500/20 z-[10000] overflow-hidden"
                 >
                   {/* Glow effects */}

@@ -41,10 +41,12 @@ const monkeyComments: MonkeyComment = {
 
 export function MonkeyMascot({ 
   isOpen, 
-  hoveredType 
+  hoveredType,
+  panelHeight = 0
 }: { 
   isOpen: boolean
-  hoveredType: string | null 
+  hoveredType: string | null
+  panelHeight?: number
 }) {
   const [currentComment, setCurrentComment] = useState<string>(monkeyComments.greeting)
   const [isSwinging, setIsSwinging] = useState(false)
@@ -65,53 +67,63 @@ export function MonkeyMascot({
     <AnimatePresence>
       {isOpen && (
         <>
-          {/* String/rope */}
+          {/* String/rope attached to bottom of notification panel */}
           <motion.div
             initial={{ height: 0, opacity: 0 }}
-            animate={{ height: 60, opacity: 1 }}
+            animate={{ height: Math.max(60, panelHeight + 20), opacity: 1 }}
             exit={{ height: 0, opacity: 0 }}
-            transition={{ duration: 0.4, ease: "easeOut" }}
-            className="absolute top-0 right-16 w-0.5 bg-gradient-to-b from-slate-600 to-slate-400 origin-top"
-            style={{ transformOrigin: 'top center' }}
+            transition={{ duration: 0.5, ease: "easeOut", delay: 0.2 }}
+            className="absolute w-0.5 bg-gradient-to-b from-slate-600 to-slate-400 origin-top shadow-lg"
+            style={{ 
+              transformOrigin: 'top center',
+              top: '100%',
+              right: '48%',
+              zIndex: 9999
+            }}
           />
 
-          {/* Monkey character */}
+          {/* Monkey character hanging at bottom */}
           <motion.div
-            initial={{ y: -100, opacity: 0, rotate: 0 }}
+            initial={{ y: -150, opacity: 0, rotate: 0 }}
             animate={{ 
               y: 0, 
               opacity: 1,
-              rotate: isSwinging ? [0, 5, -5, 0] : 0
+              rotate: isSwinging ? [0, 3, -3, 0] : 0
             }}
             exit={{ 
-              y: -100, 
+              y: -150, 
               opacity: 0,
               scale: 0.5,
-              rotate: -20
+              rotate: -15
             }}
             transition={{ 
-              y: { type: "spring", damping: 10, stiffness: 100 },
-              opacity: { duration: 0.3 },
+              y: { type: "spring", damping: 12, stiffness: 80, delay: 0.3 },
+              opacity: { duration: 0.3, delay: 0.3 },
               rotate: isSwinging ? { 
-                duration: 2, 
+                duration: 2.5, 
                 repeat: Infinity, 
                 ease: "easeInOut" 
               } : { duration: 0.2 }
             }}
-            className="absolute top-12 right-10 z-[10001]"
+            className="absolute z-[9998]"
+            style={{
+              top: `calc(100% + ${Math.max(40, panelHeight)}px)`,
+              right: '45%',
+              transform: 'translateX(50%)'
+            }}
           >
-            {/* Speech bubble */}
+            {/* Speech bubble - appears in front */}
             <motion.div
               initial={{ scale: 0, opacity: 0 }}
               animate={{ scale: 1, opacity: 1 }}
-              transition={{ delay: 0.5, type: "spring", damping: 15 }}
-              className="absolute -left-24 top-0 bg-white dark:bg-slate-800 rounded-2xl px-3 py-2 shadow-xl border-2 border-cyan-400 whitespace-nowrap"
+              transition={{ delay: 0.8, type: "spring", damping: 15 }}
+              className="absolute -left-28 -top-8 bg-white dark:bg-slate-800 rounded-2xl px-3 py-2 shadow-2xl border-2 border-cyan-400 whitespace-nowrap z-[10002]"
             >
               <div className="text-xs font-bold text-slate-800 dark:text-white">
                 {currentComment}
               </div>
-              {/* Speech bubble tail */}
-              <div className="absolute right-0 top-1/2 -translate-y-1/2 translate-x-full">
+              {/* Speech bubble tail pointing to monkey */}
+              <div className="absolute right-0 bottom-2 translate-x-full">
                 <div className="w-0 h-0 border-t-[6px] border-t-transparent border-b-[6px] border-b-transparent border-l-[8px] border-l-cyan-400" />
                 <div className="absolute top-1/2 -translate-y-1/2 right-[2px] w-0 h-0 border-t-[5px] border-t-transparent border-b-[5px] border-b-transparent border-l-[7px] border-l-white dark:border-l-slate-800" />
               </div>
