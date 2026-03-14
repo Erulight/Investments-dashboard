@@ -168,22 +168,23 @@ export default async function ZakatAuditPage() {
       where: { account: { type: 'CRYPTO' }, ...investmentScope },
       select: { id: true, currentValue: true },
     }),
-    // Zakat payments this year
+    // Zakat payments this year (scoped to current user's buckets)
     prisma.cashBucketMovement.findMany({
       where: {
         type: 'ZAKAT_PAID',
         date: { gte: new Date(now.getFullYear(), 0, 1) },
+        cashBucket: { is: personScope },
       },
       select: { amount: true, date: true, cashBucketId: true, notes: true },
     }),
-    // All-time zakat payments
+    // All-time zakat payments (scoped to current user's buckets)
     prisma.cashBucketMovement.findMany({
-      where: { type: 'ZAKAT_PAID' },
+      where: { type: 'ZAKAT_PAID', cashBucket: { is: personScope } },
       select: { amount: true, date: true, cashBucketId: true, notes: true },
     }),
-    // Health check buckets — all non-excluded with debt info
+    // Health check buckets — all non-excluded with debt info (scoped to current user)
     prisma.cashBucket.findMany({
-      where: { excludeFromZakat: false },
+      where: { excludeFromZakat: false, ...personScope },
       select: {
         id: true, label: true, haulStartDate: true, balance: true,
         debt: { select: { id: true } },
@@ -215,7 +216,24 @@ export default async function ZakatAuditPage() {
   const totalWealth = cashWealth + sukukWealth + savingsWealth + cryptoWealth
   const totalPaidThisYear = zakatPaymentsThisYear.reduce((s, p) => s + Math.abs(Number(p.amount) || 0), 0)
 
-  // ━━━ BUILD BUCKET ROWS (simplified from main zakat page for audit view) ━━━
+  // ━━━ Helper: check if any ZAKAT_PAID movement marks a given row key as paid ━━━
+  const movementHasRowPaid = (payments: any[], rowKey: string) => {
+    return payments.some((p: any) => {
+      const notes = typeof p?.notes === 'string' ? p.notes : ''
+      return notes.includes(`ZAKAT_ROW=${rowKey}`)
+    })
+  }
+
+  // Helper: check if bucket has ANY zakat payment covering a period (fallback match)
+  const hasAnyPaymentInPeriod = (payments: any[], periodStart: Date, periodEnd: Date) => {
+    return payments.some((p: any) => {
+      const pDate = new Date(p.date)
+      if (isNaN(pDate.getTime())) return false
+      return pDate.getTime() >= periodStart.getTime() && pDate.getTime() <= addDays(periodEnd, 90).getTime()
+    })
+  }
+
+  // ━━━ BUILD BUCKET ROWS (mirrors main zakat page logic) ━━━
   const bucketRows: BucketRow[] = allBuckets.flatMap((bucket): BucketRow[] => {
     const balance = Math.max(0, Number(bucket.balance) || 0)
     if (balance <= 0.01) return []
@@ -224,7 +242,9 @@ export default async function ZakatAuditPage() {
     if (!haulStart || Number.isNaN(haulStart.getTime())) return []
 
     const movements = Array.isArray(bucket.movements) ? bucket.movements : []
-    const payments = movements.filter((m: any) => m.type === 'ZAKAT_PAID')
+    const payments = movements
+      .filter((m: any) => m.type === 'ZAKAT_PAID')
+      .sort((a: any, b: any) => new Date(b.date).getTime() - new Date(a.date).getTime())
     const lastPaymentRaw = payments[0]
     const lastPayment = lastPaymentRaw ? {
       id: lastPaymentRaw.id,
@@ -248,10 +268,95 @@ export default async function ZakatAuditPage() {
       : isSavingsReceipt ? 'CIRCLYS'
       : 'CASH'
 
+    const rowKind: BucketRow['rowKind'] = isProfitBucket ? 'PROFIT'
+      : isCommissionBucket ? 'COMMISSION'
+      : isRewardBucket ? 'REWARD'
+      : isSavingsReceipt ? 'RECEIPT'
+      : 'IDLE'
+
     const source = label || 'General Cash'
     const sourceGroup = source
 
-    // Generate hawl cycle rows
+    // For receipt/reward buckets, check if the main zakat page would generate
+    // a ROSCA_RECEIPT first-hawl row
+    if (isRewardBucket || isSavingsReceipt) {
+      const firstRowKey = `ROSCA_RECEIPT|${isRewardBucket ? 'REWARD' : 'SAVINGS'}|${bucket.id}`
+      const isPaid = movementHasRowPaid(payments, firstRowKey)
+      const startDay = new Date(haulStart.getFullYear(), haulStart.getMonth(), haulStart.getDate())
+      const periodEnd = addDays(startDay, 354)
+      const haulCompleted = now.getTime() >= periodEnd.getTime()
+      const zakatDue = !isPaid && haulCompleted ? balance * 0.025 : 0
+
+      const rows: BucketRow[] = [{
+        id: firstRowKey,
+        bucketId: bucket.id,
+        periodIndex: 0,
+        label: source,
+        currency: (bucket as any).currency || 'SAR',
+        balance,
+        haulStartDate: isoDay(startDay),
+        lastZakatPaidDate: bucket.lastZakatPaidDate ? new Date(bucket.lastZakatPaidDate).toISOString().split('T')[0] : null,
+        haulCompleteDate: isoDay(periodEnd),
+        idleBase: 0,
+        receiptsTotal: balance,
+        zakatDue,
+        isPaid,
+        haulCompleted,
+        source,
+        sourceGroup,
+        sourceType,
+        rowKind,
+        why: haulCompleted
+          ? `Receipt hawl completed: ${isoDay(startDay)} to ${isoDay(periodEnd)}. Balance: ${balance.toFixed(2)}, Zakat at 2.5%: ${zakatDue.toFixed(2)}`
+          : `Receipt hawl in progress: ${isoDay(startDay)} to ${isoDay(periodEnd)}. Projected zakat: ${(balance * 0.025).toFixed(2)}`,
+        lastPayment,
+        dueReceipts: [],
+      }]
+
+      // Also generate subsequent idle cycles if hawl 1 is completed
+      if (haulCompleted) {
+        const elapsed = diffDaysFloor(startDay, now)
+        const completedCycles = Math.floor(elapsed / 354)
+        for (let i = 1; i <= completedCycles; i++) {
+          const pStart = addDays(startDay, i * 354)
+          const pEnd = addDays(startDay, (i + 1) * 354)
+          const cycleCompleted = now.getTime() >= pEnd.getTime()
+          const rowKey = `SAVINGS_IDLE|${bucket.id}|${isoDay(pStart)}|${isoDay(pEnd)}`
+          const cyclePaid = movementHasRowPaid(payments, rowKey)
+          const cycleZakat = !cyclePaid && cycleCompleted ? balance * 0.025 : 0
+
+          rows.push({
+            id: rowKey,
+            bucketId: bucket.id,
+            periodIndex: i,
+            label: `${source} • Cycle ${i + 1}`,
+            currency: (bucket as any).currency || 'SAR',
+            balance,
+            haulStartDate: isoDay(pStart),
+            lastZakatPaidDate: bucket.lastZakatPaidDate ? new Date(bucket.lastZakatPaidDate).toISOString().split('T')[0] : null,
+            haulCompleteDate: isoDay(pEnd),
+            idleBase: balance,
+            receiptsTotal: 0,
+            zakatDue: cycleZakat,
+            isPaid: cyclePaid,
+            haulCompleted: cycleCompleted,
+            source,
+            sourceGroup,
+            sourceType,
+            rowKind: 'IDLE',
+            why: cycleCompleted
+              ? `Idle cycle ${i + 1}: ${isoDay(pStart)} to ${isoDay(pEnd)} — ${cyclePaid ? 'paid' : 'due'}`
+              : `Idle cycle ${i + 1}: ${isoDay(pStart)} to ${isoDay(pEnd)} — upcoming`,
+            lastPayment,
+            dueReceipts: [],
+          })
+        }
+      }
+
+      return rows
+    }
+
+    // Generate hawl cycle rows for general cash / profit / commission buckets
     const startDay = new Date(haulStart.getFullYear(), haulStart.getMonth(), haulStart.getDate())
     const elapsed = diffDaysFloor(startDay, now)
     const completedCycles = Math.floor(elapsed / 354)
@@ -262,13 +367,26 @@ export default async function ZakatAuditPage() {
       const periodEnd = addDays(startDay, (i + 1) * 354)
       const haulCompleted = now.getTime() >= periodEnd.getTime()
 
-      if (i >= completedCycles && !haulCompleted) {
-        // Upcoming cycle — show it but no zakat due yet
+      // Try multiple row key formats used by the main zakat page
+      const depositRowKey = `DEPOSIT|${bucket.id}|${isoDay(periodStart)}|${isoDay(periodEnd)}`
+      const idleRowKey = `IDLE|${bucket.id}|${isoDay(periodStart)}|${isoDay(periodEnd)}`
+      const auditRowKey = `audit|${bucket.id}|${i}`
+
+      const isPaid = movementHasRowPaid(payments, depositRowKey) ||
+                     movementHasRowPaid(payments, idleRowKey) ||
+                     movementHasRowPaid(payments, auditRowKey) ||
+                     (haulCompleted && hasAnyPaymentInPeriod(payments, periodStart, periodEnd))
+
+      // For completed cycles, always compute zakatDue. For upcoming, show projected amount
+      const zakatDue = isPaid ? 0 : balance * 0.025
+
+      if (!haulCompleted) {
+        // Upcoming cycle — show projected zakat
         rows.push({
-          id: `audit|${bucket.id}|${i}`,
+          id: depositRowKey,
           bucketId: bucket.id,
           periodIndex: i,
-          label: `${source} • ${isoDay(periodStart)} → ${isoDay(periodEnd)}`,
+          label: source,
           currency: (bucket as any).currency || 'SAR',
           balance,
           haulStartDate: isoDay(periodStart),
@@ -282,28 +400,19 @@ export default async function ZakatAuditPage() {
           source,
           sourceGroup,
           sourceType,
-          rowKind: isProfitBucket ? 'PROFIT' : isCommissionBucket ? 'COMMISSION' : isRewardBucket ? 'REWARD' : isSavingsReceipt ? 'RECEIPT' : 'IDLE',
-          why: `Hawl cycle ${i + 1}: ${isoDay(periodStart)} to ${isoDay(periodEnd)} — in progress`,
+          rowKind,
+          why: `Hawl cycle ${i + 1}: ${isoDay(periodStart)} to ${isoDay(periodEnd)} — in progress. Projected zakat: ${(balance * 0.025).toFixed(2)}`,
           lastPayment,
           dueReceipts: [],
         })
         continue
       }
 
-      // Check if this period was paid
-      const rowKey = `audit|${bucket.id}|${i}`
-      const isPaid = payments.some((p: any) => {
-        const notes = typeof p?.notes === 'string' ? p.notes : ''
-        return notes.includes(`ZAKAT_ROW=${rowKey}`)
-      })
-
-      const zakatDue = !isPaid ? balance * 0.025 : 0
-
       rows.push({
-        id: rowKey,
+        id: depositRowKey,
         bucketId: bucket.id,
         periodIndex: i,
-        label: `${source} • ${isoDay(periodStart)} → ${isoDay(periodEnd)}`,
+        label: source,
         currency: (bucket as any).currency || 'SAR',
         balance,
         haulStartDate: isoDay(periodStart),
@@ -317,7 +426,7 @@ export default async function ZakatAuditPage() {
         source,
         sourceGroup,
         sourceType,
-        rowKind: isProfitBucket ? 'PROFIT' : isCommissionBucket ? 'COMMISSION' : isRewardBucket ? 'REWARD' : isSavingsReceipt ? 'RECEIPT' : 'IDLE',
+        rowKind,
         why: `Hawl cycle ${i + 1}: ${isoDay(periodStart)} to ${isoDay(periodEnd)} — ${isPaid ? 'paid' : 'due'}. Balance: ${balance.toFixed(2)}, Zakat at 2.5%: ${zakatDue.toFixed(2)}`,
         lastPayment,
         dueReceipts: [],
@@ -327,11 +436,157 @@ export default async function ZakatAuditPage() {
     return rows
   })
 
+  // ━━━ ADD SUKUK INVESTMENT ROWS FROM ALLOCATIONS ━━━
+  for (const inv of sukukInvestments) {
+    const meta = parseMetadata(inv.metadata)
+    const maturity = inv.maturityDate ? new Date(inv.maturityDate) : null
+    const isDealClosed = !!maturity && !isNaN(maturity.getTime()) && maturity <= now
+
+    for (const alloc of (inv.bucketAllocations || [])) {
+      const principalRemaining = Number(alloc.principalRemaining || 0)
+      if (principalRemaining <= 0.01) continue
+
+      const sourceBucket = alloc.cashBucket
+      const bucketLabel = sourceBucket?.label || ''
+      const isRoscaFunded = bucketLabel.startsWith('Savings Receipt •') || bucketLabel.startsWith('Circlys Reward Receipt •')
+
+      if (isRoscaFunded) {
+        // ROSCA Sukuk principal continuity rows
+        const savedHaulStr = meta?.savingsHaulStartDate as string | undefined
+        const continuityAnchor = toDate(savedHaulStr) || toDate(sourceBucket?.haulStartDate) || toDate(inv.startDate)
+        if (!continuityAnchor) continue
+
+        const continuityStart = new Date(continuityAnchor.getFullYear(), continuityAnchor.getMonth(), continuityAnchor.getDate())
+        const elapsed = diffDaysFloor(continuityStart, now)
+        const completedCycles = Math.floor(elapsed / 354)
+
+        // Find ALL zakat payments on the source bucket to check isPaid
+        const sourceBucketFull = allBuckets.find(b => b.id === sourceBucket?.id)
+        const sourcePayments = sourceBucketFull
+          ? (Array.isArray(sourceBucketFull.movements) ? sourceBucketFull.movements : [])
+              .filter((m: any) => m.type === 'ZAKAT_PAID')
+          : []
+
+        for (let i = 0; i < Math.max(1, completedCycles + 1); i++) {
+          const periodStart = addDays(continuityStart, i * 354)
+          const periodEnd = addDays(continuityStart, (i + 1) * 354)
+          const haulCompleted = now.getTime() >= periodEnd.getTime()
+
+          const rowKey = `ROSCA_SUKUK_PRINCIPAL|${sourceBucket?.id || ''}|${inv.id}|${isoDay(periodStart)}|${isoDay(periodEnd)}`
+          const isPaid = movementHasRowPaid(sourcePayments, rowKey)
+          const zakatDue = !isPaid && haulCompleted && isDealClosed ? principalRemaining * 0.025 : 0
+
+          bucketRows.push({
+            id: rowKey,
+            bucketId: sourceBucket?.id || inv.id,
+            periodIndex: i,
+            label: `${inv.name} • Principal`,
+            currency: 'SAR',
+            balance: principalRemaining,
+            haulStartDate: isoDay(periodStart),
+            lastZakatPaidDate: null,
+            haulCompleteDate: isoDay(periodEnd),
+            idleBase: principalRemaining,
+            receiptsTotal: 0,
+            zakatDue,
+            isPaid,
+            haulCompleted,
+            source: inv.name,
+            sourceGroup: `Sukuk Principal • ${inv.name}`,
+            sourceType: 'SUKUK',
+            rowKind: 'PRINCIPAL',
+            why: haulCompleted
+              ? (isDealClosed
+                  ? `Principal continuity from ROSCA: ${isoDay(periodStart)} to ${isoDay(periodEnd)} — ${isPaid ? 'paid' : 'due'}`
+                  : `Principal locked in active Sukuk — zakat deferred until maturity`)
+              : `Principal continuity: ${isoDay(periodStart)} to ${isoDay(periodEnd)} — upcoming`,
+            lastPayment: null,
+            dueReceipts: [],
+          })
+        }
+      }
+    }
+
+    // Add profit bucket rows linked to this investment
+    const profitBuckets = allBuckets.filter(b => {
+      const bl = typeof b.label === 'string' ? b.label : ''
+      return (bl.startsWith('Profit •') || bl.startsWith('Profit \u2022')) && bl.includes(inv.name)
+    })
+
+    for (const profitBucket of profitBuckets) {
+      const profitBalance = Math.max(0, Number(profitBucket.balance) || 0)
+      if (profitBalance <= 0.01) continue
+      const profitHaulStart = toDate(profitBucket.haulStartDate)
+      if (!profitHaulStart) continue
+
+      // Check if we already have rows for this bucket from the main loop
+      const alreadyHasRows = bucketRows.some(r => r.bucketId === profitBucket.id)
+      if (alreadyHasRows) continue
+
+      const startDay = new Date(profitHaulStart.getFullYear(), profitHaulStart.getMonth(), profitHaulStart.getDate())
+      const profitMovements = Array.isArray(profitBucket.movements) ? profitBucket.movements : []
+      const profitPayments = profitMovements.filter((m: any) => m.type === 'ZAKAT_PAID')
+
+      // Generate receipt-style rows for each profit movement
+      const profitReceipts = profitMovements.filter((m: any) =>
+        m.type === 'WITHDRAW_PROFIT' || m.type === 'CASH_IN'
+      )
+
+      if (profitReceipts.length > 0) {
+        for (const receipt of profitReceipts) {
+          const receiptDate = new Date(receipt.date)
+          if (isNaN(receiptDate.getTime())) continue
+          const receiptAmount = Math.abs(Number(receipt.amount) || 0)
+          if (receiptAmount <= 0.01) continue
+
+          const rowKey = `RECEIPT|${profitBucket.id}|${receipt.id}`
+          const isPaid = movementHasRowPaid(profitPayments, rowKey)
+          const haulCompleted = diffDaysFloor(startDay, receiptDate) >= 354 || diffDaysFloor(startDay, now) >= 354
+          const zakatDue = !isPaid && haulCompleted ? receiptAmount * 0.025 : 0
+
+          bucketRows.push({
+            id: rowKey,
+            bucketId: profitBucket.id,
+            periodIndex: 0,
+            label: `Profit • ${inv.name}`,
+            currency: 'SAR',
+            balance: receiptAmount,
+            haulStartDate: isoDay(startDay),
+            lastZakatPaidDate: null,
+            haulCompleteDate: isoDay(addDays(startDay, 354)),
+            idleBase: 0,
+            receiptsTotal: receiptAmount,
+            zakatDue,
+            isPaid,
+            haulCompleted,
+            source: inv.name,
+            sourceGroup: `Sukuk Profit • ${inv.name}`,
+            sourceType: 'SUKUK',
+            rowKind: 'PROFIT',
+            why: haulCompleted
+              ? `Profit receipt: ${isoDay(receiptDate)} — ${isPaid ? 'paid' : 'due'}`
+              : `Profit receipt: ${isoDay(receiptDate)} — hawl in progress`,
+            lastPayment: null,
+            dueReceipts: [{
+              date: isoDay(receiptDate),
+              amount: receiptAmount,
+              type: 'WITHDRAW_PROFIT',
+              investmentName: inv.name,
+            }],
+          })
+        }
+      }
+    }
+  }
+
   // Sort by hawl start date
   bucketRows.sort((a, b) => {
     const aTime = new Date(a.haulStartDate).getTime()
     const bTime = new Date(b.haulStartDate).getTime()
-    return aTime - bTime
+    if (aTime !== bTime) return aTime - bTime
+    const aEnd = new Date(a.haulCompleteDate).getTime()
+    const bEnd = new Date(b.haulCompleteDate).getTime()
+    return aEnd - bEnd
   })
 
   const totalDue = bucketRows.reduce((s, r) => s + (r.isPaid ? 0 : Math.max(0, r.zakatDue)), 0)
