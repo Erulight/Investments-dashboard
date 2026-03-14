@@ -1040,8 +1040,14 @@ export default async function DashboardPage({
       const metrics = ownerSukukMetricsById.get(inv.id)
       if (!metrics) continue
       
-      // Use only receivable profit, not principal
-      const receivableAtMaturity = Math.max(0, metrics.receivable)
+      // Use total net profit at maturity minus what's already been received
+      // This matches the sukuk page logic for receivable
+      const principal = getOwnerSukukPrincipal(inv)
+      const totalPrincipal = Math.max(0, toFiniteNumber(inv?.principalAmount))
+      const ownershipRatio = totalPrincipal > 0 ? Math.min(1, Math.max(0, principal / totalPrincipal)) : 0
+      const totalProfitFull = getSukukNetProfit(inv)
+      const totalProfit = Math.max(0, totalProfitFull * ownershipRatio)
+      const receivableAtMaturity = Math.max(0, totalProfit - metrics.received)
       
       if (receivableAtMaturity < 0.01) continue
       
