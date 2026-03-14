@@ -997,8 +997,8 @@ export default async function DashboardPage({
         : getOwnerPrincipalShare(inv)
       existing.invested += invested
       if (t === 'SUKUK') {
-        const metrics = ownerSukukMetricsById.get(inv.id)
-        existing.value += (metrics ? (metrics.principalOutstanding + metrics.receivable) : 0)
+        // Don't calculate value here, we'll set it after the loop using sukukInvested + sukukReceivable
+        existing.value += 0
       } else {
         const currentValue = Math.max(0, toFiniteNumber(inv.currentValue))
         const ownerPrincipal = getOwnerPrincipalShare(inv)
@@ -1011,6 +1011,14 @@ export default async function DashboardPage({
       existing.count += 1
       typeMap.set(t, existing)
     }
+    
+    // Set SUKUK value to match portfolio breakdown: invested + receivable
+    if (typeMap.has('SUKUK')) {
+      const sukukData = typeMap.get('SUKUK')!
+      sukukData.value = sukukInvested + sukukReceivable
+      typeMap.set('SUKUK', sukukData)
+    }
+    
     typeBreakdowns = Array.from(typeMap.entries())
       .map(([type, data]) => ({ type, ...data }))
       .sort((a, b) => b.value - a.value)
