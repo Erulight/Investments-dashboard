@@ -468,75 +468,6 @@ export default async function InvestmentsPage() {
     return sum + (Number.isFinite(principal) ? principal : 0)
   }, 0)
 
-  const totalNetProfit = (() => {
-    // Owner: include realized profit + commission from sold deals even after ownership is removed
-    if (user.role === 'OWNER' && user.personId) {
-      const activeProfit = displayedInvestments
-        .filter((inv: any) => !isSoldDealForOwner(inv))
-        .reduce((sum, inv) => sum + getNetProfit(inv), 0)
-
-      // Include deals where owner had participation OR has sell transactions
-      // (e.g., Safaqa: owner had 0 principal but sold to partner and earned profit)
-      const ownerInvestments = investments.filter((inv: any) => {
-        const participants = Array.isArray(inv.dealParticipants) ? inv.dealParticipants : []
-        if (participants.length === 0) return true
-        
-        const ownerParticipation = participants.find((p: any) => p?.personId === user.personId)
-        if (!ownerParticipation) return false
-        
-        // Include if owner has current/historical principal > 0
-        const invested = Number(ownerParticipation.investedAmount || 0)
-        if (invested > 0) return true
-        
-        // OR include if owner has sell transactions (earned profit before selling to partner)
-        const transactions = Array.isArray(inv.transactions) ? inv.transactions : []
-        const hasOwnerSell = transactions.some((tx: any) => 
-          tx.type === 'SELL_TO_PARTNER' && tx.personId === user.personId
-        )
-        return hasOwnerSell
-      })
-      const soldTarget = ownerInvestments.reduce((sum, inv) => sum + getOwnerSoldSettlement(inv).target, 0)
-      
-      // Include commission earned in total return
-      return round2(activeProfit + soldTarget + totalCommissionEarned)
-    }
-
-    // Partner: Total profit = receivable (future) + received (withdrawn)
-    const receivable = displayedInvestments.reduce((sum, inv) => sum + getNetProfit(inv), 0)
-    const received = displayedInvestments.reduce((sum, inv) => sum + getViewerReceived(inv), 0)
-    return round2(receivable + received)
-  })()
-
-  const totalWithdrawn = (() => {
-    const activeReceived = displayedInvestments
-      .filter((inv: any) => !(user.role === 'OWNER' && isSoldDealForOwner(inv)))
-      .reduce((sum, inv) => sum + getViewerReceived(inv), 0)
-
-    if (user.role !== 'OWNER' || !user.personId) return round2(activeReceived)
-
-    // Include deals where owner had participation OR has sell transactions
-    const ownerInvestments = investments.filter((inv: any) => {
-      const participants = Array.isArray(inv.dealParticipants) ? inv.dealParticipants : []
-      if (participants.length === 0) return true
-      
-      const ownerParticipation = participants.find((p: any) => p?.personId === user.personId)
-      if (!ownerParticipation) return false
-      
-      // Include if owner has current/historical principal > 0
-      const invested = Number(ownerParticipation.investedAmount || 0)
-      if (invested > 0) return true
-      
-      // OR include if owner has sell transactions (received profit before selling to partner)
-      const transactions = Array.isArray(inv.transactions) ? inv.transactions : []
-      const hasOwnerSell = transactions.some((tx: any) => 
-        tx.type === 'SELL_TO_PARTNER' && tx.personId === user.personId
-      )
-      return hasOwnerSell
-    })
-    const soldReceived = ownerInvestments.reduce((sum, inv) => sum + getOwnerSoldSettlement(inv).received, 0)
-    return round2(activeReceived + soldReceived)
-  })()
-
   const totalCommissionEarned = (() => {
     if (user.role !== 'OWNER' || !user.personId) return 0
 
@@ -574,6 +505,69 @@ export default async function InvestmentsPage() {
     }, 0)
 
     return round2(byDealCommission)
+  })()
+
+  const totalNetProfit = (() => {
+    // Owner: include realized profit + commission from sold deals even after ownership is removed
+    if (user.role === 'OWNER' && user.personId) {
+      const activeProfit = displayedInvestments
+        .filter((inv: any) => !isSoldDealForOwner(inv))
+        .reduce((sum, inv) => sum + getNetProfit(inv), 0)
+
+      // Include deals where owner had participation OR has sell transactions
+      const ownerInvestments = investments.filter((inv: any) => {
+        const participants = Array.isArray(inv.dealParticipants) ? inv.dealParticipants : []
+        if (participants.length === 0) return true
+        
+        const ownerParticipation = participants.find((p: any) => p?.personId === user.personId)
+        if (!ownerParticipation) return false
+        
+        const invested = Number(ownerParticipation.investedAmount || 0)
+        if (invested > 0) return true
+        
+        const transactions = Array.isArray(inv.transactions) ? inv.transactions : []
+        const hasOwnerSell = transactions.some((tx: any) => 
+          tx.type === 'SELL_TO_PARTNER' && tx.personId === user.personId
+        )
+        return hasOwnerSell
+      })
+      const soldTarget = ownerInvestments.reduce((sum, inv) => sum + getOwnerSoldSettlement(inv).target, 0)
+      
+      // Include commission earned in total return
+      return round2(activeProfit + soldTarget + totalCommissionEarned)
+    }
+
+    // Partner: Total profit = receivable (future) + received (withdrawn)
+    const receivable = displayedInvestments.reduce((sum, inv) => sum + getNetProfit(inv), 0)
+    const received = displayedInvestments.reduce((sum, inv) => sum + getViewerReceived(inv), 0)
+    return round2(receivable + received)
+  })()
+
+  const totalWithdrawn = (() => {
+    const activeReceived = displayedInvestments
+      .filter((inv: any) => !(user.role === 'OWNER' && isSoldDealForOwner(inv)))
+      .reduce((sum, inv) => sum + getViewerReceived(inv), 0)
+
+    if (user.role !== 'OWNER' || !user.personId) return round2(activeReceived)
+
+    const ownerInvestments = investments.filter((inv: any) => {
+      const participants = Array.isArray(inv.dealParticipants) ? inv.dealParticipants : []
+      if (participants.length === 0) return true
+      
+      const ownerParticipation = participants.find((p: any) => p?.personId === user.personId)
+      if (!ownerParticipation) return false
+      
+      const invested = Number(ownerParticipation.investedAmount || 0)
+      if (invested > 0) return true
+      
+      const transactions = Array.isArray(inv.transactions) ? inv.transactions : []
+      const hasOwnerSell = transactions.some((tx: any) => 
+        tx.type === 'SELL_TO_PARTNER' && tx.personId === user.personId
+      )
+      return hasOwnerSell
+    })
+    const soldReceived = ownerInvestments.reduce((sum, inv) => sum + getOwnerSoldSettlement(inv).received, 0)
+    return round2(activeReceived + soldReceived)
   })()
 
   const totalCommissionPaid = (() => {

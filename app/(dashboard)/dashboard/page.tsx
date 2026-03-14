@@ -776,8 +776,10 @@ export default async function DashboardPage({
       const accountType = getAccountType(inv)
       if (accountType !== 'CRYPTO') return sum
       const pos = getOwnerPosition(inv)
-      if (pos) return sum + toFiniteNumber(pos.profit)
-      return sum + toFiniteNumber(inv.realizedProfit) + toFiniteNumber(inv.unrealizedProfit)
+      const invested = pos ? toFiniteNumber(pos.investedAmount) : toFiniteNumber(inv.principalAmount)
+      const currentValue = pos ? toFiniteNumber(pos.currentValue) : toFiniteNumber(inv.currentValue)
+      const profit = currentValue - invested
+      return sum + profit
     }, 0)
 
     sipProfit = 0 // Consolidated into Malaa
@@ -1174,7 +1176,12 @@ export default async function DashboardPage({
     
     cryptoProfit = participants
       .filter((p: any) => getAccountType(p?.investment) === 'CRYPTO')
-      .reduce((sum: number, p: any) => sum + toFiniteNumber(p?.profit), 0)
+      .reduce((sum: number, p: any) => {
+        const invested = toFiniteNumber(p?.investedAmount)
+        const currentValue = toFiniteNumber(p?.currentValue)
+        const profit = currentValue - invested
+        return sum + profit
+      }, 0)
     
     sipProfit = participants
       .filter((p: any) => getAccountType(p?.investment) === 'SIP')
