@@ -17,9 +17,9 @@ export function AnimatedNumber({
   format = (v) => v.toFixed(2)
 }: AnimatedNumberProps) {
   const spring = useSpring(0, { 
-    stiffness: 100, 
+    stiffness: 200, 
     damping: 30,
-    duration: duration * 1000
+    duration: duration * 600
   })
   
   const display = useTransform(spring, (current) => format(current))
@@ -30,9 +30,9 @@ export function AnimatedNumber({
 
   return (
     <motion.span
-      initial={{ opacity: 0, y: 10 }}
+      initial={{ opacity: 0, y: 4 }}
       animate={{ opacity: 1, y: 0 }}
-      transition={{ duration: 0.5 }}
+      transition={{ duration: 0.2 }}
       className={className}
     >
       {display}

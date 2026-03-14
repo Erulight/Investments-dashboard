@@ -31,7 +31,7 @@ export function BullVsBearMascots({ emailFocused, passwordFocused, loginError }:
       const interval = setInterval(() => {
         setBullMood(prev => prev === 'fighting' ? 'angry' : 'fighting')
         setBearMood(prev => prev === 'fighting' ? 'angry' : 'fighting')
-      }, 2000)
+      }, 4000)
       return () => clearInterval(interval)
     }
   }, [loginError, emailFocused, passwordFocused])
@@ -46,7 +46,7 @@ export function BullVsBearMascots({ emailFocused, passwordFocused, loginError }:
           rotate: isFighting ? [0, -5, 0] : 0,
         }}
         transition={{
-          duration: 0.8,
+          duration: 1.5,
           repeat: isFighting ? Infinity : 0,
           ease: 'easeInOut',
         }}

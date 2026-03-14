@@ -66,11 +66,7 @@ export function LiveMarketTicker() {
     <div className="bg-slate-900/50 backdrop-blur border-t border-slate-800 py-2.5 px-4 overflow-hidden">
       <div className="flex items-center gap-6">
         <span className="text-xs font-semibold text-slate-400 uppercase tracking-wider flex items-center gap-2 flex-shrink-0">
-          <motion.span
-            className="w-1.5 h-1.5 rounded-full bg-red-500"
-            animate={{ opacity: [1, 0.4, 1] }}
-            transition={{ duration: 2, repeat: Infinity, ease: 'easeInOut' }}
-          />
+          <span className="w-1.5 h-1.5 rounded-full bg-red-500 animate-pulse" />
           Live Market
         </span>
 

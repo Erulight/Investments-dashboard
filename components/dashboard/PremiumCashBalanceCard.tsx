@@ -75,20 +75,20 @@ export function PremiumCashBalanceCard({
 
   useEffect(() => {
     const controls = animate(displayValue, cashBalance, {
-      duration: 2,
+      duration: 0.8,
       ease: 'easeOut',
-      delay: index * 0.1,
     })
     return controls.stop
-  }, [cashBalance, displayValue, index])
+  }, [cashBalance, displayValue])
 
   const handleMouseMove = (e: React.MouseEvent<HTMLDivElement>) => {
-    if (!cardRef.current) return
+    if (!cardRef.current || !isHovered) return
     const rect = cardRef.current.getBoundingClientRect()
-    setMousePosition({
-      x: e.clientX - rect.left,
-      y: e.clientY - rect.top,
-    })
+    const x = e.clientX - rect.left
+    const y = e.clientY - rect.top
+    if (Math.abs(x - mousePosition.x) > 20 || Math.abs(y - mousePosition.y) > 20) {
+      setMousePosition({ x, y })
+    }
   }
 
   const chartData = sparklineData?.map((val, idx) => ({ value: val, index: idx })) || []
@@ -199,11 +199,11 @@ export function PremiumCashBalanceCard({
   return (
     <motion.div
       ref={cardRef}
-      initial={{ opacity: 0, y: 50 }}
+      initial={{ opacity: 0, y: 20 }}
       animate={{ opacity: 1, y: 0 }}
       transition={{
-        duration: 0.6,
-        delay: index * 0.15,
+        duration: 0.3,
+        delay: index * 0.05,
         ease: [0.22, 1, 0.36, 1],
       }}
       whileHover={showForm ? {} : { scale: 1.02, y: -4 }}
@@ -219,17 +219,7 @@ export function PremiumCashBalanceCard({
         <div className="absolute inset-0 bg-gradient-to-br from-cyan-500/5 via-transparent to-purple-500/5 pointer-events-none" />
         <div className="absolute -top-24 -right-24 w-48 h-48 bg-cyan-500/10 rounded-full blur-3xl pointer-events-none" />
         <div className="absolute -bottom-24 -left-24 w-48 h-48 bg-purple-500/10 rounded-full blur-3xl pointer-events-none" />
-        <motion.div
-          className={`absolute top-0 left-0 right-0 h-[2px] bg-gradient-to-r ${colors.gradient}`}
-          initial={{ x: '-100%' }}
-          animate={{ x: '100%' }}
-          transition={{
-            duration: 3,
-            repeat: Infinity,
-            ease: 'linear',
-            delay: index * 0.2,
-          }}
-        />
+        <div className={`absolute top-0 left-0 right-0 h-[2px] bg-gradient-to-r ${colors.gradient}`} />
 
         {isHovered && (
           <motion.div
@@ -447,9 +437,7 @@ export function PremiumCashBalanceCard({
                     stroke={colors.sparkline}
                     strokeWidth={2}
                     fill="url(#gradient-cash)"
-                    isAnimationActive={true}
-                    animationDuration={1500}
-                    animationBegin={index * 100}
+                    isAnimationActive={false}
                   />
                 </AreaChart>
               </ResponsiveContainer>

@@ -112,7 +112,7 @@ export function ReceivableByYearCard({
                       initial={{ opacity: 0, y: 30 }}
                       animate={{ opacity: 1, y: 0 }}
                       exit={{ opacity: 0, scale: 0.9 }}
-                      transition={{ delay: index * 0.15, duration: 0.5, type: 'spring' }}
+                      transition={{ delay: index * 0.05, duration: 0.3, type: 'spring' }}
                       onClick={() => setSelectedYear(point)}
                       className="group relative cursor-pointer"
                       whileHover={{ scale: 1.08, y: -8 }}
@@ -214,26 +214,26 @@ export function ReceivableByYearCard({
                               />
                               
                               {/* Bubbles */}
-                              {isInView && [0, 1, 2, 3, 4].map((bubble) => (
+                              {isInView && [0, 1, 2].map((bubble) => (
                                 <motion.circle
                                   key={bubble}
                                   r="1.5"
                                   fill="rgba(255, 255, 255, 0.6)"
                                   clipPath={`url(#beaker-clip-${index})`}
                                   initial={{ 
-                                    cx: 35 + (bubble * 8),
+                                    cx: 35 + (bubble * 12),
                                     cy: 110,
                                     opacity: 0
                                   }}
                                   animate={{
-                                    cx: 35 + (bubble * 8) + Math.sin(bubble) * 5,
+                                    cx: 35 + (bubble * 12) + Math.sin(bubble) * 5,
                                     cy: [110, 110 - pct, 110 - pct - 20],
                                     opacity: [0, 0.8, 0],
                                   }}
                                   transition={{
-                                    duration: 3 + bubble * 0.5,
+                                    duration: 6 + bubble * 1,
                                     repeat: Infinity,
-                                    delay: index * 0.3 + bubble * 0.4,
+                                    delay: index * 0.3 + bubble * 0.8,
                                     ease: 'easeInOut'
                                   }}
                                 />
@@ -255,7 +255,7 @@ export function ReceivableByYearCard({
                                 transition={{
                                   y1: { duration: 2, delay: index * 0.2 },
                                   y2: { duration: 2, delay: index * 0.2 },
-                                  opacity: { duration: 2, repeat: Infinity, ease: 'easeInOut' }
+                                  opacity: { duration: 5, repeat: Infinity, ease: 'easeInOut' }
                                 }}
                               />
                             </svg>

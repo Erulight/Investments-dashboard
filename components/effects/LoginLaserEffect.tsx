@@ -7,17 +7,17 @@ export function LoginLaserEffect({ onComplete }: { onComplete?: () => void }) {
   const [particles, setParticles] = useState<Array<{ id: number; x: number; y: number; angle: number }>>([])
 
   useEffect(() => {
-    const particleArray = Array.from({ length: 50 }, (_, i) => ({
+    const particleArray = Array.from({ length: 20 }, (_, i) => ({
       id: i,
       x: window.innerWidth / 2,
       y: window.innerHeight / 2,
-      angle: (Math.PI * 2 * i) / 50,
+      angle: (Math.PI * 2 * i) / 20,
     }))
     setParticles(particleArray)
 
     const timer = setTimeout(() => {
       onComplete?.()
-    }, 2000)
+    }, 1200)
 
     return () => clearTimeout(timer)
   }, [onComplete])
@@ -29,7 +29,7 @@ export function LoginLaserEffect({ onComplete }: { onComplete?: () => void }) {
         className="absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2"
         initial={{ scale: 0, opacity: 1 }}
         animate={{ scale: 3, opacity: 0 }}
-        transition={{ duration: 1.5, ease: 'easeOut' }}
+        transition={{ duration: 1, ease: 'easeOut' }}
       >
         <div className="w-32 h-32 bg-gradient-radial from-cyan-400 via-blue-500 to-transparent rounded-full blur-xl" />
       </motion.div>
@@ -46,7 +46,7 @@ export function LoginLaserEffect({ onComplete }: { onComplete?: () => void }) {
             opacity: 0,
           }}
           transition={{
-            duration: 1.5,
+            duration: 1,
             ease: 'easeOut',
             delay: particle.id * 0.01,
           }}
@@ -63,9 +63,9 @@ export function LoginLaserEffect({ onComplete }: { onComplete?: () => void }) {
           initial={{ width: 0, height: 0, opacity: 0.8 }}
           animate={{ width: 800, height: 800, opacity: 0 }}
           transition={{
-            duration: 2,
+            duration: 1.2,
             ease: 'easeOut',
-            delay: i * 0.2,
+            delay: i * 0.15,
           }}
         />
       ))}
@@ -75,7 +75,7 @@ export function LoginLaserEffect({ onComplete }: { onComplete?: () => void }) {
         className="absolute inset-0"
         initial={{ opacity: 0 }}
         animate={{ opacity: [0, 0.3, 0] }}
-        transition={{ duration: 1.5 }}
+        transition={{ duration: 1 }}
       >
         <svg className="w-full h-full">
           <defs>
@@ -92,7 +92,7 @@ export function LoginLaserEffect({ onComplete }: { onComplete?: () => void }) {
         className="absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2"
         initial={{ opacity: 0, scale: 0.5 }}
         animate={{ opacity: [0, 1, 0], scale: [0.5, 1.2, 1] }}
-        transition={{ duration: 1.5 }}
+        transition={{ duration: 1 }}
       >
         <div className="text-4xl font-bold text-cyan-400 tracking-wider" style={{ textShadow: '0 0 20px #22d3ee' }}>
           AUTHENTICATED

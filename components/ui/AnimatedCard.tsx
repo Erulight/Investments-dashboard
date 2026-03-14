@@ -13,14 +13,14 @@ interface AnimatedCardProps {
 export function AnimatedCard({ children, index = 0, className = '', hover = true }: AnimatedCardProps) {
   return (
     <motion.div
-      initial={{ opacity: 0, y: 20 }}
+      initial={{ opacity: 0, y: 10 }}
       animate={{ opacity: 1, y: 0 }}
       transition={{
-        duration: 0.5,
-        delay: index * 0.1,
+        duration: 0.25,
+        delay: Math.min(index * 0.04, 0.2),
         ease: [0.22, 1, 0.36, 1],
       }}
-      whileHover={hover ? { scale: 1.02, y: -4 } : undefined}
+      whileHover={hover ? { scale: 1.01, y: -2 } : undefined}
       className={`premium-card ${className}`}
     >
       {children}
@@ -31,11 +31,11 @@ export function AnimatedCard({ children, index = 0, className = '', hover = true
 export function AnimatedTableRow({ children, index = 0, className = '' }: AnimatedCardProps) {
   return (
     <motion.tr
-      initial={{ opacity: 0, x: -20 }}
+      initial={{ opacity: 0, x: -8 }}
       animate={{ opacity: 1, x: 0 }}
       transition={{
-        duration: 0.4,
-        delay: index * 0.05,
+        duration: 0.15,
+        delay: Math.min(index * 0.02, 0.3),
         ease: 'easeOut',
       }}
       whileHover={{ backgroundColor: 'rgba(148, 163, 184, 0.05)' }}

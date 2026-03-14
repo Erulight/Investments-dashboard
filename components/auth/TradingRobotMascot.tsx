@@ -64,7 +64,7 @@ export function TradingRobotMascot({ emailFocused, passwordFocused, loginError }
         x: Math.random() * maxX + 50,
         y: Math.random() * maxY + 50
       })
-    }, 4000)
+    }, 8000)
 
     return () => clearInterval(floatInterval)
   }, [])
@@ -95,7 +95,7 @@ export function TradingRobotMascot({ emailFocused, passwordFocused, loginError }
         setSarcasticMessage(sarcasticMessages[Math.floor(Math.random() * sarcasticMessages.length)])
         setTimeout(() => setSarcasticMessage(''), 3000)
       }
-    }, 5000)
+    }, 10000)
 
     return () => clearInterval(expressionInterval)
   }, [action])
@@ -125,7 +125,7 @@ export function TradingRobotMascot({ emailFocused, passwordFocused, loginError }
           y: action === 'idle' ? [0, -10, 0] : 0,
         }}
         transition={{
-          duration: 2,
+          duration: 4,
           repeat: Infinity,
           ease: 'easeInOut',
         }}
@@ -272,7 +272,7 @@ export function TradingRobotMascot({ emailFocused, passwordFocused, loginError }
                     initial={{ pathLength: 0 }}
                     animate={{ pathLength: 1 }}
                     transition={{
-                      duration: 2,
+                      duration: 5,
                       repeat: Infinity,
                       ease: 'linear',
                     }}
@@ -289,36 +289,15 @@ export function TradingRobotMascot({ emailFocused, passwordFocused, loginError }
               {/* Status lights */}
               <div className="absolute bottom-2 left-3 flex gap-1">
                 <motion.div
-                  className="w-2 h-2 rounded-full bg-green-500"
-                  animate={{
-                    opacity: [1, 0.3, 1],
-                  }}
-                  transition={{
-                    duration: 1,
-                    repeat: Infinity,
-                  }}
+                  className="w-2 h-2 rounded-full bg-green-500 animate-pulse"
                 />
                 <motion.div
-                  className="w-2 h-2 rounded-full bg-blue-500"
-                  animate={{
-                    opacity: [1, 0.3, 1],
-                  }}
-                  transition={{
-                    duration: 1,
-                    repeat: Infinity,
-                    delay: 0.3,
-                  }}
+                  className="w-2 h-2 rounded-full bg-blue-500 animate-pulse"
+                  style={{ animationDelay: '0.3s' }}
                 />
                 <motion.div
-                  className="w-2 h-2 rounded-full bg-yellow-500"
-                  animate={{
-                    opacity: [1, 0.3, 1],
-                  }}
-                  transition={{
-                    duration: 1,
-                    repeat: Infinity,
-                    delay: 0.6,
-                  }}
+                  className="w-2 h-2 rounded-full bg-yellow-500 animate-pulse"
+                  style={{ animationDelay: '0.6s' }}
                 />
               </div>
             </div>

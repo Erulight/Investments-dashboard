@@ -85,7 +85,7 @@ export function FoxMascot({ profit, isLoading }: FoxMascotProps) {
         setIsJumping(true)
         setTimeout(() => setIsJumping(false), 600)
       }
-    }, 3500) // Fixed interval for consistent movement
+    }, 6000) // Fixed interval for consistent movement
 
     return () => clearInterval(moveInterval)
   }, [])
@@ -140,7 +140,7 @@ export function FoxMascot({ profit, isLoading }: FoxMascotProps) {
             opacity: [0.4, 0.6, 0.4],
           }}
           transition={{
-            duration: 2,
+            duration: 5,
             repeat: Infinity,
             ease: 'easeInOut',
           }}
@@ -166,14 +166,14 @@ export function FoxMascot({ profit, isLoading }: FoxMascotProps) {
             d="M 35 30 L 30 15 L 40 25 Z"
             fill={foxColor}
             animate={{ rotate: [0, -5, 0] }}
-            transition={{ duration: 2, repeat: Infinity, ease: 'easeInOut' }}
+            transition={{ duration: 5, repeat: Infinity, ease: 'easeInOut' }}
             style={{ originX: '35px', originY: '25px' }}
           />
           <motion.path
             d="M 65 30 L 70 15 L 60 25 Z"
             fill={foxColor}
             animate={{ rotate: [0, 5, 0] }}
-            transition={{ duration: 2, repeat: Infinity, ease: 'easeInOut' }}
+            transition={{ duration: 5, repeat: Infinity, ease: 'easeInOut' }}
             style={{ originX: '65px', originY: '25px' }}
           />
           
@@ -223,7 +223,7 @@ export function FoxMascot({ profit, isLoading }: FoxMascotProps) {
               ],
             }}
             transition={{
-              duration: 1.5,
+              duration: 4,
               repeat: Infinity,
               ease: 'easeInOut',
             }}
@@ -243,7 +243,7 @@ export function FoxMascot({ profit, isLoading }: FoxMascotProps) {
               ],
             }}
             transition={{
-              duration: 1.5,
+              duration: 4,
               repeat: Infinity,
               ease: 'easeInOut',
             }}

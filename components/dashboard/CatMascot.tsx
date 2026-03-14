@@ -27,7 +27,7 @@ function CatSVG({ state, direction }: { state: CatState; direction: 1 | -1 }) {
         strokeLinecap="round"
         fill="none"
         animate={{ rotate: [0, 12, -8, 12, 0] }}
-        transition={{ duration: 2.4, repeat: Infinity, ease: 'easeInOut' }}
+        transition={{ duration: 5, repeat: Infinity, ease: 'easeInOut' }}
         style={{ transformOrigin: '18px 65px' }}
       />
 
@@ -59,7 +59,7 @@ function CatSVG({ state, direction }: { state: CatState; direction: 1 | -1 }) {
             fill="#b08860"
             stroke="#a07848" strokeWidth="1"
             animate={legPhase ? { rotate: [6, -6, 6] } : { rotate: 0 }}
-            transition={{ duration: 0.55, repeat: Infinity, ease: 'linear' }}
+            transition={{ duration: 2, repeat: Infinity, ease: 'linear' }}
             style={{ transformOrigin: '30px 68px' }}
           />
           <motion.rect
@@ -67,7 +67,7 @@ function CatSVG({ state, direction }: { state: CatState; direction: 1 | -1 }) {
             fill="#b08860"
             stroke="#a07848" strokeWidth="1"
             animate={legPhase ? { rotate: [-6, 6, -6] } : { rotate: 0 }}
-            transition={{ duration: 0.55, repeat: Infinity, ease: 'linear' }}
+            transition={{ duration: 2, repeat: Infinity, ease: 'linear' }}
             style={{ transformOrigin: '45px 68px' }}
           />
         </>
@@ -88,7 +88,7 @@ function CatSVG({ state, direction }: { state: CatState; direction: 1 | -1 }) {
             fill="#c49a6c"
             stroke="#a07848" strokeWidth="1"
             animate={legPhase ? { rotate: [-6, 6, -6] } : { rotate: 0 }}
-            transition={{ duration: 0.55, repeat: Infinity, ease: 'linear' }}
+            transition={{ duration: 2, repeat: Infinity, ease: 'linear' }}
             style={{ transformOrigin: '67px 67px' }}
           />
           <motion.rect
@@ -96,7 +96,7 @@ function CatSVG({ state, direction }: { state: CatState; direction: 1 | -1 }) {
             fill="#c49a6c"
             stroke="#a07848" strokeWidth="1"
             animate={legPhase ? { rotate: [6, -6, 6] } : { rotate: 0 }}
-            transition={{ duration: 0.55, repeat: Infinity, ease: 'linear' }}
+            transition={{ duration: 2, repeat: Infinity, ease: 'linear' }}
             style={{ transformOrigin: '81px 67px' }}
           />
         </>
@@ -140,7 +140,7 @@ function CatSVG({ state, direction }: { state: CatState; direction: 1 | -1 }) {
         ry={isJumping ? 5 : 3.5}
         fill="#2a1a0e"
         animate={{ scaleY: [1, 0.15, 1, 1, 1] }}
-        transition={{ duration: 4.5, repeat: Infinity, times: [0, 0.05, 0.1, 0.5, 1] }}
+        transition={{ duration: 8, repeat: Infinity, times: [0, 0.03, 0.06, 0.5, 1] }}
       />
       <motion.ellipse
         cx="89"
@@ -149,7 +149,7 @@ function CatSVG({ state, direction }: { state: CatState; direction: 1 | -1 }) {
         ry={isJumping ? 5 : 3.5}
         fill="#2a1a0e"
         animate={{ scaleY: [1, 0.15, 1, 1, 1] }}
-        transition={{ duration: 4.5, repeat: Infinity, times: [0, 0.05, 0.1, 0.5, 1] }}
+        transition={{ duration: 8, repeat: Infinity, times: [0, 0.03, 0.06, 0.5, 1] }}
       />
       {/* Eye shine */}
       <circle cx="78" cy={isSitting ? 40 : 34} r="1.5" fill="white" />

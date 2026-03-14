@@ -28,7 +28,7 @@ export function TradingChartOverlay() {
         newPoints.push(newValue)
         return newPoints
       })
-    }, 2000)
+    }, 10000)
 
     return () => clearInterval(interval)
   }, [])
@@ -63,34 +63,24 @@ export function TradingChartOverlay() {
         ))}
         
         {/* Chart line */}
-        <motion.path
+        <path
           d={pathData}
           fill="none"
           stroke="#22d3ee"
           strokeWidth="2"
-          initial={{ pathLength: 0 }}
-          animate={{ pathLength: 1 }}
-          transition={{ duration: 2 }}
         />
         
         {/* Fill area */}
-        <motion.path
+        <path
           d={`${pathData} L 100 100 L 0 100 Z`}
           fill="url(#chartGradient)"
-          initial={{ opacity: 0 }}
-          animate={{ opacity: 1 }}
-          transition={{ duration: 1 }}
         />
       </svg>
       
       {/* Ticker text */}
-      <motion.div
-        className="absolute bottom-0 left-0 text-xs font-mono text-cyan-400"
-        animate={{ opacity: [0.5, 1, 0.5] }}
-        transition={{ duration: 2, repeat: Infinity }}
-      >
+      <div className="absolute bottom-0 left-0 text-xs font-mono text-cyan-400 opacity-70">
         LIVE MARKET
-      </motion.div>
+      </div>
     </div>
   )
 }

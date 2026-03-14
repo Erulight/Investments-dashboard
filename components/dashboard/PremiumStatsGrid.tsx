@@ -198,10 +198,10 @@ export function PremiumStatsGrid({
           className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm"
         >
           <motion.div
-            initial={{ scale: 0.9, opacity: 0, y: 20 }}
+            initial={{ scale: 0.95, opacity: 0, y: 10 }}
             animate={{ scale: 1, opacity: 1, y: 0 }}
-            exit={{ scale: 0.9, opacity: 0, y: 20 }}
-            transition={{ type: 'spring', duration: 0.5 }}
+            exit={{ scale: 0.95, opacity: 0, y: 10 }}
+            transition={{ type: 'spring', duration: 0.25 }}
             onClick={(e) => e.stopPropagation()}
             className="bg-gradient-to-br from-slate-900 via-slate-800 to-slate-900 rounded-2xl shadow-2xl w-full max-w-2xl border-2 border-yellow-500/30 overflow-hidden"
           >
@@ -226,7 +226,7 @@ export function PremiumStatsGrid({
             <div className="px-8 py-6 max-h-[70vh] overflow-y-auto">
               <div className="space-y-3">
                 {portfolioBreakdown.cash > 0 && (
-                  <motion.div initial={{ x: -20, opacity: 0 }} animate={{ x: 0, opacity: 1 }} transition={{ delay: 0.1 }} className="group relative p-4 rounded-xl bg-gradient-to-r from-cyan-500/10 to-cyan-600/10 border border-cyan-500/20 hover:border-cyan-400/40 transition-all duration-300">
+                  <motion.div initial={{ x: -8, opacity: 0 }} animate={{ x: 0, opacity: 1 }} transition={{ delay: 0.03 }} className="group relative p-4 rounded-xl bg-gradient-to-r from-cyan-500/10 to-cyan-600/10 border border-cyan-500/20 hover:border-cyan-400/40 transition-all duration-300">
                     <div className="absolute inset-0 bg-gradient-to-r from-cyan-500/5 to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-300 rounded-xl" />
                     <div className="relative flex items-center justify-between">
                       <div className="flex items-center gap-3">
@@ -238,7 +238,7 @@ export function PremiumStatsGrid({
                   </motion.div>
                 )}
                 {portfolioBreakdown.sukuk > 0 && (
-                  <motion.div initial={{ x: -20, opacity: 0 }} animate={{ x: 0, opacity: 1 }} transition={{ delay: 0.15 }} className="group relative p-4 rounded-xl bg-gradient-to-r from-purple-500/10 to-purple-600/10 border border-purple-500/20 hover:border-purple-400/40 transition-all duration-300">
+                  <motion.div initial={{ x: -8, opacity: 0 }} animate={{ x: 0, opacity: 1 }} transition={{ delay: 0.06 }} className="group relative p-4 rounded-xl bg-gradient-to-r from-purple-500/10 to-purple-600/10 border border-purple-500/20 hover:border-purple-400/40 transition-all duration-300">
                     <div className="absolute inset-0 bg-gradient-to-r from-purple-500/5 to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-300 rounded-xl" />
                     <div className="relative flex items-center justify-between">
                       <div className="flex items-center gap-3">
@@ -250,7 +250,7 @@ export function PremiumStatsGrid({
                   </motion.div>
                 )}
                 {portfolioBreakdown.malaa > 0 && (
-                  <motion.div initial={{ x: -20, opacity: 0 }} animate={{ x: 0, opacity: 1 }} transition={{ delay: 0.2 }} className="group relative p-4 rounded-xl bg-gradient-to-r from-blue-500/10 to-blue-600/10 border border-blue-500/20 hover:border-blue-400/40 transition-all duration-300">
+                  <motion.div initial={{ x: -8, opacity: 0 }} animate={{ x: 0, opacity: 1 }} transition={{ delay: 0.08 }} className="group relative p-4 rounded-xl bg-gradient-to-r from-blue-500/10 to-blue-600/10 border border-blue-500/20 hover:border-blue-400/40 transition-all duration-300">
                     <div className="absolute inset-0 bg-gradient-to-r from-blue-500/5 to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-300 rounded-xl" />
                     <div className="relative flex items-center justify-between">
                       <div className="flex items-center gap-3">
@@ -262,7 +262,7 @@ export function PremiumStatsGrid({
                   </motion.div>
                 )}
                 {portfolioBreakdown.crypto > 0 && (
-                  <motion.div initial={{ x: -20, opacity: 0 }} animate={{ x: 0, opacity: 1 }} transition={{ delay: 0.25 }} className="group relative p-4 rounded-xl bg-gradient-to-r from-orange-500/10 to-orange-600/10 border border-orange-500/20 hover:border-orange-400/40 transition-all duration-300">
+                  <motion.div initial={{ x: -8, opacity: 0 }} animate={{ x: 0, opacity: 1 }} transition={{ delay: 0.1 }} className="group relative p-4 rounded-xl bg-gradient-to-r from-orange-500/10 to-orange-600/10 border border-orange-500/20 hover:border-orange-400/40 transition-all duration-300">
                     <div className="absolute inset-0 bg-gradient-to-r from-orange-500/5 to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-300 rounded-xl" />
                     <div className="relative flex items-center justify-between">
                       <div className="flex items-center gap-3">
@@ -274,7 +274,7 @@ export function PremiumStatsGrid({
                   </motion.div>
                 )}
                 {portfolioBreakdown.circlys > 0 && (
-                  <motion.div initial={{ x: -20, opacity: 0 }} animate={{ x: 0, opacity: 1 }} transition={{ delay: 0.3 }} className="group relative p-4 rounded-xl bg-gradient-to-r from-pink-500/10 to-pink-600/10 border border-pink-500/20 hover:border-pink-400/40 transition-all duration-300">
+                  <motion.div initial={{ x: -8, opacity: 0 }} animate={{ x: 0, opacity: 1 }} transition={{ delay: 0.12 }} className="group relative p-4 rounded-xl bg-gradient-to-r from-pink-500/10 to-pink-600/10 border border-pink-500/20 hover:border-pink-400/40 transition-all duration-300">
                     <div className="absolute inset-0 bg-gradient-to-r from-pink-500/5 to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-300 rounded-xl" />
                     <div className="relative flex items-center justify-between">
                       <div className="flex items-center gap-3">
@@ -286,7 +286,7 @@ export function PremiumStatsGrid({
                   </motion.div>
                 )}
                 {portfolioBreakdown.other > 0 && (
-                  <motion.div initial={{ x: -20, opacity: 0 }} animate={{ x: 0, opacity: 1 }} transition={{ delay: 0.35 }} className="group relative p-4 rounded-xl bg-gradient-to-r from-slate-500/10 to-slate-600/10 border border-slate-500/20 hover:border-slate-400/40 transition-all duration-300">
+                  <motion.div initial={{ x: -8, opacity: 0 }} animate={{ x: 0, opacity: 1 }} transition={{ delay: 0.14 }} className="group relative p-4 rounded-xl bg-gradient-to-r from-slate-500/10 to-slate-600/10 border border-slate-500/20 hover:border-slate-400/40 transition-all duration-300">
                     <div className="absolute inset-0 bg-gradient-to-r from-slate-500/5 to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-300 rounded-xl" />
                     <div className="relative flex items-center justify-between">
                       <div className="flex items-center gap-3">
@@ -298,7 +298,7 @@ export function PremiumStatsGrid({
                   </motion.div>
                 )}
               </div>
-              <motion.div initial={{ y: 20, opacity: 0 }} animate={{ y: 0, opacity: 1 }} transition={{ delay: 0.4 }} className="mt-6 p-6 rounded-xl bg-gradient-to-r from-yellow-500/20 to-amber-500/20 border-2 border-yellow-500/40">
+              <motion.div initial={{ y: 8, opacity: 0 }} animate={{ y: 0, opacity: 1 }} transition={{ delay: 0.16 }} className="mt-6 p-6 rounded-xl bg-gradient-to-r from-yellow-500/20 to-amber-500/20 border-2 border-yellow-500/40">
                 <div className="flex items-center justify-between">
                   <div><p className="text-sm font-medium text-slate-400 uppercase tracking-wider">Total Portfolio Value</p><p className="text-xs text-slate-500 mt-1">Cash + All Investments</p></div>
                   <p className="text-3xl font-bold bg-gradient-to-r from-yellow-400 to-amber-400 bg-clip-text text-transparent tabular-nums">{portfolioValue.toLocaleString('en-US', { minimumFractionDigits: 2 })} {currencyPrefix}</p>
@@ -319,10 +319,10 @@ export function PremiumStatsGrid({
           className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm"
         >
           <motion.div
-            initial={{ scale: 0.9, opacity: 0, y: 20 }}
+            initial={{ scale: 0.95, opacity: 0, y: 10 }}
             animate={{ scale: 1, opacity: 1, y: 0 }}
-            exit={{ scale: 0.9, opacity: 0, y: 20 }}
-            transition={{ type: 'spring', duration: 0.5 }}
+            exit={{ scale: 0.95, opacity: 0, y: 10 }}
+            transition={{ type: 'spring', duration: 0.25 }}
             onClick={(e) => e.stopPropagation()}
             className="bg-gradient-to-br from-slate-900 via-slate-800 to-slate-900 rounded-2xl shadow-2xl w-full max-w-lg border-2 border-cyan-500/30 overflow-hidden"
           >
@@ -346,7 +346,7 @@ export function PremiumStatsGrid({
             </div>
             <div className="px-8 py-6">
               <div className="space-y-3">
-                <motion.div initial={{ x: -20, opacity: 0 }} animate={{ x: 0, opacity: 1 }} transition={{ delay: 0.1 }} className="group relative p-4 rounded-xl bg-gradient-to-r from-emerald-500/10 to-emerald-600/10 border border-emerald-500/20 hover:border-emerald-400/40 transition-all duration-300">
+                <motion.div initial={{ x: -8, opacity: 0 }} animate={{ x: 0, opacity: 1 }} transition={{ delay: 0.03 }} className="group relative p-4 rounded-xl bg-gradient-to-r from-emerald-500/10 to-emerald-600/10 border border-emerald-500/20 hover:border-emerald-400/40 transition-all duration-300">
                   <div className="absolute inset-0 bg-gradient-to-r from-emerald-500/5 to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-300 rounded-xl" />
                   <div className="relative flex items-center justify-between">
                     <div className="flex items-center gap-3">
@@ -357,7 +357,7 @@ export function PremiumStatsGrid({
                   </div>
                 </motion.div>
                 {cashBreakdown.setting !== 0 && (
-                  <motion.div initial={{ x: -20, opacity: 0 }} animate={{ x: 0, opacity: 1 }} transition={{ delay: 0.15 }} className={`group relative p-4 rounded-xl ${cashBreakdown.setting > 0 ? 'bg-gradient-to-r from-amber-500/10 to-amber-600/10 border border-amber-500/20 hover:border-amber-400/40' : 'bg-gradient-to-r from-red-500/10 to-red-600/10 border border-red-500/20 hover:border-red-400/40'} transition-all duration-300`}>
+                  <motion.div initial={{ x: -8, opacity: 0 }} animate={{ x: 0, opacity: 1 }} transition={{ delay: 0.06 }} className={`group relative p-4 rounded-xl ${cashBreakdown.setting > 0 ? 'bg-gradient-to-r from-amber-500/10 to-amber-600/10 border border-amber-500/20 hover:border-amber-400/40' : 'bg-gradient-to-r from-red-500/10 to-red-600/10 border border-red-500/20 hover:border-red-400/40'} transition-all duration-300`}>
                     <div className={`absolute inset-0 ${cashBreakdown.setting > 0 ? 'bg-gradient-to-r from-amber-500/5' : 'bg-gradient-to-r from-red-500/5'} to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-300 rounded-xl`} />
                     <div className="relative flex items-center justify-between">
                       <div className="flex items-center gap-3">
@@ -384,10 +384,10 @@ export function PremiumStatsGrid({
           className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm"
         >
           <motion.div
-            initial={{ scale: 0.9, opacity: 0, y: 20 }}
+            initial={{ scale: 0.95, opacity: 0, y: 10 }}
             animate={{ scale: 1, opacity: 1, y: 0 }}
-            exit={{ scale: 0.9, opacity: 0, y: 20 }}
-            transition={{ type: 'spring', duration: 0.5 }}
+            exit={{ scale: 0.95, opacity: 0, y: 10 }}
+            transition={{ type: 'spring', duration: 0.25 }}
             onClick={(e) => e.stopPropagation()}
             className="bg-gradient-to-br from-slate-900 via-slate-800 to-slate-900 rounded-2xl shadow-2xl w-full max-w-2xl border-2 border-purple-500/30 overflow-hidden"
           >
@@ -412,7 +412,7 @@ export function PremiumStatsGrid({
             <div className="px-8 py-6 max-h-[70vh] overflow-y-auto">
               <div className="space-y-3">
                 {investedBreakdown.sukuk > 0 && (
-                  <motion.div initial={{ x: -20, opacity: 0 }} animate={{ x: 0, opacity: 1 }} transition={{ delay: 0.1 }} className="group relative p-4 rounded-xl bg-gradient-to-r from-purple-500/10 to-purple-600/10 border border-purple-500/20 hover:border-purple-400/40 transition-all duration-300">
+                  <motion.div initial={{ x: -8, opacity: 0 }} animate={{ x: 0, opacity: 1 }} transition={{ delay: 0.03 }} className="group relative p-4 rounded-xl bg-gradient-to-r from-purple-500/10 to-purple-600/10 border border-purple-500/20 hover:border-purple-400/40 transition-all duration-300">
                     <div className="absolute inset-0 bg-gradient-to-r from-purple-500/5 to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-300 rounded-xl" />
                     <div className="relative flex items-center justify-between">
                       <div className="flex items-center gap-3">
@@ -424,7 +424,7 @@ export function PremiumStatsGrid({
                   </motion.div>
                 )}
                 {investedBreakdown.malaa > 0 && (
-                  <motion.div initial={{ x: -20, opacity: 0 }} animate={{ x: 0, opacity: 1 }} transition={{ delay: 0.15 }} className="group relative p-4 rounded-xl bg-gradient-to-r from-blue-500/10 to-blue-600/10 border border-blue-500/20 hover:border-blue-400/40 transition-all duration-300">
+                  <motion.div initial={{ x: -8, opacity: 0 }} animate={{ x: 0, opacity: 1 }} transition={{ delay: 0.06 }} className="group relative p-4 rounded-xl bg-gradient-to-r from-blue-500/10 to-blue-600/10 border border-blue-500/20 hover:border-blue-400/40 transition-all duration-300">
                     <div className="absolute inset-0 bg-gradient-to-r from-blue-500/5 to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-300 rounded-xl" />
                     <div className="relative flex items-center justify-between">
                       <div className="flex items-center gap-3">
@@ -436,7 +436,7 @@ export function PremiumStatsGrid({
                   </motion.div>
                 )}
                 {investedBreakdown.crypto > 0 && (
-                  <motion.div initial={{ x: -20, opacity: 0 }} animate={{ x: 0, opacity: 1 }} transition={{ delay: 0.2 }} className="group relative p-4 rounded-xl bg-gradient-to-r from-orange-500/10 to-orange-600/10 border border-orange-500/20 hover:border-orange-400/40 transition-all duration-300">
+                  <motion.div initial={{ x: -8, opacity: 0 }} animate={{ x: 0, opacity: 1 }} transition={{ delay: 0.08 }} className="group relative p-4 rounded-xl bg-gradient-to-r from-orange-500/10 to-orange-600/10 border border-orange-500/20 hover:border-orange-400/40 transition-all duration-300">
                     <div className="absolute inset-0 bg-gradient-to-r from-orange-500/5 to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-300 rounded-xl" />
                     <div className="relative flex items-center justify-between">
                       <div className="flex items-center gap-3">
@@ -448,7 +448,7 @@ export function PremiumStatsGrid({
                   </motion.div>
                 )}
                 {investedBreakdown.circlys > 0 && (
-                  <motion.div initial={{ x: -20, opacity: 0 }} animate={{ x: 0, opacity: 1 }} transition={{ delay: 0.25 }} className="group relative p-4 rounded-xl bg-gradient-to-r from-pink-500/10 to-pink-600/10 border border-pink-500/20 hover:border-pink-400/40 transition-all duration-300">
+                  <motion.div initial={{ x: -8, opacity: 0 }} animate={{ x: 0, opacity: 1 }} transition={{ delay: 0.1 }} className="group relative p-4 rounded-xl bg-gradient-to-r from-pink-500/10 to-pink-600/10 border border-pink-500/20 hover:border-pink-400/40 transition-all duration-300">
                     <div className="absolute inset-0 bg-gradient-to-r from-pink-500/5 to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-300 rounded-xl" />
                     <div className="relative flex items-center justify-between">
                       <div className="flex items-center gap-3">
@@ -460,7 +460,7 @@ export function PremiumStatsGrid({
                   </motion.div>
                 )}
                 {investedBreakdown.other > 0 && (
-                  <motion.div initial={{ x: -20, opacity: 0 }} animate={{ x: 0, opacity: 1 }} transition={{ delay: 0.3 }} className="group relative p-4 rounded-xl bg-gradient-to-r from-slate-500/10 to-slate-600/10 border border-slate-500/20 hover:border-slate-400/40 transition-all duration-300">
+                  <motion.div initial={{ x: -8, opacity: 0 }} animate={{ x: 0, opacity: 1 }} transition={{ delay: 0.12 }} className="group relative p-4 rounded-xl bg-gradient-to-r from-slate-500/10 to-slate-600/10 border border-slate-500/20 hover:border-slate-400/40 transition-all duration-300">
                     <div className="absolute inset-0 bg-gradient-to-r from-slate-500/5 to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-300 rounded-xl" />
                     <div className="relative flex items-center justify-between">
                       <div className="flex items-center gap-3">
@@ -472,7 +472,7 @@ export function PremiumStatsGrid({
                   </motion.div>
                 )}
               </div>
-              <motion.div initial={{ y: 20, opacity: 0 }} animate={{ y: 0, opacity: 1 }} transition={{ delay: 0.35 }} className="mt-6 p-6 rounded-xl bg-gradient-to-r from-purple-500/20 to-violet-500/20 border-2 border-purple-500/40">
+              <motion.div initial={{ y: 8, opacity: 0 }} animate={{ y: 0, opacity: 1 }} transition={{ delay: 0.14 }} className="mt-6 p-6 rounded-xl bg-gradient-to-r from-purple-500/20 to-violet-500/20 border-2 border-purple-500/40">
                 <div className="flex items-center justify-between">
                   <div><p className="text-sm font-medium text-slate-400 uppercase tracking-wider">Total Invested</p><p className="text-xs text-slate-500 mt-1">Principal deployed</p></div>
                   <p className="text-3xl font-bold bg-gradient-to-r from-purple-400 to-violet-400 bg-clip-text text-transparent tabular-nums">{totalInvested.toLocaleString('en-US', { minimumFractionDigits: 2 })} {currencyPrefix}</p>
@@ -493,10 +493,10 @@ export function PremiumStatsGrid({
           className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm"
         >
           <motion.div
-            initial={{ scale: 0.9, opacity: 0, y: 20 }}
+            initial={{ scale: 0.95, opacity: 0, y: 10 }}
             animate={{ scale: 1, opacity: 1, y: 0 }}
-            exit={{ scale: 0.9, opacity: 0, y: 20 }}
-            transition={{ type: 'spring', duration: 0.5 }}
+            exit={{ scale: 0.95, opacity: 0, y: 10 }}
+            transition={{ type: 'spring', duration: 0.25 }}
             onClick={(e) => e.stopPropagation()}
             className="bg-gradient-to-br from-slate-900 via-slate-800 to-slate-900 rounded-2xl shadow-2xl w-full max-w-2xl border-2 border-emerald-500/30 overflow-hidden"
           >
@@ -526,9 +526,9 @@ export function PremiumStatsGrid({
               <div className="space-y-3">
                 {/* Sukuk Receivable */}
                 <motion.div
-                  initial={{ x: -20, opacity: 0 }}
+                  initial={{ x: -8, opacity: 0 }}
                   animate={{ x: 0, opacity: 1 }}
-                  transition={{ delay: 0.1 }}
+                  transition={{ delay: 0.03 }}
                   className="group relative p-4 rounded-xl bg-gradient-to-r from-purple-500/10 to-purple-600/10 border border-purple-500/20 hover:border-purple-400/40 transition-all duration-300"
                 >
                   <div className="absolute inset-0 bg-gradient-to-r from-purple-500/5 to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-300 rounded-xl" />
@@ -550,9 +550,9 @@ export function PremiumStatsGrid({
 
                 {/* Sukuk Received */}
                 <motion.div
-                  initial={{ x: -20, opacity: 0 }}
+                  initial={{ x: -8, opacity: 0 }}
                   animate={{ x: 0, opacity: 1 }}
-                  transition={{ delay: 0.15 }}
+                  transition={{ delay: 0.06 }}
                   className="group relative p-4 rounded-xl bg-gradient-to-r from-emerald-500/10 to-emerald-600/10 border border-emerald-500/20 hover:border-emerald-400/40 transition-all duration-300"
                 >
                   <div className="absolute inset-0 bg-gradient-to-r from-emerald-500/5 to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-300 rounded-xl" />
@@ -574,9 +574,9 @@ export function PremiumStatsGrid({
 
                 {/* Commission */}
                 <motion.div
-                  initial={{ x: -20, opacity: 0 }}
+                  initial={{ x: -8, opacity: 0 }}
                   animate={{ x: 0, opacity: 1 }}
-                  transition={{ delay: 0.2 }}
+                  transition={{ delay: 0.08 }}
                   className="group relative p-4 rounded-xl bg-gradient-to-r from-cyan-500/10 to-cyan-600/10 border border-cyan-500/20 hover:border-cyan-400/40 transition-all duration-300"
                 >
                   <div className="absolute inset-0 bg-gradient-to-r from-cyan-500/5 to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-300 rounded-xl" />
@@ -598,9 +598,9 @@ export function PremiumStatsGrid({
 
                 {/* Savings Rewards */}
                 <motion.div
-                  initial={{ x: -20, opacity: 0 }}
+                  initial={{ x: -8, opacity: 0 }}
                   animate={{ x: 0, opacity: 1 }}
-                  transition={{ delay: 0.25 }}
+                  transition={{ delay: 0.1 }}
                   className="group relative p-4 rounded-xl bg-gradient-to-r from-yellow-500/10 to-yellow-600/10 border border-yellow-500/20 hover:border-yellow-400/40 transition-all duration-300"
                 >
                   <div className="absolute inset-0 bg-gradient-to-r from-yellow-500/5 to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-300 rounded-xl" />
@@ -622,9 +622,9 @@ export function PremiumStatsGrid({
 
                 {/* Malaa Profit */}
                 <motion.div
-                  initial={{ x: -20, opacity: 0 }}
+                  initial={{ x: -8, opacity: 0 }}
                   animate={{ x: 0, opacity: 1 }}
-                  transition={{ delay: 0.3 }}
+                  transition={{ delay: 0.12 }}
                   className="group relative p-4 rounded-xl bg-gradient-to-r from-blue-500/10 to-blue-600/10 border border-blue-500/20 hover:border-blue-400/40 transition-all duration-300"
                 >
                   <div className="absolute inset-0 bg-gradient-to-r from-blue-500/5 to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-300 rounded-xl" />
@@ -646,9 +646,9 @@ export function PremiumStatsGrid({
 
                 {/* Crypto Profit */}
                 <motion.div
-                  initial={{ x: -20, opacity: 0 }}
+                  initial={{ x: -8, opacity: 0 }}
                   animate={{ x: 0, opacity: 1 }}
-                  transition={{ delay: 0.35 }}
+                  transition={{ delay: 0.14 }}
                   className="group relative p-4 rounded-xl bg-gradient-to-r from-orange-500/10 to-orange-600/10 border border-orange-500/20 hover:border-orange-400/40 transition-all duration-300"
                 >
                   <div className="absolute inset-0 bg-gradient-to-r from-orange-500/5 to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-300 rounded-xl" />
@@ -671,9 +671,9 @@ export function PremiumStatsGrid({
                 {/* SIP Profit */}
                 {profitBreakdown.sipProfit > 0 && (
                   <motion.div
-                    initial={{ x: -20, opacity: 0 }}
+                    initial={{ x: -8, opacity: 0 }}
                     animate={{ x: 0, opacity: 1 }}
-                    transition={{ delay: 0.4 }}
+                    transition={{ delay: 0.16 }}
                     className="group relative p-4 rounded-xl bg-gradient-to-r from-pink-500/10 to-pink-600/10 border border-pink-500/20 hover:border-pink-400/40 transition-all duration-300"
                   >
                     <div className="absolute inset-0 bg-gradient-to-r from-pink-500/5 to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-300 rounded-xl" />
@@ -697,9 +697,9 @@ export function PremiumStatsGrid({
                 {/* Other Profit */}
                 {profitBreakdown.otherProfit > 0 && (
                   <motion.div
-                    initial={{ x: -20, opacity: 0 }}
+                    initial={{ x: -8, opacity: 0 }}
                     animate={{ x: 0, opacity: 1 }}
-                    transition={{ delay: 0.45 }}
+                    transition={{ delay: 0.18 }}
                     className="group relative p-4 rounded-xl bg-gradient-to-r from-slate-500/10 to-slate-600/10 border border-slate-500/20 hover:border-slate-400/40 transition-all duration-300"
                   >
                     <div className="absolute inset-0 bg-gradient-to-r from-slate-500/5 to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-300 rounded-xl" />
@@ -723,9 +723,9 @@ export function PremiumStatsGrid({
 
               {/* Total Summary */}
               <motion.div
-                initial={{ y: 20, opacity: 0 }}
+                initial={{ y: 8, opacity: 0 }}
                 animate={{ y: 0, opacity: 1 }}
-                transition={{ delay: 0.5 }}
+                transition={{ delay: 0.2 }}
                 className="mt-6 p-6 rounded-xl bg-gradient-to-r from-emerald-500/20 to-cyan-500/20 border-2 border-emerald-500/40"
               >
                 <div className="flex items-center justify-between">

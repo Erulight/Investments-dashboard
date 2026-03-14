@@ -41,12 +41,12 @@ export function AnimatedStatCard({
 }: AnimatedCardProps & { index?: number }) {
   return (
     <motion.div
-      initial={{ opacity: 0, scale: 0.9, y: 20 }}
+      initial={{ opacity: 0, scale: 0.97, y: 10 }}
       animate={{ opacity: 1, scale: 1, y: 0 }}
       transition={{ 
-        duration: 0.5, 
+        duration: 0.25, 
         ease: [0.22, 1, 0.36, 1],
-        delay: index * 0.1
+        delay: Math.min(index * 0.04, 0.2)
       }}
       whileHover={{ 
         scale: 1.02,

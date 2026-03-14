@@ -72,7 +72,7 @@ export function MonkeyMascot({
             initial={{ height: 0, opacity: 0 }}
             animate={{ height: Math.max(60, panelHeight + 20), opacity: 1 }}
             exit={{ height: 0, opacity: 0 }}
-            transition={{ duration: 0.5, ease: "easeOut", delay: 0.2 }}
+            transition={{ duration: 0.3, ease: "easeOut", delay: 0.1 }}
             className="absolute w-0.5 bg-gradient-to-b from-slate-600 to-slate-400 origin-top shadow-lg"
             style={{ 
               transformOrigin: 'top center',
@@ -157,7 +157,7 @@ export function MonkeyMascot({
               {/* Eyes */}
               <motion.g
                 animate={{ scaleY: [1, 0.1, 1] }}
-                transition={{ duration: 3, repeat: Infinity, repeatDelay: 2 }}
+                transition={{ duration: 0.3, repeat: Infinity, repeatDelay: 5 }}
               >
                 <ellipse cx="42" cy="45" rx="4" ry="5" fill="#2D1B00" />
                 <ellipse cx="58" cy="45" rx="4" ry="5" fill="#2D1B00" />
@@ -189,7 +189,7 @@ export function MonkeyMascot({
                   rx="2"
                   fill="url(#monkeyBody)"
                   animate={{ rotate: isSwinging ? [-5, 5, -5] : 0 }}
-                  transition={{ duration: 2, repeat: Infinity }}
+                  transition={{ duration: 4, repeat: Infinity }}
                   style={{ transformOrigin: '50px 10px' }}
                 />
                 <circle cx="50" cy="10" r="5" fill="url(#monkeyFace)" />
@@ -212,7 +212,7 @@ export function MonkeyMascot({
                     "M 70 60 Q 85 55 90 45 Q 92 40 88 38"
                   ]
                 }}
-                transition={{ duration: 1.5, repeat: Infinity, ease: "easeInOut" }}
+                transition={{ duration: 4, repeat: Infinity, ease: "easeInOut" }}
               />
             </svg>
           </motion.div>

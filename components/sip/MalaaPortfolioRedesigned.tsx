@@ -291,7 +291,7 @@ function NeonLineChart({ points, range }: { points: { at: Date; value: number }[
           opacity: [0.3, 0.6, 0.3],
         }}
         transition={{
-          duration: 2,
+          duration: 5,
           repeat: Infinity,
           ease: 'easeInOut',
         }}
@@ -911,7 +911,7 @@ export default function MalaaPortfolioRedesigned({ investment, userRole }: Malaa
                 opacity: [0.3, 0.5, 0.3],
               }}
               transition={{
-                duration: 4,
+                duration: 6,
                 repeat: Infinity,
                 ease: 'easeInOut',
               }}
@@ -999,7 +999,7 @@ export default function MalaaPortfolioRedesigned({ investment, userRole }: Malaa
               opacity: [0.2, 0.4, 0.2],
             }}
             transition={{
-              duration: 5,
+              duration: 8,
               repeat: Infinity,
               ease: 'easeInOut',
             }}
@@ -1011,7 +1011,7 @@ export default function MalaaPortfolioRedesigned({ investment, userRole }: Malaa
               opacity: [0.2, 0.3, 0.2],
             }}
             transition={{
-              duration: 4,
+              duration: 6,
               repeat: Infinity,
               ease: 'easeInOut',
               delay: 1,
@@ -1043,7 +1043,7 @@ export default function MalaaPortfolioRedesigned({ investment, userRole }: Malaa
                           ? ['0 0 0px rgba(16,185,129,0.3)', '0 0 20px rgba(16,185,129,0.5)', '0 0 0px rgba(16,185,129,0.3)']
                           : ['0 0 0px rgba(239,68,68,0.3)', '0 0 20px rgba(239,68,68,0.5)', '0 0 0px rgba(239,68,68,0.3)'],
                       }}
-                      transition={{ duration: 2, repeat: Infinity }}
+                      transition={{ duration: 4, repeat: Infinity }}
                     >
                       <span className={`font-bold text-lg ${profit >= 0 ? 'text-emerald-300' : 'text-red-300'}`}>
                         {profit >= 0 ? '+' : ''}{formatCurrency(profit)}
@@ -1129,7 +1129,7 @@ export default function MalaaPortfolioRedesigned({ investment, userRole }: Malaa
               opacity: [0.1, 0.2, 0.1],
             }}
             transition={{
-              duration: 3,
+              duration: 6,
               repeat: Infinity,
               ease: 'easeInOut',
             }}
@@ -1187,7 +1187,7 @@ export default function MalaaPortfolioRedesigned({ investment, userRole }: Malaa
                   opacity: [0.2, 0.3, 0.2],
                 }}
                 transition={{
-                  duration: 3,
+                  duration: 6,
                   repeat: Infinity,
                   delay: i * 0.5,
                 }}

@@ -50,12 +50,12 @@ export function AnimatedTableRow({
 }: AnimatedListProps & { index?: number; onClick?: () => void }) {
   return (
     <motion.tr
-      initial={{ opacity: 0, x: -20 }}
+      initial={{ opacity: 0, x: -8 }}
       animate={{ opacity: 1, x: 0 }}
       transition={{ 
-        duration: 0.4, 
+        duration: 0.15, 
         ease: [0.22, 1, 0.36, 1],
-        delay: index * 0.05
+        delay: Math.min(index * 0.02, 0.3)
       }}
       whileHover={{ 
         backgroundColor: 'rgba(59, 130, 246, 0.05)',

@@ -264,9 +264,9 @@ export function Navbar({ user, activeAccountTypes, notifications }: NavbarProps)
   return (
     <motion.nav 
       className="sticky top-0 z-[9999] pointer-events-auto shadow-xl border-b border-cyan-500/20 bg-gradient-to-r from-slate-900/95 to-slate-800/95 backdrop-blur-xl"
-      initial={{ y: -100 }}
+      initial={{ y: -40 }}
       animate={{ y: 0 }}
-      transition={{ duration: 0.5, ease: 'easeOut' }}
+      transition={{ duration: 0.25, ease: 'easeOut' }}
     >
       <div className="w-full px-4 sm:px-6 lg:px-8">
         <div className="flex items-center justify-between h-14">
