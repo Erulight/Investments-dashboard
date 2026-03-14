@@ -154,27 +154,87 @@ export function ReceivableByYearCard({
                         
                         {/* Beaker flask */}
                         <div className="relative h-40 w-full">
-                          {/* Flask outline */}
-                          <svg viewBox="0 0 100 140" className="w-full h-full drop-filter">
+                          <svg viewBox="0 0 100 140" className="w-full h-full overflow-hidden">
                             <defs>
                               <linearGradient id={`gradient-${index}`} x1="0%" y1="0%" x2="0%" y2="100%">
                                 <stop offset="0%" stopColor={color.from} stopOpacity="0.9" />
                                 <stop offset="50%" stopColor={color.via} stopOpacity="0.95" />
                                 <stop offset="100%" stopColor={color.to} stopOpacity="1" />
                               </linearGradient>
-                              <filter id={`glow-${index}`}>
-                                <feGaussianBlur stdDeviation="2" result="coloredBlur"/>
-                                <feMerge>
-                                  <feMergeNode in="coloredBlur"/>
-                                  <feMergeNode in="SourceGraphic"/>
-                                </feMerge>
-                              </filter>
+                              <clipPath id={`beaker-clip-${index}`}>
+                                <path d="M 30 10 L 30 50 L 20 90 Q 20 110, 50 110 Q 80 110, 80 90 L 70 50 L 70 10 Z" />
+                              </clipPath>
                             </defs>
+
+                            {/* Liquid fill (clipped to beaker shape) */}
+                            <motion.rect
+                              x="10"
+                              y="10"
+                              width="80"
+                              height="110"
+                              fill={`url(#gradient-${index})`}
+                              clipPath={`url(#beaker-clip-${index})`}
+                              initial={{ y: 120 }}
+                              animate={{ 
+                                y: isInView ? 110 - pct : 120
+                              }}
+                              transition={{ 
+                                duration: 2,
+                                delay: index * 0.2,
+                                ease: [0.34, 1.56, 0.64, 1]
+                              }}
+                            />
+
+                            {/* Bubbles (clipped to beaker shape) */}
+                            {isInView && [0, 1, 2].map((bubble) => (
+                              <motion.circle
+                                key={bubble}
+                                r="1.5"
+                                fill="rgba(255, 255, 255, 0.6)"
+                                clipPath={`url(#beaker-clip-${index})`}
+                                initial={{ 
+                                  cx: 35 + (bubble * 12),
+                                  cy: 110,
+                                  opacity: 0
+                                }}
+                                animate={{
+                                  cx: 35 + (bubble * 12) + Math.sin(bubble) * 5,
+                                  cy: [110, 110 - pct, 110 - pct - 20],
+                                  opacity: [0, 0.8, 0],
+                                }}
+                                transition={{
+                                  duration: 6 + bubble * 1,
+                                  repeat: Infinity,
+                                  delay: index * 0.3 + bubble * 0.8,
+                                  ease: 'easeInOut'
+                                }}
+                              />
+                            ))}
+
+                            {/* Surface shimmer (clipped to beaker shape) */}
+                            <motion.line
+                              x1="25"
+                              x2="75"
+                              stroke="rgba(255, 255, 255, 0.4)"
+                              strokeWidth="1"
+                              clipPath={`url(#beaker-clip-${index})`}
+                              initial={{ y1: 110, y2: 110 }}
+                              animate={{ 
+                                y1: isInView ? 110 - pct : 110,
+                                y2: isInView ? 110 - pct : 110,
+                                opacity: [0.3, 0.7, 0.3]
+                              }}
+                              transition={{
+                                y1: { duration: 2, delay: index * 0.2 },
+                                y2: { duration: 2, delay: index * 0.2 },
+                                opacity: { duration: 5, repeat: Infinity, ease: 'easeInOut' }
+                              }}
+                            />
                             
-                            {/* Glass beaker outline */}
+                            {/* Glass beaker outline (drawn on top of liquid) */}
                             <path
                               d="M 30 10 L 30 50 L 20 90 Q 20 110, 50 110 Q 80 110, 80 90 L 70 50 L 70 10 Z"
-                              fill="rgba(148, 163, 184, 0.1)"
+                              fill="none"
                               stroke="rgba(148, 163, 184, 0.3)"
                               strokeWidth="1.5"
                               className="transition-all duration-500 group-hover:stroke-white/50"
@@ -185,81 +245,6 @@ export function ReceivableByYearCard({
                             <line x1="25" y1="50" x2="30" y2="50" stroke="rgba(148, 163, 184, 0.4)" strokeWidth="0.5" />
                             <line x1="25" y1="30" x2="30" y2="30" stroke="rgba(148, 163, 184, 0.4)" strokeWidth="0.5" />
                           </svg>
-                          
-                          {/* Liquid fill with bubbles */}
-                          <div className="absolute inset-0 overflow-hidden">
-                            <svg viewBox="0 0 100 140" className="w-full h-full">
-                              <clipPath id={`beaker-clip-${index}`}>
-                                <path d="M 30 10 L 30 50 L 20 90 Q 20 110, 50 110 Q 80 110, 80 90 L 70 50 L 70 10 Z" />
-                              </clipPath>
-                              
-                              {/* Liquid */}
-                              <motion.rect
-                                x="20"
-                                y="10"
-                                width="60"
-                                height="100"
-                                fill={`url(#gradient-${index})`}
-                                clipPath={`url(#beaker-clip-${index})`}
-                                filter={`url(#glow-${index})`}
-                                initial={{ y: 110 }}
-                                animate={{ 
-                                  y: isInView ? 110 - pct : 110
-                                }}
-                                transition={{ 
-                                  duration: 2,
-                                  delay: index * 0.2,
-                                  ease: [0.34, 1.56, 0.64, 1]
-                                }}
-                              />
-                              
-                              {/* Bubbles */}
-                              {isInView && [0, 1, 2].map((bubble) => (
-                                <motion.circle
-                                  key={bubble}
-                                  r="1.5"
-                                  fill="rgba(255, 255, 255, 0.6)"
-                                  clipPath={`url(#beaker-clip-${index})`}
-                                  initial={{ 
-                                    cx: 35 + (bubble * 12),
-                                    cy: 110,
-                                    opacity: 0
-                                  }}
-                                  animate={{
-                                    cx: 35 + (bubble * 12) + Math.sin(bubble) * 5,
-                                    cy: [110, 110 - pct, 110 - pct - 20],
-                                    opacity: [0, 0.8, 0],
-                                  }}
-                                  transition={{
-                                    duration: 6 + bubble * 1,
-                                    repeat: Infinity,
-                                    delay: index * 0.3 + bubble * 0.8,
-                                    ease: 'easeInOut'
-                                  }}
-                                />
-                              ))}
-                              
-                              {/* Surface shimmer */}
-                              <motion.line
-                                x1="25"
-                                x2="75"
-                                stroke="rgba(255, 255, 255, 0.4)"
-                                strokeWidth="1"
-                                clipPath={`url(#beaker-clip-${index})`}
-                                initial={{ y1: 110, y2: 110 }}
-                                animate={{ 
-                                  y1: isInView ? 110 - pct : 110,
-                                  y2: isInView ? 110 - pct : 110,
-                                  opacity: [0.3, 0.7, 0.3]
-                                }}
-                                transition={{
-                                  y1: { duration: 2, delay: index * 0.2 },
-                                  y2: { duration: 2, delay: index * 0.2 },
-                                  opacity: { duration: 5, repeat: Infinity, ease: 'easeInOut' }
-                                }}
-                              />
-                            </svg>
-                          </div>
                           
                           {/* Glow effect */}
                           <motion.div
