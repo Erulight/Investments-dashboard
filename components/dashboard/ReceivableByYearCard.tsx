@@ -1,10 +1,10 @@
 'use client'
 
-import { useState } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/Card'
 import { Modal } from '@/components/sukuk/SukukModal'
 import { formatDisplayDate } from '@/lib/date'
-import { motion, AnimatePresence } from 'framer-motion'
+import { motion, AnimatePresence, useInView } from 'framer-motion'
 
 type DealDetail = {
   id: string
@@ -19,6 +19,15 @@ type YearPoint = {
   deals?: DealDetail[]
 }
 
+const colors = [
+  { from: '#06b6d4', via: '#0891b2', to: '#0e7490', glow: 'rgba(6, 182, 212, 0.5)', name: 'cyan' },
+  { from: '#8b5cf6', via: '#7c3aed', to: '#6d28d9', glow: 'rgba(139, 92, 246, 0.5)', name: 'violet' },
+  { from: '#ec4899', via: '#db2777', to: '#be185d', glow: 'rgba(236, 72, 153, 0.5)', name: 'pink' },
+  { from: '#10b981', via: '#059669', to: '#047857', glow: 'rgba(16, 185, 129, 0.5)', name: 'emerald' },
+  { from: '#f59e0b', via: '#d97706', to: '#b45309', glow: 'rgba(245, 158, 11, 0.5)', name: 'amber' },
+  { from: '#3b82f6', via: '#2563eb', to: '#1d4ed8', glow: 'rgba(59, 130, 246, 0.5)', name: 'blue' },
+]
+
 export function ReceivableByYearCard({
   data,
   currencyPrefix = 'SAR',
@@ -30,6 +39,8 @@ export function ReceivableByYearCard({
   const maxAmount = safe.reduce((m, x) => Math.max(m, Number(x.amount) || 0), 0)
   const [selectedYear, setSelectedYear] = useState<YearPoint | null>(null)
   const [isHidden, setIsHidden] = useState(false)
+  const containerRef = useRef<HTMLDivElement>(null)
+  const isInView = useInView(containerRef, { once: true, margin: '-100px' })
 
   const getMonthlyBreakdown = (yearData: YearPoint) => {
     if (!yearData.deals) return []
@@ -83,31 +94,33 @@ export function ReceivableByYearCard({
             </motion.button>
           </div>
         </CardHeader>
-        <CardContent className="relative z-10">
+<CardContent className="relative z-10">
+          <div ref={containerRef}>
           {safe.length === 0 ? (
             <div className="text-xs text-cyan-400/60">No receivable data.</div>
           ) : (
-            <div className="grid grid-cols-2 gap-4 sm:grid-cols-4">
+            <div className="grid grid-cols-2 gap-6 sm:grid-cols-4">
               <AnimatePresence mode="wait">
                 {safe.map((point, index) => {
                   const amount = Math.max(0, Number(point.amount) || 0)
                   const pct = maxAmount > 0 ? (amount / maxAmount) * 100 : 0
+                  const color = colors[index % colors.length]
+                  
                   return (
                     <motion.button
                       key={point.year}
-                      initial={{ opacity: 0, y: 20 }}
+                      initial={{ opacity: 0, y: 30 }}
                       animate={{ opacity: 1, y: 0 }}
                       exit={{ opacity: 0, scale: 0.9 }}
-                      transition={{ delay: index * 0.1, duration: 0.4 }}
+                      transition={{ delay: index * 0.15, duration: 0.5, type: 'spring' }}
                       onClick={() => setSelectedYear(point)}
-                      className="group relative rounded-2xl border-2 border-cyan-500/30 bg-gradient-to-br from-slate-800/80 to-slate-900/80 px-4 py-4 transition-all duration-500 hover:border-cyan-400/70 hover:shadow-2xl hover:shadow-cyan-500/30 cursor-pointer backdrop-blur-sm"
-                      whileHover={{ scale: 1.05, y: -5 }}
-                      whileTap={{ scale: 0.98 }}
+                      className="group relative cursor-pointer"
+                      whileHover={{ scale: 1.08, y: -8 }}
+                      whileTap={{ scale: 0.95 }}
                     >
-                      <div className="absolute inset-0 rounded-2xl bg-gradient-to-br from-cyan-500/0 to-purple-500/0 group-hover:from-cyan-500/10 group-hover:to-purple-500/10 transition-all duration-500" />
-                      <div className="absolute -inset-0.5 rounded-2xl bg-gradient-to-r from-cyan-500 to-purple-500 opacity-0 group-hover:opacity-20 blur transition-all duration-500" />
-                      
-                      <div className="relative z-10">
+                      {/* Chemistry beaker container */}
+                      <div className="relative">
+                        {/* Amount label */}
                         <AnimatePresence mode="wait">
                           {isHidden ? (
                             <motion.div
@@ -115,48 +128,164 @@ export function ReceivableByYearCard({
                               initial={{ opacity: 0, scale: 0.8 }}
                               animate={{ opacity: 1, scale: 1 }}
                               exit={{ opacity: 0, scale: 0.8 }}
-                              transition={{ duration: 0.3 }}
-                              className="text-xs font-bold text-cyan-400 tabular-nums drop-shadow-[0_0_6px_rgba(34,211,238,0.4)]"
+                              className="text-xs font-bold tabular-nums mb-2 text-center"
+                              style={{ color: color.from }}
                             >
                               ••••••
                             </motion.div>
                           ) : (
                             <motion.div
                               key="visible"
-                              initial={{ opacity: 0, scale: 0.8 }}
-                              animate={{ opacity: 1, scale: 1 }}
-                              exit={{ opacity: 0, scale: 0.8 }}
-                              transition={{ duration: 0.3 }}
-                              className="text-xs font-bold bg-gradient-to-r from-cyan-400 to-purple-400 bg-clip-text text-transparent drop-shadow-[0_0_6px_rgba(34,211,238,0.4)] tabular-nums"
+                              initial={{ opacity: 0, y: -10 }}
+                              animate={{ opacity: 1, y: 0 }}
+                              exit={{ opacity: 0, y: -10 }}
+                              className="text-xs font-bold tabular-nums mb-2 text-center"
+                              style={{ 
+                                background: `linear-gradient(135deg, ${color.from}, ${color.via})`,
+                                WebkitBackgroundClip: 'text',
+                                WebkitTextFillColor: 'transparent',
+                                filter: `drop-shadow(0 0 8px ${color.glow})`
+                              }}
                             >
-                              {amount.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })} {currencyPrefix}
+                              {amount.toLocaleString(undefined, { minimumFractionDigits: 0, maximumFractionDigits: 0 })} {currencyPrefix}
                             </motion.div>
                           )}
                         </AnimatePresence>
                         
-                        <div className="mt-3 h-28 w-full rounded-2xl bg-slate-900/50 border border-cyan-500/20 relative overflow-hidden backdrop-blur-sm">
-                          <div className="absolute inset-0 bg-gradient-to-t from-cyan-500/5 to-transparent" />
+                        {/* Beaker flask */}
+                        <div className="relative h-40 w-full">
+                          {/* Flask outline */}
+                          <svg viewBox="0 0 100 140" className="w-full h-full drop-filter">
+                            <defs>
+                              <linearGradient id={`gradient-${index}`} x1="0%" y1="0%" x2="0%" y2="100%">
+                                <stop offset="0%" stopColor={color.from} stopOpacity="0.9" />
+                                <stop offset="50%" stopColor={color.via} stopOpacity="0.95" />
+                                <stop offset="100%" stopColor={color.to} stopOpacity="1" />
+                              </linearGradient>
+                              <filter id={`glow-${index}`}>
+                                <feGaussianBlur stdDeviation="2" result="coloredBlur"/>
+                                <feMerge>
+                                  <feMergeNode in="coloredBlur"/>
+                                  <feMergeNode in="SourceGraphic"/>
+                                </feMerge>
+                              </filter>
+                            </defs>
+                            
+                            {/* Glass beaker outline */}
+                            <path
+                              d="M 30 10 L 30 50 L 20 90 Q 20 110, 50 110 Q 80 110, 80 90 L 70 50 L 70 10 Z"
+                              fill="rgba(148, 163, 184, 0.1)"
+                              stroke="rgba(148, 163, 184, 0.3)"
+                              strokeWidth="1.5"
+                              className="transition-all duration-500 group-hover:stroke-white/50"
+                            />
+                            
+                            {/* Measurement lines */}
+                            <line x1="25" y1="70" x2="30" y2="70" stroke="rgba(148, 163, 184, 0.4)" strokeWidth="0.5" />
+                            <line x1="25" y1="50" x2="30" y2="50" stroke="rgba(148, 163, 184, 0.4)" strokeWidth="0.5" />
+                            <line x1="25" y1="30" x2="30" y2="30" stroke="rgba(148, 163, 184, 0.4)" strokeWidth="0.5" />
+                          </svg>
+                          
+                          {/* Liquid fill with bubbles */}
+                          <div className="absolute inset-0 overflow-hidden">
+                            <svg viewBox="0 0 100 140" className="w-full h-full">
+                              <clipPath id={`beaker-clip-${index}`}>
+                                <path d="M 30 10 L 30 50 L 20 90 Q 20 110, 50 110 Q 80 110, 80 90 L 70 50 L 70 10 Z" />
+                              </clipPath>
+                              
+                              {/* Liquid */}
+                              <motion.rect
+                                x="20"
+                                y="10"
+                                width="60"
+                                height="100"
+                                fill={`url(#gradient-${index})`}
+                                clipPath={`url(#beaker-clip-${index})`}
+                                filter={`url(#glow-${index})`}
+                                initial={{ y: 110 }}
+                                animate={{ 
+                                  y: isInView ? 110 - pct : 110
+                                }}
+                                transition={{ 
+                                  duration: 2,
+                                  delay: index * 0.2,
+                                  ease: [0.34, 1.56, 0.64, 1]
+                                }}
+                              />
+                              
+                              {/* Bubbles */}
+                              {isInView && [0, 1, 2, 3, 4].map((bubble) => (
+                                <motion.circle
+                                  key={bubble}
+                                  r="1.5"
+                                  fill="rgba(255, 255, 255, 0.6)"
+                                  clipPath={`url(#beaker-clip-${index})`}
+                                  initial={{ 
+                                    cx: 35 + (bubble * 8),
+                                    cy: 110,
+                                    opacity: 0
+                                  }}
+                                  animate={{
+                                    cx: 35 + (bubble * 8) + Math.sin(bubble) * 5,
+                                    cy: [110, 110 - pct, 110 - pct - 20],
+                                    opacity: [0, 0.8, 0],
+                                  }}
+                                  transition={{
+                                    duration: 3 + bubble * 0.5,
+                                    repeat: Infinity,
+                                    delay: index * 0.3 + bubble * 0.4,
+                                    ease: 'easeInOut'
+                                  }}
+                                />
+                              ))}
+                              
+                              {/* Surface shimmer */}
+                              <motion.line
+                                x1="25"
+                                x2="75"
+                                stroke="rgba(255, 255, 255, 0.4)"
+                                strokeWidth="1"
+                                clipPath={`url(#beaker-clip-${index})`}
+                                initial={{ y1: 110, y2: 110 }}
+                                animate={{ 
+                                  y1: isInView ? 110 - pct : 110,
+                                  y2: isInView ? 110 - pct : 110,
+                                  opacity: [0.3, 0.7, 0.3]
+                                }}
+                                transition={{
+                                  y1: { duration: 2, delay: index * 0.2 },
+                                  y2: { duration: 2, delay: index * 0.2 },
+                                  opacity: { duration: 2, repeat: Infinity, ease: 'easeInOut' }
+                                }}
+                              />
+                            </svg>
+                          </div>
+                          
+                          {/* Glow effect */}
                           <motion.div
-                            className="absolute bottom-0 left-0 right-0 rounded-t-2xl bg-gradient-to-t from-cyan-500 via-cyan-400 to-purple-400"
-                            initial={{ height: '8%' }}
-                            animate={{ height: `${Math.max(8, pct)}%` }}
-                            transition={{ duration: 1, ease: "easeOut" }}
-                            style={{
-                              boxShadow: '0 0 20px rgba(34,211,238,0.5), 0 0 40px rgba(34,211,238,0.3)'
-                            }}
-                          />
-                          <motion.div
-                            className="absolute inset-x-0 bottom-0 h-1 bg-gradient-to-r from-transparent via-white to-transparent"
-                            animate={{ opacity: [0.5, 1, 0.5] }}
-                            transition={{ duration: 2, repeat: Infinity, ease: "easeInOut" }}
+                            className="absolute inset-0 rounded-full blur-2xl opacity-0 group-hover:opacity-100 transition-opacity duration-500"
+                            style={{ background: color.glow }}
                           />
                         </div>
                         
-                        <div className="mt-3 text-center text-base font-black bg-gradient-to-r from-cyan-300 to-purple-300 bg-clip-text text-transparent drop-shadow-[0_0_8px_rgba(34,211,238,0.5)]">
+                        {/* Year label */}
+                        <div 
+                          className="mt-3 text-center text-lg font-black drop-shadow-lg"
+                          style={{ 
+                            background: `linear-gradient(135deg, ${color.from}, ${color.to})`,
+                            WebkitBackgroundClip: 'text',
+                            WebkitTextFillColor: 'transparent'
+                          }}
+                        >
                           {point.year}
                         </div>
+                        
+                        {/* Deals count */}
                         {point.deals && point.deals.length > 0 && (
-                          <div className="mt-1 text-[10px] font-semibold text-cyan-400/70">
+                          <div 
+                            className="mt-1 text-[10px] font-semibold text-center opacity-70"
+                            style={{ color: color.from }}
+                          >
                             {point.deals.length} deal{point.deals.length !== 1 ? 's' : ''}
                           </div>
                         )}
@@ -167,6 +296,7 @@ export function ReceivableByYearCard({
               </AnimatePresence>
             </div>
           )}
+          </div>
         </CardContent>
       </Card>
 

@@ -1040,10 +1040,8 @@ export default async function DashboardPage({
       const metrics = ownerSukukMetricsById.get(inv.id)
       if (!metrics) continue
       
-      // Calculate expected receivable at maturity (not current accrued)
-      const receivableAtMaturity = metrics.accruedProfit > 0
-        ? Math.max(0, metrics.accruedProfit - metrics.received)
-        : metrics.receivable
+      // Use current receivable (net profit - received) + principal outstanding
+      const receivableAtMaturity = Math.max(0, metrics.receivable + metrics.principalOutstanding)
       
       if (receivableAtMaturity < 0.01) continue
       
