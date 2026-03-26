@@ -122,6 +122,7 @@ const getHijriYear = (date: Date) => {
 }
 
 function NeonLineChart({ points, range }: { points: { at: Date; value: number }[]; range: RangeKey }) {
+  const [hoveredPoint, setHoveredPoint] = useState<number | null>(null)
   const width = 900
   const height = 300
   const padX = 40
@@ -240,34 +241,39 @@ function NeonLineChart({ points, range }: { points: { at: Date; value: number }[
           </linearGradient>
         </defs>
 
-        {/* Data points */}
+        {/* Data points with hover interaction */}
         {coords.map((coord, i) => (
           <motion.g
             key={i}
             initial={{ scale: 0, opacity: 0 }}
             animate={{ scale: 1, opacity: 1 }}
             transition={{ delay: 0.5 + i * 0.05, duration: 0.3 }}
+            onMouseEnter={() => setHoveredPoint(i)}
+            onMouseLeave={() => setHoveredPoint(null)}
+            style={{ cursor: 'pointer' }}
           >
             <circle
               cx={coord.x}
               cy={coord.y}
-              r="6"
+              r={hoveredPoint === i ? "10" : "6"}
               fill={neonColor}
               opacity="0.3"
+              className="transition-all duration-200"
             />
             <motion.circle
               cx={coord.x}
               cy={coord.y}
-              r="4"
+              r={hoveredPoint === i ? "6" : "4"}
               fill={neonColor}
               animate={{
-                scale: i === coords.length - 1 ? [1, 1.3, 1] : 1,
+                scale: i === coords.length - 1 || hoveredPoint === i ? [1, 1.3, 1] : 1,
               }}
               transition={{
                 duration: 2,
-                repeat: i === coords.length - 1 ? Infinity : 0,
+                repeat: i === coords.length - 1 || hoveredPoint === i ? Infinity : 0,
                 ease: 'easeInOut',
               }}
+              className="transition-all duration-200"
             />
           </motion.g>
         ))}
@@ -296,6 +302,46 @@ function NeonLineChart({ points, range }: { points: { at: Date; value: number }[
           ease: 'easeInOut',
         }}
       />
+
+      {/* Interactive tooltip */}
+      {hoveredPoint !== null && coords[hoveredPoint] && (
+        <motion.div
+          initial={{ opacity: 0, scale: 0.8, y: 10 }}
+          animate={{ opacity: 1, scale: 1, y: 0 }}
+          exit={{ opacity: 0, scale: 0.8, y: 10 }}
+          transition={{ duration: 0.2 }}
+          className="absolute pointer-events-none z-10"
+          style={{
+            left: `${(coords[hoveredPoint].x / width) * 100}%`,
+            top: `${(coords[hoveredPoint].y / height) * 100}%`,
+            transform: 'translate(-50%, -120%)',
+          }}
+        >
+          <div className="relative">
+            {/* Neon glow background */}
+            <div className="absolute inset-0 bg-gradient-to-br from-cyan-500/40 to-purple-500/40 blur-xl rounded-lg" />
+            
+            {/* Tooltip content */}
+            <div className="relative bg-slate-900/95 backdrop-blur-xl border-2 border-cyan-400/50 rounded-lg px-4 py-3 shadow-2xl">
+              <div className="flex flex-col gap-1">
+                <div className="text-xs font-bold text-cyan-400 uppercase tracking-wider">
+                  {coords[hoveredPoint].date.toLocaleDateString('en-US', { 
+                    month: 'short', 
+                    day: 'numeric', 
+                    year: 'numeric' 
+                  })}
+                </div>
+                <div className="text-lg font-bold text-white tabular-nums">
+                  {formatCurrency(coords[hoveredPoint].value)}
+                </div>
+              </div>
+              
+              {/* Arrow pointing down */}
+              <div className="absolute left-1/2 -bottom-2 w-4 h-4 bg-slate-900 border-r-2 border-b-2 border-cyan-400/50 transform rotate-45 -translate-x-1/2" />
+            </div>
+          </div>
+        </motion.div>
+      )}
     </div>
   )
 }

@@ -1,6 +1,7 @@
 'use client'
 
-import { useMemo } from 'react'
+import { useMemo, useState } from 'react'
+import { motion, AnimatePresence } from 'framer-motion'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/Card'
 
 type SeriesPoint = { label: string; value: number }
@@ -16,6 +17,7 @@ function formatCompact(n: number) {
 }
 
 function SimpleBarChart({ points, positiveOnly }: { points: SeriesPoint[]; positiveOnly?: boolean }) {
+  const [hoveredBar, setHoveredBar] = useState<number | null>(null)
   const { maxAbs } = useMemo(() => {
     const values = points.map((p) => (positiveOnly ? Math.max(0, p.value) : Math.abs(p.value)))
     const maxAbs = Math.max(1, ...values)
@@ -29,8 +31,8 @@ function SimpleBarChart({ points, positiveOnly }: { points: SeriesPoint[]; posit
           <div key={idx} className="border-b border-slate-700/40" />
         ))}
       </div>
-      <div className="grid grid-cols-12 gap-1 items-end h-28">
-        {points.map((p) => {
+      <div className="grid grid-cols-12 gap-1 items-end h-28 relative">
+        {points.map((p, idx) => {
           const raw = positiveOnly ? Math.max(0, p.value) : p.value
           const h = Math.max(2, Math.round((Math.abs(raw) / maxAbs) * 100))
           const color = raw >= 0
@@ -38,15 +40,50 @@ function SimpleBarChart({ points, positiveOnly }: { points: SeriesPoint[]; posit
             : 'bg-gradient-to-t from-rose-600/70 to-rose-400/80'
 
           return (
-            <div key={p.label} className="col-span-1 flex flex-col items-center gap-1">
-              <div className="w-full h-full rounded-md bg-slate-800/30 border border-slate-700/40 p-[1px]">
-                <div
-                  className={`w-full rounded-sm transition-all duration-700 ${color}`}
+            <div 
+              key={p.label} 
+              className="col-span-1 flex flex-col items-center gap-1 relative"
+              onMouseEnter={() => setHoveredBar(idx)}
+              onMouseLeave={() => setHoveredBar(null)}
+            >
+              <div className="w-full h-full rounded-md bg-slate-800/30 border border-slate-700/40 p-[1px] cursor-pointer">
+                <motion.div
+                  className={`w-full rounded-sm ${color}`}
                   style={{ height: `${h}%`, marginTop: `${100 - h}%` }}
-                  title={`${p.label}: ${p.value.toLocaleString()}`}
+                  animate={{
+                    scale: hoveredBar === idx ? [1, 1.05, 1] : 1,
+                  }}
+                  transition={{
+                    duration: 0.5,
+                    repeat: hoveredBar === idx ? Infinity : 0,
+                  }}
                 />
               </div>
               <div className="text-[10px] text-slate-400 leading-none">{p.label}</div>
+              
+              {/* Tooltip */}
+              <AnimatePresence>
+                {hoveredBar === idx && (
+                  <motion.div
+                    initial={{ opacity: 0, y: 10, scale: 0.8 }}
+                    animate={{ opacity: 1, y: 0, scale: 1 }}
+                    exit={{ opacity: 0, y: 10, scale: 0.8 }}
+                    transition={{ duration: 0.2 }}
+                    className="absolute bottom-full mb-2 pointer-events-none z-20"
+                  >
+                    <div className="relative">
+                      <div className="absolute inset-0 bg-gradient-to-br from-cyan-500/40 to-purple-500/40 blur-md rounded" />
+                      <div className="relative bg-slate-900/95 backdrop-blur-xl border-2 border-cyan-400/50 rounded px-3 py-2 shadow-xl whitespace-nowrap">
+                        <div className="text-xs font-bold text-cyan-400">{p.label}</div>
+                        <div className="text-sm font-bold text-white tabular-nums">
+                          {raw >= 0 ? '+' : ''}{formatCompact(raw)}
+                        </div>
+                      </div>
+                      <div className="absolute left-1/2 -bottom-1 w-2 h-2 bg-slate-900 border-r-2 border-b-2 border-cyan-400/50 transform rotate-45 -translate-x-1/2" />
+                    </div>
+                  </motion.div>
+                )}
+              </AnimatePresence>
             </div>
           )
         })}
@@ -56,6 +93,7 @@ function SimpleBarChart({ points, positiveOnly }: { points: SeriesPoint[]; posit
 }
 
 function SimpleLineChart({ points }: { points: SeriesPoint[] }) {
+  const [hoveredPoint, setHoveredPoint] = useState<number | null>(null)
   const { min, max, path, areaPath, coords, w, h, pad } = useMemo(() => {
     const values = points.map((p) => p.value)
     const min = Math.min(...values)
@@ -75,7 +113,7 @@ function SimpleLineChart({ points }: { points: SeriesPoint[] }) {
       return pad + (1 - t) * (h - pad * 2)
     }
 
-    const coords = points.map((p, i) => ({ x: scaleX(i), y: scaleY(p.value) }))
+    const coords = points.map((p, i) => ({ x: scaleX(i), y: scaleY(p.value), value: p.value, label: p.label }))
 
     const d = coords
       .map((p, i) => `${i === 0 ? 'M' : 'L'} ${p.x.toFixed(1)} ${p.y.toFixed(1)}`)
@@ -89,7 +127,7 @@ function SimpleLineChart({ points }: { points: SeriesPoint[] }) {
   }, [points])
 
   return (
-    <div className="w-full">
+    <div className="w-full relative">
       <svg viewBox={`0 0 ${w} ${h}`} className="w-full h-28">
         <defs>
           <linearGradient id="dashboard-line-gradient" x1="0" y1="0" x2="0" y2="1">
@@ -110,9 +148,65 @@ function SimpleLineChart({ points }: { points: SeriesPoint[] }) {
         {areaPath && <path d={areaPath} fill="url(#dashboard-line-gradient)" />}
         <path d={path} fill="none" stroke="url(#dashboard-line-stroke)" strokeWidth="2.5" />
         {coords.map((p, idx) => (
-          <circle key={idx} cx={p.x} cy={p.y} r="2.5" fill="#38bdf8" />
+          <g 
+            key={idx}
+            onMouseEnter={() => setHoveredPoint(idx)}
+            onMouseLeave={() => setHoveredPoint(null)}
+            style={{ cursor: 'pointer' }}
+          >
+            <circle 
+              cx={p.x} 
+              cy={p.y} 
+              r={hoveredPoint === idx ? "5" : "2.5"} 
+              fill="#38bdf8"
+              className="transition-all duration-200"
+            />
+            {hoveredPoint === idx && (
+              <motion.circle
+                cx={p.x}
+                cy={p.y}
+                r="8"
+                fill="none"
+                stroke="#38bdf8"
+                strokeWidth="2"
+                initial={{ scale: 0, opacity: 0 }}
+                animate={{ scale: [1, 1.5, 1], opacity: [0.8, 0, 0.8] }}
+                transition={{ duration: 1.5, repeat: Infinity }}
+              />
+            )}
+          </g>
         ))}
       </svg>
+      
+      {/* Interactive tooltip */}
+      <AnimatePresence>
+        {hoveredPoint !== null && coords[hoveredPoint] && (
+          <motion.div
+            initial={{ opacity: 0, y: 10, scale: 0.8 }}
+            animate={{ opacity: 1, y: 0, scale: 1 }}
+            exit={{ opacity: 0, y: 10, scale: 0.8 }}
+            transition={{ duration: 0.2 }}
+            className="absolute pointer-events-none z-20"
+            style={{
+              left: `${(coords[hoveredPoint].x / w) * 100}%`,
+              top: `${(coords[hoveredPoint].y / h) * 100}%`,
+              transform: 'translate(-50%, -120%)',
+            }}
+          >
+            <div className="relative">
+              <div className="absolute inset-0 bg-gradient-to-br from-cyan-500/40 to-blue-500/40 blur-md rounded" />
+              <div className="relative bg-slate-900/95 backdrop-blur-xl border-2 border-cyan-400/50 rounded px-3 py-2 shadow-xl whitespace-nowrap">
+                <div className="text-xs font-bold text-cyan-400">{coords[hoveredPoint].label}</div>
+                <div className="text-sm font-bold text-white tabular-nums">
+                  {formatCompact(coords[hoveredPoint].value)}
+                </div>
+              </div>
+              <div className="absolute left-1/2 -bottom-1 w-2 h-2 bg-slate-900 border-r-2 border-b-2 border-cyan-400/50 transform rotate-45 -translate-x-1/2" />
+            </div>
+          </motion.div>
+        )}
+      </AnimatePresence>
+      
       <div className="flex justify-between text-[11px] text-slate-400 -mt-1">
         <span>{formatCompact(min)}</span>
         <span>{formatCompact(max)}</span>
