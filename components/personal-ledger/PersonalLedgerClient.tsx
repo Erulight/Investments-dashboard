@@ -55,6 +55,11 @@ export function PersonalLedgerClient() {
   const [formLoading, setFormLoading] = useState(false)
   const [deleteId, setDeleteId] = useState<string | null>(null)
   const [deleteLoading, setDeleteLoading] = useState(false)
+  const [deletePersonId, setDeletePersonId] = useState<string | null>(null)
+  const [deletePersonLoading, setDeletePersonLoading] = useState(false)
+  const [editPersonId, setEditPersonId] = useState<string | null>(null)
+  const [editPersonName, setEditPersonName] = useState('')
+  const [editPersonLoading, setEditPersonLoading] = useState(false)
 
   const fetchPersons = useCallback(async () => {
     setLoading(true)
@@ -200,6 +205,53 @@ export function PersonalLedgerClient() {
     }
   }
 
+  const handleDeletePerson = async () => {
+    if (!deletePersonId) return
+    setDeletePersonLoading(true)
+    try {
+      const res = await fetch(`/api/personal-ledger/person/${deletePersonId}`, { method: 'DELETE' })
+      const data = await res.json()
+      if (!res.ok) throw new Error(data.error || 'Failed to delete person')
+      setDeletePersonId(null)
+      if (activePersonId === deletePersonId) {
+        setActivePersonId(null)
+      }
+      await fetchPersons()
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'Failed to delete person')
+    } finally {
+      setDeletePersonLoading(false)
+    }
+  }
+
+  const openEditPerson = (person: Person) => {
+    setEditPersonId(person.id)
+    setEditPersonName(person.name)
+    setFormError('')
+  }
+
+  const handleEditPerson = async () => {
+    if (!editPersonId || !editPersonName.trim()) return
+    setEditPersonLoading(true)
+    setFormError('')
+    try {
+      const res = await fetch(`/api/personal-ledger/person/${editPersonId}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ name: editPersonName.trim() }),
+      })
+      const data = await res.json()
+      if (!res.ok) throw new Error(data.error || 'Failed to update person')
+      setEditPersonId(null)
+      setEditPersonName('')
+      await fetchPersons()
+    } catch (e) {
+      setFormError(e instanceof Error ? e.message : 'Failed to update person')
+    } finally {
+      setEditPersonLoading(false)
+    }
+  }
+
   const exportCsv = () => {
     if (!activePerson) return
     const header = 'Date,Type,Amount,Currency,Notes'
@@ -244,17 +296,36 @@ export function PersonalLedgerClient() {
       <div className="bg-white dark:bg-slate-800 rounded-xl border border-slate-200 dark:border-white/10 shadow-sm">
         <div className="flex items-center gap-2 px-4 py-3 border-b border-slate-200 dark:border-white/10 overflow-x-auto">
           {persons.map(person => (
-            <button
-              key={person.id}
-              onClick={() => setActivePersonId(person.id)}
-              className={`px-4 py-2 rounded-lg text-sm font-medium whitespace-nowrap transition-colors ${
-                activePersonId === person.id
-                  ? 'bg-cyan-600 text-white'
-                  : 'bg-slate-100 dark:bg-slate-700 text-slate-700 dark:text-slate-300 hover:bg-slate-200 dark:hover:bg-slate-600'
-              }`}
-            >
-              {person.name}
-            </button>
+            <div key={person.id} className="relative group">
+              <button
+                onClick={() => setActivePersonId(person.id)}
+                className={`px-4 py-2 rounded-lg text-sm font-medium whitespace-nowrap transition-colors ${
+                  activePersonId === person.id
+                    ? 'bg-cyan-600 text-white'
+                    : 'bg-slate-100 dark:bg-slate-700 text-slate-700 dark:text-slate-300 hover:bg-slate-200 dark:hover:bg-slate-600'
+                }`}
+              >
+                {person.name}
+              </button>
+              {activePersonId === person.id && (
+                <div className="absolute -top-1 -right-1 flex gap-0.5 opacity-0 group-hover:opacity-100 transition-opacity">
+                  <button
+                    onClick={(e) => { e.stopPropagation(); openEditPerson(person); }}
+                    className="w-5 h-5 rounded-full bg-blue-500 hover:bg-blue-600 text-white text-[10px] flex items-center justify-center shadow-lg"
+                    title="Edit person name"
+                  >
+                    ✎
+                  </button>
+                  <button
+                    onClick={(e) => { e.stopPropagation(); setDeletePersonId(person.id); }}
+                    className="w-5 h-5 rounded-full bg-red-500 hover:bg-red-600 text-white text-[10px] flex items-center justify-center shadow-lg"
+                    title="Delete person"
+                  >
+                    ✕
+                  </button>
+                </div>
+              )}
+            </div>
           ))}
         </div>
 
@@ -545,7 +616,90 @@ export function PersonalLedgerClient() {
         </div>
       )}
 
-      {/* Delete Confirm Modal */}
+      {/* Edit Person Modal */}
+      {editPersonId && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50 backdrop-blur-sm">
+          <div className="bg-white dark:bg-slate-800 rounded-2xl shadow-2xl w-full max-w-sm border border-slate-200 dark:border-white/10">
+            <div className="px-6 py-4 border-b border-slate-200 dark:border-white/10 flex items-center justify-between">
+              <h2 className="text-base font-bold text-slate-900 dark:text-white">Edit Person Name</h2>
+              <button
+                onClick={() => { setEditPersonId(null); setEditPersonName(''); setFormError(''); }}
+                className="w-7 h-7 rounded-full flex items-center justify-center text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 hover:bg-slate-100 dark:hover:bg-white/10 transition-colors"
+              >
+                ✕
+              </button>
+            </div>
+            <div className="px-6 py-5 space-y-4">
+              {formError && (
+                <div className="px-3 py-2 rounded-lg bg-red-50 dark:bg-red-950/40 text-sm text-red-700 dark:text-red-300 border border-red-200 dark:border-red-800/60">
+                  {formError}
+                </div>
+              )}
+              <div>
+                <label className="block text-xs font-semibold text-slate-600 dark:text-slate-300 mb-1">Person Name *</label>
+                <input
+                  type="text"
+                  required
+                  value={editPersonName}
+                  onChange={e => setEditPersonName(e.target.value)}
+                  placeholder="Enter person's name"
+                  className="w-full px-3 py-2 text-sm rounded-lg border border-slate-200 dark:border-white/15 bg-slate-50 dark:bg-slate-700 text-slate-900 dark:text-white placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-cyan-500"
+                  onKeyDown={e => { if (e.key === 'Enter') handleEditPerson(); }}
+                />
+              </div>
+              <div className="flex gap-3">
+                <button
+                  type="button"
+                  onClick={() => { setEditPersonId(null); setEditPersonName(''); setFormError(''); }}
+                  className="flex-1 px-4 py-2 rounded-lg border border-slate-200 dark:border-white/15 text-sm font-medium text-slate-700 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-white/10 transition-colors"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="button"
+                  onClick={handleEditPerson}
+                  disabled={editPersonLoading || !editPersonName.trim()}
+                  className="flex-1 px-4 py-2 rounded-lg bg-cyan-600 hover:bg-cyan-500 text-white text-sm font-semibold transition-colors disabled:opacity-60"
+                >
+                  {editPersonLoading ? 'Saving…' : 'Save'}
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Delete Person Confirm Modal */}
+      {deletePersonId && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50 backdrop-blur-sm">
+          <div className="bg-white dark:bg-slate-800 rounded-2xl shadow-2xl w-full max-w-sm border border-slate-200 dark:border-white/10 p-6">
+            <div className="text-center">
+              <div className="text-4xl mb-3">⚠️</div>
+              <h3 className="text-base font-bold text-slate-900 dark:text-white mb-2">Delete Person?</h3>
+              <p className="text-sm text-slate-500 dark:text-slate-400 mb-5">
+                This will delete the person and all their transactions. This action cannot be undone.
+              </p>
+              <div className="flex gap-3">
+                <button
+                  onClick={() => setDeletePersonId(null)}
+                  className="flex-1 px-4 py-2 rounded-lg border border-slate-200 dark:border-white/15 text-sm font-medium text-slate-700 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-white/10"
+                >
+                  Cancel
+                </button>
+                <button
+                  onClick={handleDeletePerson}
+                  disabled={deletePersonLoading}
+                  className="flex-1 px-4 py-2 rounded-lg bg-red-600 hover:bg-red-500 text-white text-sm font-semibold disabled:opacity-60"
+                >
+                  {deletePersonLoading ? 'Deleting…' : 'Delete'}
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Delete Transaction Confirm Modal */}
       {deleteId && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50 backdrop-blur-sm">
           <div className="bg-white dark:bg-slate-800 rounded-2xl shadow-2xl w-full max-w-sm border border-slate-200 dark:border-white/10 p-6">
