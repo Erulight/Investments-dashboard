@@ -4,11 +4,11 @@ import { requireAuth } from '@/lib/rbac'
 
 export async function DELETE(
   req: NextRequest,
-  { params }: { params: { id: string } }
+  { params }: { params: Promise<{ id: string }> }
 ) {
   try {
     await requireAuth(['OWNER'])
-    const { id } = params
+    const { id } = await params
 
     if (!id) {
       return NextResponse.json({ error: 'Person ID is required' }, { status: 400 })
@@ -36,11 +36,11 @@ export async function DELETE(
 
 export async function PUT(
   req: NextRequest,
-  { params }: { params: { id: string } }
+  { params }: { params: Promise<{ id: string }> }
 ) {
   try {
     await requireAuth(['OWNER'])
-    const { id } = params
+    const { id } = await params
     const body = await req.json().catch(() => ({}))
 
     const name = typeof body.name === 'string' ? body.name.trim() : ''
