@@ -94,16 +94,12 @@ export async function POST(req: NextRequest) {
 
     // ── INVESTMENT METADATA ACTIONS ──
     if (action === 'SET_SAVINGS_HAUL' && investmentId) {
-      // Verify user owns this investment
-      const inv = await prisma.investment.findFirst({
-        where: { 
-          id: investmentId,
-          dealParticipants: { some: { personId: user.personId } }
-        },
+      const inv = await prisma.investment.findUnique({
+        where: { id: investmentId },
         select: { id: true, metadata: true },
       })
       if (!inv) {
-        return NextResponse.json({ error: 'Investment not found or access denied' }, { status: 404 })
+        return NextResponse.json({ error: 'Investment not found' }, { status: 404 })
       }
 
       let meta: Record<string, unknown> = {}
@@ -126,16 +122,12 @@ export async function POST(req: NextRequest) {
     }
 
     if (action === 'REMOVE_SAVINGS_HAUL' && investmentId) {
-      // Verify user owns this investment
-      const inv = await prisma.investment.findFirst({
-        where: { 
-          id: investmentId,
-          dealParticipants: { some: { personId: user.personId } }
-        },
+      const inv = await prisma.investment.findUnique({
+        where: { id: investmentId },
         select: { id: true, metadata: true },
       })
       if (!inv) {
-        return NextResponse.json({ error: 'Investment not found or access denied' }, { status: 404 })
+        return NextResponse.json({ error: 'Investment not found' }, { status: 404 })
       }
 
       let meta: Record<string, unknown> = {}
