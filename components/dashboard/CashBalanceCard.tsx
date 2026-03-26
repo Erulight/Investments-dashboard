@@ -42,6 +42,9 @@ export function CashBalanceCard({ initialCash, role }: { initialCash: number; ro
   const [partnersLoading, setPartnersLoading] = useState(false)
   const [partnersError, setPartnersError] = useState('')
   const [selectedPartnerId, setSelectedPartnerId] = useState('')
+  const [showHistoryModal, setShowHistoryModal] = useState(false)
+  const [balanceHistory, setBalanceHistory] = useState<Array<{ date: string; balance: number; type: string; amount: number; description: string | null }>>([])  
+  const [historyLoading, setHistoryLoading] = useState(false)
 
   const loadCash = async () => {
     setError('')
@@ -160,10 +163,37 @@ export function CashBalanceCard({ initialCash, role }: { initialCash: number; ro
     }
   }
 
+  const loadBalanceHistory = async () => {
+    setHistoryLoading(true)
+    try {
+      const res = await fetch('/api/cash/history')
+      const data = await res.json().catch(() => ({}))
+      if (!res.ok) {
+        throw new Error(data.error || 'Failed to load balance history')
+      }
+      setBalanceHistory(data.history || [])
+      setShowHistoryModal(true)
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Failed to load balance history')
+    } finally {
+      setHistoryLoading(false)
+    }
+  }
+
   return (
     <Card>
       <CardContent>
-        <p className="text-xs font-medium text-gray-500 uppercase tracking-wider">Cash Balance</p>
+        <div className="flex items-center justify-between">
+          <p className="text-xs font-medium text-gray-500 uppercase tracking-wider">Cash Balance</p>
+          <button
+            onClick={loadBalanceHistory}
+            disabled={historyLoading}
+            className="text-xs text-cyan-600 hover:text-cyan-700 font-medium transition-colors"
+            title="View balance history"
+          >
+            {historyLoading ? 'Loading...' : '📊 History'}
+          </button>
+        </div>
         <div className="text-xl font-bold text-gray-900 mt-1 tabular-nums">
           SAR {Number(cashBalance || 0).toLocaleString()}
         </div>
@@ -296,6 +326,80 @@ export function CashBalanceCard({ initialCash, role }: { initialCash: number; ro
           )}
         </div>
       </CardContent>
+
+      {/* Balance History Modal */}
+      {showHistoryModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50 backdrop-blur-sm">
+          <div className="bg-white dark:bg-slate-800 rounded-2xl shadow-2xl w-full max-w-3xl border border-slate-200 dark:border-white/10 max-h-[80vh] flex flex-col">
+            <div className="px-6 py-4 border-b border-slate-200 dark:border-white/10 flex items-center justify-between">
+              <h2 className="text-lg font-bold text-slate-900 dark:text-white">Cash Balance History</h2>
+              <button
+                onClick={() => setShowHistoryModal(false)}
+                className="w-8 h-8 rounded-full flex items-center justify-center text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 hover:bg-slate-100 dark:hover:bg-white/10 transition-colors"
+              >
+                ✕
+              </button>
+            </div>
+            <div className="px-6 py-4 overflow-y-auto flex-1">
+              {balanceHistory.length === 0 ? (
+                <div className="text-center py-8 text-slate-400">
+                  <p className="text-sm">No transaction history available</p>
+                </div>
+              ) : (
+                <div className="space-y-1">
+                  <div className="grid grid-cols-12 gap-2 pb-2 border-b border-slate-200 dark:border-white/10 text-xs font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wider">
+                    <div className="col-span-2">Date</div>
+                    <div className="col-span-2">Type</div>
+                    <div className="col-span-4">Description</div>
+                    <div className="col-span-2 text-right">Amount</div>
+                    <div className="col-span-2 text-right">Balance</div>
+                  </div>
+                  {balanceHistory.map((entry, idx) => (
+                    <div
+                      key={idx}
+                      className="grid grid-cols-12 gap-2 py-2 border-b border-slate-100 dark:border-white/5 hover:bg-slate-50 dark:hover:bg-white/5 transition-colors text-sm"
+                    >
+                      <div className="col-span-2 text-slate-700 dark:text-slate-300">
+                        {new Date(entry.date).toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' })}
+                      </div>
+                      <div className="col-span-2">
+                        <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-semibold ${
+                          entry.type.includes('IN') || entry.type.includes('RECEIVE') || entry.type.includes('PROFIT') || entry.type.includes('COMMISSION')
+                            ? 'bg-emerald-100 dark:bg-emerald-500/20 text-emerald-700 dark:text-emerald-400'
+                            : entry.type.includes('OUT') || entry.type.includes('INVEST') || entry.type.includes('WITHDRAW') || entry.type.includes('PAY')
+                            ? 'bg-red-100 dark:bg-red-500/20 text-red-700 dark:text-red-400'
+                            : 'bg-slate-100 dark:bg-slate-500/20 text-slate-700 dark:text-slate-400'
+                        }`}>
+                          {entry.type.replace(/_/g, ' ')}
+                        </span>
+                      </div>
+                      <div className="col-span-4 text-slate-500 dark:text-slate-400 text-xs truncate">
+                        {entry.description || '—'}
+                      </div>
+                      <div className={`col-span-2 text-right font-semibold tabular-nums ${
+                        entry.amount >= 0 ? 'text-emerald-600 dark:text-emerald-400' : 'text-red-500 dark:text-red-400'
+                      }`}>
+                        {entry.amount >= 0 ? '+' : ''}{entry.amount.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                      </div>
+                      <div className="col-span-2 text-right font-bold text-slate-900 dark:text-white tabular-nums">
+                        {entry.balance.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+            <div className="px-6 py-4 border-t border-slate-200 dark:border-white/10 flex justify-end">
+              <button
+                onClick={() => setShowHistoryModal(false)}
+                className="px-4 py-2 rounded-lg bg-slate-100 dark:bg-slate-700 text-slate-700 dark:text-slate-300 hover:bg-slate-200 dark:hover:bg-slate-600 text-sm font-medium transition-colors"
+              >
+                Close
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </Card>
   )
 }
