@@ -243,30 +243,30 @@ function NeonLineChart({ points, range }: { points: { at: Date; value: number; a
 
         {/* Data points with hover interaction */}
         {coords.map((coord, i) => (
-          <motion.g
-            key={i}
-            initial={{ scale: 0, opacity: 0 }}
-            animate={{ scale: 1, opacity: 1 }}
-            transition={{ delay: 0.5 + i * 0.05, duration: 0.3 }}
-            style={{ cursor: 'pointer', pointerEvents: 'all' }}
-          >
+          <g key={i}>
             {/* Invisible larger hit area for easier hovering */}
             <circle
               cx={coord.x}
               cy={coord.y}
-              r="15"
+              r="20"
               fill="transparent"
               onMouseEnter={() => setHoveredPoint(i)}
               onMouseLeave={() => setHoveredPoint(null)}
-              style={{ pointerEvents: 'all' }}
+              style={{ cursor: 'pointer' }}
             />
-            <circle
+            <motion.circle
               cx={coord.x}
               cy={coord.y}
               r={hoveredPoint === i ? "10" : "6"}
               fill={neonColor}
               opacity="0.3"
-              className="transition-all duration-200"
+              initial={{ scale: 0, opacity: 0 }}
+              animate={{ 
+                scale: 1, 
+                opacity: 0.3,
+                r: hoveredPoint === i ? 10 : 6
+              }}
+              transition={{ delay: 0.5 + i * 0.05, duration: 0.3 }}
               style={{ pointerEvents: 'none' }}
             />
             <motion.circle
@@ -274,18 +274,24 @@ function NeonLineChart({ points, range }: { points: { at: Date; value: number; a
               cy={coord.y}
               r={hoveredPoint === i ? "6" : "4"}
               fill={neonColor}
+              initial={{ scale: 0, opacity: 0 }}
               animate={{
                 scale: i === coords.length - 1 || hoveredPoint === i ? [1, 1.3, 1] : 1,
+                opacity: 1,
+                r: hoveredPoint === i ? 6 : 4
               }}
               transition={{
-                duration: 2,
-                repeat: i === coords.length - 1 || hoveredPoint === i ? Infinity : 0,
-                ease: 'easeInOut',
+                scale: {
+                  duration: 2,
+                  repeat: i === coords.length - 1 || hoveredPoint === i ? Infinity : 0,
+                  ease: 'easeInOut',
+                },
+                r: { duration: 0.2 },
+                opacity: { delay: 0.5 + i * 0.05, duration: 0.3 }
               }}
-              className="transition-all duration-200"
               style={{ pointerEvents: 'none' }}
             />
-          </motion.g>
+          </g>
         ))}
 
         {/* Value labels */}
