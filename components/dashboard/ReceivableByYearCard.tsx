@@ -104,6 +104,7 @@ export function ReceivableByYearCard({
                 {safe.map((point, index) => {
                   const amount = Math.max(0, Number(point.amount) || 0)
                   const pct = maxAmount > 0 ? (amount / maxAmount) * 100 : 0
+                  const fillHeight = pct // Beaker is 100 units tall (y=10 to y=110)
                   const color = colors[index % colors.length]
                   
                   return (
@@ -174,8 +175,8 @@ export function ReceivableByYearCard({
                               clipPath={`url(#beaker-clip-${index})`}
                               initial={{ y: 110, height: 0 }}
                               animate={{ 
-                                y: isInView ? 110 - pct : 110,
-                                height: isInView ? pct : 0
+                                y: isInView ? 110 - fillHeight : 110,
+                                height: isInView ? fillHeight : 0
                               }}
                               transition={{ 
                                 duration: 2,
@@ -198,7 +199,7 @@ export function ReceivableByYearCard({
                                 }}
                                 animate={{
                                   cx: 35 + (bubble * 12) + Math.sin(bubble) * 5,
-                                  cy: [110, 110 - pct, 110 - pct - 20],
+                                  cy: [110, 110 - fillHeight, 110 - fillHeight - 20],
                                   opacity: [0, 0.8, 0],
                                 }}
                                 transition={{
@@ -219,8 +220,8 @@ export function ReceivableByYearCard({
                               clipPath={`url(#beaker-clip-${index})`}
                               initial={{ y1: 110, y2: 110 }}
                               animate={{ 
-                                y1: isInView ? 110 - pct : 110,
-                                y2: isInView ? 110 - pct : 110,
+                                y1: isInView ? 110 - fillHeight : 110,
+                                y2: isInView ? 110 - fillHeight : 110,
                                 opacity: [0.3, 0.7, 0.3]
                               }}
                               transition={{
