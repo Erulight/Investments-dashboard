@@ -207,15 +207,18 @@ export function CatMascot() {
   const [targetPos, setTargetPos] = useState<{ x: number; y: number } | null>(null)
   const [pos, setPos] = useState<{ x: number; y: number } | null>(null)
   const [comment, setComment] = useState<string | null>(null)
+  const [mousePos, setMousePos] = useState<{ x: number; y: number }>({ x: 0, y: 0 })
   const lastScrollY = useRef(0)
   const scrollTimeout = useRef<ReturnType<typeof setTimeout> | null>(null)
   const activeCardId = useRef<string | null>(null)
+  const cursorFollowTimeout = useRef<ReturnType<typeof setTimeout> | null>(null)
 
   const springX = useSpring(pos?.x ?? 0, { stiffness: 120, damping: 18 })
   const springY = useSpring(pos?.y ?? 0, { stiffness: 120, damping: 18 })
 
-  // Initial bottom-right placement
+  // Initial bottom-right placement (below navbar)
   useLayoutEffect(() => {
+    const navbarHeight = 60
     const startX = window.innerWidth - 150
     const startY = window.innerHeight - 110
     setPos({ x: startX, y: startY })
@@ -241,8 +244,9 @@ export function CatMascot() {
       activeCardId.current = cardId
 
       const rect = el.getBoundingClientRect()
-      const newX = rect.left + rect.width / 2 - 55
-      const newY = rect.bottom - 100
+      const navbarHeight = 60
+      const newX = rect.left + rect.width / 2 - 33
+      const newY = Math.max(rect.bottom - 60, navbarHeight + 10)
 
       const prevX = springX.get()
       setDirection(newX > prevX ? 1 : -1)
@@ -307,8 +311,9 @@ export function CatMascot() {
 
       if (nearestCard) {
         const rect = (nearestCard as Element).getBoundingClientRect()
-        const newX = rect.left + rect.width / 2 - 55
-        const newY = rect.bottom - 100
+        const navbarHeight = 60
+        const newX = rect.left + rect.width / 2 - 33
+        const newY = Math.max(rect.bottom - 60 + window.scrollY, navbarHeight + 10)
         const prevX = springX.get()
         setDirection(newX > prevX ? 1 : -1)
         setTargetPos({ x: newX, y: newY })
@@ -321,6 +326,50 @@ export function CatMascot() {
 
     window.addEventListener('scroll', onScroll, { passive: true })
     return () => window.removeEventListener('scroll', onScroll)
+  }, [])
+
+  // Cursor following from distance
+  useEffect(() => {
+    const onMouseMove = (e: MouseEvent) => {
+      setMousePos({ x: e.clientX, y: e.clientY })
+      
+      // Only follow cursor if not on a card
+      if (activeCardId.current) return
+      
+      if (cursorFollowTimeout.current) clearTimeout(cursorFollowTimeout.current)
+      
+      cursorFollowTimeout.current = setTimeout(() => {
+        const navbarHeight = 60
+        const currentX = springX.get()
+        const currentY = springY.get()
+        
+        // Calculate distance from cursor
+        const dx = e.clientX - currentX
+        const dy = e.clientY - currentY
+        const distance = Math.sqrt(dx * dx + dy * dy)
+        
+        // Follow from a distance (150-300px range)
+        if (distance > 300) {
+          const angle = Math.atan2(dy, dx)
+          const followDistance = 200
+          const newX = e.clientX - Math.cos(angle) * followDistance
+          const newY = Math.max(e.clientY - Math.sin(angle) * followDistance, navbarHeight + 10)
+          
+          const prevX = springX.get()
+          setDirection(newX > prevX ? 1 : -1)
+          setCatState('walking')
+          setTargetPos({ x: newX, y: newY })
+          
+          setTimeout(() => setCatState('sitting'), 800)
+        }
+      }, 100)
+    }
+    
+    window.addEventListener('mousemove', onMouseMove)
+    return () => {
+      window.removeEventListener('mousemove', onMouseMove)
+      if (cursorFollowTimeout.current) clearTimeout(cursorFollowTimeout.current)
+    }
   }, [])
 
   if (!pos) return null
