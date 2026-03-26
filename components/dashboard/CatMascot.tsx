@@ -13,8 +13,8 @@ function CatSVG({ state, direction }: { state: CatState; direction: 1 | -1 }) {
   return (
     <svg
       viewBox="0 0 110 90"
-      width="110"
-      height="90"
+      width="66"
+      height="54"
       style={{ transform: direction === -1 ? 'scaleX(-1)' : 'none', overflow: 'visible' }}
     >
       {/* Tail */}
@@ -188,11 +188,25 @@ function CatSVG({ state, direction }: { state: CatState; direction: 1 | -1 }) {
   )
 }
 
+const sarcasticComments = [
+  "Oh great, another card to visit... 🙄",
+  "Yawn... this again?",
+  "Do I HAVE to?",
+  "Fine, I'll go... *sigh*",
+  "You're really into this, huh?",
+  "Can't a cat get some rest?",
+  "This better be worth it...",
+  "Ugh, exercise... 😒",
+  "I was napping, you know.",
+  "Another day, another card..."
+]
+
 export function CatMascot() {
   const [catState, setCatState] = useState<CatState>('sitting')
   const [direction, setDirection] = useState<1 | -1>(1)
   const [targetPos, setTargetPos] = useState<{ x: number; y: number } | null>(null)
   const [pos, setPos] = useState<{ x: number; y: number } | null>(null)
+  const [comment, setComment] = useState<string | null>(null)
   const lastScrollY = useRef(0)
   const scrollTimeout = useRef<ReturnType<typeof setTimeout> | null>(null)
   const activeCardId = useRef<string | null>(null)
@@ -234,6 +248,11 @@ export function CatMascot() {
       setDirection(newX > prevX ? 1 : -1)
       setCatState('jumping')
       setTargetPos({ x: newX, y: newY })
+      
+      // Show sarcastic comment
+      const randomComment = sarcasticComments[Math.floor(Math.random() * sarcasticComments.length)]
+      setComment(randomComment)
+      setTimeout(() => setComment(null), 3000)
 
       setTimeout(() => setCatState('sitting'), 600)
     }
@@ -307,6 +326,7 @@ export function CatMascot() {
   if (!pos) return null
 
   return (
+    <>
     <motion.div
       style={{
         position: 'fixed',
@@ -314,7 +334,7 @@ export function CatMascot() {
         top: 0,
         x: springX,
         y: springY,
-        zIndex: 9999,
+        zIndex: 99999,
         pointerEvents: 'none',
         willChange: 'transform',
       }}
@@ -335,5 +355,34 @@ export function CatMascot() {
     >
       <CatSVG state={catState} direction={direction} />
     </motion.div>
+    
+    {/* Sarcastic speech bubble */}
+    <AnimatePresence>
+      {comment && (
+        <motion.div
+          initial={{ opacity: 0, scale: 0.8, y: 10 }}
+          animate={{ opacity: 1, scale: 1, y: 0 }}
+          exit={{ opacity: 0, scale: 0.8, y: 10 }}
+          transition={{ duration: 0.2 }}
+          style={{
+            position: 'fixed',
+            left: springX.get() + 35,
+            top: springY.get() - 40,
+            zIndex: 100000,
+            pointerEvents: 'none',
+          }}
+        >
+          <div className="relative">
+            <div className="bg-white/95 backdrop-blur-sm border-2 border-gray-300 rounded-2xl px-3 py-2 shadow-lg max-w-[180px]">
+              <p className="text-xs font-medium text-gray-700 leading-tight">{comment}</p>
+            </div>
+            {/* Speech bubble tail */}
+            <div className="absolute left-4 -bottom-2 w-0 h-0 border-l-[8px] border-l-transparent border-r-[8px] border-r-transparent border-t-[8px] border-t-white/95" />
+            <div className="absolute left-[17px] -bottom-[10px] w-0 h-0 border-l-[7px] border-l-transparent border-r-[7px] border-r-transparent border-t-[7px] border-t-gray-300" />
+          </div>
+        </motion.div>
+      )}
+    </AnimatePresence>
+    </>
   )
 }
