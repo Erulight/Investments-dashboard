@@ -98,10 +98,7 @@ export async function POST(req: NextRequest) {
       const inv = await prisma.investment.findFirst({
         where: { 
           id: investmentId,
-          OR: [
-            { account: { personId: user.personId } },
-            { dealParticipants: { some: { personId: user.personId } } }
-          ]
+          dealParticipants: { some: { personId: user.personId } }
         },
         select: { id: true, metadata: true },
       })
@@ -133,10 +130,7 @@ export async function POST(req: NextRequest) {
       const inv = await prisma.investment.findFirst({
         where: { 
           id: investmentId,
-          OR: [
-            { account: { personId: user.personId } },
-            { dealParticipants: { some: { personId: user.personId } } }
-          ]
+          dealParticipants: { some: { personId: user.personId } }
         },
         select: { id: true, metadata: true },
       })
