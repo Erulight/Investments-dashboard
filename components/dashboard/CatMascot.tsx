@@ -213,14 +213,14 @@ export function CatMascot() {
   const activeCardId = useRef<string | null>(null)
   const cursorFollowTimeout = useRef<ReturnType<typeof setTimeout> | null>(null)
 
-  const springX = useSpring(pos?.x ?? 0, { stiffness: 120, damping: 18 })
-  const springY = useSpring(pos?.y ?? 0, { stiffness: 120, damping: 18 })
+  const springX = useSpring(pos?.x ?? 0, { stiffness: 80, damping: 20 })
+  const springY = useSpring(pos?.y ?? 0, { stiffness: 80, damping: 20 })
 
   // Initial bottom-right placement (below navbar)
   useLayoutEffect(() => {
     const navbarHeight = 60
     const startX = window.innerWidth - 150
-    const startY = window.innerHeight - 110
+    const startY = window.scrollY + window.innerHeight - 110
     setPos({ x: startX, y: startY })
     springX.set(startX)
     springY.set(startY)
@@ -246,7 +246,7 @@ export function CatMascot() {
       const rect = el.getBoundingClientRect()
       const navbarHeight = 60
       const newX = rect.left + rect.width / 2 - 33
-      const newY = Math.max(rect.bottom - 60, navbarHeight + 10)
+      const newY = rect.bottom + window.scrollY - 60
 
       const prevX = springX.get()
       setDirection(newX > prevX ? 1 : -1)
@@ -258,7 +258,7 @@ export function CatMascot() {
       setComment(randomComment)
       setTimeout(() => setComment(null), 3000)
 
-      setTimeout(() => setCatState('sitting'), 600)
+      setTimeout(() => setCatState('sitting'), 1000)
     }
 
     const onLeave = () => {
@@ -311,9 +311,8 @@ export function CatMascot() {
 
       if (nearestCard) {
         const rect = (nearestCard as Element).getBoundingClientRect()
-        const navbarHeight = 60
         const newX = rect.left + rect.width / 2 - 33
-        const newY = Math.max(rect.bottom - 60 + window.scrollY, navbarHeight + 10)
+        const newY = rect.bottom + window.scrollY - 60
         const prevX = springX.get()
         setDirection(newX > prevX ? 1 : -1)
         setTargetPos({ x: newX, y: newY })
@@ -339,30 +338,30 @@ export function CatMascot() {
       if (cursorFollowTimeout.current) clearTimeout(cursorFollowTimeout.current)
       
       cursorFollowTimeout.current = setTimeout(() => {
-        const navbarHeight = 60
         const currentX = springX.get()
         const currentY = springY.get()
         
-        // Calculate distance from cursor
+        // Calculate distance from cursor (accounting for scroll)
+        const mouseYAbsolute = e.clientY + window.scrollY
         const dx = e.clientX - currentX
-        const dy = e.clientY - currentY
+        const dy = mouseYAbsolute - currentY
         const distance = Math.sqrt(dx * dx + dy * dy)
         
-        // Follow from a distance (150-300px range)
-        if (distance > 300) {
+        // Follow from a distance (200-400px range)
+        if (distance > 400) {
           const angle = Math.atan2(dy, dx)
-          const followDistance = 200
+          const followDistance = 250
           const newX = e.clientX - Math.cos(angle) * followDistance
-          const newY = Math.max(e.clientY - Math.sin(angle) * followDistance, navbarHeight + 10)
+          const newY = mouseYAbsolute - Math.sin(angle) * followDistance
           
           const prevX = springX.get()
           setDirection(newX > prevX ? 1 : -1)
           setCatState('walking')
           setTargetPos({ x: newX, y: newY })
           
-          setTimeout(() => setCatState('sitting'), 800)
+          setTimeout(() => setCatState('sitting'), 1200)
         }
-      }, 100)
+      }, 150)
     }
     
     window.addEventListener('mousemove', onMouseMove)
@@ -378,7 +377,7 @@ export function CatMascot() {
     <>
     <motion.div
       style={{
-        position: 'fixed',
+        position: 'absolute',
         left: 0,
         top: 0,
         x: springX,
@@ -389,17 +388,17 @@ export function CatMascot() {
       }}
       animate={
         catState === 'jumping'
-          ? { y: [0, -30, 0], scaleY: [1, 1.15, 0.9, 1] }
+          ? { y: [0, -50, -40, 0], scaleY: [1, 1.2, 1.1, 0.85, 1], scaleX: [1, 0.95, 0.98, 1.05, 1] }
           : catState === 'walking'
-          ? { scaleX: [1, 1.04, 1] }
-          : { scaleY: [1, 1.02, 1] }
+          ? { scaleX: [1, 1.03, 1], y: [0, -2, 0] }
+          : { scaleY: [1, 1.02, 1], rotate: [0, -1, 1, 0] }
       }
       transition={
         catState === 'jumping'
-          ? { duration: 0.5, ease: 'easeOut' }
+          ? { duration: 1, ease: [0.43, 0.13, 0.23, 0.96] }
           : catState === 'walking'
-          ? { duration: 0.4, repeat: Infinity }
-          : { duration: 2.5, repeat: Infinity, ease: 'easeInOut' }
+          ? { duration: 0.5, repeat: Infinity, ease: 'easeInOut' }
+          : { duration: 3, repeat: Infinity, ease: 'easeInOut' }
       }
     >
       <CatSVG state={catState} direction={direction} />
@@ -414,7 +413,7 @@ export function CatMascot() {
           exit={{ opacity: 0, scale: 0.8, y: 10 }}
           transition={{ duration: 0.2 }}
           style={{
-            position: 'fixed',
+            position: 'absolute',
             left: springX.get() + 35,
             top: springY.get() - 30,
             zIndex: 1000000,
