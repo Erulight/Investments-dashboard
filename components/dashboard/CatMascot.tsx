@@ -208,6 +208,7 @@ export function CatMascot() {
   const [pos, setPos] = useState<{ x: number; y: number } | null>(null)
   const [comment, setComment] = useState<string | null>(null)
   const [mousePos, setMousePos] = useState<{ x: number; y: number }>({ x: 0, y: 0 })
+  const [isJumping, setIsJumping] = useState(false)
   const lastScrollY = useRef(0)
   const scrollTimeout = useRef<ReturnType<typeof setTimeout> | null>(null)
   const activeCardId = useRef<string | null>(null)
@@ -251,6 +252,7 @@ export function CatMascot() {
       const prevX = springX.get()
       setDirection(newX > prevX ? 1 : -1)
       setCatState('jumping')
+      setIsJumping(true)
       setTargetPos({ x: newX, y: newY })
       
       // Show sarcastic comment
@@ -258,7 +260,10 @@ export function CatMascot() {
       setComment(randomComment)
       setTimeout(() => setComment(null), 3000)
 
-      setTimeout(() => setCatState('sitting'), 1000)
+      setTimeout(() => {
+        setCatState('sitting')
+        setIsJumping(false)
+      }, 1000)
     }
 
     const onLeave = () => {
@@ -386,22 +391,25 @@ export function CatMascot() {
         pointerEvents: 'none',
         willChange: 'transform',
       }}
-      animate={
-        catState === 'jumping'
-          ? { y: [0, -50, -40, 0], scaleY: [1, 1.2, 1.1, 0.85, 1], scaleX: [1, 0.95, 0.98, 1.05, 1] }
-          : catState === 'walking'
-          ? { scaleX: [1, 1.03, 1], y: [0, -2, 0] }
-          : { scaleY: [1, 1.02, 1], rotate: [0, -1, 1, 0] }
-      }
-      transition={
-        catState === 'jumping'
-          ? { duration: 1, ease: [0.43, 0.13, 0.23, 0.96] }
-          : catState === 'walking'
-          ? { duration: 0.5, repeat: Infinity, ease: 'easeInOut' }
-          : { duration: 3, repeat: Infinity, ease: 'easeInOut' }
-      }
     >
-      <CatSVG state={catState} direction={direction} />
+      <motion.div
+        animate={
+          isJumping
+            ? { y: [0, -60, -50, -10, 0], scaleY: [1, 1.25, 1.15, 0.8, 1], scaleX: [1, 0.9, 0.95, 1.1, 1] }
+            : catState === 'walking'
+            ? { scaleX: [1, 1.03, 1], y: [0, -3, 0] }
+            : { scaleY: [1, 1.02, 1], rotate: [0, -2, 2, 0] }
+        }
+        transition={
+          isJumping
+            ? { duration: 1, ease: [0.34, 1.56, 0.64, 1] }
+            : catState === 'walking'
+            ? { duration: 0.5, repeat: Infinity, ease: 'easeInOut' }
+            : { duration: 3, repeat: Infinity, ease: 'easeInOut' }
+        }
+      >
+        <CatSVG state={catState} direction={direction} />
+      </motion.div>
     </motion.div>
     
     {/* Sarcastic speech bubble */}
