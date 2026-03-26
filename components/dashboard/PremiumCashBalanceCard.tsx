@@ -56,6 +56,9 @@ export function PremiumCashBalanceCard({
   const [entryDate, setEntryDate] = useState(formatDateInput(new Date()))
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState('')
+  const [showHistoryModal, setShowHistoryModal] = useState(false)
+  const [balanceHistory, setBalanceHistory] = useState<Array<{ date: string; balance: number; type: string; amount: number; description: string | null }>>([])  
+  const [historyLoading, setHistoryLoading] = useState(false)
   
   const router = useRouter()
   const searchParams = useSearchParams()
@@ -196,6 +199,23 @@ export function PremiumCashBalanceCard({
     }
   }
 
+  const loadBalanceHistory = async () => {
+    setHistoryLoading(true)
+    try {
+      const res = await fetch('/api/cash/history')
+      const data = await res.json().catch(() => ({}))
+      if (!res.ok) {
+        throw new Error(data.error || 'Failed to load balance history')
+      }
+      setBalanceHistory(data.history || [])
+      setShowHistoryModal(true)
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Failed to load balance history')
+    } finally {
+      setHistoryLoading(false)
+    }
+  }
+
   return (
     <motion.div
       ref={cardRef}
@@ -240,10 +260,18 @@ export function PremiumCashBalanceCard({
 
         <div className="relative p-6 space-y-4">
           <div className="flex items-start justify-between">
-            <div className="flex-1">
+            <div className="flex-1 flex items-center justify-between">
               <p className="text-xs font-bold bg-gradient-to-r from-cyan-400 to-purple-400 bg-clip-text text-transparent uppercase tracking-wider drop-shadow-lg">
                 Cash Balance
               </p>
+              <button
+                onClick={loadBalanceHistory}
+                disabled={historyLoading}
+                className="text-xs text-cyan-400 hover:text-cyan-300 font-medium transition-colors"
+                title="View balance history"
+              >
+                {historyLoading ? 'Loading...' : '📊'}
+              </button>
             </div>
             <motion.button
               onClick={toggleHidden}
@@ -458,6 +486,80 @@ export function PremiumCashBalanceCard({
           transition={{ duration: 0.3 }}
         />
       </div>
+
+      {/* Balance History Modal */}
+      {showHistoryModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50 backdrop-blur-sm">
+          <div className="bg-slate-900 rounded-2xl shadow-2xl w-full max-w-3xl border-2 border-cyan-400/40 max-h-[80vh] flex flex-col">
+            <div className="px-6 py-4 border-b border-cyan-400/20 flex items-center justify-between">
+              <h2 className="text-lg font-bold text-white">Cash Balance History</h2>
+              <button
+                onClick={() => setShowHistoryModal(false)}
+                className="w-8 h-8 rounded-full flex items-center justify-center text-slate-400 hover:text-white hover:bg-slate-800 transition-colors"
+              >
+                ✕
+              </button>
+            </div>
+            <div className="px-6 py-4 overflow-y-auto flex-1">
+              {balanceHistory.length === 0 ? (
+                <div className="text-center py-8 text-slate-400">
+                  <p className="text-sm">No transaction history available</p>
+                </div>
+              ) : (
+                <div className="space-y-1">
+                  <div className="grid grid-cols-12 gap-2 pb-2 border-b border-cyan-400/20 text-xs font-semibold text-cyan-400 uppercase tracking-wider">
+                    <div className="col-span-2">Date</div>
+                    <div className="col-span-2">Type</div>
+                    <div className="col-span-4">Description</div>
+                    <div className="col-span-2 text-right">Amount</div>
+                    <div className="col-span-2 text-right">Balance</div>
+                  </div>
+                  {balanceHistory.map((entry, idx) => (
+                    <div
+                      key={idx}
+                      className="grid grid-cols-12 gap-2 py-2 border-b border-slate-800 hover:bg-slate-800/50 transition-colors text-sm"
+                    >
+                      <div className="col-span-2 text-slate-300">
+                        {new Date(entry.date).toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' })}
+                      </div>
+                      <div className="col-span-2">
+                        <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-semibold ${
+                          entry.type.includes('IN') || entry.type.includes('RECEIVE') || entry.type.includes('PROFIT') || entry.type.includes('COMMISSION')
+                            ? 'bg-emerald-500/20 text-emerald-400'
+                            : entry.type.includes('OUT') || entry.type.includes('INVEST') || entry.type.includes('WITHDRAW') || entry.type.includes('PAY')
+                            ? 'bg-red-500/20 text-red-400'
+                            : 'bg-slate-500/20 text-slate-400'
+                        }`}>
+                          {entry.type.replace(/_/g, ' ')}
+                        </span>
+                      </div>
+                      <div className="col-span-4 text-slate-400 text-xs truncate">
+                        {entry.description || '—'}
+                      </div>
+                      <div className={`col-span-2 text-right font-semibold tabular-nums ${
+                        entry.amount >= 0 ? 'text-emerald-400' : 'text-red-400'
+                      }`}>
+                        {entry.amount >= 0 ? '+' : ''}{entry.amount.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                      </div>
+                      <div className="col-span-2 text-right font-bold text-cyan-400 tabular-nums">
+                        {entry.balance.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+            <div className="px-6 py-4 border-t border-cyan-400/20 flex justify-end">
+              <button
+                onClick={() => setShowHistoryModal(false)}
+                className="px-4 py-2 rounded-lg bg-slate-800 text-slate-300 hover:bg-slate-700 text-sm font-medium transition-colors"
+              >
+                Close
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </motion.div>
   )
 }
