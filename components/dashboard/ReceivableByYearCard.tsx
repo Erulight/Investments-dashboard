@@ -162,36 +162,37 @@ export function ReceivableByYearCard({
                                 <stop offset="50%" stopColor={color.via} stopOpacity="0.95" />
                                 <stop offset="100%" stopColor={color.to} stopOpacity="1" />
                               </linearGradient>
-                              <clipPath id={`beaker-clip-${index}`}>
-                                <path d="M 30 10 L 30 50 L 20 90 Q 20 110, 50 110 Q 80 110, 80 90 L 70 50 L 70 10 Z" />
-                              </clipPath>
+                              <mask id={`beaker-mask-${index}`}>
+                                <path d="M 30 10 L 30 50 L 20 90 Q 20 110, 50 110 Q 80 110, 80 90 L 70 50 L 70 10 Z" fill="white" />
+                              </mask>
                             </defs>
 
-                            {/* Liquid fill (clipped to beaker shape) */}
-                            <motion.rect
-                              x="20"
-                              width="60"
-                              fill={`url(#gradient-${index})`}
-                              clipPath={`url(#beaker-clip-${index})`}
-                              initial={{ y: 110, height: 0 }}
-                              animate={{ 
-                                y: isInView ? 110 - fillHeight : 110,
-                                height: isInView ? fillHeight : 0
-                              }}
-                              transition={{ 
-                                duration: 2,
-                                delay: index * 0.2,
-                                ease: [0.34, 1.56, 0.64, 1]
-                              }}
-                            />
+                            {/* Liquid fill */}
+                            <g mask={`url(#beaker-mask-${index})`}>
+                              <motion.rect
+                                x="20"
+                                width="60"
+                                fill={`url(#gradient-${index})`}
+                                initial={{ y: 110, height: 0 }}
+                                animate={{ 
+                                  y: isInView ? 110 - fillHeight : 110,
+                                  height: isInView ? fillHeight : 0
+                                }}
+                                transition={{ 
+                                  duration: 2,
+                                  delay: index * 0.2,
+                                  ease: [0.34, 1.56, 0.64, 1]
+                                }}
+                              />
+                            </g>
 
-                            {/* Bubbles (clipped to beaker shape) */}
+                            {/* Bubbles */}
+                            <g mask={`url(#beaker-mask-${index})`}>
                             {isInView && [0, 1, 2].map((bubble) => (
                               <motion.circle
                                 key={bubble}
                                 r="1.5"
                                 fill="rgba(255, 255, 255, 0.6)"
-                                clipPath={`url(#beaker-clip-${index})`}
                                 initial={{ 
                                   cx: 35 + (bubble * 12),
                                   cy: 110,
@@ -211,13 +212,12 @@ export function ReceivableByYearCard({
                               />
                             ))}
 
-                            {/* Surface shimmer (clipped to beaker shape) */}
+                            {/* Surface shimmer */}
                             <motion.line
                               x1="25"
                               x2="75"
                               stroke="rgba(255, 255, 255, 0.4)"
                               strokeWidth="1"
-                              clipPath={`url(#beaker-clip-${index})`}
                               initial={{ y1: 110, y2: 110 }}
                               animate={{ 
                                 y1: isInView ? 110 - fillHeight : 110,
@@ -230,6 +230,7 @@ export function ReceivableByYearCard({
                                 opacity: { duration: 5, repeat: Infinity, ease: 'easeInOut' }
                               }}
                             />
+                            </g>
                             
                             {/* Glass beaker outline (drawn on top of liquid) */}
                             <path
