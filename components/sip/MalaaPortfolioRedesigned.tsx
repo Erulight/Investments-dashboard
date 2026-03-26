@@ -121,7 +121,7 @@ const getHijriYear = (date: Date) => {
   }
 }
 
-function NeonLineChart({ points, range }: { points: { at: Date; value: number }[]; range: RangeKey }) {
+function NeonLineChart({ points, range }: { points: { at: Date; value: number; action: string }[]; range: RangeKey }) {
   const [hoveredPoint, setHoveredPoint] = useState<number | null>(null)
   const width = 900
   const height = 300
@@ -155,7 +155,7 @@ function NeonLineChart({ points, range }: { points: { at: Date; value: number }[
   const coords = points.map((p) => {
     const x = padX + ((p.at.getTime() - x0) / xRange) * (width - padX * 2)
     const y = padY + (1 - (p.value - min) / range_val) * (height - padY * 2)
-    return { x, y, value: p.value, date: p.at }
+    return { x, y, value: p.value, date: p.at, action: p.action }
   })
 
   const d = coords
@@ -248,10 +248,18 @@ function NeonLineChart({ points, range }: { points: { at: Date; value: number }[
             initial={{ scale: 0, opacity: 0 }}
             animate={{ scale: 1, opacity: 1 }}
             transition={{ delay: 0.5 + i * 0.05, duration: 0.3 }}
-            onMouseEnter={() => setHoveredPoint(i)}
-            onMouseLeave={() => setHoveredPoint(null)}
-            style={{ cursor: 'pointer' }}
+            style={{ cursor: 'pointer', pointerEvents: 'all' }}
           >
+            {/* Invisible larger hit area for easier hovering */}
+            <circle
+              cx={coord.x}
+              cy={coord.y}
+              r="15"
+              fill="transparent"
+              onMouseEnter={() => setHoveredPoint(i)}
+              onMouseLeave={() => setHoveredPoint(null)}
+              style={{ pointerEvents: 'all' }}
+            />
             <circle
               cx={coord.x}
               cy={coord.y}
@@ -259,6 +267,7 @@ function NeonLineChart({ points, range }: { points: { at: Date; value: number }[
               fill={neonColor}
               opacity="0.3"
               className="transition-all duration-200"
+              style={{ pointerEvents: 'none' }}
             />
             <motion.circle
               cx={coord.x}
@@ -274,6 +283,7 @@ function NeonLineChart({ points, range }: { points: { at: Date; value: number }[
                 ease: 'easeInOut',
               }}
               className="transition-all duration-200"
+              style={{ pointerEvents: 'none' }}
             />
           </motion.g>
         ))}
@@ -330,6 +340,9 @@ function NeonLineChart({ points, range }: { points: { at: Date; value: number }[
                     day: 'numeric', 
                     year: 'numeric' 
                   })}
+                </div>
+                <div className="text-[10px] text-emerald-400 font-semibold uppercase">
+                  {coords[hoveredPoint].action.replace(/_/g, ' ')}
                 </div>
                 <div className="text-lg font-bold text-white tabular-nums">
                   {formatCurrency(coords[hoveredPoint].value)}
@@ -402,10 +415,11 @@ export default function MalaaPortfolioRedesigned({ investment, userRole }: Malaa
       .map((h) => {
         const at = new Date(h.at)
         const value = Number(h.currentValue)
+        const action = String(h.action || '')
         if (Number.isNaN(at.getTime()) || !Number.isFinite(value)) return null
-        return { at, value }
+        return { at, value, action }
       })
-      .filter((x): x is { at: Date; value: number } => !!x)
+      .filter((x): x is { at: Date; value: number; action: string } => !!x)
       .sort((a, b) => a.at.getTime() - b.at.getTime())
 
     const filtered = start ? parsed.filter((p) => p.at >= start) : parsed
