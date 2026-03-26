@@ -334,7 +334,7 @@ export function CatMascot() {
         top: 0,
         x: springX,
         y: springY,
-        zIndex: 99999,
+        zIndex: 999999,
         pointerEvents: 'none',
         willChange: 'transform',
       }}
@@ -367,18 +367,18 @@ export function CatMascot() {
           style={{
             position: 'fixed',
             left: springX.get() + 35,
-            top: springY.get() - 40,
-            zIndex: 100000,
+            top: springY.get() - 30,
+            zIndex: 1000000,
             pointerEvents: 'none',
           }}
         >
           <div className="relative">
-            <div className="bg-white/95 backdrop-blur-sm border-2 border-gray-300 rounded-2xl px-3 py-2 shadow-lg max-w-[180px]">
-              <p className="text-xs font-medium text-gray-700 leading-tight">{comment}</p>
+            <div className="bg-white/40 backdrop-blur-md border border-gray-200/50 rounded-xl px-2 py-1.5 shadow-md max-w-[120px]">
+              <p className="text-[10px] font-medium text-gray-800 leading-tight">{comment}</p>
             </div>
             {/* Speech bubble tail */}
-            <div className="absolute left-4 -bottom-2 w-0 h-0 border-l-[8px] border-l-transparent border-r-[8px] border-r-transparent border-t-[8px] border-t-white/95" />
-            <div className="absolute left-[17px] -bottom-[10px] w-0 h-0 border-l-[7px] border-l-transparent border-r-[7px] border-r-transparent border-t-[7px] border-t-gray-300" />
+            <div className="absolute left-3 -bottom-1.5 w-0 h-0 border-l-[6px] border-l-transparent border-r-[6px] border-r-transparent border-t-[6px] border-t-white/40" />
+            <div className="absolute left-[13px] -bottom-[7px] w-0 h-0 border-l-[5px] border-l-transparent border-r-[5px] border-r-transparent border-t-[5px] border-t-gray-200/50" />
           </div>
         </motion.div>
       )}
