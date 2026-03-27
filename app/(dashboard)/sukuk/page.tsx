@@ -343,7 +343,7 @@ export default async function InvestmentsPage() {
     if (user.role !== 'OWNER' || !user.personId) return 0
     const transactions = Array.isArray(inv.transactions) ? inv.transactions : []
     const profit = transactions
-      .filter((tx: any) => tx.type === 'SELL_PROFIT_ACCRUED' && tx.personId === user.personId)
+      .filter((tx: any) => tx.type === 'SELL_PROFIT_ACCRUED' && (tx.personId === user.personId || tx.personId == null))
       .reduce((sum: number, tx: any) => {
         const amount = Number(tx.amount)
         return sum + (Number.isFinite(amount) ? amount : 0)
@@ -355,13 +355,14 @@ export default async function InvestmentsPage() {
     if (user.role !== 'OWNER' || !user.personId) return { profit: 0, commission: 0 }
     const transactions = Array.isArray(inv.transactions) ? inv.transactions : []
 
+    const isOwnerTx = (tx: any) => tx.personId === user.personId || tx.personId == null
     const sells = transactions
-      .filter((tx: any) => tx.type === 'SELL_TO_PARTNER' && tx.personId === user.personId)
+      .filter((tx: any) => tx.type === 'SELL_TO_PARTNER' && isOwnerTx(tx))
       .map((tx: any) => ({ tx, d: toDate(tx?.date), meta: parseMetadata(tx?.metadata) }))
       .filter((x: any) => x.d)
 
     const ownerBuysAfter = transactions
-      .filter((tx: any) => tx.type === 'BUY_FROM_PARTNER' && tx.personId === user.personId)
+      .filter((tx: any) => tx.type === 'BUY_FROM_PARTNER' && isOwnerTx(tx))
       .map((tx: any) => toDate(tx?.date))
       .filter((d: any) => d)
 
@@ -471,7 +472,8 @@ export default async function InvestmentsPage() {
     // For sold deals (owner perspective), use realized sale profit metadata.
     if (user.role === 'OWNER' && user.personId) {
       const transactions = Array.isArray(inv.transactions) ? inv.transactions : []
-      const sellTx = transactions.find((tx: any) => tx.type === 'SELL_TO_PARTNER' && tx.personId === user.personId)
+      const isOwnerSellTx = (tx: any) => tx.type === 'SELL_TO_PARTNER' && (tx.personId === user.personId || tx.personId == null)
+      const sellTx = transactions.find(isOwnerSellTx)
       if (sellTx) {
         const saleMeta = parseMetadata(sellTx.metadata)
         if (saleMeta && Number.isFinite(saleMeta.accruedProfitAtSale ?? saleMeta.investorProfit)) {
