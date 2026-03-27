@@ -386,9 +386,28 @@ export default async function InvestmentsPage() {
   const isSoldDealForOwner = (inv: any) => {
     if (user.role !== 'OWNER' || !user.personId) return false
     const participants = Array.isArray(inv.dealParticipants) ? inv.dealParticipants : []
-    if (participants.length === 0) return false
-    const ownerParticipation = participants.find((p: any) => p?.personId === user.personId)
-    return !ownerParticipation || Number(ownerParticipation.investedAmount || 0) <= 0
+
+    // Participants-based check: owner entry missing or zeroed out
+    if (participants.length > 0) {
+      const ownerParticipation = participants.find((p: any) => p?.personId === user.personId)
+      if (!ownerParticipation || Number(ownerParticipation.investedAmount || 0) <= 0) return true
+    }
+
+    // Transaction-based check: SELL_TO_PARTNER without a later BUY_FROM_PARTNER
+    // (catches cases where dealParticipants was not updated after the sale)
+    const transactions = Array.isArray(inv.transactions) ? inv.transactions : []
+    const sellDates = transactions
+      .filter((tx: any) => tx.type === 'SELL_TO_PARTNER' && tx.personId === user.personId)
+      .map((tx: any) => toDate(tx?.date))
+      .filter((d: any) => d)
+    if (sellDates.length === 0) return false
+    const buyDates = transactions
+      .filter((tx: any) => tx.type === 'BUY_FROM_PARTNER' && tx.personId === user.personId)
+      .map((tx: any) => toDate(tx?.date))
+      .filter((d: any) => d)
+    return sellDates.some((sd: Date) =>
+      !buyDates.some((bd: Date) => (bd as any).getTime() >= (sd as any).getTime())
+    )
   }
 
   const getOwnerSoldSettlement = (inv: any) => {
@@ -662,13 +681,11 @@ export default async function InvestmentsPage() {
 
   const totalReceivable = (() => {
     if (user.role === 'OWNER' && user.personId) {
-      const activeNet = activeInvestments
-        .reduce((sum, inv) => sum + getNetProfit(inv), 0)
-
-      const activeReceived = activeInvestments
-        .reduce((sum, inv) => sum + getViewerReceived(inv), 0)
-
-      return round2(Math.max(0, activeNet - activeReceived))
+      // Sum per-deal max(0, ...) so deals where received > profit don't drag the total below zero
+      // and the header matches the Contributing Deals sum in the popup exactly
+      return round2(activeInvestments.reduce((sum, inv) => {
+        return sum + Math.max(0, getNetProfit(inv) - getViewerReceived(inv))
+      }, 0))
     }
 
     return round2(Math.max(0, totalNetProfit - totalWithdrawn))
