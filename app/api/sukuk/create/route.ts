@@ -90,6 +90,24 @@ export async function POST(req: NextRequest) {
     if (Number.isNaN(startDate.getTime())) {
       return NextResponse.json({ error: 'Invalid startDate' }, { status: 400 })
     }
+    
+    // BARRIER: Prevent future start dates
+    const today = new Date()
+    today.setHours(0, 0, 0, 0)
+    const startDateOnly = new Date(startDate)
+    startDateOnly.setHours(0, 0, 0, 0)
+    
+    if (startDateOnly > today) {
+      const formattedStartDate = startDate.toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' })
+      const formattedToday = today.toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' })
+      return NextResponse.json(
+        { 
+          error: `Cannot create Sukuk with future start date. Start date (${formattedStartDate}) cannot be later than today (${formattedToday}).` 
+        }, 
+        { status: 400 }
+      )
+    }
+    
     if (maturityDate && Number.isNaN(maturityDate.getTime())) {
       return NextResponse.json({ error: 'Invalid maturityDate' }, { status: 400 })
     }
