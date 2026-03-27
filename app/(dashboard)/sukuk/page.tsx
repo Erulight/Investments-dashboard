@@ -200,10 +200,20 @@ export default async function InvestmentsPage() {
           if (Number.isFinite(v)) return v
         }
       }
-      // No explicit owner participation entry found — subtract partner participant amounts
-      // to get the owner's residual portion; exclude the owner's own entry in case of type mismatch
+      // No explicit owner participation entry found — owner holds the residual after partner amounts.
+      // IMPORTANT: inv.principalAmount is reduced by ALL WITHDRAW_PRINCIPAL events, but
+      // dealParticipants[].investedAmount stores ORIGINAL amounts. Reconstruct the original
+      // total first, then subtract partner originals, then subtract owner's own withdrawals.
       const participants = Array.isArray(inv?.dealParticipants) ? inv.dealParticipants : []
       if (participants.length > 0) {
+        const transactions = Array.isArray(inv?.transactions) ? inv.transactions : []
+        const allPrincipalWithdrawals = transactions
+          .filter((tx: any) => tx.type === 'WITHDRAW_PRINCIPAL')
+          .reduce((s: number, tx: any) => {
+            const amt = Number(tx.amount)
+            return s + (Number.isFinite(amt) ? amt : 0)
+          }, 0)
+        const originalTotal = Number(inv?.principalAmount) + allPrincipalWithdrawals
         const partnerOnly = user.personId
           ? participants.filter((p: any) => String(p?.personId) !== String(user.personId))
           : participants
@@ -211,7 +221,14 @@ export default async function InvestmentsPage() {
           const amt = Number(p?.investedAmount)
           return s + (Number.isFinite(amt) ? amt : 0)
         }, 0)
-        return Math.max(0, Number(inv?.principalAmount) - partnerTotal)
+        const ownerOriginal = Math.max(0, originalTotal - partnerTotal)
+        const ownerWithdrawals = transactions
+          .filter((tx: any) => tx.type === 'WITHDRAW_PRINCIPAL' && isViewerTransaction(tx))
+          .reduce((s: number, tx: any) => {
+            const amt = Number(tx.amount)
+            return s + (Number.isFinite(amt) ? amt : 0)
+          }, 0)
+        return Math.max(0, ownerOriginal - ownerWithdrawals)
       }
     }
     const principalRaw = Number(inv?.principalAmount)
@@ -244,9 +261,7 @@ export default async function InvestmentsPage() {
     const profitWithdrawals = transactions.filter((tx: any) => tx.type === 'WITHDRAW_PROFIT')
 
     if (user.role === 'OWNER') {
-      const totalReceived = Number(inv.totalReceived)
-      if (Number.isFinite(totalReceived)) return totalReceived
-
+      // Do NOT use inv.totalReceived — it aggregates receipts for ALL participants, not just the owner
       return profitWithdrawals.reduce((sum: number, tx: any) => {
         const ownerTx = user.personId
           ? (tx.personId == null || tx.personId === user.personId)
@@ -446,7 +461,9 @@ export default async function InvestmentsPage() {
     const effectiveParticipation = inv.myParticipation ?? getOwnerParticipation(inv)
     const investment = Number.isFinite(Number(effectiveParticipation?.investedAmount))
       ? Number(effectiveParticipation.investedAmount)
-      : (Number.isFinite(Number(inv.principalAmount)) ? Number(inv.principalAmount) : 0)
+      : (user.role === 'OWNER' && user.personId
+          ? getInvestedAmount(inv)  // owner's share only, not full deal incl. partner
+          : (Number.isFinite(Number(inv.principalAmount)) ? Number(inv.principalAmount) : 0))
     const apr = Number.isFinite(inv.interestRate) ? inv.interestRate : 0
     const fees = Number.isFinite(inv.fees) ? inv.fees : 0
     const participationRatio = inv.principalAmount > 0 && investment > 0
@@ -491,10 +508,12 @@ export default async function InvestmentsPage() {
 
   const isActiveDeal = (inv: any) => {
     if (isSoldDealForOwner(inv)) return false
+    // Active if owner still has principal outstanding (covers B2B partial-principal-returned deals)
+    if (getViewerPrincipal(inv) > 0.01) return true
+    // Active if there is uncollected profit
     const netProfit = getNetProfit(inv)
     const totalReceived = getViewerReceived(inv)
-    const receivable = netProfit - totalReceived
-    return receivable > 0.01
+    return netProfit - totalReceived > 0.01
   }
 
   const displayedInvestments = (() => {
