@@ -816,14 +816,19 @@ export default async function DashboardPage({
 
     // Helper: Get net profit for Sukuk (matches Sukuk page getNetProfit)
     const getSukukNetProfitForDashboard = (inv: any) => {
-      const principal = inv.myParticipation?.investedAmount ?? inv.principalAmount
-      const investment = Number.isFinite(principal) ? principal : 0
+      const ownerPosition = getOwnerPosition(inv)
+      const effectiveInvested = ownerPosition?.investedAmount ?? inv.myParticipation?.investedAmount
+      const principal = Number.isFinite(Number(effectiveInvested))
+        ? Number(effectiveInvested)
+        : getOwnerSukukPrincipal(inv)
+      const investment = Number.isFinite(principal) ? Math.max(0, principal) : 0
       const apr = Number.isFinite(inv.interestRate) ? inv.interestRate : 0
       const fees = Number.isFinite(inv.fees) ? inv.fees : 0
       const participationRatio = inv.principalAmount > 0 && investment > 0
         ? Math.min(1, investment / inv.principalAmount)
         : 0
-      const startBasis = inv.myParticipation?.acquiredAt ?? inv.startDate
+      const effectiveParticipation = ownerPosition ?? inv.myParticipation
+      const startBasis = effectiveParticipation?.acquiredAt ?? inv.startDate
       const totalMonthsFull = getPeriodMonths(inv.startDate, inv.maturityDate)
       const periodMonths = getPeriodMonths(startBasis, inv.maturityDate)
       const periodYears = periodMonths ? periodMonths / 12 : 0
@@ -831,29 +836,28 @@ export default async function DashboardPage({
         ? investment * (apr / 100) * periodYears
         : 0
 
+      const hasParticipation = Boolean(effectiveParticipation && inv.principalAmount > 0 && investment < inv.principalAmount)
       const manualReceivableFull = Number.isFinite(inv.receivableAmount) ? inv.receivableAmount : null
       const manualReceivable = manualReceivableFull !== null && manualReceivableFull > 0
-        ? (inv.myParticipation
+        ? (hasParticipation
             ? (manualReceivableFull * participationRatio) * (totalMonthsFull > 0 ? Math.min(1, Math.max(0, periodMonths / totalMonthsFull)) : 1)
             : manualReceivableFull)
         : null
       if (manualReceivable !== null) {
         return round2(Math.max(0, manualReceivable))
       }
-      const timeRatio = inv.myParticipation && totalMonthsFull > 0
+      const timeRatio = hasParticipation && totalMonthsFull > 0
         ? Math.min(1, Math.max(0, periodMonths / totalMonthsFull))
         : 1
-      const proratedFees = inv.myParticipation
+      const proratedFees = hasParticipation
         ? (fees * participationRatio) * timeRatio
         : fees
       return round2(Math.max(0, grossProfit - proratedFees))
     }
 
     // Helper: Get received profit for Sukuk (matches Sukuk page getViewerReceived)
+    // Do NOT use inv.totalReceived — it aggregates receipts for ALL participants, not just the owner
     const getSukukReceivedForDashboard = (inv: any) => {
-      const totalReceivedRaw = Number(inv.totalReceived)
-      if (Number.isFinite(totalReceivedRaw)) return totalReceivedRaw
-      
       const txs = Array.isArray(inv.transactions) ? inv.transactions : []
       return txs
         .filter((tx: any) => tx?.type === 'WITHDRAW_PROFIT')
