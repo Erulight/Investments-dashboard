@@ -702,7 +702,7 @@ export default async function InvestmentsPage() {
   })()
 
   const totalValue = totalInvested
-  const totalReturn = totalNetProfit
+  const totalReturn = round2(totalCommissionEarned + totalReceivable + totalWithdrawn)
   const returnPercentage = totalInvested > 0 ? ((totalReturn / totalInvested) * 100) : 0
   const activeDealsCount = activeInvestments.length
 
