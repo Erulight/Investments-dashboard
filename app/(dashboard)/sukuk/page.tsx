@@ -706,8 +706,30 @@ export default async function InvestmentsPage() {
   const returnPercentage = totalInvested > 0 ? ((totalReturn / totalInvested) * 100) : 0
   const activeDealsCount = activeInvestments.length
 
+  const getOwnerFeeShareFromSellMeta = (inv: any) => {
+    if (user.role !== 'OWNER') return 0
+    const transactions = Array.isArray(inv.transactions) ? inv.transactions : []
+    const isOwnerTx = (tx: any) => tx.personId === user.personId || tx.personId == null
+    const sells = transactions
+      .filter((tx: any) => tx.type === 'SELL_TO_PARTNER' && isOwnerTx(tx))
+      .map((tx: any) => ({ tx, d: toDate(tx?.date), meta: parseMetadata(tx?.metadata) }))
+      .filter((x: any) => x.d)
+    const ownerBuysAfter = transactions
+      .filter((tx: any) => tx.type === 'BUY_FROM_PARTNER' && isOwnerTx(tx))
+      .map((tx: any) => toDate(tx?.date))
+      .filter((d: any) => d)
+    const hasBuyAfter = (sellDate: Date) => ownerBuysAfter.some((bd: Date) => (bd as any).getTime() >= (sellDate as any).getTime())
+    return sells.reduce((acc: number, s: any) => {
+      if (hasBuyAfter(s.d as Date)) return acc
+      const feeShare = Number(s.meta?.investorFeeShare ?? 0)
+      return acc + (Number.isFinite(feeShare) ? round2(Math.max(0, feeShare)) : 0)
+    }, 0)
+  }
+
   const totalFeesPaid = round2(displayedInvestments.reduce((sum, inv) => {
-    if (isSoldDealForOwner(inv)) return sum
+    if (isSoldDealForOwner(inv)) {
+      return sum + getOwnerFeeShareFromSellMeta(inv)
+    }
     const fees = Number.isFinite(inv.fees) ? inv.fees : 0
     if (fees <= 0) return sum
     const effectiveP = inv.myParticipation ?? getOwnerParticipation(inv)
@@ -804,18 +826,22 @@ export default async function InvestmentsPage() {
 
     feesPaid: displayedInvestments
       .map((inv: any) => {
-        if (isSoldDealForOwner(inv)) return null
-        const fees = Number.isFinite(inv.fees) ? inv.fees : 0
-        if (fees <= 0) return null
-        const effectiveP = inv.myParticipation ?? getOwnerParticipation(inv)
-        const investment = Number.isFinite(Number(effectiveP?.investedAmount))
-          ? Number(effectiveP?.investedAmount)
-          : (user.role === 'OWNER' ? getInvestedAmount(inv) : (Number.isFinite(Number(inv.principalAmount)) ? Number(inv.principalAmount) : 0))
-        if (investment <= 0) return null
-        const principalFull = Number.isFinite(inv.principalAmount) ? inv.principalAmount : 0
-        const ratio = principalFull > 0 && investment > 0 ? Math.min(1, investment / principalFull) : 0
-        const hasPartial = principalFull > 0 && investment < principalFull
-        const value = hasPartial ? fees * ratio : fees
+        let value = 0
+        if (isSoldDealForOwner(inv)) {
+          value = getOwnerFeeShareFromSellMeta(inv)
+        } else {
+          const fees = Number.isFinite(inv.fees) ? inv.fees : 0
+          if (fees <= 0) return null
+          const effectiveP = inv.myParticipation ?? getOwnerParticipation(inv)
+          const investment = Number.isFinite(Number(effectiveP?.investedAmount))
+            ? Number(effectiveP?.investedAmount)
+            : (user.role === 'OWNER' ? getInvestedAmount(inv) : (Number.isFinite(Number(inv.principalAmount)) ? Number(inv.principalAmount) : 0))
+          if (investment <= 0) return null
+          const principalFull = Number.isFinite(inv.principalAmount) ? inv.principalAmount : 0
+          const ratio = principalFull > 0 && investment > 0 ? Math.min(1, investment / principalFull) : 0
+          const hasPartial = principalFull > 0 && investment < principalFull
+          value = hasPartial ? fees * ratio : fees
+        }
         return value > 0.01 ? { name: inv.name || inv.id || 'Unknown', value: toDisplayAmount(value) } : null
       })
       .filter(Boolean)
