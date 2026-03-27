@@ -476,10 +476,11 @@ export default async function InvestmentsPage() {
 
   const isActiveDeal = (inv: any) => {
     if (isSoldDealForOwner(inv)) return false
+    const principalOutstanding = getPrincipalOutstanding(inv)
     const netProfit = getNetProfit(inv)
     const totalReceived = getViewerReceived(inv)
     const receivable = netProfit - totalReceived
-    return receivable > 0.01
+    return principalOutstanding > 0.01 || receivable > 0.01
   }
 
   const displayedInvestments = (() => {
