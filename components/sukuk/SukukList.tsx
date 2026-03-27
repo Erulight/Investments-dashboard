@@ -960,7 +960,7 @@ export function SukukList({ initialSukuk, userRole, ownerPersonId, viewerPersonI
     const isSoldDeal = userRole === 'OWNER' ? isSoldDealForOwnerView(inv) : false
     const isPartnerIssuedCommission = userRole === 'OWNER' ? isPartnerIssuedCommissionDeal(inv) : false
 
-    if (userRole === 'OWNER' && ownerPersonId) {
+    if (userRole === 'OWNER') {
       const metrics = isSoldDeal ? getSoldDealMetrics(inv) : getMetrics(inv)
       const isClosedDeal = !isSoldDeal && Number(metrics.receivable || 0) <= 0.01
       const isActiveDeal = !isSoldDeal && !isClosedDeal
@@ -1790,7 +1790,7 @@ export function SukukList({ initialSukuk, userRole, ownerPersonId, viewerPersonI
         </div>
         <div className="flex items-center gap-3">
           <span className="text-xs text-slate-500 dark:text-slate-400">As of {asOfLabel}</span>
-          {userRole === 'OWNER' && ownerPersonId && (
+          {userRole === 'OWNER' && (
             <div className="flex items-center gap-2">
               <button
                 type="button"
