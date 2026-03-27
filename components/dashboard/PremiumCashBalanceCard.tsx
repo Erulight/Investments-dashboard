@@ -489,25 +489,57 @@ export function PremiumCashBalanceCard({
 
       {/* Balance History Modal */}
       {showHistoryModal && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50 backdrop-blur-sm">
-          <div className="bg-slate-900 rounded-2xl shadow-2xl w-full max-w-6xl border-2 border-cyan-400/40 max-h-[85vh] flex flex-col">
-            <div className="px-6 py-4 border-b border-cyan-400/20 flex items-center justify-between">
-              <h2 className="text-lg font-bold text-white">Cash Balance History</h2>
-              <button
+        <motion.div
+          initial={{ opacity: 0 }}
+          animate={{ opacity: 1 }}
+          exit={{ opacity: 0 }}
+          transition={{ duration: 0.2 }}
+          className="fixed inset-0 z-[60] flex items-center justify-center p-6 bg-black/60 backdrop-blur-md"
+        >
+          <motion.div
+            initial={{ scale: 0.95, opacity: 0, y: 20 }}
+            animate={{ scale: 1, opacity: 1, y: 0 }}
+            exit={{ scale: 0.95, opacity: 0, y: 20 }}
+            transition={{ duration: 0.3, ease: [0.22, 1, 0.36, 1] }}
+            className="bg-gradient-to-br from-slate-900 via-slate-800 to-slate-900 rounded-3xl shadow-2xl w-full h-full border-2 border-cyan-400/40 flex flex-col overflow-hidden"
+            style={{
+              boxShadow: '0 0 80px rgba(34, 211, 238, 0.3), inset 0 0 40px rgba(34, 211, 238, 0.05)'
+            }}
+          >
+            <div className="px-8 py-6 border-b border-cyan-400/30 flex items-center justify-between bg-slate-900/50 backdrop-blur-sm">
+              <div className="flex items-center gap-3">
+                <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-cyan-500/20 to-purple-500/20 border border-cyan-400/30 flex items-center justify-center">
+                  <span className="text-2xl">📊</span>
+                </div>
+                <h2 className="text-2xl font-bold bg-gradient-to-r from-cyan-400 to-purple-400 bg-clip-text text-transparent">Cash Balance History</h2>
+              </div>
+              <motion.button
                 onClick={() => setShowHistoryModal(false)}
-                className="w-8 h-8 rounded-full flex items-center justify-center text-slate-400 hover:text-white hover:bg-slate-800 transition-colors"
+                whileHover={{ scale: 1.1, rotate: 90 }}
+                whileTap={{ scale: 0.9 }}
+                className="w-10 h-10 rounded-xl flex items-center justify-center text-slate-400 hover:text-white bg-slate-800/50 hover:bg-red-500/20 border border-slate-700 hover:border-red-500/50 transition-all duration-300"
               >
                 ✕
-              </button>
+              </motion.button>
             </div>
-            <div className="px-6 py-4 overflow-y-auto flex-1">
+            <div className="px-8 py-6 overflow-y-auto flex-1 custom-scrollbar">
               {balanceHistory.length === 0 ? (
-                <div className="text-center py-8 text-slate-400">
-                  <p className="text-sm">No transaction history available</p>
-                </div>
+                <motion.div
+                  initial={{ opacity: 0, y: 20 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  className="text-center py-16 text-slate-400"
+                >
+                  <div className="text-6xl mb-4">📭</div>
+                  <p className="text-lg font-medium">No transaction history available</p>
+                </motion.div>
               ) : (
-                <div className="space-y-1">
-                  <div className="grid grid-cols-12 gap-4 pb-3 border-b border-cyan-400/20 text-sm font-semibold text-cyan-400 uppercase tracking-wider">
+                <motion.div
+                  initial={{ opacity: 0 }}
+                  animate={{ opacity: 1 }}
+                  transition={{ delay: 0.1 }}
+                  className="space-y-2"
+                >
+                  <div className="grid grid-cols-12 gap-6 pb-4 border-b-2 border-cyan-400/30 text-sm font-bold text-cyan-400 uppercase tracking-wider sticky top-0 bg-slate-900/80 backdrop-blur-sm z-10 py-3">
                     <div className="col-span-2">Date</div>
                     <div className="col-span-2">Type</div>
                     <div className="col-span-3">Description</div>
@@ -515,15 +547,18 @@ export function PremiumCashBalanceCard({
                     <div className="col-span-3 text-right">Balance</div>
                   </div>
                   {balanceHistory.map((entry, idx) => (
-                    <div
+                    <motion.div
                       key={idx}
-                      className="grid grid-cols-12 gap-4 py-3 border-b border-slate-800 hover:bg-slate-800/50 transition-colors"
+                      initial={{ opacity: 0, x: -20 }}
+                      animate={{ opacity: 1, x: 0 }}
+                      transition={{ delay: idx * 0.03, duration: 0.3 }}
+                      className="grid grid-cols-12 gap-6 py-4 border-b border-slate-800/50 hover:bg-gradient-to-r hover:from-cyan-500/5 hover:to-purple-500/5 transition-all duration-300 rounded-lg px-2 -mx-2"
                     >
-                      <div className="col-span-2 text-slate-300 text-sm">
+                      <div className="col-span-2 text-slate-300 text-base font-medium">
                         {new Date(entry.date).toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' })}
                       </div>
                       <div className="col-span-2">
-                        <span className={`inline-flex items-center px-2.5 py-1 rounded-full text-xs font-semibold ${
+                        <span className={`inline-flex items-center px-3 py-1.5 rounded-lg text-xs font-bold shadow-lg ${
                           entry.type.includes('IN') || entry.type.includes('RECEIVE') || entry.type.includes('PROFIT') || entry.type.includes('COMMISSION')
                             ? 'bg-emerald-500/20 text-emerald-400'
                             : entry.type.includes('OUT') || entry.type.includes('INVEST') || entry.type.includes('WITHDRAW') || entry.type.includes('PAY')
@@ -533,32 +568,37 @@ export function PremiumCashBalanceCard({
                           {entry.type.replace(/_/g, ' ')}
                         </span>
                       </div>
-                      <div className="col-span-3 text-slate-400 text-sm">
+                      <div className="col-span-3 text-slate-300 text-base">
                         {entry.description || '—'}
                       </div>
-                      <div className={`col-span-2 text-right font-semibold tabular-nums text-base ${
+                      <div className={`col-span-2 text-right font-bold tabular-nums text-lg ${
                         entry.amount >= 0 ? 'text-emerald-400' : 'text-red-400'
                       }`}>
                         {entry.amount >= 0 ? '+' : ''}{entry.amount.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
                       </div>
-                      <div className="col-span-3 text-right font-bold text-cyan-400 tabular-nums text-base">
+                      <div className="col-span-3 text-right font-black text-cyan-400 tabular-nums text-xl drop-shadow-[0_0_8px_rgba(34,211,238,0.5)]">
                         {entry.balance.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
                       </div>
-                    </div>
+                    </motion.div>
                   ))}
                 </div>
               )}
             </div>
-            <div className="px-6 py-4 border-t border-cyan-400/20 flex justify-end">
-              <button
+            <div className="px-8 py-5 border-t border-cyan-400/30 flex justify-between items-center bg-slate-900/50 backdrop-blur-sm">
+              <div className="text-sm text-slate-400">
+                <span className="font-semibold text-cyan-400">{balanceHistory.length}</span> transactions
+              </div>
+              <motion.button
                 onClick={() => setShowHistoryModal(false)}
-                className="px-4 py-2 rounded-lg bg-slate-800 text-slate-300 hover:bg-slate-700 text-sm font-medium transition-colors"
+                whileHover={{ scale: 1.05 }}
+                whileTap={{ scale: 0.95 }}
+                className="px-6 py-3 rounded-xl bg-gradient-to-r from-slate-800 to-slate-700 text-white hover:from-slate-700 hover:to-slate-600 text-sm font-bold transition-all duration-300 border border-slate-600 hover:border-cyan-500/50 shadow-lg"
               >
                 Close
-              </button>
+              </motion.button>
             </div>
-          </div>
-        </div>
+          </motion.div>
+        </motion.div>
       )}
     </motion.div>
   )
