@@ -395,14 +395,17 @@ export default async function InvestmentsPage() {
 
     // Transaction-based check: SELL_TO_PARTNER without a later BUY_FROM_PARTNER
     // (catches cases where dealParticipants was not updated after the sale)
+    // null personId = owner transaction in single-participant/legacy deals (matches isViewerTransaction)
+    const isOwnerTx = (tx: any) =>
+      tx.personId === user.personId || tx.personId == null
     const transactions = Array.isArray(inv.transactions) ? inv.transactions : []
     const sellDates = transactions
-      .filter((tx: any) => tx.type === 'SELL_TO_PARTNER' && tx.personId === user.personId)
+      .filter((tx: any) => tx.type === 'SELL_TO_PARTNER' && isOwnerTx(tx))
       .map((tx: any) => toDate(tx?.date))
       .filter((d: any) => d)
     if (sellDates.length === 0) return false
     const buyDates = transactions
-      .filter((tx: any) => tx.type === 'BUY_FROM_PARTNER' && tx.personId === user.personId)
+      .filter((tx: any) => tx.type === 'BUY_FROM_PARTNER' && isOwnerTx(tx))
       .map((tx: any) => toDate(tx?.date))
       .filter((d: any) => d)
     return sellDates.some((sd: Date) =>
