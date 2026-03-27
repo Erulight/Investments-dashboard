@@ -567,51 +567,43 @@ export default async function InvestmentsPage() {
     return sum + (Number.isFinite(principal) ? principal : 0)
   }, 0)
 
-  const totalCommissionEarned = (() => {
+  const getEffectiveCommission = (inv: any) => {
     if (user.role !== 'OWNER') return 0
-
-    const isOwnerCommissionTx = (tx: any) =>
+    const isOwnerCommTx = (tx: any) =>
       user.personId ? (tx.personId === user.personId || tx.personId == null) : tx.personId == null
+    const transactions = Array.isArray(inv.transactions) ? inv.transactions : []
 
-    const relevantDeals = displayedInvestments.filter((inv: any) => {
-      if (isSoldDealForOwner(inv)) return true
-      return isActiveDeal(inv)
-    })
+    // Source 1: all PARTNER_COMMISSION transactions for this owner
+    const txCommission = transactions
+      .filter((tx: any) => tx.type === 'PARTNER_COMMISSION' && isOwnerCommTx(tx))
+      .reduce((sum: number, tx: any) => {
+        const amount = Number(tx.amount)
+        return sum + (Number.isFinite(amount) ? Math.max(0, amount) : 0)
+      }, 0)
 
-    const byDealCommission = relevantDeals.reduce((sum, inv) => {
-      const transactions = Array.isArray(inv.transactions) ? inv.transactions : []
-      const txSellCommission = transactions
-        .filter((tx: any) => tx.type === 'PARTNER_COMMISSION' && isOwnerCommissionTx(tx))
-        .filter((tx: any) => {
-          const meta = parseMetadata(tx.metadata)
-          return meta?.source !== 'PARTNER_CREATE_COMMISSION_PAYOUT'
-        })
-        .reduce((acc: number, tx: any) => {
-          const amount = Number(tx.amount)
-          return acc + (Number.isFinite(amount) ? amount : 0)
-        }, 0)
+    // Source 2: SELL_TO_PARTNER metadata commissionAmount
+    const sellMetaCommission = getOwnerRealizedFromSellMeta(inv).commission
 
-      const txCreateCommission = transactions
-        .filter((tx: any) => tx.type === 'PARTNER_COMMISSION' && isOwnerCommissionTx(tx))
-        .filter((tx: any) => {
-          const meta = parseMetadata(tx.metadata)
-          return meta?.source === 'PARTNER_CREATE_COMMISSION_PAYOUT'
-        })
-        .reduce((acc: number, tx: any) => {
-          const amount = Number(tx.amount)
-          return acc + (Number.isFinite(amount) ? amount : 0)
-        }, 0)
+    // Source 3: investment metadata partnerCommissionPlan.amount
+    const planCommission = getPartnerCreateCommissionPlan(inv)
 
-      const metaSellCommission = getOwnerRealizedFromSellMeta(inv).commission
-      const metaCreateCommission = getPartnerCreateCommissionPlan(inv)
-
-      const sellEffective = Math.max(Math.max(0, txSellCommission), Math.max(0, metaSellCommission))
-      const createEffective = Math.max(Math.max(0, txCreateCommission), Math.max(0, metaCreateCommission))
-
-      return sum + sellEffective + createEffective
+    // Source 4: partner participant commissionFees (edited value takes priority in SukukList)
+    const participants = Array.isArray(inv.dealParticipants) ? inv.dealParticipants : []
+    const partnerParticipants = user.personId
+      ? participants.filter((p: any) => p?.personId && p.personId !== user.personId)
+      : participants.filter((p: any) => p?.personId != null)
+    const participantCommission = partnerParticipants.reduce((sum: number, p: any) => {
+      const commission = Number(p?.commissionFees ?? 0)
+      return sum + (Number.isFinite(commission) ? Math.max(0, commission) : 0)
     }, 0)
 
-    return round2(byDealCommission)
+    // Take MAX to avoid double-counting (matches SukukList approach)
+    return round2(Math.max(txCommission, sellMetaCommission, planCommission, participantCommission))
+  }
+
+  const totalCommissionEarned = (() => {
+    if (user.role !== 'OWNER') return 0
+    return round2(displayedInvestments.reduce((sum, inv) => sum + getEffectiveCommission(inv), 0))
   })()
 
   const totalNetProfit = (() => {
@@ -829,20 +821,8 @@ export default async function InvestmentsPage() {
 
     commissionEarned: (user.role === 'OWNER'
       ? displayedInvestments
-        .filter((inv: any) => isSoldDealForOwner(inv) || isActiveDeal(inv))
         .map((inv: any) => {
-          const isOwnerCommTx = (tx: any) =>
-            user.personId ? (tx.personId === user.personId || tx.personId == null) : tx.personId == null
-          const transactions = Array.isArray(inv.transactions) ? inv.transactions : []
-          const sellComm = transactions
-            .filter((tx: any) => tx.type === 'PARTNER_COMMISSION' && isOwnerCommTx(tx) && parseMetadata(tx.metadata)?.source !== 'PARTNER_CREATE_COMMISSION_PAYOUT')
-            .reduce((s: number, tx: any) => s + Math.max(0, Number(tx.amount) || 0), 0)
-          const createComm = transactions
-            .filter((tx: any) => tx.type === 'PARTNER_COMMISSION' && isOwnerCommTx(tx) && parseMetadata(tx.metadata)?.source === 'PARTNER_CREATE_COMMISSION_PAYOUT')
-            .reduce((s: number, tx: any) => s + Math.max(0, Number(tx.amount) || 0), 0)
-          const metaSell = getOwnerRealizedFromSellMeta(inv).commission
-          const metaCreate = getPartnerCreateCommissionPlan(inv)
-          const total = Math.max(sellComm, metaSell) + Math.max(createComm, metaCreate)
+          const total = getEffectiveCommission(inv)
           return total > 0.01 ? { name: inv.name || inv.id || 'Unknown', value: toDisplayAmount(total) } : null
         })
         .filter(Boolean)
