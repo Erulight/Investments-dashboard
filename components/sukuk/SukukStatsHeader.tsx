@@ -6,6 +6,16 @@ type PlatformTotal = [string, number]
 
 type PlatformDeal = { name: string; principal: number; receivable: number }
 
+type DealRow = { name: string; value: number }
+type ActiveDealRow = { name: string; platform: string; principal: number; receivable: number }
+type DealBreakdowns = {
+  totalReturn: DealRow[]
+  activeDeals: ActiveDealRow[]
+  feesPaid: DealRow[]
+  commissionEarned: DealRow[]
+  receivable: DealRow[]
+}
+
 type SukukStatsHeaderProps = {
   role: string
   currency: string
@@ -26,10 +36,11 @@ type SukukStatsHeaderProps = {
   realizedCoveragePct: number
   platformTotals: PlatformTotal[]
   platformDeals?: Record<string, PlatformDeal[]>
+  dealBreakdowns?: DealBreakdowns
 }
 
 type DetailRow = { label: string; value: string; color?: string }
-type CardDetail = { title: string; color: string; rows: DetailRow[]; extra?: React.ReactNode }
+type CardDetail = { title: string; color: string; rows: DetailRow[]; extra?: React.ReactNode; dealRows?: DealRow[]; activeDealRows?: ActiveDealRow[] }
 
 function DetailModal({ detail, onClose }: { detail: CardDetail | null; onClose: () => void }) {
   useEffect(() => {
@@ -89,6 +100,48 @@ function DetailModal({ detail, onClose }: { detail: CardDetail | null; onClose: 
             </div>
           ))}
         </div>
+
+        {detail.dealRows && detail.dealRows.length > 0 && (
+          <div className="relative mt-4">
+            <p className="mb-2 text-[10px] uppercase tracking-wider text-slate-500">Contributing Deals</p>
+            <div className="max-h-64 overflow-y-auto space-y-1.5 pr-1">
+              {detail.dealRows.map((d, i) => (
+                <div
+                  key={i}
+                  className="flex items-center justify-between rounded-lg px-3 py-2"
+                  style={{ background: 'rgba(255,255,255,0.03)', border: '1px solid rgba(255,255,255,0.06)' }}
+                >
+                  <span className="text-xs text-slate-300 truncate mr-3 max-w-[55%]">{d.name}</span>
+                  <span className="text-xs font-semibold tabular-nums shrink-0" style={{ color: detail.color }}>
+                    {d.value.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                  </span>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
+
+        {detail.activeDealRows && detail.activeDealRows.length > 0 && (
+          <div className="relative mt-4">
+            <p className="mb-2 text-[10px] uppercase tracking-wider text-slate-500">Active Deals ({detail.activeDealRows.length})</p>
+            <div className="max-h-72 overflow-y-auto space-y-1.5 pr-1">
+              {detail.activeDealRows.map((d, i) => (
+                <div
+                  key={i}
+                  className="rounded-xl p-2.5"
+                  style={{ background: 'rgba(255,255,255,0.03)', border: '1px solid rgba(255,255,255,0.06)' }}
+                >
+                  <p className="text-xs font-semibold text-white truncate mb-1.5">{d.name}</p>
+                  <div className="flex items-center gap-2">
+                    <span className="text-[10px] text-slate-500 truncate flex-1">{d.platform}</span>
+                    <span className="text-[10px] tabular-nums shrink-0" style={{ color: '#22d3ee' }}>{d.principal.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })} principal</span>
+                    <span className="text-[10px] tabular-nums shrink-0" style={{ color: '#fb923c' }}>{d.receivable.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })} recv</span>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
 
         {detail.extra && <div className="relative mt-4">{detail.extra}</div>}
       </div>
@@ -166,6 +219,7 @@ export function SukukStatsHeader({
   realizedCoveragePct,
   platformTotals,
   platformDeals = {},
+  dealBreakdowns,
 }: SukukStatsHeaderProps) {
   const target = useMemo(() => ({
     totalValue: toSafeNumber(totalValue),
@@ -292,7 +346,7 @@ export function SukukStatsHeader({
           { label: 'Received to Date', value: `${formatMoney(animated.totalWithdrawn)} ${c}` },
           { label: 'Pending Receivable', value: `${formatMoney(animated.totalReceivable)} ${c}`, color: '#fb923c' },
           { label: 'Return on Capital', value: `${animated.returnPercentage >= 0 ? '+' : ''}${animated.returnPercentage.toFixed(2)}%`, color: '#10b981' },
-        ] })}>
+        ], dealRows: dealBreakdowns?.totalReturn })}>  
           <p className="text-[11px] uppercase tracking-wider text-slate-400">Total Return</p>
           <p className="mt-1 text-xl font-bold tabular-nums" style={{ color: '#10b981' }}>{formatMoney(animated.totalReturn)} <span className="text-sm text-slate-400">{c}</span></p>
           <p className="mt-1 text-[10px] text-slate-500">Click for breakdown ›</p>
@@ -303,7 +357,7 @@ export function SukukStatsHeader({
           { label: 'Profit Earned', value: `${formatMoney(animated.totalReturn)} ${c}` },
           { label: 'Capital Deployed', value: `${formatMoney(animated.totalValue)} ${c}` },
           { label: 'Coverage', value: `${animated.realizedCoveragePct.toFixed(1)}% realized` },
-        ] })}>
+        ], dealRows: dealBreakdowns?.totalReturn })}>
           <p className="text-[11px] uppercase tracking-wider text-slate-400">Return %</p>
           <p className="mt-1 text-xl font-bold tabular-nums" style={{ color: animated.returnPercentage >= 0 ? '#10b981' : '#f87171' }}>
             {animated.returnPercentage >= 0 ? '+' : ''}{animated.returnPercentage.toFixed(2)}%
@@ -313,11 +367,11 @@ export function SukukStatsHeader({
 
         <NeonCard color="#8b5cf6" onClick={() => setModal({ title: 'Active Deals', color: '#8b5cf6', rows: [
           { label: 'Active Deals', value: formatInt(activeDealsCount), color: '#8b5cf6' },
-          { label: 'Near Maturity (≤30d)', value: formatInt(nearMaturityDealsCount), color: '#f59e0b' },
+          { label: 'Near Maturity (\u226430d)', value: formatInt(nearMaturityDealsCount), color: '#f59e0b' },
           { label: 'Overdue Deals', value: formatInt(overdueDealsCount), color: '#f87171' },
-          { label: 'Avg Days to Maturity', value: avgDaysToMaturity === null ? '—' : `${formatInt(avgDaysToMaturity)}d` },
-          { label: 'Avg Overdue Days', value: avgOverdueDays === null ? '—' : `${formatInt(avgOverdueDays)}d`, color: overdueDealsCount > 0 ? '#f87171' : undefined },
-        ] })}>
+          { label: 'Avg Days to Maturity', value: avgDaysToMaturity === null ? '\u2014' : `${formatInt(avgDaysToMaturity)}d` },
+          { label: 'Avg Overdue Days', value: avgOverdueDays === null ? '\u2014' : `${formatInt(avgOverdueDays)}d`, color: overdueDealsCount > 0 ? '#f87171' : undefined },
+        ], activeDealRows: dealBreakdowns?.activeDeals })}>
           <p className="text-[11px] uppercase tracking-wider text-slate-400">Active Deals</p>
           <p className="mt-1 text-xl font-bold tabular-nums" style={{ color: '#8b5cf6' }}>{formatInt(activeDealsCount)}</p>
           <p className="mt-1 text-[10px] text-slate-500">Click for breakdown ›</p>
@@ -356,8 +410,8 @@ export function SukukStatsHeader({
           { label: 'Total Fees Paid', value: `${formatMoney(animated.totalFeesPaid)} ${c}`, color: '#f59e0b' },
           { label: 'Gross Return', value: `${formatMoney(animated.totalReturn + animated.totalFeesPaid)} ${c}` },
           { label: 'Net Return', value: `${formatMoney(animated.totalReturn)} ${c}`, color: '#10b981' },
-          { label: 'Fee Impact', value: animated.totalReturn + animated.totalFeesPaid > 0 ? `${((animated.totalFeesPaid / (animated.totalReturn + animated.totalFeesPaid)) * 100).toFixed(1)}% of gross` : '—' },
-        ] })}>
+          { label: 'Fee Impact', value: animated.totalReturn + animated.totalFeesPaid > 0 ? `${((animated.totalFeesPaid / (animated.totalReturn + animated.totalFeesPaid)) * 100).toFixed(1)}% of gross` : '\u2014' },
+        ], dealRows: dealBreakdowns?.feesPaid })}>
           <p className="text-[11px] uppercase tracking-wider text-slate-400">Fees Paid</p>
           <p className="mt-1 text-sm font-semibold tabular-nums" style={{ color: '#f59e0b' }}>{formatMoney(animated.totalFeesPaid)} <span className="text-xs text-slate-500">{c}</span></p>
         </NeonCard>
@@ -365,12 +419,12 @@ export function SukukStatsHeader({
         <NeonCard color="#a855f7" onClick={() => setModal({ title: role === 'OWNER' ? 'Commission Earned' : 'Commission Paid', color: '#a855f7', rows: role === 'OWNER' ? [
           { label: 'Commission Earned', value: `${formatMoney(animated.totalCommissionEarned)} ${c}`, color: '#a855f7' },
           { label: 'Total Return', value: `${formatMoney(animated.totalReturn)} ${c}` },
-          { label: 'Commission Rate', value: animated.totalReturn > 0 ? `${((animated.totalCommissionEarned / animated.totalReturn) * 100).toFixed(1)}%` : '—' },
+          { label: 'Commission Rate', value: animated.totalReturn > 0 ? `${((animated.totalCommissionEarned / animated.totalReturn) * 100).toFixed(1)}%` : '\u2014' },
         ] : [
           { label: 'Commission Paid', value: `${formatMoney(animated.totalCommissionPaid)} ${c}`, color: '#a855f7' },
           { label: 'Gross Return', value: `${formatMoney(animated.totalReturn + animated.totalCommissionPaid)} ${c}` },
           { label: 'Net After Commission', value: `${formatMoney(animated.totalReturn)} ${c}`, color: '#10b981' },
-        ] })}>
+        ], dealRows: role === 'OWNER' ? dealBreakdowns?.commissionEarned : undefined })}>
           <p className="text-[11px] uppercase tracking-wider text-slate-400">{role === 'OWNER' ? 'Commission Earned' : 'Commission Paid'}</p>
           <p className="mt-1 text-sm font-semibold tabular-nums" style={{ color: '#a855f7' }}>
             {formatMoney(role === 'OWNER' ? animated.totalCommissionEarned : animated.totalCommissionPaid)} <span className="text-xs text-slate-500">{c}</span>
@@ -381,21 +435,21 @@ export function SukukStatsHeader({
           { label: 'Total Receivable', value: `${formatMoney(animated.totalReceivable)} ${c}`, color: '#fb923c' },
           { label: 'Already Received', value: `${formatMoney(animated.totalWithdrawn)} ${c}`, color: '#10b981' },
           { label: 'Total Expected', value: `${formatMoney(animated.totalReceivable + animated.totalWithdrawn)} ${c}` },
-          { label: 'Pending %', value: animated.totalReceivable + animated.totalWithdrawn > 0 ? `${((animated.totalReceivable / (animated.totalReceivable + animated.totalWithdrawn)) * 100).toFixed(1)}%` : '—' },
-        ] })}>
+          { label: 'Pending %', value: animated.totalReceivable + animated.totalWithdrawn > 0 ? `${((animated.totalReceivable / (animated.totalReceivable + animated.totalWithdrawn)) * 100).toFixed(1)}%` : '\u2014' },
+        ], dealRows: dealBreakdowns?.receivable })}>
           <p className="text-[11px] uppercase tracking-wider text-slate-400">Receivable</p>
           <p className="mt-1 text-sm font-semibold tabular-nums" style={{ color: '#fb923c' }}>{formatMoney(animated.totalReceivable)} <span className="text-xs text-slate-500">{c}</span></p>
         </NeonCard>
 
         <NeonCard color="#94a3b8" onClick={() => setModal({ title: 'Avg Days to Maturity', color: '#94a3b8', rows: [
-          { label: 'Avg Days to Maturity', value: avgDaysToMaturity === null ? '—' : `${formatInt(avgDaysToMaturity)} days`, color: '#94a3b8' },
-          { label: 'Near Maturity (≤30d)', value: formatInt(nearMaturityDealsCount), color: nearMaturityDealsCount > 0 ? '#f59e0b' : undefined },
+          { label: 'Avg Days to Maturity', value: avgDaysToMaturity === null ? '\u2014' : `${formatInt(avgDaysToMaturity)} days`, color: '#94a3b8' },
+          { label: 'Near Maturity (\u226430d)', value: formatInt(nearMaturityDealsCount), color: nearMaturityDealsCount > 0 ? '#f59e0b' : undefined },
           { label: 'Overdue Deals', value: formatInt(overdueDealsCount), color: overdueDealsCount > 0 ? '#f87171' : undefined },
-          { label: 'Avg Overdue Days', value: avgOverdueDays === null ? '—' : `${formatInt(avgOverdueDays)} days`, color: overdueDealsCount > 0 ? '#f87171' : undefined },
+          { label: 'Avg Overdue Days', value: avgOverdueDays === null ? '\u2014' : `${formatInt(avgOverdueDays)} days`, color: overdueDealsCount > 0 ? '#f87171' : undefined },
         ] })}>
           <p className="text-[11px] uppercase tracking-wider text-slate-400">Avg Days to Maturity</p>
           <p className="mt-1 text-sm font-semibold tabular-nums text-slate-200">
-            {avgDaysToMaturity === null ? '—' : `${formatInt(avgDaysToMaturity)}d`}
+            {avgDaysToMaturity === null ? '\u2014' : `${formatInt(avgDaysToMaturity)}d`}
           </p>
         </NeonCard>
       </div>

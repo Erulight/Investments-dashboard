@@ -200,11 +200,14 @@ export default async function InvestmentsPage() {
           if (Number.isFinite(v)) return v
         }
       }
-      // No explicit owner participation entry found — subtract all partner participant amounts
-      // to get the owner's remaining portion and avoid counting partner capital
+      // No explicit owner participation entry found — subtract partner participant amounts
+      // to get the owner's residual portion; exclude the owner's own entry in case of type mismatch
       const participants = Array.isArray(inv?.dealParticipants) ? inv.dealParticipants : []
       if (participants.length > 0) {
-        const partnerTotal = participants.reduce((s: number, p: any) => {
+        const partnerOnly = user.personId
+          ? participants.filter((p: any) => String(p?.personId) !== String(user.personId))
+          : participants
+        const partnerTotal = partnerOnly.reduce((s: number, p: any) => {
           const amt = Number(p?.investedAmount)
           return s + (Number.isFinite(amt) ? amt : 0)
         }, 0)
@@ -740,6 +743,62 @@ export default async function InvestmentsPage() {
     })
   }
 
+  const dealBreakdowns = {
+    totalReturn: activeInvestments
+      .map((inv: any) => ({ name: inv.name || inv.id || 'Unknown', value: toDisplayAmount(getNetProfit(inv)) }))
+      .filter((d: any) => d.value > 0.01)
+      .sort((a: any, b: any) => b.value - a.value) as { name: string; value: number }[],
+
+    activeDeals: activeInvestments.map((inv: any) => ({
+      name: inv.name || inv.id || 'Unknown',
+      platform: inv.account?.name || 'Unknown',
+      principal: toDisplayAmount(getPrincipalOutstanding(inv)),
+      receivable: toDisplayAmount(Math.max(0, getNetProfit(inv) - getViewerReceived(inv))),
+    })) as { name: string; platform: string; principal: number; receivable: number }[],
+
+    feesPaid: activeInvestments
+      .map((inv: any) => {
+        if (isSoldDealForOwner(inv)) return null
+        const effectiveP = inv.myParticipation ?? getOwnerParticipation(inv)
+        if (!effectiveP) return null
+        const investment = Number.isFinite(Number(effectiveP.investedAmount)) ? Number(effectiveP.investedAmount) : 0
+        if (investment <= 0) return null
+        const fees = Number.isFinite(inv.fees) ? inv.fees : 0
+        const principalFull = Number.isFinite(inv.principalAmount) ? inv.principalAmount : 0
+        const ratio = principalFull > 0 && investment > 0 ? Math.min(1, investment / principalFull) : 0
+        const hasPartial = principalFull > 0 && investment < principalFull
+        const value = hasPartial ? fees * ratio : fees
+        return value > 0.01 ? { name: inv.name || inv.id || 'Unknown', value: toDisplayAmount(value) } : null
+      })
+      .filter(Boolean) as { name: string; value: number }[],
+
+    commissionEarned: (user.role === 'OWNER' && user.personId
+      ? activeInvestments
+        .map((inv: any) => {
+          const transactions = Array.isArray(inv.transactions) ? inv.transactions : []
+          const sellComm = transactions
+            .filter((tx: any) => tx.type === 'PARTNER_COMMISSION' && tx.personId === user.personId && parseMetadata(tx.metadata)?.source !== 'PARTNER_CREATE_COMMISSION_PAYOUT')
+            .reduce((s: number, tx: any) => s + Math.max(0, Number(tx.amount) || 0), 0)
+          const createComm = transactions
+            .filter((tx: any) => tx.type === 'PARTNER_COMMISSION' && tx.personId === user.personId && parseMetadata(tx.metadata)?.source === 'PARTNER_CREATE_COMMISSION_PAYOUT')
+            .reduce((s: number, tx: any) => s + Math.max(0, Number(tx.amount) || 0), 0)
+          const metaSell = getOwnerRealizedFromSellMeta(inv).commission
+          const metaCreate = getPartnerCreateCommissionPlan(inv)
+          const total = Math.max(sellComm, metaSell) + Math.max(createComm, metaCreate)
+          return total > 0.01 ? { name: inv.name || inv.id || 'Unknown', value: toDisplayAmount(total) } : null
+        })
+        .filter(Boolean)
+      : []) as { name: string; value: number }[],
+
+    receivable: activeInvestments
+      .map((inv: any) => {
+        const receivable = Math.max(0, getNetProfit(inv) - getViewerReceived(inv))
+        return receivable > 0.01 ? { name: inv.name || inv.id || 'Unknown', value: toDisplayAmount(receivable) } : null
+      })
+      .filter(Boolean)
+      .sort((a: any, b: any) => b.value - a.value) as { name: string; value: number }[],
+  }
+
   const getMonthKey = (value?: string | Date | null) => {
     const date = toDate(value)
     if (!date) return null
@@ -847,6 +906,7 @@ export default async function InvestmentsPage() {
         realizedCoveragePct={realizedCoveragePct}
         platformTotals={displayPlatformTotals}
         platformDeals={platformDeals}
+        dealBreakdowns={dealBreakdowns}
       />
 
       {/* Investments List */}
