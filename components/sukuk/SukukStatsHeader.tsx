@@ -14,6 +14,7 @@ type DealBreakdowns = {
   feesPaid: DealRow[]
   commissionEarned: DealRow[]
   receivable: DealRow[]
+  received: DealRow[]
 }
 
 type SukukStatsHeaderProps = {
@@ -401,7 +402,7 @@ export function SukukStatsHeader({
           { label: 'Coverage Rate', value: `${animated.realizedCoveragePct.toFixed(1)}%` },
           { label: 'Still Pending', value: `${formatMoney(animated.totalReceivable)} ${c}`, color: '#fb923c' },
           { label: 'Fees Paid', value: `${formatMoney(animated.totalFeesPaid)} ${c}`, color: '#f59e0b' },
-        ] })}>
+        ], dealRows: dealBreakdowns?.received })}>
           <p className="text-[11px] uppercase tracking-wider text-slate-400">Received</p>
           <p className="mt-1 text-sm font-semibold tabular-nums" style={{ color: '#38bdf8' }}>{formatMoney(animated.totalWithdrawn)} <span className="text-xs text-slate-500">{c}</span></p>
         </NeonCard>

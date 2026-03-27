@@ -643,30 +643,26 @@ export default async function InvestmentsPage() {
   })()
 
   const totalWithdrawn = (() => {
-    const activeReceived = displayedInvestments
-      .filter((inv: any) => !(user.role === 'OWNER' && isSoldDealForOwner(inv)))
+    // All deals: WITHDRAW_PROFIT for the owner (includes pre-sale and post-sale withdrawals)
+    const allWithdrawProfit = displayedInvestments
       .reduce((sum, inv) => sum + getViewerReceived(inv), 0)
 
-    if (user.role !== 'OWNER' || !user.personId) return round2(activeReceived)
+    if (user.role !== 'OWNER' || !user.personId) return round2(allWithdrawProfit)
 
-    const ownerInvestments = investments.filter((inv: any) => {
-      const participants = Array.isArray(inv.dealParticipants) ? inv.dealParticipants : []
-      if (participants.length === 0) return true
-      
-      const ownerParticipation = participants.find((p: any) => p?.personId === user.personId)
-      if (!ownerParticipation) return false
-      
-      const invested = Number(ownerParticipation.investedAmount || 0)
-      if (invested > 0) return true
-      
-      const transactions = Array.isArray(inv.transactions) ? inv.transactions : []
-      const hasOwnerSell = transactions.some((tx: any) => 
-        tx.type === 'SELL_TO_PARTNER' && tx.personId === user.personId
-      )
-      return hasOwnerSell
-    })
-    const soldReceived = ownerInvestments.reduce((sum, inv) => sum + getOwnerSoldSettlement(inv).received, 0)
-    return round2(activeReceived + soldReceived)
+    // For sold deals: also count SELL_PROFIT_ACCRUED (not captured by getViewerReceived)
+    const soldProfitAccrued = displayedInvestments
+      .filter((inv: any) => isSoldDealForOwner(inv))
+      .reduce((sum, inv) => {
+        const transactions = Array.isArray(inv.transactions) ? inv.transactions : []
+        return sum + transactions.reduce((s: number, tx: any) => {
+          if (tx.type !== 'SELL_PROFIT_ACCRUED') return s
+          if (tx.personId !== user.personId && tx.personId != null) return s
+          const amount = Number(tx.amount)
+          return s + (Number.isFinite(amount) ? Math.max(0, amount) : 0)
+        }, 0)
+      }, 0)
+
+    return round2(allWithdrawProfit + soldProfitAccrued)
   })()
 
   const totalCommissionPaid = (() => {
@@ -864,6 +860,28 @@ export default async function InvestmentsPage() {
       })
       .filter(Boolean)
       .sort((a: any, b: any) => b.value - a.value) as { name: string; value: number }[],
+
+    received: (() => {
+      const rows: { name: string; value: number }[] = []
+      displayedInvestments.forEach((inv: any) => {
+        // WITHDRAW_PROFIT for the owner (pre-sale + post-sale)
+        let received = getViewerReceived(inv)
+        // For sold deals: also add SELL_PROFIT_ACCRUED
+        if (user.role === 'OWNER' && user.personId && isSoldDealForOwner(inv)) {
+          const transactions = Array.isArray(inv.transactions) ? inv.transactions : []
+          const sellAccrued = transactions.reduce((s: number, tx: any) => {
+            if (tx.type !== 'SELL_PROFIT_ACCRUED') return s
+            if (tx.personId !== user.personId && tx.personId != null) return s
+            const amount = Number(tx.amount)
+            return s + (Number.isFinite(amount) ? Math.max(0, amount) : 0)
+          }, 0)
+          received += sellAccrued
+        }
+        const isSold = user.role === 'OWNER' && isSoldDealForOwner(inv)
+        if (received > 0.01) rows.push({ name: `${inv.name || inv.id || 'Unknown'}${isSold ? ' (sold)' : ''}`, value: toDisplayAmount(received) })
+      })
+      return rows.sort((a, b) => b.value - a.value)
+    })(),
   }
 
   const getMonthKey = (value?: string | Date | null) => {
