@@ -490,7 +490,7 @@ export function PremiumCashBalanceCard({
       {/* Balance History Modal */}
       {showHistoryModal && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50 backdrop-blur-sm">
-          <div className="bg-slate-900 rounded-2xl shadow-2xl w-full max-w-3xl border-2 border-cyan-400/40 max-h-[80vh] flex flex-col">
+          <div className="bg-slate-900 rounded-2xl shadow-2xl w-full max-w-6xl border-2 border-cyan-400/40 max-h-[85vh] flex flex-col">
             <div className="px-6 py-4 border-b border-cyan-400/20 flex items-center justify-between">
               <h2 className="text-lg font-bold text-white">Cash Balance History</h2>
               <button
@@ -507,23 +507,23 @@ export function PremiumCashBalanceCard({
                 </div>
               ) : (
                 <div className="space-y-1">
-                  <div className="grid grid-cols-12 gap-2 pb-2 border-b border-cyan-400/20 text-xs font-semibold text-cyan-400 uppercase tracking-wider">
+                  <div className="grid grid-cols-12 gap-4 pb-3 border-b border-cyan-400/20 text-sm font-semibold text-cyan-400 uppercase tracking-wider">
                     <div className="col-span-2">Date</div>
                     <div className="col-span-2">Type</div>
-                    <div className="col-span-4">Description</div>
+                    <div className="col-span-3">Description</div>
                     <div className="col-span-2 text-right">Amount</div>
-                    <div className="col-span-2 text-right">Balance</div>
+                    <div className="col-span-3 text-right">Balance</div>
                   </div>
                   {balanceHistory.map((entry, idx) => (
                     <div
                       key={idx}
-                      className="grid grid-cols-12 gap-2 py-2 border-b border-slate-800 hover:bg-slate-800/50 transition-colors text-sm"
+                      className="grid grid-cols-12 gap-4 py-3 border-b border-slate-800 hover:bg-slate-800/50 transition-colors"
                     >
-                      <div className="col-span-2 text-slate-300">
+                      <div className="col-span-2 text-slate-300 text-sm">
                         {new Date(entry.date).toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' })}
                       </div>
                       <div className="col-span-2">
-                        <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-semibold ${
+                        <span className={`inline-flex items-center px-2.5 py-1 rounded-full text-xs font-semibold ${
                           entry.type.includes('IN') || entry.type.includes('RECEIVE') || entry.type.includes('PROFIT') || entry.type.includes('COMMISSION')
                             ? 'bg-emerald-500/20 text-emerald-400'
                             : entry.type.includes('OUT') || entry.type.includes('INVEST') || entry.type.includes('WITHDRAW') || entry.type.includes('PAY')
@@ -533,15 +533,15 @@ export function PremiumCashBalanceCard({
                           {entry.type.replace(/_/g, ' ')}
                         </span>
                       </div>
-                      <div className="col-span-4 text-slate-400 text-xs truncate">
+                      <div className="col-span-3 text-slate-400 text-sm">
                         {entry.description || '—'}
                       </div>
-                      <div className={`col-span-2 text-right font-semibold tabular-nums ${
+                      <div className={`col-span-2 text-right font-semibold tabular-nums text-base ${
                         entry.amount >= 0 ? 'text-emerald-400' : 'text-red-400'
                       }`}>
                         {entry.amount >= 0 ? '+' : ''}{entry.amount.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
                       </div>
-                      <div className="col-span-2 text-right font-bold text-cyan-400 tabular-nums">
+                      <div className="col-span-3 text-right font-bold text-cyan-400 tabular-nums text-base">
                         {entry.balance.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
                       </div>
                     </div>
