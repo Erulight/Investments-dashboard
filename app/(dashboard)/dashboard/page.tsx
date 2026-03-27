@@ -502,6 +502,19 @@ export default async function DashboardPage({
       return 0
     }
 
+    // Returns ORIGINAL invested amount (adds back WITHDRAW_PRINCIPAL) - matches sukuk page getInvestedAmount
+    const getOwnerSukukInvestedAmount = (inv: any) => {
+      const current = getOwnerSukukPrincipal(inv)
+      const transactions = Array.isArray(inv.transactions) ? inv.transactions : []
+      const withdrawalSum = transactions
+        .filter((tx: any) => tx.type === 'WITHDRAW_PRINCIPAL' && (!ownerPersonId || tx.personId === ownerPersonId || tx.personId == null))
+        .reduce((sum: number, tx: any) => {
+          const amount = Number(tx.amount)
+          return sum + (Number.isFinite(amount) ? amount : 0)
+        }, 0)
+      return Math.max(0, current + withdrawalSum)
+    }
+
     const getOwnerPrincipalShare = (inv: any) => {
       const accountType = getAccountType(inv)
       if (!accountType) return 0
@@ -818,9 +831,10 @@ export default async function DashboardPage({
     const getSukukNetProfitForDashboard = (inv: any) => {
       const ownerPosition = getOwnerPosition(inv)
       const effectiveInvested = ownerPosition?.investedAmount ?? inv.myParticipation?.investedAmount
+      // Use getOwnerSukukInvestedAmount (adds back WITHDRAW_PRINCIPAL) to match sukuk page's getInvestedAmount
       const principal = Number.isFinite(Number(effectiveInvested))
         ? Number(effectiveInvested)
-        : getOwnerSukukPrincipal(inv)
+        : getOwnerSukukInvestedAmount(inv)
       const investment = Number.isFinite(principal) ? Math.max(0, principal) : 0
       const apr = Number.isFinite(inv.interestRate) ? inv.interestRate : 0
       const fees = Number.isFinite(inv.fees) ? inv.fees : 0
