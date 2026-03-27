@@ -216,7 +216,7 @@ export default async function InvestmentsPage() {
         const originalTotal = Number(inv?.principalAmount) + allPrincipalWithdrawals
         const partnerOnly = user.personId
           ? participants.filter((p: any) => String(p?.personId) !== String(user.personId))
-          : participants
+          : participants.filter((p: any) => p?.personId != null)
         const partnerTotal = partnerOnly.reduce((s: number, p: any) => {
           const amt = Number(p?.investedAmount)
           return s + (Number.isFinite(amt) ? amt : 0)
@@ -490,7 +490,7 @@ export default async function InvestmentsPage() {
     const effectiveParticipation = inv.myParticipation ?? getOwnerParticipation(inv)
     const investment = Number.isFinite(Number(effectiveParticipation?.investedAmount))
       ? Number(effectiveParticipation.investedAmount)
-      : (user.role === 'OWNER' && user.personId
+      : (user.role === 'OWNER'
           ? getInvestedAmount(inv)  // owner's share only, not full deal incl. partner
           : (Number.isFinite(Number(inv.principalAmount)) ? Number(inv.principalAmount) : 0))
     const apr = Number.isFinite(inv.interestRate) ? inv.interestRate : 0
