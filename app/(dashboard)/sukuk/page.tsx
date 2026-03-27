@@ -566,7 +566,7 @@ export default async function InvestmentsPage() {
     if (user.role !== 'OWNER') return 0
 
     const isOwnerCommissionTx = (tx: any) =>
-      user.personId ? tx.personId === user.personId : tx.personId == null
+      user.personId ? (tx.personId === user.personId || tx.personId == null) : tx.personId == null
 
     const relevantDeals = displayedInvestments.filter((inv: any) => {
       if (isSoldDealForOwner(inv)) return true
@@ -827,7 +827,7 @@ export default async function InvestmentsPage() {
         .filter((inv: any) => isSoldDealForOwner(inv) || isActiveDeal(inv))
         .map((inv: any) => {
           const isOwnerCommTx = (tx: any) =>
-            user.personId ? tx.personId === user.personId : tx.personId == null
+            user.personId ? (tx.personId === user.personId || tx.personId == null) : tx.personId == null
           const transactions = Array.isArray(inv.transactions) ? inv.transactions : []
           const sellComm = transactions
             .filter((tx: any) => tx.type === 'PARTNER_COMMISSION' && isOwnerCommTx(tx) && parseMetadata(tx.metadata)?.source !== 'PARTNER_CREATE_COMMISSION_PAYOUT')
