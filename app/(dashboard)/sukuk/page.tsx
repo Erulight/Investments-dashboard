@@ -476,11 +476,10 @@ export default async function InvestmentsPage() {
 
   const isActiveDeal = (inv: any) => {
     if (isSoldDealForOwner(inv)) return false
-    const principalOutstanding = getPrincipalOutstanding(inv)
     const netProfit = getNetProfit(inv)
     const totalReceived = getViewerReceived(inv)
     const receivable = netProfit - totalReceived
-    return principalOutstanding > 0.01 || receivable > 0.01
+    return receivable > 0.01
   }
 
   const displayedInvestments = (() => {
@@ -502,7 +501,12 @@ export default async function InvestmentsPage() {
   const totalCommissionEarned = (() => {
     if (user.role !== 'OWNER' || !user.personId) return 0
 
-    const byDealCommission = investments.reduce((sum, inv) => {
+    const relevantDeals = displayedInvestments.filter((inv: any) => {
+      if (isSoldDealForOwner(inv)) return true
+      return isActiveDeal(inv)
+    })
+
+    const byDealCommission = relevantDeals.reduce((sum, inv) => {
       const transactions = Array.isArray(inv.transactions) ? inv.transactions : []
       const txSellCommission = transactions
         .filter((tx: any) => tx.type === 'PARTNER_COMMISSION' && tx.personId === user.personId)
@@ -624,12 +628,10 @@ export default async function InvestmentsPage() {
 
   const totalReceivable = (() => {
     if (user.role === 'OWNER' && user.personId) {
-      const activeNet = displayedInvestments
-        .filter((inv: any) => !isSoldDealForOwner(inv))
+      const activeNet = activeInvestments
         .reduce((sum, inv) => sum + getNetProfit(inv), 0)
 
-      const activeReceived = displayedInvestments
-        .filter((inv: any) => !isSoldDealForOwner(inv))
+      const activeReceived = activeInvestments
         .reduce((sum, inv) => sum + getViewerReceived(inv), 0)
 
       return round2(Math.max(0, activeNet - activeReceived))
@@ -643,14 +645,18 @@ export default async function InvestmentsPage() {
   const returnPercentage = totalInvested > 0 ? ((totalReturn / totalInvested) * 100) : 0
   const activeDealsCount = activeInvestments.length
 
-  const totalFeesPaid = round2(displayedInvestments.reduce((sum, inv) => {
+  const totalFeesPaid = round2(activeInvestments.reduce((sum, inv) => {
+    if (isSoldDealForOwner(inv)) return sum
     const effectiveP = inv.myParticipation ?? getOwnerParticipation(inv)
-    const investment = Number.isFinite(Number(effectiveP?.investedAmount))
+    if (!effectiveP) return sum
+    const investment = Number.isFinite(Number(effectiveP.investedAmount))
       ? Number(effectiveP.investedAmount)
-      : (Number.isFinite(Number(inv.principalAmount)) ? Number(inv.principalAmount) : 0)
-    const ratio = inv.principalAmount > 0 && investment > 0 ? Math.min(1, investment / inv.principalAmount) : 0
+      : 0
+    if (investment <= 0) return sum
     const fees = Number.isFinite(inv.fees) ? inv.fees : 0
-    const hasPartialParticipation = Boolean(effectiveP && inv.principalAmount > 0 && investment < inv.principalAmount)
+    const principalFull = Number.isFinite(inv.principalAmount) ? inv.principalAmount : 0
+    const ratio = principalFull > 0 && investment > 0 ? Math.min(1, investment / principalFull) : 0
+    const hasPartialParticipation = principalFull > 0 && investment < principalFull
     return sum + (hasPartialParticipation ? fees * ratio : fees)
   }, 0))
 
