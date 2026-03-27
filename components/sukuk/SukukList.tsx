@@ -173,20 +173,15 @@ export function SukukList({ initialSukuk, userRole, ownerPersonId, viewerPersonI
   }
 
   const isSoldDealForOwnerView = (investment: any) => {
-    if (userRole !== 'OWNER' || !ownerPersonId) return false
-    // null personId = owner tx on single-participant/legacy deals (matches isViewerTransaction)
-    const isOwnerTx = (tx: any) => tx.personId === ownerPersonId || tx.personId == null
-    const participantList = Array.isArray(investment?.dealParticipants) ? investment.dealParticipants : []
+    if (userRole !== 'OWNER') return false
+    // null ownerPersonId = legacy single-owner: match transactions with null personId
+    const isOwnerTx = ownerPersonId
+      ? (tx: any) => tx.personId === ownerPersonId || tx.personId == null
+      : (tx: any) => tx.personId == null
 
-    // Participants-based check: if owner has explicit entry still active, not sold
-    if (participantList.length > 0) {
-      const ownerParticipant = getOwnerParticipant(participantList)
-      const ownerExited = !ownerParticipant || Number(ownerParticipant.investedAmount || 0) <= 0
-      if (!ownerExited) return false
-    }
-
-    // Transaction-based check: SELL_TO_PARTNER without a later BUY_FROM_PARTNER
-    // This also handles legacy/no-participant deals (e.g. Midmak 2(P))
+    // Transaction-based check only: SELL_TO_PARTNER without a later BUY_FROM_PARTNER.
+    // Participant-based checks are omitted because the sell route does not zero the
+    // seller's DealParticipant.investedAmount, causing false negatives.
     const txs = Array.isArray(investment?.transactions) ? investment.transactions : []
     const sellDates = txs
       .filter((tx: any) => tx.type === 'SELL_TO_PARTNER' && isOwnerTx(tx))
