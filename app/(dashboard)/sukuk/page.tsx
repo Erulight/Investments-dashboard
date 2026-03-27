@@ -713,6 +713,21 @@ export default async function InvestmentsPage() {
     .map(([platform, value]) => [platform, toDisplayAmount(value)] as [string, number])
     .sort((a, b) => b[1] - a[1])
 
+  const platformDeals: Record<string, Array<{ name: string; principal: number; receivable: number }>> = {}
+  for (const inv of activeInvestments) {
+    const platform = inv.account?.name || 'Unknown'
+    const principal = getPrincipalOutstanding(inv)
+    const netProfit = getNetProfit(inv)
+    const received = getViewerReceived(inv)
+    const receivable = Math.max(0, netProfit - received)
+    if (!platformDeals[platform]) platformDeals[platform] = []
+    platformDeals[platform].push({
+      name: inv.name || inv.id || 'Unknown Deal',
+      principal: toDisplayAmount(Number.isFinite(principal) ? principal : 0),
+      receivable: toDisplayAmount(receivable),
+    })
+  }
+
   const getMonthKey = (value?: string | Date | null) => {
     const date = toDate(value)
     if (!date) return null
@@ -819,6 +834,7 @@ export default async function InvestmentsPage() {
         avgOverdueDays={avgOverdueDays}
         realizedCoveragePct={realizedCoveragePct}
         platformTotals={displayPlatformTotals}
+        platformDeals={platformDeals}
       />
 
       {/* Investments List */}

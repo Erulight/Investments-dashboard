@@ -4,6 +4,8 @@ import { useEffect, useMemo, useRef, useState } from 'react'
 
 type PlatformTotal = [string, number]
 
+type PlatformDeal = { name: string; principal: number; receivable: number }
+
 type SukukStatsHeaderProps = {
   role: string
   currency: string
@@ -23,6 +25,7 @@ type SukukStatsHeaderProps = {
   avgOverdueDays: number | null
   realizedCoveragePct: number
   platformTotals: PlatformTotal[]
+  platformDeals?: Record<string, PlatformDeal[]>
 }
 
 type DetailRow = { label: string; value: string; color?: string }
@@ -162,6 +165,7 @@ export function SukukStatsHeader({
   avgOverdueDays,
   realizedCoveragePct,
   platformTotals,
+  platformDeals = {},
 }: SukukStatsHeaderProps) {
   const target = useMemo(() => ({
     totalValue: toSafeNumber(totalValue),
@@ -179,6 +183,7 @@ export function SukukStatsHeader({
   const [animated, setAnimated] = useState(target)
   const previousRef = useRef(target)
   const [modal, setModal] = useState<CardDetail | null>(null)
+  const [platformModal, setPlatformModal] = useState<{ platform: string; deals: PlatformDeal[]; total: number } | null>(null)
 
   useEffect(() => {
     const from = previousRef.current
@@ -444,24 +449,30 @@ export function SukukStatsHeader({
           className="relative mt-3 rounded-xl p-4"
           style={{ background: 'rgba(255,255,255,0.025)', border: '1px solid rgba(255,255,255,0.07)' }}
         >
-          <p className="mb-3 text-[11px] uppercase tracking-wider text-slate-400">By Platform</p>
+          <p className="mb-3 text-[11px] uppercase tracking-wider text-slate-400">By Platform <span className="normal-case text-slate-500">(active only · click to see deals)</span></p>
           <div className="space-y-2.5">
             {(() => {
               const max = Math.max(...platformTotals.map(e => e[1]), 1)
               const colors = ['#22d3ee', '#10b981', '#8b5cf6', '#f59e0b', '#f87171']
-              return platformTotals.slice(0, 5).map(([platform, value], i) => {
+              return platformTotals.slice(0, 8).map(([platform, value], i) => {
                 const pct = Math.max(0, Math.min(100, (value / max) * 100))
                 const col = colors[i % colors.length]
+                const deals = platformDeals[platform] ?? []
                 return (
-                  <div key={platform}>
+                  <button
+                    key={platform}
+                    type="button"
+                    onClick={() => setPlatformModal({ platform, deals, total: value })}
+                    className="w-full text-left group"
+                  >
                     <div className="mb-1 flex items-center justify-between gap-2">
-                      <span className="truncate text-xs text-slate-300">{platform}</span>
+                      <span className="truncate text-xs font-medium group-hover:text-white transition-colors" style={{ color: col }}>{platform}</span>
                       <span className="text-xs font-semibold tabular-nums text-slate-100">{formatMoney(value)} {c}</span>
                     </div>
                     <div className="h-1.5 w-full overflow-hidden rounded-full bg-white/10">
-                      <div className="h-full rounded-full transition-all duration-700" style={{ width: `${pct}%`, background: col, boxShadow: `0 0 8px ${col}50` }} />
+                      <div className="h-full rounded-full transition-all duration-700 group-hover:brightness-125" style={{ width: `${pct}%`, background: col, boxShadow: `0 0 8px ${col}50` }} />
                     </div>
-                  </div>
+                  </button>
                 )
               })
             })()}
@@ -470,6 +481,80 @@ export function SukukStatsHeader({
       )}
 
       <DetailModal detail={modal} onClose={() => setModal(null)} />
+
+      {/* Platform deal popup */}
+      {platformModal && (
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center p-4"
+          style={{ backdropFilter: 'blur(16px)', background: 'rgba(2,6,23,0.85)' }}
+          onClick={() => setPlatformModal(null)}
+        >
+          <div
+            className="relative w-full max-w-md overflow-hidden rounded-2xl border p-6 shadow-2xl"
+            style={{
+              background: 'linear-gradient(135deg, rgba(2,6,23,0.98) 0%, rgba(7,28,57,0.98) 100%)',
+              borderColor: '#22d3ee',
+              boxShadow: '0 0 0 1px rgba(34,211,238,0.3), 0 0 60px rgba(34,211,238,0.15), 0 24px 60px rgba(0,0,0,0.8)',
+              maxHeight: '85vh',
+              overflowY: 'auto',
+            }}
+            onClick={e => e.stopPropagation()}
+          >
+            <div className="pointer-events-none absolute -top-8 -right-8 h-24 w-24 rounded-full blur-2xl" style={{ background: 'rgba(34,211,238,0.2)' }} />
+
+            <div className="relative mb-5 flex items-center justify-between">
+              <div className="flex items-center gap-2">
+                <div className="h-2 w-2 rounded-full animate-pulse" style={{ background: '#22d3ee', boxShadow: '0 0 8px #22d3ee' }} />
+                <div>
+                  <h3 className="text-base font-bold text-white" style={{ textShadow: '0 0 20px rgba(34,211,238,0.6)' }}>{platformModal.platform}</h3>
+                  <p className="text-[11px] text-slate-400">{platformModal.deals.length} active deal{platformModal.deals.length !== 1 ? 's' : ''} · {formatMoney(platformModal.total)} {c} total</p>
+                </div>
+              </div>
+              <button
+                onClick={() => setPlatformModal(null)}
+                className="flex h-7 w-7 items-center justify-center rounded-full text-xs text-slate-400 transition-all hover:text-white"
+                style={{ background: 'rgba(255,255,255,0.06)', border: '1px solid rgba(255,255,255,0.1)' }}
+              >
+                ✕
+              </button>
+            </div>
+
+            {platformModal.deals.length === 0 ? (
+              <p className="text-sm text-slate-500">No active deals found for this platform.</p>
+            ) : (
+              <div className="relative space-y-2">
+                {platformModal.deals.map((deal, i) => (
+                  <div
+                    key={i}
+                    className="rounded-xl p-3"
+                    style={{ background: 'rgba(255,255,255,0.04)', border: '1px solid rgba(255,255,255,0.08)' }}
+                  >
+                    <p className="mb-2 text-sm font-semibold text-white truncate">{deal.name}</p>
+                    <div className="grid grid-cols-2 gap-2">
+                      <div className="rounded-lg px-2.5 py-1.5" style={{ background: 'rgba(34,211,238,0.06)', border: '1px solid rgba(34,211,238,0.15)' }}>
+                        <p className="text-[10px] uppercase tracking-wider text-slate-400">Remaining Principal</p>
+                        <p className="mt-0.5 text-sm font-bold tabular-nums" style={{ color: '#22d3ee' }}>{formatMoney(deal.principal)} {c}</p>
+                      </div>
+                      <div className="rounded-lg px-2.5 py-1.5" style={{ background: 'rgba(251,146,60,0.06)', border: '1px solid rgba(251,146,60,0.15)' }}>
+                        <p className="text-[10px] uppercase tracking-wider text-slate-400">Receivable</p>
+                        <p className="mt-0.5 text-sm font-bold tabular-nums" style={{ color: '#fb923c' }}>{formatMoney(deal.receivable)} {c}</p>
+                      </div>
+                    </div>
+                  </div>
+                ))}
+
+                <div
+                  className="mt-3 rounded-xl p-3 flex items-center justify-between"
+                  style={{ background: 'rgba(34,211,238,0.06)', border: '1px solid rgba(34,211,238,0.2)' }}
+                >
+                  <span className="text-xs font-semibold uppercase tracking-wider" style={{ color: '#22d3ee' }}>Platform Total</span>
+                  <span className="text-sm font-bold tabular-nums text-white">{formatMoney(platformModal.total)} {c}</span>
+                </div>
+              </div>
+            )}
+          </div>
+        </div>
+      )}
     </div>
   )
 }
