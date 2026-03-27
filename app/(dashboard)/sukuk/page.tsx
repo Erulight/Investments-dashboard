@@ -192,6 +192,20 @@ export default async function InvestmentsPage() {
     return getViewerPrincipal(inv)
   }
 
+  const getInvestedAmount = (inv: any) => {
+    // Returns the ORIGINAL invested amount by adding back any WITHDRAW_PRINCIPAL transactions
+    // This matches SukukList's getHistoricalPrincipal and ensures Portfolio Value = sum of Investment column in table
+    const current = getViewerPrincipal(inv)
+    const transactions = Array.isArray(inv.transactions) ? inv.transactions : []
+    const withdrawalSum = transactions
+      .filter((tx: any) => tx.type === 'WITHDRAW_PRINCIPAL' && isViewerTransaction(tx))
+      .reduce((sum: number, tx: any) => {
+        const amount = Number(tx.amount)
+        return sum + (Number.isFinite(amount) ? amount : 0)
+      }, 0)
+    return Math.max(0, current + withdrawalSum)
+  }
+
   const getViewerReceived = (inv: any) => {
     const transactions = Array.isArray(inv.transactions) ? inv.transactions : []
     const profitWithdrawals = transactions.filter((tx: any) => tx.type === 'WITHDRAW_PROFIT')
@@ -464,7 +478,7 @@ export default async function InvestmentsPage() {
   const activeInvestments = displayedInvestments.filter(isActiveDeal)
 
   const totalInvested = activeInvestments.reduce((sum, inv) => {
-    const principal = getPrincipalOutstanding(inv)
+    const principal = getInvestedAmount(inv)
     return sum + (Number.isFinite(principal) ? principal : 0)
   }, 0)
 
@@ -668,7 +682,7 @@ export default async function InvestmentsPage() {
     activeInvestments
       .reduce((map: Map<string, number>, inv: any) => {
         const platform = inv.account?.name || 'Unknown'
-        const principal = getPrincipalOutstanding(inv)
+        const principal = getInvestedAmount(inv)
         const invested = Number.isFinite(principal) ? principal : 0
         map.set(platform, (map.get(platform) ?? 0) + invested)
         return map
