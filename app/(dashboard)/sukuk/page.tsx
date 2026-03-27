@@ -192,11 +192,23 @@ export default async function InvestmentsPage() {
       const v = Number(inv.myParticipation.investedAmount)
       if (Number.isFinite(v)) return v
     }
-    if (user.role === 'OWNER' && user.personId) {
-      const ownerP = getOwnerParticipation(inv)
-      if (ownerP) {
-        const v = Number(ownerP.investedAmount)
-        if (Number.isFinite(v)) return v
+    if (user.role === 'OWNER') {
+      if (user.personId) {
+        const ownerP = getOwnerParticipation(inv)
+        if (ownerP) {
+          const v = Number(ownerP.investedAmount)
+          if (Number.isFinite(v)) return v
+        }
+      }
+      // No explicit owner participation entry found — subtract all partner participant amounts
+      // to get the owner's remaining portion and avoid counting partner capital
+      const participants = Array.isArray(inv?.dealParticipants) ? inv.dealParticipants : []
+      if (participants.length > 0) {
+        const partnerTotal = participants.reduce((s: number, p: any) => {
+          const amt = Number(p?.investedAmount)
+          return s + (Number.isFinite(amt) ? amt : 0)
+        }, 0)
+        return Math.max(0, Number(inv?.principalAmount) - partnerTotal)
       }
     }
     const principalRaw = Number(inv?.principalAmount)
