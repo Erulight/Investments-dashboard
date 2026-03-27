@@ -551,7 +551,12 @@ export default async function InvestmentsPage() {
     return investments.filter((inv: any) => {
       const participants = Array.isArray(inv.dealParticipants) ? inv.dealParticipants : []
       if (participants.length === 0) return true
-      return participants.some((p: any) => p.personId === user.personId)
+      if (participants.some((p: any) => p.personId === user.personId)) return true
+      // Also include sold deals where owner was removed from participants after selling
+      const transactions = Array.isArray(inv.transactions) ? inv.transactions : []
+      return transactions.some((tx: any) =>
+        tx.type === 'SELL_TO_PARTNER' && (tx.personId === user.personId || tx.personId == null)
+      )
     })
   })()
 
