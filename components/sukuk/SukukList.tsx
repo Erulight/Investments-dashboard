@@ -174,15 +174,32 @@ export function SukukList({ initialSukuk, userRole, ownerPersonId, viewerPersonI
 
   const isSoldDealForOwnerView = (investment: any) => {
     if (userRole !== 'OWNER' || !ownerPersonId) return false
+    // null personId = owner tx on single-participant/legacy deals (matches isViewerTransaction)
+    const isOwnerTx = (tx: any) => tx.personId === ownerPersonId || tx.personId == null
     const participantList = Array.isArray(investment?.dealParticipants) ? investment.dealParticipants : []
-    if (participantList.length === 0) return false
-    const ownerParticipant = getOwnerParticipant(participantList)
-    const ownerExited = !ownerParticipant || Number(ownerParticipant.investedAmount || 0) <= 0
-    if (!ownerExited) return false
 
+    // Participants-based check: if owner has explicit entry still active, not sold
+    if (participantList.length > 0) {
+      const ownerParticipant = getOwnerParticipant(participantList)
+      const ownerExited = !ownerParticipant || Number(ownerParticipant.investedAmount || 0) <= 0
+      if (!ownerExited) return false
+    }
+
+    // Transaction-based check: SELL_TO_PARTNER without a later BUY_FROM_PARTNER
+    // This also handles legacy/no-participant deals (e.g. Midmak 2(P))
     const txs = Array.isArray(investment?.transactions) ? investment.transactions : []
-    const hasOwnerSellTx = txs.some((tx: any) => tx?.type === 'SELL_TO_PARTNER' && tx.personId === ownerPersonId)
-    return hasOwnerSellTx
+    const sellDates = txs
+      .filter((tx: any) => tx.type === 'SELL_TO_PARTNER' && isOwnerTx(tx))
+      .map((tx: any) => toDate(tx?.date))
+      .filter((d: any) => d)
+    if (sellDates.length === 0) return false
+    const buyDates = txs
+      .filter((tx: any) => tx.type === 'BUY_FROM_PARTNER' && isOwnerTx(tx))
+      .map((tx: any) => toDate(tx?.date))
+      .filter((d: any) => d)
+    return sellDates.some((sd: Date) =>
+      !buyDates.some((bd: Date) => (bd as any).getTime() >= (sd as any).getTime())
+    )
   }
 
   const isOwnerCommissionOnlyClose = (investment: any) => {
@@ -574,7 +591,7 @@ export function SukukList({ initialSukuk, userRole, ownerPersonId, viewerPersonI
     const ownerPrincipal = ownerParticipant ? Number(ownerParticipant.investedAmount || 0) : 0
     const hasOwnerPrincipal = Number.isFinite(ownerPrincipal) && ownerPrincipal > 0.01
     const hasOwnerSellTx = transactions.some(
-      (tx: any) => tx?.type === 'SELL_TO_PARTNER' && (!ownerPersonId || tx.personId === ownerPersonId)
+      (tx: any) => tx?.type === 'SELL_TO_PARTNER' && (!ownerPersonId || tx.personId === ownerPersonId || tx.personId == null)
     )
 
     const isPartnerIssued = target > 0.01 && !hasOwnerPrincipal && !hasOwnerSellTx
@@ -629,7 +646,7 @@ export function SukukList({ initialSukuk, userRole, ownerPersonId, viewerPersonI
     const transactions = Array.isArray(inv.transactions) ? inv.transactions : []
 
     const sellTxs = transactions
-      .filter((tx: any) => tx.type === 'SELL_TO_PARTNER' && (!ownerPersonId || tx.personId === ownerPersonId))
+      .filter((tx: any) => tx.type === 'SELL_TO_PARTNER' && (!ownerPersonId || tx.personId === ownerPersonId || tx.personId == null))
       .map((tx: any) => ({ tx, meta: parseMetadata(tx.metadata) }))
       .filter((x: any) => x.tx)
 
