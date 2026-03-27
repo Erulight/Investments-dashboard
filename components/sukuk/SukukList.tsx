@@ -144,7 +144,7 @@ export function SukukList({ initialSukuk, userRole, ownerPersonId, viewerPersonI
   const [actionableOnly, setActionableOnly] = useState(false)
   const [filtersOpen, setFiltersOpen] = useState(false)
   const [filterTab, setFilterTab] = useState<'platforms' | 'terms' | 'statuses' | 'dates'>('platforms')
-  const [ownerView, setOwnerView] = useState<'all' | 'active' | 'closed' | 'sold' | 'commission'>('all')
+  const [ownerView, setOwnerView] = useState<'all' | 'active' | 'closed' | 'sold' | 'commission'>('active')
   const list = Array.isArray(sukuk) ? sukuk : []
   const isEmpty = list.length === 0
 
