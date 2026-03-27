@@ -178,9 +178,27 @@ export default async function InvestmentsPage() {
     return true
   }
 
+  const getOwnerParticipation = (inv: any) => {
+    if (user.role !== 'OWNER' || !user.personId) return null
+    const participants = Array.isArray(inv.dealParticipants) ? inv.dealParticipants : []
+    if (participants.length === 0) {
+      return { investedAmount: inv.principalAmount, acquiredAt: inv.startDate, commissionFees: 0 }
+    }
+    return participants.find((p: any) => p?.personId === user.personId) ?? null
+  }
+
   const getViewerPrincipal = (inv: any) => {
-    const participationPrincipalRaw = Number(inv?.myParticipation?.investedAmount)
-    if (Number.isFinite(participationPrincipalRaw)) return participationPrincipalRaw
+    if (inv?.myParticipation) {
+      const v = Number(inv.myParticipation.investedAmount)
+      if (Number.isFinite(v)) return v
+    }
+    if (user.role === 'OWNER' && user.personId) {
+      const ownerP = getOwnerParticipation(inv)
+      if (ownerP) {
+        const v = Number(ownerP.investedAmount)
+        if (Number.isFinite(v)) return v
+      }
+    }
     const principalRaw = Number(inv?.principalAmount)
     return Number.isFinite(principalRaw) ? principalRaw : 0
   }
@@ -410,14 +428,16 @@ export default async function InvestmentsPage() {
       }
     }
 
-    const principal = inv.myParticipation?.investedAmount ?? inv.principalAmount
-    const investment = Number.isFinite(principal) ? principal : 0
+    const effectiveParticipation = inv.myParticipation ?? getOwnerParticipation(inv)
+    const investment = Number.isFinite(Number(effectiveParticipation?.investedAmount))
+      ? Number(effectiveParticipation.investedAmount)
+      : (Number.isFinite(Number(inv.principalAmount)) ? Number(inv.principalAmount) : 0)
     const apr = Number.isFinite(inv.interestRate) ? inv.interestRate : 0
     const fees = Number.isFinite(inv.fees) ? inv.fees : 0
     const participationRatio = inv.principalAmount > 0 && investment > 0
       ? Math.min(1, investment / inv.principalAmount)
       : 0
-    const startBasis = inv.myParticipation?.acquiredAt ?? inv.startDate
+    const startBasis = effectiveParticipation?.acquiredAt ?? inv.startDate
     const totalMonthsFull = getPeriodMonths(inv.startDate, inv.maturityDate)
     const periodMonths = getPeriodMonths(startBasis, inv.maturityDate)
     const periodYears = periodMonths ? periodMonths / 12 : 0
@@ -425,33 +445,30 @@ export default async function InvestmentsPage() {
       ? investment * (apr / 100) * periodYears
       : 0
 
+    const hasParticipation = Boolean(effectiveParticipation && inv.principalAmount > 0 && investment < inv.principalAmount)
     const manualReceivableFull = Number.isFinite(inv.receivableAmount) ? inv.receivableAmount : null
     const manualReceivable = manualReceivableFull !== null && manualReceivableFull > 0
-      ? (inv.myParticipation
+      ? (hasParticipation
           ? (manualReceivableFull * participationRatio) * (totalMonthsFull > 0 ? Math.min(1, Math.max(0, periodMonths / totalMonthsFull)) : 1)
           : manualReceivableFull)
       : null
     if (manualReceivable !== null) {
       const commissionFees = user.role === 'PARTNER'
-        ? (Number.isFinite(inv.myParticipation?.commissionFees)
-            ? Number(inv.myParticipation.commissionFees)
+        ? (Number.isFinite(effectiveParticipation?.commissionFees)
+            ? Number(effectiveParticipation.commissionFees)
             : getPartnerCommissionPaid(inv))
-        : (Number.isFinite(inv.myParticipation?.commissionFees)
-            ? Number(inv.myParticipation.commissionFees)
-            : 0)
+        : 0
       return round2(Math.max(0, manualReceivable - commissionFees))
     }
     const commissionFees = user.role === 'PARTNER'
-      ? (Number.isFinite(inv.myParticipation?.commissionFees)
-          ? Number(inv.myParticipation.commissionFees)
+      ? (Number.isFinite(effectiveParticipation?.commissionFees)
+          ? Number(effectiveParticipation.commissionFees)
           : getPartnerCommissionPaid(inv))
-      : (Number.isFinite(inv.myParticipation?.commissionFees)
-          ? Number(inv.myParticipation.commissionFees)
-          : 0)
-    const timeRatio = inv.myParticipation && totalMonthsFull > 0
+      : 0
+    const timeRatio = hasParticipation && totalMonthsFull > 0
       ? Math.min(1, Math.max(0, periodMonths / totalMonthsFull))
       : 1
-    const proratedFees = inv.myParticipation
+    const proratedFees = hasParticipation
       ? (fees * participationRatio) * timeRatio
       : fees
     return round2(Math.max(0, grossProfit - proratedFees - commissionFees))
@@ -627,17 +644,14 @@ export default async function InvestmentsPage() {
   const activeDealsCount = activeInvestments.length
 
   const totalFeesPaid = round2(displayedInvestments.reduce((sum, inv) => {
-    const principal = inv.myParticipation?.investedAmount ?? inv.principalAmount
-    const investment = Number.isFinite(principal) ? principal : 0
+    const effectiveP = inv.myParticipation ?? getOwnerParticipation(inv)
+    const investment = Number.isFinite(Number(effectiveP?.investedAmount))
+      ? Number(effectiveP.investedAmount)
+      : (Number.isFinite(Number(inv.principalAmount)) ? Number(inv.principalAmount) : 0)
     const ratio = inv.principalAmount > 0 && investment > 0 ? Math.min(1, investment / inv.principalAmount) : 0
     const fees = Number.isFinite(inv.fees) ? inv.fees : 0
-    const startBasis = inv.myParticipation?.acquiredAt ?? inv.startDate
-    const monthsHeld = getPeriodMonths(startBasis, inv.maturityDate)
-    const totalMonthsFull = getPeriodMonths(inv.startDate, inv.maturityDate)
-    const timeRatio = inv.myParticipation && totalMonthsFull > 0
-      ? Math.min(1, Math.max(0, monthsHeld / totalMonthsFull))
-      : 1
-    return sum + (inv.myParticipation ? (fees * ratio) * timeRatio : fees)
+    const hasPartialParticipation = Boolean(effectiveP && inv.principalAmount > 0 && investment < inv.principalAmount)
+    return sum + (hasPartialParticipation ? fees * ratio : fees)
   }, 0))
 
   const maturityDayStats = (() => {
@@ -921,7 +935,7 @@ export default async function InvestmentsPage() {
             <CardContent>
               <div className="space-y-3">
                 {activeInvestments.slice(0, 5).map((inv: any) => {
-                  const principal = inv.principalAmount
+                  const principal = getInvestedAmount(inv)
                   const percentage = totalInvested > 0 ? (principal / totalInvested * 100) : 0
                   return (
                     <div key={inv.id}>
