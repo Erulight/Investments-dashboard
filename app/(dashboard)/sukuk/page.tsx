@@ -493,6 +493,7 @@ export default async function InvestmentsPage() {
       : (user.role === 'OWNER'
           ? getInvestedAmount(inv)  // owner's share only, not full deal incl. partner
           : (Number.isFinite(Number(inv.principalAmount)) ? Number(inv.principalAmount) : 0))
+    if (investment <= 0) return 0
     const apr = Number.isFinite(inv.interestRate) ? inv.interestRate : 0
     const fees = Number.isFinite(inv.fees) ? inv.fees : 0
     const participationRatio = inv.principalAmount > 0 && investment > 0
