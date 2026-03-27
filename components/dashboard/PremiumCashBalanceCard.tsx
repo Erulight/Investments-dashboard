@@ -581,7 +581,7 @@ export function PremiumCashBalanceCard({
                       </div>
                     </motion.div>
                   ))}
-                </div>
+                </motion.div>
               )}
             </div>
             <div className="px-8 py-5 border-t border-cyan-400/30 flex justify-between items-center bg-slate-900/50 backdrop-blur-sm">
