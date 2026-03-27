@@ -707,6 +707,7 @@ export default async function InvestmentsPage() {
   const activeDealsCount = activeInvestments.length
 
   const totalFeesPaid = round2(displayedInvestments.reduce((sum, inv) => {
+    if (isSoldDealForOwner(inv)) return sum
     const fees = Number.isFinite(inv.fees) ? inv.fees : 0
     if (fees <= 0) return sum
     const effectiveP = inv.myParticipation ?? getOwnerParticipation(inv)
@@ -803,6 +804,7 @@ export default async function InvestmentsPage() {
 
     feesPaid: displayedInvestments
       .map((inv: any) => {
+        if (isSoldDealForOwner(inv)) return null
         const fees = Number.isFinite(inv.fees) ? inv.fees : 0
         if (fees <= 0) return null
         const effectiveP = inv.myParticipation ?? getOwnerParticipation(inv)
