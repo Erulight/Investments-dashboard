@@ -830,18 +830,16 @@ export default async function DashboardPage({
     // Helper: Get net profit for Sukuk (matches Sukuk page getNetProfit)
     const getSukukNetProfitForDashboard = (inv: any) => {
       const ownerPosition = getOwnerPosition(inv)
-      const effectiveInvested = ownerPosition?.investedAmount ?? inv.myParticipation?.investedAmount
-      // Use getOwnerSukukInvestedAmount (adds back WITHDRAW_PRINCIPAL) to match sukuk page's getInvestedAmount
-      const principal = Number.isFinite(Number(effectiveInvested))
-        ? Number(effectiveInvested)
+      const effectiveParticipation = ownerPosition ?? inv.myParticipation
+      // Match sukuk page: try participation.investedAmount first, fall back to getOwnerSukukInvestedAmount
+      const investment = Number.isFinite(Number(effectiveParticipation?.investedAmount))
+        ? Number(effectiveParticipation.investedAmount)
         : getOwnerSukukInvestedAmount(inv)
-      const investment = Number.isFinite(principal) ? Math.max(0, principal) : 0
       const apr = Number.isFinite(inv.interestRate) ? inv.interestRate : 0
       const fees = Number.isFinite(inv.fees) ? inv.fees : 0
       const participationRatio = inv.principalAmount > 0 && investment > 0
         ? Math.min(1, investment / inv.principalAmount)
         : 0
-      const effectiveParticipation = ownerPosition ?? inv.myParticipation
       const startBasis = effectiveParticipation?.acquiredAt ?? inv.startDate
       const totalMonthsFull = getPeriodMonths(inv.startDate, inv.maturityDate)
       const periodMonths = getPeriodMonths(startBasis, inv.maturityDate)
