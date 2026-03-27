@@ -563,7 +563,7 @@ export function SukukList({ initialSukuk, userRole, ownerPersonId, viewerPersonI
       .filter((tx: any) => {
         if (ownerPersonId && tx?.personId && tx.personId !== ownerPersonId) return false
         const meta = parseMetadata(tx?.metadata)
-        return meta?.source === 'PARTNER_CREATE_COMMISSION_PAYOUT'
+        return meta?.source === 'PARTNER_CREATE_COMMISSION_PAYOUT' || meta?.source === 'OWNER_COMMISSION_RECEIPT'
       })
 
     const receivedRaw = ownerCommissionTxs.reduce((sum: number, tx: any) => {

@@ -385,33 +385,38 @@ export default async function InvestmentsPage() {
   }
 
   const isSoldDealForOwner = (inv: any) => {
-    if (user.role !== 'OWNER' || !user.personId) return false
-    const participants = Array.isArray(inv.dealParticipants) ? inv.dealParticipants : []
+    if (user.role !== 'OWNER') return false
+    // null personId = legacy single-owner: match transactions with null personId
+    const isOwnerTx = user.personId
+      ? (tx: any) => tx.personId === user.personId || tx.personId == null
+      : (tx: any) => tx.personId == null
 
-    // Participants-based check: owner entry missing or zeroed out
-    if (participants.length > 0) {
-      const ownerParticipation = participants.find((p: any) => p?.personId === user.personId)
-      if (!ownerParticipation || Number(ownerParticipation.investedAmount || 0) <= 0) return true
-    }
-
-    // Transaction-based check: SELL_TO_PARTNER without a later BUY_FROM_PARTNER
-    // (catches cases where dealParticipants was not updated after the sale)
-    // null personId = owner transaction in single-participant/legacy deals (matches isViewerTransaction)
-    const isOwnerTx = (tx: any) =>
-      tx.personId === user.personId || tx.personId == null
-    const transactions = Array.isArray(inv.transactions) ? inv.transactions : []
-    const sellDates = transactions
+    // Transaction-based check first: SELL_TO_PARTNER without a later BUY_FROM_PARTNER
+    const txs = Array.isArray(inv.transactions) ? inv.transactions : []
+    const sellDates = txs
       .filter((tx: any) => tx.type === 'SELL_TO_PARTNER' && isOwnerTx(tx))
       .map((tx: any) => toDate(tx?.date))
       .filter((d: any) => d)
-    if (sellDates.length === 0) return false
-    const buyDates = transactions
-      .filter((tx: any) => tx.type === 'BUY_FROM_PARTNER' && isOwnerTx(tx))
-      .map((tx: any) => toDate(tx?.date))
-      .filter((d: any) => d)
-    return sellDates.some((sd: Date) =>
-      !buyDates.some((bd: Date) => (bd as any).getTime() >= (sd as any).getTime())
-    )
+    if (sellDates.length > 0) {
+      const buyDates = txs
+        .filter((tx: any) => tx.type === 'BUY_FROM_PARTNER' && isOwnerTx(tx))
+        .map((tx: any) => toDate(tx?.date))
+        .filter((d: any) => d)
+      return sellDates.some((sd: Date) =>
+        !buyDates.some((bd: Date) => (bd as any).getTime() >= (sd as any).getTime())
+      )
+    }
+
+    // Participant fallback for non-null personId: owner entry missing or zeroed out
+    if (user.personId) {
+      const participants = Array.isArray(inv.dealParticipants) ? inv.dealParticipants : []
+      if (participants.length > 0) {
+        const ownerParticipation = participants.find((p: any) => p?.personId === user.personId)
+        return !ownerParticipation || Number(ownerParticipation.investedAmount || 0) <= 0
+      }
+    }
+
+    return false
   }
 
   const getOwnerSoldSettlement = (inv: any) => {
