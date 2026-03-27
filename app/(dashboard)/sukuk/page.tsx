@@ -690,9 +690,8 @@ export default async function InvestmentsPage() {
   })()
 
   const totalReceivable = (() => {
-    if (user.role === 'OWNER' && user.personId) {
-      // Sum per-deal max(0, ...) so deals where received > profit don't drag the total below zero
-      // and the header matches the Contributing Deals sum in the popup exactly
+    if (user.role === 'OWNER') {
+      // Active deals only, profit only (no commission, no principal, no sold deals)
       return round2(activeInvestments.reduce((sum, inv) => {
         return sum + Math.max(0, getNetProfit(inv) - getViewerReceived(inv))
       }, 0))
