@@ -495,7 +495,7 @@ export default async function InvestmentsPage() {
   const activeInvestments = displayedInvestments.filter(isActiveDeal)
 
   const totalInvested = activeInvestments.reduce((sum, inv) => {
-    const principal = getInvestedAmount(inv)
+    const principal = getPrincipalOutstanding(inv)
     return sum + (Number.isFinite(principal) ? principal : 0)
   }, 0)
 
@@ -703,7 +703,7 @@ export default async function InvestmentsPage() {
     activeInvestments
       .reduce((map: Map<string, number>, inv: any) => {
         const platform = inv.account?.name || 'Unknown'
-        const principal = getInvestedAmount(inv)
+        const principal = getPrincipalOutstanding(inv)
         const invested = Number.isFinite(principal) ? principal : 0
         map.set(platform, (map.get(platform) ?? 0) + invested)
         return map
