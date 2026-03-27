@@ -432,9 +432,10 @@ export default async function InvestmentsPage() {
 
     const transactions = Array.isArray(inv.transactions) ? inv.transactions : []
     
+    const isOwnerTx = (tx: any) => tx.personId === user.personId || tx.personId == null
     // Calculate profit received
     const profitReceivedRaw = transactions.reduce((sum: number, tx: any) => {
-      if (tx?.personId !== user.personId) return sum
+      if (!isOwnerTx(tx)) return sum
 
       if (tx.type === 'SELL_PROFIT_ACCRUED') {
         const amount = Number(tx.amount)
@@ -453,7 +454,7 @@ export default async function InvestmentsPage() {
     
     // Calculate commission received
     const commissionReceivedRaw = transactions.reduce((sum: number, tx: any) => {
-      if (tx?.personId !== user.personId) return sum
+      if (!isOwnerTx(tx)) return sum
       if (tx.type !== 'PARTNER_COMMISSION') return sum
       
       const meta = parseMetadata(tx.metadata)
@@ -672,16 +673,20 @@ export default async function InvestmentsPage() {
 
   const totalPendingFromSoldDeals = (() => {
     if (user.role !== 'OWNER' || !user.personId) return 0
-    // Only count deals where owner has/had ACTUAL participation (exclude partner-only deals)
+    // Include deals where owner has participation OR has SELL_TO_PARTNER transactions
     const ownerInvestments = investments.filter((inv: any) => {
       const participants = Array.isArray(inv.dealParticipants) ? inv.dealParticipants : []
-      // If no participants, it's a legacy owner-only deal
       if (participants.length === 0) return true
-      // Must exist AND have positive invested amount
       const ownerParticipation = participants.find((p: any) => p?.personId === user.personId)
-      if (!ownerParticipation) return false
-      const invested = Number(ownerParticipation.investedAmount || 0)
-      return invested > 0
+      if (ownerParticipation) {
+        const invested = Number(ownerParticipation.investedAmount || 0)
+        if (invested > 0) return true
+      }
+      // Also include sold deals where owner was removed from participants
+      const transactions = Array.isArray(inv.transactions) ? inv.transactions : []
+      return transactions.some((tx: any) =>
+        tx.type === 'SELL_TO_PARTNER' && (tx.personId === user.personId || tx.personId == null)
+      )
     })
     return round2(ownerInvestments.reduce((sum, inv) => sum + getOwnerSoldSettlement(inv).pending, 0))
   })()
