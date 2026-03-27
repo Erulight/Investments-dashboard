@@ -484,6 +484,16 @@ export default async function DashboardPage({
       return dps.find((p: any) => p?.personId === ownerPersonId) || null
     }
 
+    // Matches sukuk page's getOwnerParticipation - includes fallback for legacy deals
+    const getOwnerParticipation = (inv: any) => {
+      if (!ownerPersonId) return null
+      const participants = Array.isArray(inv.dealParticipants) ? inv.dealParticipants : []
+      if (participants.length === 0) {
+        return { investedAmount: inv.principalAmount, acquiredAt: inv.startDate, commissionFees: 0 }
+      }
+      return participants.find((p: any) => p?.personId === ownerPersonId) ?? null
+    }
+
     const getOwnerSukukPrincipal = (inv: any) => {
       const ownerPosition = getOwnerPosition(inv)
       if (ownerPosition) {
@@ -829,8 +839,8 @@ export default async function DashboardPage({
 
     // Helper: Get net profit for Sukuk (matches Sukuk page getNetProfit)
     const getSukukNetProfitForDashboard = (inv: any) => {
-      const ownerPosition = getOwnerPosition(inv)
-      const effectiveParticipation = ownerPosition ?? inv.myParticipation
+      // Use getOwnerParticipation (includes legacy deal fallback) instead of getOwnerPosition
+      const effectiveParticipation = getOwnerParticipation(inv)
       // Match sukuk page: try participation.investedAmount first, fall back to getOwnerSukukInvestedAmount
       const investment = Number.isFinite(Number(effectiveParticipation?.investedAmount))
         ? Number(effectiveParticipation.investedAmount)
