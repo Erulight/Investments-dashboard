@@ -845,6 +845,8 @@ export default async function DashboardPage({
       const investment = Number.isFinite(Number(effectiveParticipation?.investedAmount))
         ? Number(effectiveParticipation.investedAmount)
         : getOwnerSukukInvestedAmount(inv)
+      // Early return if no investment (matches sukuk page line 497)
+      if (investment <= 0) return 0
       const apr = Number.isFinite(inv.interestRate) ? inv.interestRate : 0
       const fees = Number.isFinite(inv.fees) ? inv.fees : 0
       const participationRatio = inv.principalAmount > 0 && investment > 0
@@ -894,13 +896,18 @@ export default async function DashboardPage({
     }
 
     // RECEIVABLE & RECEIVED: Match Sukuk page logic exactly
-    const activeNetProfit = ownerSukuk
-      .filter((inv: any) => !isSoldSukukForOwner(inv))
-      .reduce((sum, inv) => sum + getSukukNetProfitForDashboard(inv), 0)
+    // CRITICAL: Apply max(0) per-deal BEFORE summing (sukuk page pattern)
+    const activeSukukDeals = ownerSukuk.filter((inv: any) => !isSoldSukukForOwner(inv))
     
-    const activeReceivedFromInv = ownerSukuk
-      .filter((inv: any) => !isSoldSukukForOwner(inv))
-      .reduce((sum, inv) => sum + getSukukReceivedForDashboard(inv), 0)
+    sukukReceivable = round2(activeSukukDeals.reduce((sum, inv) => {
+      const netProfit = getSukukNetProfitForDashboard(inv)
+      const received = getSukukReceivedForDashboard(inv)
+      return sum + Math.max(0, netProfit - received)
+    }, 0))
+    
+    const activeReceivedFromInv = activeSukukDeals.reduce((sum, inv) => {
+      return sum + getSukukReceivedForDashboard(inv)
+    }, 0)
     
     const soldReceived = ownerSukuk.reduce((sum, inv) => {
       const settlement = getOwnerSoldSettlement(inv)
@@ -908,7 +915,6 @@ export default async function DashboardPage({
     }, 0)
     
     sukukReceivedProfit = round2(activeReceivedFromInv + soldReceived)
-    sukukReceivable = round2(Math.max(0, activeNetProfit - activeReceivedFromInv))
 
     const commissionSourceSukuk = owned
       .filter((inv) => getAccountType(inv) === 'SUKUK')
