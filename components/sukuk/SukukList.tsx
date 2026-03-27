@@ -672,13 +672,31 @@ export function SukukList({ initialSukuk, userRole, ownerPersonId, viewerPersonI
         return sum + (Number.isFinite(amount) ? amount : 0)
       }, 0)
 
+    const hasSellProfitAccruedTx = transactions.some(
+      (tx: any) => tx.type === 'SELL_PROFIT_ACCRUED' && (!ownerPersonId || tx.personId === ownerPersonId || tx.personId == null)
+    )
+
     const soldProfitReceived = transactions
       .filter((tx: any) => tx.type === 'SELL_PROFIT_ACCRUED' || tx.type === 'WITHDRAW_PROFIT')
       .reduce((sum: number, tx: any) => {
         if (ownerPersonId && tx?.personId && tx.personId !== ownerPersonId) return sum
         if (tx.type === 'WITHDRAW_PROFIT') {
           const meta = parseMetadata(tx.metadata)
-          if (meta?.source !== 'SOLD_DEAL_RECEIPT') return sum
+          if (meta?.source === 'SOLD_DEAL_RECEIPT') {
+            const amount = Number(tx.amount)
+            return sum + (Number.isFinite(amount) ? Math.max(0, amount) : 0)
+          }
+          // For SETTLE_DEBT / non-CASH sells where no SELL_PROFIT_ACCRUED is created,
+          // count WITHDRAW_PROFIT transactions on or before the sell date as received profit
+          // (owner withdrew their earned profit during the holding period before selling).
+          if (!hasSellProfitAccruedTx && saleDate) {
+            const txDate = toDate(tx.date)
+            if (txDate && (txDate as Date).getTime() <= (saleDate as Date).getTime()) {
+              const amount = Number(tx.amount)
+              return sum + (Number.isFinite(amount) ? Math.max(0, amount) : 0)
+            }
+          }
+          return sum
         }
         const amount = Number(tx.amount)
         return sum + (Number.isFinite(amount) ? Math.max(0, amount) : 0)
