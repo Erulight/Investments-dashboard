@@ -1,4 +1,8 @@
+import { config } from 'dotenv'
 import { prisma } from '../lib/db'
+
+// Load environment variables from .env file
+config()
 
 async function fixFutureBucketDates() {
   console.log('🔧 Fixing Future-Dated Cash Buckets...\n')
