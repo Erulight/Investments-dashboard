@@ -136,6 +136,20 @@ export async function POST(
     const contributionDate = dueDate
     const fundingCutoff = new Date()
     const currency = investment.account?.currency || 'SAR'
+
+    // Prevent payments with dates too far in the future (allow up to 30 days for flexibility)
+    const maxFutureDays = 30
+    const maxAllowedDate = new Date()
+    maxAllowedDate.setDate(maxAllowedDate.getDate() + maxFutureDays)
+    if (dueDate.getTime() > maxAllowedDate.getTime()) {
+      const dueDateStr = dueDate.toISOString().split('T')[0]
+      return NextResponse.json(
+        { 
+          error: `Payment date (${dueDateStr}) is too far in the future. Maximum allowed is ${maxFutureDays} days from today.`
+        },
+        { status: 400 }
+      )
+    }
     const startAnchorRaw = new Date(investment.startDate)
     const contributionHaulStart = Number.isNaN(startAnchorRaw.getTime()) ? contributionDate : startAnchorRaw
 
@@ -680,9 +694,13 @@ export async function DELETE(
 
         // Fallback for legacy payments (without fundingSources) or deleted source buckets.
         if (remainingToRestore > 0.0001) {
+          // Use today's date for haulStartDate to prevent future-dated buckets
+          const today = new Date()
+          const safeHaulStartDate = dueDate <= today ? dueDate : today
+          
           await createCashBucket(tx, {
             amount: remainingToRestore,
-            haulStartDate: dueDate,
+            haulStartDate: safeHaulStartDate,
             currency: investment.account?.currency || 'SAR',
             label: 'General Cash',
             date: dueDate,

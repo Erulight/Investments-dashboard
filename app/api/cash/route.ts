@@ -206,6 +206,17 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: 'Haul start date cannot be after entry date' }, { status: 400 })
     }
 
+    // Prevent future haul start dates (allow up to 7 days for flexibility)
+    const maxFutureDays = 7
+    const maxAllowedHaulDate = new Date()
+    maxAllowedHaulDate.setDate(maxAllowedHaulDate.getDate() + maxFutureDays)
+    if (direction === 'IN' && haulStartDate.getTime() > maxAllowedHaulDate.getTime()) {
+      return NextResponse.json(
+        { error: `Haul start date cannot be more than ${maxFutureDays} days in the future` },
+        { status: 400 }
+      )
+    }
+
     const scopePersonId = user.role === 'OWNER' ? null : user.personId!
 
     const result = await prisma.$transaction(async (tx: any) => {
