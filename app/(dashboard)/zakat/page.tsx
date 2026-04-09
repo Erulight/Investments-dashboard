@@ -1281,10 +1281,32 @@ export default async function ZakatPage() {
       : []
   )
 
-  // Calculate total zakat paid and group by year
+  // Calculate total zakat paid and group by zakat period year (which year's zakat was paid)
   const paymentsByYear = allPayments.reduce((acc: Record<string, number>, payment: any) => {
     const amount = Math.abs(Number(payment.amount) || 0)
-    const year = new Date(payment.date).getFullYear()
+    
+    // Extract the zakat period year from the row key in notes
+    // Format: ZAKAT_ROW=TYPE|bucket|...|start-date|end-date
+    const notes = payment.notes || ''
+    const rowKeyMatch = notes.match(/ZAKAT_ROW=(.+)/)
+    
+    let year = new Date(payment.date).getFullYear() // fallback to payment date
+    
+    if (rowKeyMatch) {
+      const rowKey = rowKeyMatch[1]
+      const parts = rowKey.split('|')
+      
+      // Find the last date in the row key (haul completion date)
+      const dates = parts.filter((p: string) => /^\d{4}-\d{2}-\d{2}$/.test(p))
+      if (dates.length > 0) {
+        const haulEndDate = dates[dates.length - 1]
+        const match = haulEndDate.match(/^(\d{4})-/)
+        if (match) {
+          year = parseInt(match[1])
+        }
+      }
+    }
+    
     acc[year] = (acc[year] || 0) + amount
     return acc
   }, {})
