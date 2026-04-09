@@ -8,9 +8,10 @@ interface AnimatedCardProps {
   index?: number
   className?: string
   hover?: boolean
+  onClick?: () => void
 }
 
-export function AnimatedCard({ children, index = 0, className = '', hover = true }: AnimatedCardProps) {
+export function AnimatedCard({ children, index = 0, className = '', hover = true, onClick }: AnimatedCardProps) {
   return (
     <motion.div
       initial={{ opacity: 0, y: 10 }}
@@ -22,6 +23,7 @@ export function AnimatedCard({ children, index = 0, className = '', hover = true
       }}
       whileHover={hover ? { scale: 1.01, y: -2 } : undefined}
       className={`premium-card ${className}`}
+      onClick={onClick}
     >
       {children}
     </motion.div>

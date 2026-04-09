@@ -84,12 +84,17 @@ export function ZakatDashboard({
   buckets,
   zakatEnabled = true,
   displayCurrency = 'SAR',
+  totalZakatPaid = 0,
+  paymentsByYear = {},
 }: {
   buckets: BucketRow[]
   zakatEnabled?: boolean
   displayCurrency?: DisplayCurrency
+  totalZakatPaid?: number
+  paymentsByYear?: Record<string, number>
 }) {
   const router = useRouter()
+  const [showPaymentsModal, setShowPaymentsModal] = useState(false)
 
   const toDay = (value: string) => {
     const m = value.match(/^(\d{4})-(\d{2})-(\d{2})/)
@@ -662,7 +667,67 @@ export function ZakatDashboard({
           <div className="text-xs text-slate-500 dark:text-slate-400">Payment Coverage</div>
           <div className="text-lg font-bold text-slate-900 dark:text-slate-100">{paymentCoveragePct.toFixed(1)}%</div>
         </AnimatedCard>
+        <AnimatedCard 
+          index={6} 
+          className="border border-slate-200 dark:border-white/10 p-3 cursor-pointer hover:border-emerald-300 dark:hover:border-emerald-600 transition-colors" 
+          hover={true}
+          onClick={() => setShowPaymentsModal(true)}
+        >
+          <div className="text-xs text-slate-500 dark:text-slate-400 flex items-center gap-1">
+            Total Zakat Paid
+            <svg className="h-3 w-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+            </svg>
+          </div>
+          <div className="text-lg font-bold text-emerald-600 dark:text-emerald-400">{money(totalZakatPaid)}</div>
+        </AnimatedCard>
       </div>
+
+      {/* Payments Modal */}
+      {showPaymentsModal && (
+        <div 
+          className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm"
+          onClick={() => setShowPaymentsModal(false)}
+        >
+          <div 
+            className="bg-white dark:bg-slate-800 rounded-lg shadow-xl max-w-md w-full mx-4 p-6"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="flex items-center justify-between mb-4">
+              <h3 className="text-lg font-bold text-slate-900 dark:text-slate-100">Zakat Payments History</h3>
+              <button
+                onClick={() => setShowPaymentsModal(false)}
+                className="text-slate-400 hover:text-slate-600 dark:hover:text-slate-200"
+              >
+                <svg className="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                </svg>
+              </button>
+            </div>
+            <div className="border-t border-slate-200 dark:border-slate-700 pt-4">
+              <div className="space-y-3">
+                {Object.entries(paymentsByYear)
+                  .sort(([a], [b]) => Number(b) - Number(a))
+                  .map(([year, amount]) => (
+                    <div key={year} className="flex items-center justify-between py-2 border-b border-slate-100 dark:border-slate-700/50">
+                      <span className="text-sm font-medium text-slate-700 dark:text-slate-300">{year}</span>
+                      <span className="text-sm font-bold text-emerald-600 dark:text-emerald-400">{money(amount)}</span>
+                    </div>
+                  ))}
+                {Object.keys(paymentsByYear).length === 0 && (
+                  <div className="text-center py-8 text-slate-500 dark:text-slate-400 text-sm">
+                    No zakat payments recorded yet
+                  </div>
+                )}
+              </div>
+              <div className="mt-4 pt-4 border-t-2 border-slate-300 dark:border-slate-600 flex items-center justify-between">
+                <span className="text-sm font-bold text-slate-900 dark:text-slate-100">Total Paid</span>
+                <span className="text-lg font-bold text-emerald-600 dark:text-emerald-400">{money(totalZakatPaid)}</span>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Year Tabs */}
       <div className="flex items-center gap-2 border-b border-gray-200 pb-2">

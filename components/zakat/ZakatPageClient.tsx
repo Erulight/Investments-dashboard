@@ -43,10 +43,14 @@ export function ZakatPageClient({
   initialBuckets,
   zakatEnabled = true,
   displayCurrency = 'SAR',
+  totalZakatPaid = 0,
+  paymentsByYear = {},
 }: {
   initialBuckets: BucketRow[]
   zakatEnabled?: boolean
   displayCurrency?: DisplayCurrency
+  totalZakatPaid?: number
+  paymentsByYear?: Record<string, number>
 }) {
   const router = useRouter()
   const [buckets, setBuckets] = useState<BucketRow[]>(initialBuckets)
@@ -207,6 +211,8 @@ export function ZakatPageClient({
         buckets={buckets}
         zakatEnabled={zakatEnabled}
         displayCurrency={displayCurrency}
+        totalZakatPaid={totalZakatPaid}
+        paymentsByYear={paymentsByYear}
       />
 
       <style jsx>{`

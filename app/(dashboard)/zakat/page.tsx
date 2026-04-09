@@ -1281,6 +1281,16 @@ export default async function ZakatPage() {
       : []
   )
 
+  // Calculate total zakat paid and group by year
+  const paymentsByYear = allPayments.reduce((acc: Record<string, number>, payment: any) => {
+    const amount = Math.abs(Number(payment.amount) || 0)
+    const year = new Date(payment.date).getFullYear()
+    acc[year] = (acc[year] || 0) + amount
+    return acc
+  }, {})
+
+  const totalZakatPaid = Object.values(paymentsByYear).reduce((sum: number, amt: number) => sum + amt, 0)
+
   const totalZakatableWealth = buckets.reduce((sum: number, b: any) => {
     const balance = Number(b.balance)
     return sum + (Number.isFinite(balance) ? Math.max(0, balance) : 0)
@@ -2417,6 +2427,8 @@ export default async function ZakatPage() {
         initialBuckets={rows}
         zakatEnabled={zakatEnabled}
         displayCurrency={displayCurrency}
+        totalZakatPaid={totalZakatPaid}
+        paymentsByYear={paymentsByYear}
       />
     </div>
   )
