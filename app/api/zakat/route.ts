@@ -3,6 +3,7 @@ import { prisma } from '@/lib/db'
 import { requireAuth } from '@/lib/rbac'
 import { logAudit } from '@/lib/audit'
 import { recomputeCashSetting } from '@/lib/cashBalance'
+import { withdrawFromBuckets } from '@/lib/cashBuckets'
 
 const getCashAccount = async (tx: any, currency = 'SAR') => {
   const existing = await tx.account.findFirst({
@@ -73,14 +74,10 @@ export async function POST(req: NextRequest) {
       if (!bucket) {
         throw new Error('ZAKAT_BUCKET_NOT_FOUND')
       }
-      if (bucket.balance < amount) {
-        throw new Error('ZAKAT_BUCKET_BALANCE_LOW')
-      }
 
       const rowMarker = `ZAKAT_ROW=${rowId}`
       const existingRowPayment = await tx.cashBucketMovement.findFirst({
         where: {
-          cashBucketId: bucketId,
           type: 'ZAKAT_PAID',
           notes: { contains: rowMarker },
         },
@@ -89,25 +86,28 @@ export async function POST(req: NextRequest) {
         throw new Error('ZAKAT_ROW_ALREADY_PAID')
       }
 
+      const combinedNotes = notes ? `${notes} | ${rowMarker}` : rowMarker
+
+      // Use withdrawFromBuckets to pull from all available cash, not just the specific bucket
+      await withdrawFromBuckets(tx, {
+        amount,
+        currency: bucket.currency,
+        date,
+        type: 'ZAKAT_PAID',
+        notes: combinedNotes,
+        availableOnOrBefore: date,
+        personId: user.personId || null,
+      })
+
+      // Update the bucket's lastZakatPaidDate for tracking
       await tx.cashBucket.update({
         where: { id: bucketId },
         data: {
-          balance: { decrement: amount },
           lastZakatPaidDate: date,
         },
       })
 
-      const combinedNotes = notes ? `${notes} | ${rowMarker}` : rowMarker
-
-      const movement = await tx.cashBucketMovement.create({
-        data: {
-          cashBucketId: bucketId,
-          amount: -amount,
-          type: 'ZAKAT_PAID',
-          date,
-          notes: combinedNotes,
-        },
-      })
+      const movement = { id: 'withdrawn' } // Placeholder since withdrawFromBuckets creates movements internally
 
       if (user.role === 'PARTNER') {
         await recomputeCashSetting(tx, user.personId || null)
@@ -169,13 +169,13 @@ export async function POST(req: NextRequest) {
 
     if (error instanceof Error) {
       if (error.message === 'ZAKAT_BUCKET_NOT_FOUND') {
-        return NextResponse.json({ error: 'Bucket not found' }, { status: 404 })
-      }
-      if (error.message === 'ZAKAT_BUCKET_BALANCE_LOW') {
-        return NextResponse.json({ error: 'Bucket balance is too low' }, { status: 400 })
+        return NextResponse.json({ error: 'Zakat row not found' }, { status: 404 })
       }
       if (error.message === 'ZAKAT_ROW_ALREADY_PAID') {
         return NextResponse.json({ error: 'Zakat is already paid for this row' }, { status: 400 })
+      }
+      if (error.message === 'INSUFFICIENT_CASH') {
+        return NextResponse.json({ error: 'Insufficient cash balance' }, { status: 400 })
       }
     }
 
