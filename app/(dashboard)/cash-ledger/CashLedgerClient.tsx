@@ -533,22 +533,125 @@ export function CashLedgerClient() {
                       Page {data.page} of {data.totalPages} ({data.totalCount} entries)
                     </span>
                     <div className="flex items-center gap-2">
+                      {/* First page */}
+                      <Button
+                        size="sm"
+                        variant="secondary"
+                        disabled={page <= 1}
+                        onClick={() => setPage(1)}
+                        title="First page"
+                      >
+                        «
+                      </Button>
+                      
+                      {/* Previous */}
                       <Button
                         size="sm"
                         variant="secondary"
                         disabled={page <= 1}
                         onClick={() => setPage(p => Math.max(1, p - 1))}
+                        title="Previous page"
                       >
-                        Previous
+                        ‹
                       </Button>
+
+                      {/* Page numbers */}
+                      {(() => {
+                        const pages: number[] = []
+                        const maxVisible = 5
+                        let start = Math.max(1, page - Math.floor(maxVisible / 2))
+                        let end = Math.min(data.totalPages, start + maxVisible - 1)
+                        
+                        if (end - start < maxVisible - 1) {
+                          start = Math.max(1, end - maxVisible + 1)
+                        }
+
+                        for (let i = start; i <= end; i++) {
+                          pages.push(i)
+                        }
+
+                        return (
+                          <>
+                            {start > 1 && (
+                              <>
+                                <button
+                                  onClick={() => setPage(1)}
+                                  className="px-2.5 py-1 text-xs font-medium rounded hover:bg-gray-100"
+                                >
+                                  1
+                                </button>
+                                {start > 2 && <span className="text-gray-400">...</span>}
+                              </>
+                            )}
+                            
+                            {pages.map(p => (
+                              <button
+                                key={p}
+                                onClick={() => setPage(p)}
+                                className={`px-2.5 py-1 text-xs font-medium rounded ${
+                                  p === page
+                                    ? 'bg-emerald-600 text-white'
+                                    : 'hover:bg-gray-100 text-gray-700'
+                                }`}
+                              >
+                                {p}
+                              </button>
+                            ))}
+
+                            {end < data.totalPages && (
+                              <>
+                                {end < data.totalPages - 1 && <span className="text-gray-400">...</span>}
+                                <button
+                                  onClick={() => setPage(data.totalPages)}
+                                  className="px-2.5 py-1 text-xs font-medium rounded hover:bg-gray-100"
+                                >
+                                  {data.totalPages}
+                                </button>
+                              </>
+                            )}
+                          </>
+                        )
+                      })()}
+
+                      {/* Next */}
                       <Button
                         size="sm"
                         variant="secondary"
                         disabled={page >= data.totalPages}
                         onClick={() => setPage(p => p + 1)}
+                        title="Next page"
                       >
-                        Next
+                        ›
                       </Button>
+
+                      {/* Last page */}
+                      <Button
+                        size="sm"
+                        variant="secondary"
+                        disabled={page >= data.totalPages}
+                        onClick={() => setPage(data.totalPages)}
+                        title="Last page"
+                      >
+                        »
+                      </Button>
+
+                      {/* Page input */}
+                      <div className="flex items-center gap-1 ml-2 pl-2 border-l border-gray-300">
+                        <span className="text-xs text-gray-500">Go to:</span>
+                        <input
+                          type="number"
+                          min="1"
+                          max={data.totalPages}
+                          value={page}
+                          onChange={(e) => {
+                            const val = parseInt(e.target.value)
+                            if (val >= 1 && val <= data.totalPages) {
+                              setPage(val)
+                            }
+                          }}
+                          className="w-14 px-2 py-1 text-xs border border-gray-300 rounded focus:outline-none focus:ring-1 focus:ring-emerald-500"
+                        />
+                      </div>
                     </div>
                   </div>
                 )}
