@@ -28,30 +28,17 @@ async function checkPayments() {
     console.log(`  Date: ${payment.date.toISOString().split('T')[0]}`)
     console.log(`  Notes: ${payment.notes || '(no notes)'}`)
     
-    // Try to extract year from row key
+    // Try to extract row key (new logic with non-greedy match)
     const notes = payment.notes || ''
-    const rowKeyMatch = notes.match(/ZAKAT_ROW=(.+)/)
+    const rowKeyMatch = notes.match(/ZAKAT_ROW=(.+?)(?:\s|$)/)
     
     if (rowKeyMatch) {
       const rowKey = rowKeyMatch[1]
       console.log(`  Row Key: ${rowKey}`)
-      
-      const parts = rowKey.split('|')
-      const dates = parts.filter((p) => /^\d{4}-\d{2}-\d{2}$/.test(p))
-      
-      console.log(`  Date parts found: ${dates.join(', ')}`)
-      
-      if (dates.length > 0) {
-        const haulEndDate = dates[dates.length - 1]
-        const yearMatch = haulEndDate.match(/^(\d{4})-/)
-        if (yearMatch) {
-          console.log(`  Extracted Year: ${yearMatch[1]}`)
-        }
-      } else {
-        console.log(`  No dates found in row key - will use payment date year: ${payment.date.getFullYear()}`)
-      }
+      console.log(`  → This will be looked up in the row year map`)
+      console.log(`  → If not found, will fallback to payment year: ${payment.date.getFullYear()}`)
     } else {
-      console.log(`  No ZAKAT_ROW marker found`)
+      console.log(`  No ZAKAT_ROW marker found - will use payment year: ${payment.date.getFullYear()}`)
     }
     
     console.log('')

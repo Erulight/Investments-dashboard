@@ -1281,38 +1281,6 @@ export default async function ZakatPage() {
       : []
   )
 
-  // Calculate total zakat paid and group by zakat period year (which year's zakat was paid)
-  const paymentsByYear = allPayments.reduce((acc: Record<string, number>, payment: any) => {
-    const amount = Math.abs(Number(payment.amount) || 0)
-    
-    // Extract the zakat period year from the row key in notes
-    // Format: ZAKAT_ROW=TYPE|bucket|...|start-date|end-date
-    const notes = payment.notes || ''
-    const rowKeyMatch = notes.match(/ZAKAT_ROW=(.+)/)
-    
-    let year = new Date(payment.date).getFullYear() // fallback to payment date
-    
-    if (rowKeyMatch) {
-      const rowKey = rowKeyMatch[1]
-      const parts = rowKey.split('|')
-      
-      // Find the last date in the row key (haul completion date)
-      const dates = parts.filter((p: string) => /^\d{4}-\d{2}-\d{2}$/.test(p))
-      if (dates.length > 0) {
-        const haulEndDate = dates[dates.length - 1]
-        const match = haulEndDate.match(/^(\d{4})-/)
-        if (match) {
-          year = parseInt(match[1])
-        }
-      }
-    }
-    
-    acc[year] = (acc[year] || 0) + amount
-    return acc
-  }, {})
-
-  const totalZakatPaid = Object.values(paymentsByYear).reduce((sum: number, amt: number) => sum + amt, 0)
-
   const totalZakatableWealth = buckets.reduce((sum: number, b: any) => {
     const balance = Number(b.balance)
     return sum + (Number.isFinite(balance) ? Math.max(0, balance) : 0)
@@ -1583,6 +1551,9 @@ export default async function ZakatPage() {
     if (label.startsWith('Profit •')) return 'PROFIT' as const
     return 'PROFIT' as const
   }
+
+  // Map of row IDs to their haul completion years (populated after rows are created)
+  const rowYearMap = new Map<string, number>()
 
   const rawRows: BucketRow[] = buckets
     .flatMap((bucket: any): BucketRow[] => {
@@ -2419,6 +2390,40 @@ export default async function ZakatPage() {
       ),
     )
   }
+
+  // Build map of row IDs to their haul completion years
+  for (const row of rows) {
+    const haulEndDate = row.haulCompleteDate
+    const yearMatch = haulEndDate.match(/^(\d{4})-/)
+    if (yearMatch) {
+      rowYearMap.set(row.id, parseInt(yearMatch[1]))
+    }
+  }
+
+  // Calculate total zakat paid and group by zakat period year
+  const paymentsByYear = allPayments.reduce((acc: Record<string, number>, payment: any) => {
+    const amount = Math.abs(Number(payment.amount) || 0)
+    
+    // Extract the row key from payment notes
+    const notes = payment.notes || ''
+    const rowKeyMatch = notes.match(/ZAKAT_ROW=(.+?)(?:\s|$)/)
+    
+    let year = new Date(payment.date).getFullYear() // fallback to payment date
+    
+    if (rowKeyMatch) {
+      const rowKey = rowKeyMatch[1]
+      // Look up the year for this row
+      const rowYear = rowYearMap.get(rowKey)
+      if (rowYear) {
+        year = rowYear
+      }
+    }
+    
+    acc[year] = (acc[year] || 0) + amount
+    return acc
+  }, {})
+
+  const totalZakatPaid = Object.values(paymentsByYear).reduce((sum: number, amt: number) => sum + amt, 0)
 
   return (
     <div className="space-y-6">
