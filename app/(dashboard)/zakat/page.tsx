@@ -1274,6 +1274,13 @@ export default async function ZakatPage() {
     },
   })
 
+  // Create global payments array from all buckets for cross-bucket zakat payment detection
+  const allPayments = buckets.flatMap((bucket: any) => 
+    Array.isArray(bucket.movements) 
+      ? bucket.movements.filter((m: any) => m?.type === 'ZAKAT_PAID')
+      : []
+  )
+
   const totalZakatableWealth = buckets.reduce((sum: number, b: any) => {
     const balance = Number(b.balance)
     return sum + (Number.isFinite(balance) ? Math.max(0, balance) : 0)
@@ -1708,7 +1715,7 @@ export default async function ZakatPage() {
         // Only amount still held through hawl completion is zakatable.
         const firstHaulCompleted = now.getTime() >= firstHaulEnd.getTime()
         const firstRowKey = buildRowKey(['ROSCA_RECEIPT', isRewardReceiptBucket ? 'REWARD' : 'SAVINGS', bucket.id])
-        const firstIsPaid = movementHasRowPaid(payments, firstRowKey)
+        const firstIsPaid = movementHasRowPaid(allPayments, firstRowKey)
         const firstHawlStartTime = startOfDay(firstHawlStart).getTime()
         const firstHawlEndTime = startOfDay(firstHaulEnd).getTime()
         const outflowsBeforeFirstHawlEnd = hawlOutflowEvents.reduce(
@@ -1852,7 +1859,7 @@ export default async function ZakatPage() {
             if (heldForFullHawl <= 0.01) continue
 
             const rowKey = buildRowKey(['SAVINGS_IDLE', bucket.id, isoDay(periodStart), isoDay(periodEnd)])
-            const isPaid = movementHasRowPaid(payments, rowKey)
+            const isPaid = movementHasRowPaid(allPayments, rowKey)
             const zakatDue = !isPaid ? heldForFullHawl * 0.025 : 0
 
             savingsRows.push({
@@ -1912,7 +1919,7 @@ export default async function ZakatPage() {
               isoDay(periodStart),
               isoDay(periodEnd),
             ])
-            const isPaid = movementHasRowPaid(payments, rowKey)
+            const isPaid = movementHasRowPaid(allPayments, rowKey)
             const zakatDue = !isPaid ? alloc.principalRemaining * 0.025 : 0
 
             savingsRows.push({
@@ -2050,7 +2057,7 @@ export default async function ZakatPage() {
         if (r.eligibilityDuration < 354) return
 
         const rowKey = buildRowKey(['RECEIPT', bucket.id, r.movementId])
-        const isPaid = movementHasRowPaid(payments, rowKey)
+        const isPaid = movementHasRowPaid(allPayments, rowKey)
         // For receipt rows, hawl completes on receipt day itself.
         // Only same-day outflows can reduce this row's zakat base.
         const withdrawnBeforeHawlEnd = sumHawlOutflowsBetween(r.receiptDay, r.receiptDay)
@@ -2157,7 +2164,7 @@ export default async function ZakatPage() {
           if (idleAmount <= 0.01) continue
 
           const rowKey = buildRowKey(['IDLE', bucket.id, r.movementId, isoDay(periodStart), isoDay(periodEnd)])
-          const isPaid = movementHasRowPaid(payments, rowKey)
+          const isPaid = movementHasRowPaid(allPayments, rowKey)
           const zakatDue = !isPaid && idleAmount > 0 ? idleAmount * 0.025 : 0
           const idleDays = diffDaysFloor(periodStart, periodEnd)
           const movementType = typeof r.movement?.type === 'string' ? r.movement.type : ''
@@ -2258,7 +2265,7 @@ export default async function ZakatPage() {
           if (heldForFullHawl <= 0.01) continue
 
           const rowKey = buildRowKey(['DEPOSIT', bucket.id, isoDay(periodStart), isoDay(periodEnd)])
-          const isPaid = movementHasRowPaid(payments, rowKey)
+          const isPaid = movementHasRowPaid(allPayments, rowKey)
           const zakatDue = !isPaid ? heldForFullHawl * 0.025 : 0
           const idleDays = diffDaysFloor(periodStart, periodEnd)
 
