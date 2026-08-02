@@ -221,7 +221,24 @@ export async function POST(req: NextRequest) {
 
     const result = await prisma.$transaction(async (tx: any) => {
       const cashAccount = await getCashAccount(tx, currency)
-      const delta = direction === 'IN' ? amount : -amount
+
+      let withdrawAmount = amount
+      if (direction === 'OUT') {
+        // The dashboard displays the cash balance rounded to the nearest
+        // whole unit. If the user types that rounded figure to withdraw
+        // "everything", the true available balance can be a fraction below
+        // it, which would otherwise fail with INSUFFICIENT_CASH. Clamp small
+        // rounding overshoots (up to 1 currency unit) down to what's
+        // actually available.
+        const available = await getBucketCashBalance(tx, scopePersonId)
+        if (amount > available && amount - available <= 1) {
+          withdrawAmount = Math.max(0, Math.round(available * 100) / 100)
+        }
+        if (withdrawAmount <= 0) {
+          throw new Error('INSUFFICIENT_CASH')
+        }
+      }
+      const delta = direction === 'IN' ? amount : -withdrawAmount
 
       if (direction === 'IN') {
         await createCashBucket(tx, {
@@ -236,7 +253,7 @@ export async function POST(req: NextRequest) {
         })
       } else {
         await withdrawFromBuckets(tx, {
-          amount,
+          amount: withdrawAmount,
           currency,
           date,
           type: 'CASH_OUT',
