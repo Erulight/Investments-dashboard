@@ -48,26 +48,39 @@ export async function GET(req: NextRequest) {
         include: { cashBucket: { select: { id: true, label: true, haulStartDate: true } } },
         orderBy: { date: 'asc' },
       })
+      const principalWithdrawalMovements = await prisma.cashBucketMovement.findMany({
+        where: { investmentId: investment.id, type: { in: ['WITHDRAW_PRINCIPAL', 'ROLLBACK_PRINCIPAL'] } },
+        orderBy: { date: 'asc' },
+      })
 
       const totalAllocatedRemaining = allocations.reduce((sum, a) => sum + Number(a.principalRemaining || 0), 0)
       const totalInvestOut = investOutMovements.reduce((sum, m) => sum + Math.abs(Number(m.amount) || 0), 0)
+      const totalWithdrawn = principalWithdrawalMovements.reduce((sum, m) => sum + Math.abs(Number(m.amount) || 0), 0)
       const mismatch = Number(investment.principalAmount || 0) - totalAllocatedRemaining
 
-      return { allocations, investOutMovements, totalAllocatedRemaining, totalInvestOut, mismatch }
+      return { allocations, investOutMovements, totalAllocatedRemaining, totalInvestOut, totalWithdrawn, mismatch }
     }
 
     const before = await diagnose()
 
-    if (!apply || before.mismatch <= 0.01) {
+    // Ground truth: what should actually remain, based on real cash movements
+    // (money that came in via INVEST_OUT minus money that has genuinely gone
+    // back out via WITHDRAW_PRINCIPAL/ROLLBACK_PRINCIPAL). We only ever repair
+    // up to this amount, never beyond it, so we can't accidentally conjure up
+    // principal that was legitimately already withdrawn.
+    const expectedRemaining = before.totalInvestOut - before.totalWithdrawn
+    const repairableShortfall = Math.min(before.mismatch, Math.max(0, expectedRemaining - before.totalAllocatedRemaining))
+
+    if (!apply || repairableShortfall <= 0.01) {
       return NextResponse.json({
         applied: false,
         investment: { id: investment.id, name: investment.name, principalAmount: investment.principalAmount },
+        expectedRemaining,
+        repairableShortfall,
         ...before,
       })
     }
 
-    // Reconstruct: for each INVEST_OUT bucket without an existing allocation row,
-    // create one covering that bucket's contribution.
     const existingBucketIds = new Set(before.allocations.map((a) => a.cashBucketId))
     const investOutByBucket = new Map<string, { amount: number; haulStartDate: Date; label: string | null }>()
     for (const m of before.investOutMovements) {
@@ -86,12 +99,35 @@ export async function GET(req: NextRequest) {
     }
 
     const result = await prisma.$transaction(async (tx) => {
+      const restored: any[] = []
       const created: any[] = []
-      let remainingShortfall = before.mismatch
+      let remainingShortfall = repairableShortfall
 
+      // Step 1: top up existing allocations that are under their own
+      // principalAllocated cap (this is the common case: a prior operation
+      // zeroed out principalRemaining without any real withdrawal happening).
+      for (const alloc of before.allocations) {
+        if (remainingShortfall <= 0.01) break
+
+        const allocatedCap = Number(alloc.principalAllocated || 0)
+        const currentRemaining = Number(alloc.principalRemaining || 0)
+        const room = Math.max(0, allocatedCap - currentRemaining)
+        if (room <= 0.01) continue
+
+        const addBack = Math.min(room, remainingShortfall)
+        const updated = await tx.investmentBucketAllocation.update({
+          where: { id: alloc.id },
+          data: { principalRemaining: currentRemaining + addBack },
+        })
+        restored.push(updated)
+        remainingShortfall = Math.max(0, remainingShortfall - addBack)
+      }
+
+      // Step 2: for any INVEST_OUT bucket that never got an allocation row at
+      // all, create one covering that bucket's contribution.
       for (const [bucketId, entry] of investOutByBucket) {
         if (remainingShortfall <= 0.01) break
-        if (existingBucketIds.has(bucketId)) continue // already tracked, leave alone
+        if (existingBucketIds.has(bucketId)) continue
 
         const amount = Math.min(entry.amount, remainingShortfall)
         if (amount <= 0) continue
@@ -109,7 +145,7 @@ export async function GET(req: NextRequest) {
         remainingShortfall = Math.max(0, remainingShortfall - amount)
       }
 
-      // Fallback: no (unmatched) INVEST_OUT history to reconstruct from.
+      // Step 3: fallback if nothing above could absorb the shortfall.
       // Create a synthetic legacy cash bucket anchored to the investment's
       // start date so the allocation math has something to point at.
       if (remainingShortfall > 0.01) {
@@ -136,7 +172,7 @@ export async function GET(req: NextRequest) {
         remainingShortfall = 0
       }
 
-      return created
+      return { restored, created }
     })
 
     const after = await diagnose()
@@ -144,7 +180,10 @@ export async function GET(req: NextRequest) {
     return NextResponse.json({
       applied: true,
       investment: { id: investment.id, name: investment.name, principalAmount: investment.principalAmount },
-      createdAllocations: result,
+      expectedRemaining,
+      repairableShortfall,
+      restoredAllocations: result.restored,
+      createdAllocations: result.created,
       before,
       after,
     })
