@@ -991,10 +991,14 @@ export default async function DashboardPage({
       .reduce((sum, inv) => sum + Math.max(0, toFiniteNumber(inv.currentValue)), 0)
 
     // Calculate Circles ongoing: total contributed in active ongoing Circles
+    // that have NOT yet had their payout received (this tile is "saved, not received").
     circlysOngoingSaved = investments
       .filter((inv: any) => getAccountType(inv) === 'CIRCLYS')
       .reduce((sum, inv) => {
         const meta = parseMetadata(inv.metadata)
+        const hasReceived = Boolean(meta?.received?.date)
+        if (hasReceived) return sum
+
         const monthlyContribution = toFiniteNumber(meta?.monthlyContribution)
         const totalMonths = toFiniteNumber(meta?.totalMonths)
         const totalRequired = monthlyContribution * totalMonths
