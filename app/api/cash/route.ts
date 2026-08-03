@@ -232,7 +232,9 @@ export async function POST(req: NextRequest) {
         // actually available.
         const available = await getBucketCashBalance(tx, scopePersonId)
         if (amount > available && amount - available <= 1) {
-          withdrawAmount = Math.max(0, Math.round(available * 100) / 100)
+          // Round DOWN, never up — rounding up could still request a hair
+          // more than what's truly available and trip INSUFFICIENT_CASH.
+          withdrawAmount = Math.max(0, Math.floor(available * 100) / 100)
         }
         if (withdrawAmount <= 0) {
           throw new Error('INSUFFICIENT_CASH')
