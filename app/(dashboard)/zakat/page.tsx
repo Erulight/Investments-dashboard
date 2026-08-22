@@ -812,14 +812,21 @@ export default async function ZakatPage() {
     if (rewardCashAdjusted) {
       await recomputeCashSetting(prisma, null)
     }
+  }
 
-    // For every Sukuk investment owned by the owner, determine correct hawl start:
-    // - Prefer real funding allocations from ROSCA buckets
-    //   (Savings Receipt and Circlys Reward Receipt buckets)
-    // - Else prefer allocations from Sukuk principal receipt buckets (recycled principal)
-    // - Fallback to CASH_INVEST/start date for manual cash funding
-    // Persist anchor in metadata and keep receipt suppression only for fully depleted receipts.
-
+  // For every Sukuk investment held by the current viewer (owner OR partner),
+  // determine correct hawl start:
+  // - Prefer real funding allocations from ROSCA buckets
+  //   (Savings Receipt and Circlys Reward Receipt buckets)
+  // - Else prefer allocations from Sukuk principal receipt buckets (recycled principal)
+  // - Fallback to CASH_INVEST/start date for manual cash funding
+  // Persist anchor in metadata and keep receipt suppression only for fully depleted receipts.
+  //
+  // Partners get the exact same treatment as the owner here (scoped to their
+  // own personId) so their sukuk principal/profit receipts inherit the
+  // correct historical hawl anchor instead of resetting the zakat clock.
+  const sukukAnchorScopePersonId = user.role === 'OWNER' ? ownerPersonId : user.personId!
+  if (user.role === 'OWNER' || (user.role === 'PARTNER' && user.personId)) {
     const allSukukInvestments = await prisma.investment.findMany({
       where: { account: { type: 'SUKUK' } },
       select: { id: true, name: true, metadata: true, startDate: true },
@@ -828,8 +835,8 @@ export default async function ZakatPage() {
     const allSukukCashInvestTxs = await prisma.transaction.findMany({
       where: {
         type: 'CASH_INVEST',
-        ...(ownerPersonId
-          ? { OR: [{ personId: ownerPersonId }, { personId: null }] }
+        ...(sukukAnchorScopePersonId
+          ? { OR: [{ personId: sukukAnchorScopePersonId }, { personId: null }] }
           : { personId: null }),
         investmentId: { not: null },
         investment: { account: { type: 'SUKUK' } },
@@ -843,8 +850,8 @@ export default async function ZakatPage() {
             investmentId: { in: allSukukInvestments.map((inv: any) => inv.id) },
             cashBucket: {
               AND: [
-                ...(ownerPersonId
-                  ? [{ OR: [{ personId: ownerPersonId }, { personId: null }] }]
+                ...(sukukAnchorScopePersonId
+                  ? [{ OR: [{ personId: sukukAnchorScopePersonId }, { personId: null }] }]
                   : [{ personId: null }]),
                 {
                   OR: [
@@ -887,8 +894,8 @@ export default async function ZakatPage() {
             type: 'INVEST_OUT',
             cashBucket: {
               AND: [
-                ...(ownerPersonId
-                  ? [{ OR: [{ personId: ownerPersonId }, { personId: null }] }]
+                ...(sukukAnchorScopePersonId
+                  ? [{ OR: [{ personId: sukukAnchorScopePersonId }, { personId: null }] }]
                   : [{ personId: null }]),
                 {
                   OR: [
@@ -921,8 +928,8 @@ export default async function ZakatPage() {
             investmentId: { in: allSukukInvestments.map((inv: any) => inv.id) },
             cashBucket: {
               AND: [
-                ...(ownerPersonId
-                  ? [{ OR: [{ personId: ownerPersonId }, { personId: null }] }]
+                ...(sukukAnchorScopePersonId
+                  ? [{ OR: [{ personId: sukukAnchorScopePersonId }, { personId: null }] }]
                   : [{ personId: null }]),
                 {
                   OR: [
@@ -949,8 +956,8 @@ export default async function ZakatPage() {
 
     const allOwnerRewardReceiptBuckets = await prisma.cashBucket.findMany({
       where: {
-        ...(ownerPersonId
-          ? { OR: [{ personId: ownerPersonId }, { personId: null }] }
+        ...(sukukAnchorScopePersonId
+          ? { OR: [{ personId: sukukAnchorScopePersonId }, { personId: null }] }
           : { personId: null }),
         label: { startsWith: 'Circlys Reward Receipt •' },
       },
@@ -2046,7 +2053,8 @@ export default async function ZakatPage() {
           if (Number.isNaN(start.getTime())) return null
           const invMetadata = parseMetadata(inv?.metadata)
           const inheritedSavingsHaulStart = toDate(invMetadata?.savingsHaulStartDate)
-          const resolvedOwnerAnchor = user.role === 'OWNER' && inv?.id
+          // Resolved for both owner and partner (see sukukAnchorScopePersonId block above).
+          const resolvedOwnerAnchor = inv?.id
             ? ownerResolvedSukukHawlStartByInvestmentId.get(inv.id as string) || null
             : null
           const ownerSukukAnchor =
