@@ -1002,6 +1002,16 @@ export function SukukList({ initialSukuk, userRole, ownerPersonId, viewerPersonI
       if (ownerView === 'all') {
         // show all
       }
+    } else if (userRole === 'PARTNER') {
+      // Partners get the same Active/Closed distinction as the owner
+      // (based on their own remaining receivable), just without the
+      // owner-only Sold/Commission concepts.
+      const metrics = getMetrics(inv)
+      const isClosedDeal = Number(metrics.receivable || 0) <= 0.01
+      const isActiveDeal = !isClosedDeal
+
+      if (ownerView === 'active' && !isActiveDeal) return false
+      if (ownerView === 'closed' && !isClosedDeal) return false
     }
     const metrics = isSoldDeal ? getSoldDealMetrics(inv) : getMetrics(inv)
 
@@ -1876,6 +1886,43 @@ export function SukukList({ initialSukuk, userRole, ownerPersonId, viewerPersonI
                 }`}
               >
                 Commission
+              </button>
+            </div>
+          )}
+          {userRole === 'PARTNER' && (
+            <div className="flex items-center gap-2">
+              <button
+                type="button"
+                onClick={() => setOwnerView('all')}
+                className={`rounded-full border px-3 py-1.5 text-xs font-semibold transition-colors ${
+                  ownerView === 'all'
+                    ? 'border-blue-600 bg-blue-600 text-white dark:bg-blue-500 dark:text-blue-100'
+                    : 'border-slate-200 bg-white text-slate-700 hover:border-slate-300 dark:border-white/10 dark:bg-slate-900/60 dark:text-slate-200 dark:hover:border-white/20'
+                }`}
+              >
+                All
+              </button>
+              <button
+                type="button"
+                onClick={() => setOwnerView('active')}
+                className={`rounded-full border px-3 py-1.5 text-xs font-semibold transition-colors ${
+                  ownerView === 'active'
+                    ? 'border-blue-600 bg-blue-600 text-white dark:bg-blue-500 dark:text-blue-100'
+                    : 'border-slate-200 bg-white text-slate-700 hover:border-slate-300 dark:border-white/10 dark:bg-slate-900/60 dark:text-slate-200 dark:hover:border-white/20'
+                }`}
+              >
+                Active
+              </button>
+              <button
+                type="button"
+                onClick={() => setOwnerView('closed')}
+                className={`rounded-full border px-3 py-1.5 text-xs font-semibold transition-colors ${
+                  ownerView === 'closed'
+                    ? 'border-blue-600 bg-blue-600 text-white dark:bg-blue-500 dark:text-blue-100'
+                    : 'border-slate-200 bg-white text-slate-700 hover:border-slate-300 dark:border-white/10 dark:bg-slate-900/60 dark:text-slate-200 dark:hover:border-white/20'
+                }`}
+              >
+                Closed
               </button>
             </div>
           )}
