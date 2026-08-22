@@ -1326,6 +1326,46 @@ export default async function ZakatPage() {
     sukukValueForNisab = participations.reduce((sum: number, p: any) => {
       return sum + getPartnerSukukValueAt(p.investment, p, now)
     }, 0)
+
+    // Some sukuk deals are created entirely for a partner (funded and
+    // withdrawn via personId-tagged transactions and a partnerCommissionPlan
+    // in metadata) without ever getting a DealParticipant row, so they never
+    // show up in the query above. Find those and value them the same way,
+    // using a synthetic participation covering the full deal.
+    const legacyPartnerSukuk = await prisma.investment.findMany({
+      where: {
+        account: { type: 'SUKUK' },
+        dealParticipants: { none: {} },
+        transactions: { some: { personId: user.personId } },
+      },
+      select: {
+        id: true,
+        startDate: true,
+        maturityDate: true,
+        interestRate: true,
+        fees: true,
+        principalAmount: true,
+        receivableAmount: true,
+        transactions: {
+          where: {
+            type: { in: ['WITHDRAW_PROFIT', 'WITHDRAW_PRINCIPAL', 'BUY_FROM_PARTNER'] },
+            OR: [{ personId: user.personId }, { personId: null }],
+          },
+          select: { type: true, date: true, amount: true, personId: true, metadata: true },
+          orderBy: { date: 'asc' },
+        },
+      },
+    })
+
+    sukukValueForNisab += legacyPartnerSukuk.reduce((sum: number, inv: any) => {
+      const syntheticParticipation = {
+        investedAmount: inv.principalAmount,
+        acquiredAt: inv.startDate,
+        commissionFees: 0,
+        personId: user.personId,
+      }
+      return sum + getPartnerSukukValueAt(inv, syntheticParticipation, now)
+    }, 0)
   }
 
   if (user.role === 'OWNER') {
@@ -1341,6 +1381,7 @@ export default async function ZakatPage() {
         interestRate: true,
         fees: true,
         receivableAmount: true,
+        metadata: true,
         dealParticipants: {
           select: { personId: true, investedAmount: true, acquiredAt: true, commissionFees: true },
         },
@@ -1360,8 +1401,26 @@ export default async function ZakatPage() {
       return dps.find((p: any) => p?.personId === ownerPersonId) || null
     }
 
+    // Deals created entirely for a partner (funded/withdrawn via
+    // personId-tagged transactions and a partnerCommissionPlan in metadata)
+    // without a DealParticipant row should NOT count as the owner's own
+    // sukuk principal for zakat purposes.
+    const isPartnerOnlyLegacyDeal = (inv: any) => {
+      let meta: any = null
+      try {
+        meta = typeof inv?.metadata === 'string' ? JSON.parse(inv.metadata) : inv?.metadata
+      } catch {
+        meta = null
+      }
+      if (meta?.partnerCommissionPlan) return true
+      const txs = Array.isArray(inv?.transactions) ? inv.transactions : []
+      return txs.some((tx: any) => tx?.personId && tx.personId !== ownerPersonId)
+    }
+
     sukukValueForNisab = investments.reduce((sum: number, inv: any) => {
       const pos = getOwnerPosition(inv)
+      const participants = Array.isArray(inv.dealParticipants) ? inv.dealParticipants : []
+      if (!pos && participants.length === 0 && isPartnerOnlyLegacyDeal(inv)) return sum
       const principal = pos ? (Number(pos.investedAmount) || 0) : (Number(inv.principalAmount) || 0)
       if (principal <= 0) return sum
 

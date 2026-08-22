@@ -257,6 +257,9 @@ export async function POST(
             throw new Error('AMOUNT_EXCEEDS_PARTNER_PROFIT')
           }
 
+          // Is this the withdrawal that fully closes the partner's position?
+          const isClosingPrincipalNow = source === 'PRINCIPAL' && (remainingPrincipal - amount) <= 0.01
+
           await creditBucketsForReceipt(tx, {
             investmentId: investment.id,
             amount,
@@ -286,7 +289,7 @@ export async function POST(
             },
           })
 
-          if (source === 'PROFIT') {
+          if (source === 'PROFIT' || isClosingPrincipalNow) {
             const invMeta = parseMetadata(investment.metadata)
             const commissionPlan = invMeta?.partnerCommissionPlan && typeof invMeta.partnerCommissionPlan === 'object'
               ? invMeta.partnerCommissionPlan
@@ -346,13 +349,18 @@ export async function POST(
                     return sum + (Number.isFinite(amount) ? Math.max(0, amount) : 0)
                   }, 0)
 
-                const withdrawnAfter = Math.max(0, withdrawnProfit + amount)
+                const withdrawnAfter = Math.max(0, withdrawnProfit + (source === 'PROFIT' ? amount : 0))
                 const expectedCumulative = partnerProfitTarget > 0
                   ? round2(Math.min(plannedCommission, (withdrawnAfter / partnerProfitTarget) * plannedCommission))
                   : round2(plannedCommission)
 
                 const remainingCommission = Math.max(0, plannedCommission - alreadyPaid)
-                const payoutNow = round2(Math.min(remainingCommission, Math.max(0, expectedCumulative - alreadyPaid)))
+                // When the partner is fully closing their position, settle any
+                // outstanding commission in full rather than prorating it against
+                // profit withdrawn — the deal is ending now, nothing is left to accrue against.
+                const payoutNow = isClosingPrincipalNow
+                  ? round2(remainingCommission)
+                  : round2(Math.min(remainingCommission, Math.max(0, expectedCumulative - alreadyPaid)))
 
                 if (payoutNow > 0.01) {
                   const ownerCashAccount = await tx.account.findFirst({
@@ -395,6 +403,7 @@ export async function POST(
                         plannedCommission,
                         alreadyPaid,
                         partnerProfitTarget,
+                        closedOut: isClosingPrincipalNow,
                       }),
                     },
                   })
