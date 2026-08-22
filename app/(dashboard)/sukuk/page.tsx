@@ -178,10 +178,29 @@ export default async function InvestmentsPage() {
     return true
   }
 
+  // Some sukuk deals are created entirely for a partner (the partner funds
+  // and withdraws directly via personId-tagged transactions and a
+  // partnerCommissionPlan in metadata) without ever getting a
+  // DealParticipant row. Without this check, the "no participants" fallback
+  // below would wrongly attribute the WHOLE deal to the owner forever, even
+  // after the partner fully exits.
+  const isPartnerOnlyLegacyDeal = (inv: any) => {
+    let meta: any = null
+    try {
+      meta = typeof inv?.metadata === 'string' ? JSON.parse(inv.metadata) : inv?.metadata
+    } catch {
+      meta = null
+    }
+    if (meta?.partnerCommissionPlan) return true
+    const txs = Array.isArray(inv?.transactions) ? inv.transactions : []
+    return txs.some((tx: any) => tx?.personId && tx.personId !== user.personId)
+  }
+
   const getOwnerParticipation = (inv: any) => {
     if (user.role !== 'OWNER' || !user.personId) return null
     const participants = Array.isArray(inv.dealParticipants) ? inv.dealParticipants : []
     if (participants.length === 0) {
+      if (isPartnerOnlyLegacyDeal(inv)) return null
       return { investedAmount: inv.principalAmount, acquiredAt: inv.startDate, commissionFees: 0 }
     }
     return participants.find((p: any) => p?.personId === user.personId) ?? null
@@ -230,6 +249,9 @@ export default async function InvestmentsPage() {
           }, 0)
         return Math.max(0, ownerOriginal - ownerWithdrawals)
       }
+      // No participants at all — only fall back to the full principal if this
+      // isn't actually a partner-only legacy deal (see isPartnerOnlyLegacyDeal).
+      if (isPartnerOnlyLegacyDeal(inv)) return 0
     }
     const principalRaw = Number(inv?.principalAmount)
     return Number.isFinite(principalRaw) ? principalRaw : 0
