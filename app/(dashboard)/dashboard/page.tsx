@@ -484,11 +484,25 @@ export default async function DashboardPage({
       return dps.find((p: any) => p?.personId === ownerPersonId) || null
     }
 
+    // Some sukuk deals are created entirely for a partner (the partner funds
+    // and withdraws directly via personId-tagged transactions, with a
+    // partnerCommissionPlan in metadata) without ever getting a
+    // DealParticipant row. Without this check, the "no participants" legacy
+    // fallback below would wrongly attribute the WHOLE deal (principal +
+    // receivable) to the owner forever, even after the partner fully exits.
+    const isPartnerOnlyLegacyDeal = (inv: any) => {
+      const meta = parseMetadata(inv.metadata)
+      if (meta?.partnerCommissionPlan) return true
+      const txs = Array.isArray(inv.transactions) ? inv.transactions : []
+      return txs.some((tx: any) => tx?.personId && tx.personId !== ownerPersonId)
+    }
+
     // Matches sukuk page's getOwnerParticipation - includes fallback for legacy deals
     const getOwnerParticipation = (inv: any) => {
       if (!ownerPersonId) return null
       const participants = Array.isArray(inv.dealParticipants) ? inv.dealParticipants : []
       if (participants.length === 0) {
+        if (isPartnerOnlyLegacyDeal(inv)) return null
         return { investedAmount: inv.principalAmount, acquiredAt: inv.startDate, commissionFees: 0 }
       }
       return participants.find((p: any) => p?.personId === ownerPersonId) ?? null
@@ -501,9 +515,11 @@ export default async function DashboardPage({
         return Number.isFinite(ownerPrincipal) ? Math.max(0, ownerPrincipal) : 0
       }
 
-      // Legacy deals may not have participants; in that case fallback to investment principal.
+      // Legacy deals may not have participants; in that case fallback to investment principal,
+      // unless the deal was actually created entirely for a partner (see isPartnerOnlyLegacyDeal).
       const participants = Array.isArray(inv.dealParticipants) ? inv.dealParticipants : []
       if (participants.length === 0) {
+        if (isPartnerOnlyLegacyDeal(inv)) return 0
         const principal = Number(inv.principalAmount)
         return Number.isFinite(principal) ? Math.max(0, principal) : 0
       }
