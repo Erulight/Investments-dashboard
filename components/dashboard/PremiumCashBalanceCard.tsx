@@ -2,6 +2,7 @@
 
 import { motion, useMotionValue, useTransform, animate, AnimatePresence } from 'framer-motion'
 import { useEffect, useRef, useState } from 'react'
+import { createPortal } from 'react-dom'
 import { AreaChart, Area, ResponsiveContainer } from 'recharts'
 import { TrendingUp, TrendingDown, Plus, Minus, ArrowLeftRight } from 'lucide-react'
 import { useRouter, useSearchParams } from 'next/navigation'
@@ -59,6 +60,11 @@ export function PremiumCashBalanceCard({
   const [showHistoryModal, setShowHistoryModal] = useState(false)
   const [balanceHistory, setBalanceHistory] = useState<Array<{ date: string; balance: number; type: string; amount: number; description: string | null }>>([])  
   const [historyLoading, setHistoryLoading] = useState(false)
+  const [mounted, setMounted] = useState(false)
+
+  useEffect(() => {
+    setMounted(true)
+  }, [])
   
   const router = useRouter()
   const searchParams = useSearchParams()
@@ -487,8 +493,13 @@ export function PremiumCashBalanceCard({
         />
       </div>
 
-      {/* Balance History Modal */}
-      {showHistoryModal && (
+      {/* Balance History Modal
+          Rendered via a portal to document.body: this card is a motion.div
+          with active transform/animation styles, which makes it a
+          containing block for `position: fixed` descendants per the CSS
+          spec (breaking full-viewport fixed positioning). Portaling escapes
+          that so the modal actually covers the whole screen. */}
+      {mounted && showHistoryModal && createPortal(
         <motion.div
           initial={{ opacity: 0 }}
           animate={{ opacity: 1 }}
@@ -598,7 +609,8 @@ export function PremiumCashBalanceCard({
               </motion.button>
             </div>
           </motion.div>
-        </motion.div>
+        </motion.div>,
+        document.body
       )}
     </motion.div>
   )

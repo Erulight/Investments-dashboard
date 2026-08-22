@@ -7,6 +7,7 @@ import { YearFilter } from '@/components/dashboard/YearFilter'
 import { ReportButton } from '@/components/dashboard/ReportButton'
 import { DashboardCharts } from '@/components/dashboard/DashboardCharts'
 import { PremiumStatsGrid } from '@/components/dashboard/PremiumStatsGrid'
+import { PartnerPortfolioCard } from '@/components/dashboard/PartnerPortfolioCard'
 import { ReceivableByYearCard } from '@/components/dashboard/ReceivableByYearCard'
 import { AnimatedCard } from '@/components/ui/AnimatedCard'
 import { TradingChartOverlay } from '@/components/dashboard/TradingChartOverlay'
@@ -1733,6 +1734,8 @@ export default async function DashboardPage({
         }}
         currencyPrefix={currencyPrefix}
       />
+
+      {user.role === 'OWNER' && <PartnerPortfolioCard currencyPrefix={currencyPrefix} />}
 
       <DashboardStatsClient
         liquiditySharePct={liquiditySharePct}
