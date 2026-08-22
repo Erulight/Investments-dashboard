@@ -1536,6 +1536,7 @@ export default async function ZakatPage() {
           category: true,
           metadata: true,
           account: { select: { type: true } },
+          dealParticipants: { select: { personId: true, investedAmount: true } },
         },
       })
     : []
@@ -2068,7 +2069,22 @@ export default async function ZakatPage() {
           const isProfitReceiptMovement = movementType === 'WITHDRAW_PROFIT' || (isProfitBucket && movementType === 'CASH_IN')
 
           if (isPrincipalReceiptMovement && inv?.account?.type === 'SUKUK') {
-            const currentPrincipal = Math.max(0, Number(inv?.principalAmount || 0))
+            // investment.principalAmount is the whole deal's size and is only ever
+            // decremented for OWNER withdrawals - a PARTNER's own principal
+            // withdrawal never touches it. So for a partner, check THEIR OWN
+            // remaining share (DealParticipant.investedAmount) instead of the
+            // deal-wide field, otherwise their principal receipts would never
+            // qualify for the zakat ledger at all.
+            let currentPrincipal: number
+            if (user.role === 'PARTNER' && user.personId) {
+              const participants = Array.isArray(inv?.dealParticipants) ? inv.dealParticipants : []
+              const myParticipant = participants.find((p: any) => p?.personId === user.personId)
+              currentPrincipal = myParticipant
+                ? Math.max(0, Number(myParticipant.investedAmount || 0))
+                : 0 // legacy partner-only deal with no DealParticipant row - it's entirely this partner's
+            } else {
+              currentPrincipal = Math.max(0, Number(inv?.principalAmount || 0))
+            }
             if (currentPrincipal > 0.0001) return null
             const maturityRaw = inv?.maturityDate ? new Date(inv.maturityDate as any) : null
             const matured =
