@@ -80,6 +80,8 @@ export async function POST(
         type: 'CASH_OUT',
         notes: `Debt payment • ${debt.lenderName}`,
         availableOnOrBefore: paidAt,
+        // This route is owner-only (checked above) - never draw from a partner's bucket.
+        personId: null,
       })
 
       const payment = await tx.debtPayment.create({

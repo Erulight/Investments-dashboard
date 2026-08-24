@@ -122,6 +122,8 @@ export async function POST(request: Request) {
         investmentId: cryptoId,
         notes,
         availableOnOrBefore: date,
+        // This route is owner-only (checked above) - never draw from a partner's bucket.
+        personId: null,
       })
 
       await recomputeCashSetting(tx, null)

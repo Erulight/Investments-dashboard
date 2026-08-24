@@ -242,6 +242,10 @@ export async function PUT(
           where: { id: accountId },
         })
         const cashAccount = await getCashAccount(tx, account?.currency || 'SAR')
+        // Scope funding/crediting to whichever role is actually editing this
+        // deal - never let a partner's edit draw from/credit the owner's
+        // cash pool (or another partner's), and vice versa.
+        const editorScopePersonId = user.role === 'OWNER' ? null : (user.personId || null)
 
         if (principalDelta > 0) {
           await withdrawFromBuckets(tx, {
@@ -253,6 +257,7 @@ export async function PUT(
             notes: 'Principal increase',
             allocateToInvestment: true,
             availableOnOrBefore: startDate,
+            personId: editorScopePersonId,
           })
         } else {
           await creditBucketsForReceipt(tx, {
@@ -262,10 +267,11 @@ export async function PUT(
             date: adjustmentDate,
             type: 'WITHDRAW_PRINCIPAL',
             notes: 'Principal decrease',
+            personId: editorScopePersonId,
           })
         }
 
-        await recomputeCashSetting(tx, null)
+        await recomputeCashSetting(tx, editorScopePersonId)
 
         await tx.transaction.create({
           data: {

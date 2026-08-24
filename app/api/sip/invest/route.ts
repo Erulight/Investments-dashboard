@@ -86,6 +86,8 @@ export async function POST(request: Request) {
         investmentId: sipId,
         notes: `SIP Invest • ${sip.name}`,
         availableOnOrBefore: investmentDate,
+        // Never let an owner's investment draw from a partner's bucket or vice versa.
+        personId: user.role === 'OWNER' ? null : (user.personId || null),
       })
 
       await recomputeCashSetting(tx, user.role === 'OWNER' ? null : (user.personId || null))
