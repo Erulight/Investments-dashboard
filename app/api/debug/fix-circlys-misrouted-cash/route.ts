@@ -1,7 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { prisma } from '@/lib/db'
 import { requireAuth } from '@/lib/rbac'
-import { withdrawFromBuckets } from '@/lib/cashBuckets'
 import { recomputeCashSetting } from '@/lib/cashBalance'
 
 export const dynamic = 'force-dynamic'
@@ -77,13 +76,41 @@ export async function GET(req: NextRequest) {
         await recomputeCashSetting(tx, r.personId)
       }
 
-      await withdrawFromBuckets(tx, {
-        amount: totalToOwnerDebit,
-        date: new Date(),
-        type: 'CASH_OUT',
-        notes: 'Repair: reverse cash wrongly retained from misrouted Circlys withdrawals',
-        personId: null,
+      // Debit the owner's raw current balances directly (not via
+      // withdrawFromBuckets), since this is a corrective adjustment to
+      // today's snapshot, not a real new expense - it shouldn't be blocked
+      // by that helper's future-scheduled-outflow guard.
+      const ownerBuckets = await tx.cashBucket.findMany({
+        where: { personId: null, balance: { gt: 0 } },
+        orderBy: [{ haulStartDate: 'asc' }, { createdAt: 'asc' }],
       })
+
+      let remaining = totalToOwnerDebit
+      for (const bucket of ownerBuckets) {
+        if (remaining <= 0.0001) break
+        const used = Math.min(bucket.balance, remaining)
+        if (used <= 0) continue
+
+        await tx.cashBucket.update({
+          where: { id: bucket.id },
+          data: { balance: { decrement: used } },
+        })
+        await tx.cashBucketMovement.create({
+          data: {
+            cashBucketId: bucket.id,
+            amount: -used,
+            type: 'CASH_OUT',
+            date: new Date(),
+            notes: 'Repair: reverse cash wrongly retained from misrouted Circlys withdrawals',
+          },
+        })
+        remaining -= used
+      }
+
+      if (remaining > 0.0001) {
+        throw new Error('INSUFFICIENT_CASH')
+      }
+
       await recomputeCashSetting(tx, null)
 
       return { debitedFromOwner: totalToOwnerDebit }
