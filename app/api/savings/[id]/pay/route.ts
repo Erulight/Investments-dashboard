@@ -186,6 +186,8 @@ export async function POST(
           availableOnOrBefore: fundingCutoff,
           // Do not fund paybacks from the Savings Receipt bucket.
           excludeLabelPrefixes: ['Circlys •', 'Savings Receipt •'],
+          // Circlys plans are owner-administered - never draw from a partner's cash bucket.
+          personId: null,
         })
 
         // Record transaction in Cash Ledger for visibility
@@ -242,6 +244,8 @@ export async function POST(
           // Allow funding from currently available cash even when recording past-due months.
           availableOnOrBefore: fundingCutoff,
           excludeLabelPrefixes: ['Circlys •'],
+          // Circlys plans are owner-administered - never draw from a partner's cash bucket.
+          personId: null,
         })
 
         // Record transaction in Cash Ledger for visibility
