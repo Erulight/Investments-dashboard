@@ -104,7 +104,11 @@ export const withdrawFromBuckets = async (
     notes?: string | null
     allocateToInvestment?: boolean
     availableOnOrBefore?: Date
-    personId?: string | null
+    // Required (not optional): omitting this applies NO scoping at all,
+    // which previously caused an owner-only expense (e.g. a Circlys
+    // contribution) to silently drain a partner's cash bucket instead.
+    // Pass `null` explicitly for the owner's shared pool.
+    personId: string | null
     excludeLabelPrefixes?: string[]
     preferredLabelPrefixes?: string[]
   }
@@ -297,7 +301,10 @@ export const creditBucketsForReceipt = async (
     date: Date
     type: MovementType
     notes?: string | null
-    personId?: string | null
+    // Required (not optional): omitting this applies NO scoping at all when
+    // locating allocations/buckets to credit. Pass `null` explicitly for
+    // the owner's shared pool.
+    personId: string | null
     profitHaulStartDate?: Date
   }
 ) => {

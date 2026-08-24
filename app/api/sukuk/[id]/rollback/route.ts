@@ -144,6 +144,8 @@ export async function POST(
           date,
           type: 'ROLLBACK_PRINCIPAL',
           notes: notes || null,
+          // This branch only runs for the owner (partner branch is above).
+          personId: null,
         })
       }
 
