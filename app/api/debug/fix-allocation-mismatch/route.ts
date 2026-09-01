@@ -83,7 +83,6 @@ export async function GET(req: NextRequest) {
       return NextResponse.json({
         applied: false,
         investment: { id: investment.id, name: investment.name, principalAmount: investment.principalAmount },
-        expectedRemaining,
         repairableShortfall,
         repairableExcess,
         ...before,
