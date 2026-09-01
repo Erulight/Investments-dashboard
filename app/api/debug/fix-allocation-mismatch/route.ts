@@ -56,28 +56,74 @@ export async function GET(req: NextRequest) {
       const totalAllocatedRemaining = allocations.reduce((sum, a) => sum + Number(a.principalRemaining || 0), 0)
       const totalInvestOut = investOutMovements.reduce((sum, m) => sum + Math.abs(Number(m.amount) || 0), 0)
       const totalWithdrawn = principalWithdrawalMovements.reduce((sum, m) => sum + Math.abs(Number(m.amount) || 0), 0)
-      const mismatch = Number(investment.principalAmount || 0) - totalAllocatedRemaining
+      // Ground truth: what should actually remain, based on real cash movements
+      // (money that came in via INVEST_OUT minus money that has genuinely gone
+      // back out via WITHDRAW_PRINCIPAL/ROLLBACK_PRINCIPAL) - NOT
+      // investment.principalAmount, which is only reliable for OWNER-only
+      // withdrawals and can itself go stale (e.g. partner-driven withdrawals
+      // never touch it).
+      const expectedRemaining = totalInvestOut - totalWithdrawn
+      const mismatch = expectedRemaining - totalAllocatedRemaining
 
-      return { allocations, investOutMovements, totalAllocatedRemaining, totalInvestOut, totalWithdrawn, mismatch }
+      return { allocations, investOutMovements, totalAllocatedRemaining, totalInvestOut, totalWithdrawn, expectedRemaining, mismatch }
     }
 
     const before = await diagnose()
+    const { expectedRemaining } = before
 
-    // Ground truth: what should actually remain, based on real cash movements
-    // (money that came in via INVEST_OUT minus money that has genuinely gone
-    // back out via WITHDRAW_PRINCIPAL/ROLLBACK_PRINCIPAL). We only ever repair
-    // up to this amount, never beyond it, so we can't accidentally conjure up
-    // principal that was legitimately already withdrawn.
-    const expectedRemaining = before.totalInvestOut - before.totalWithdrawn
-    const repairableShortfall = Math.min(before.mismatch, Math.max(0, expectedRemaining - before.totalAllocatedRemaining))
+    // We only ever repair up to what the real cash movement history
+    // justifies, never beyond it, so we can't accidentally conjure up
+    // principal that was legitimately already withdrawn (mismatch > 0), nor
+    // leave phantom "available" principal that was actually already spent
+    // (mismatch < 0, which could let someone double-withdraw real cash).
+    const repairableShortfall = Math.max(0, before.mismatch)
+    const repairableExcess = Math.max(0, -before.mismatch)
 
-    if (!apply || repairableShortfall <= 0.01) {
+    if (!apply || (repairableShortfall <= 0.01 && repairableExcess <= 0.01)) {
       return NextResponse.json({
         applied: false,
         investment: { id: investment.id, name: investment.name, principalAmount: investment.principalAmount },
         expectedRemaining,
         repairableShortfall,
+        repairableExcess,
         ...before,
+      })
+    }
+
+    if (repairableExcess > 0.01) {
+      // Over-tracked: proportionally reduce each allocation's
+      // principalRemaining down until the total matches ground truth.
+      const result = await prisma.$transaction(async (tx) => {
+        const reduced: any[] = []
+        let remainingToRemove = repairableExcess
+
+        for (const alloc of before.allocations) {
+          if (remainingToRemove <= 0.01) break
+          const currentRemaining = Number(alloc.principalRemaining || 0)
+          if (currentRemaining <= 0.01) continue
+
+          const removeAmount = Math.min(currentRemaining, remainingToRemove)
+          const updated = await tx.investmentBucketAllocation.update({
+            where: { id: alloc.id },
+            data: { principalRemaining: currentRemaining - removeAmount },
+          })
+          reduced.push(updated)
+          remainingToRemove = Math.max(0, remainingToRemove - removeAmount)
+        }
+
+        return { reduced }
+      })
+
+      const after = await diagnose()
+      return NextResponse.json({
+        applied: true,
+        direction: 'reduced',
+        investment: { id: investment.id, name: investment.name, principalAmount: investment.principalAmount },
+        expectedRemaining,
+        repairableExcess,
+        reducedAllocations: result.reduced,
+        before,
+        after,
       })
     }
 
