@@ -796,9 +796,16 @@ export async function DELETE(
         await tx.cashBucket.delete({ where: { id: bucketId } })
 
         if (contributionAmount > 0) {
+          // Cap at today: if the plan's start date (and therefore this
+          // contribution's haul anchor) is in the future, refunded cash from
+          // undoing it must still be usable/withdrawable immediately - it
+          // can't be locked until a date that hasn't happened yet.
+          const today = new Date()
+          const safeHaulStartDate = contributionHaulStart <= today ? contributionHaulStart : today
+
           await createCashBucket(tx, {
             amount: contributionAmount,
-            haulStartDate: contributionHaulStart,
+            haulStartDate: safeHaulStartDate,
             currency: contributionBucket?.currency || investment.account?.currency || 'SAR',
             label: 'General Cash',
             date: dueDate,

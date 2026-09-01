@@ -20,6 +20,7 @@ export async function GET(req: NextRequest) {
     if (Number.isNaN(cutoff.getTime())) {
       return NextResponse.json({ error: 'Invalid date' }, { status: 400 })
     }
+    const apply = url.searchParams.get('apply') === '1'
 
     const futureBuckets = await prisma.cashBucket.findMany({
       where: {
@@ -43,10 +44,33 @@ export async function GET(req: NextRequest) {
 
     const totalFutureLocked = futureBuckets.reduce((s, b) => s + Number(b.balance || 0), 0)
 
+    if (!apply || futureBuckets.length === 0) {
+      return NextResponse.json({
+        applied: false,
+        cutoff,
+        totalFutureLocked,
+        futureBuckets,
+      })
+    }
+
+    // Pull each bucket's haul anchor back to "now" so its balance is
+    // immediately usable, instead of locked until a date that hasn't
+    // happened yet.
+    const now = new Date()
+    const fixed = await prisma.$transaction(
+      futureBuckets.map((b) =>
+        prisma.cashBucket.update({
+          where: { id: b.id },
+          data: { haulStartDate: now },
+        }),
+      ),
+    )
+
     return NextResponse.json({
+      applied: true,
       cutoff,
       totalFutureLocked,
-      futureBuckets,
+      fixedBuckets: fixed,
     })
   } catch (error) {
     console.error('find-future-dated-buckets error:', error)
