@@ -129,6 +129,7 @@ export default async function InvestmentsPage() {
       ...p.investment,
       myParticipation: {
         id: p.id,
+        personId: p.personId,
         investedAmount: p.investedAmount,
         currentValue: p.currentValue,
         profit: p.profit,

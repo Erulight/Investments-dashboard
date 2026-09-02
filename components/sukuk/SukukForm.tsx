@@ -46,6 +46,18 @@ export function SukukForm({ mode, initialData, userRole, onSuccess, onCancel }: 
     ? String(Math.max(0, myParticipationCommission))
     : ''
 
+  // investment.totalReceived is a deal-wide field that only the OWNER's own
+  // profit withdrawals increment (see withdraw/route.ts) - a partner's own
+  // receipts never touch it, so it always reads stale/0 for a partner even
+  // after they've received plenty. For a partner, compute their own
+  // received total from their own WITHDRAW_PROFIT transactions instead.
+  const myPersonId = initialData?.myParticipation?.personId
+  const partnerReceivedTotal = isPartnerEdit
+    ? (Array.isArray(initialData?.transactions) ? initialData.transactions : [])
+        .filter((tx: any) => tx.type === 'WITHDRAW_PROFIT' && (!myPersonId || tx.personId === myPersonId))
+        .reduce((sum: number, tx: any) => sum + Math.abs(Number(tx.amount) || 0), 0)
+    : null
+
   const [formData, setFormData] = useState<any>({
     accountId: initialData?.accountId || '',
     name: initialData?.name || '',
@@ -57,7 +69,7 @@ export function SukukForm({ mode, initialData, userRole, onSuccess, onCancel }: 
     maturityDate: formatDateInput(initialData?.maturityDate),
     interestRate: initialData?.interestRate || '',
     fees: initialData?.fees ?? '',
-    totalReceived: initialData?.totalReceived ?? '',
+    totalReceived: isPartnerEdit ? partnerReceivedTotal : (initialData?.totalReceived ?? ''),
     receivableAmount: initialData?.receivableAmount ?? '',
     partnerCommissionType: initialCommissionType,
     partnerCommissionCash: initialCommissionCash,
@@ -216,7 +228,10 @@ export function SukukForm({ mode, initialData, userRole, onSuccess, onCancel }: 
         currentValue: parseOptionalNumber(formData.currentValue),
         interestRate: computedApr,
         fees,
-        totalReceived: parseOptionalNumber(formData.totalReceived),
+        // Partners never submit totalReceived - it's a deal-wide field they
+        // can't correctly represent from their own view, and their receive
+        // flow tracks their own total separately (see partnerReceivedTotal).
+        totalReceived: isPartnerEdit ? undefined : parseOptionalNumber(formData.totalReceived),
         receivableAmount,
         partnerCommissionType: isPartnerCreate ? partnerCommissionType : undefined,
         partnerCommissionCash: isPartnerCreate ? partnerCommissionCash : undefined,
@@ -328,9 +343,17 @@ export function SukukForm({ mode, initialData, userRole, onSuccess, onCancel }: 
         throw new Error(data.error || 'Failed to record receipt')
       }
       const updated = data.investment
+      const receivedAmount = Math.abs(parseFloat(receiptForm.amount)) || 0
       setFormData((prev: any) => ({
         ...prev,
-        totalReceived: updated?.totalReceived ?? prev.totalReceived,
+        // Partners: investment.totalReceived is deal-wide and doesn't
+        // reflect their own receipts, so track their own running total
+        // locally instead of trusting the response's deal-wide value.
+        totalReceived: isPartnerEdit
+          ? (receiptForm.source === 'PROFIT'
+              ? (Number(prev.totalReceived) || 0) + receivedAmount
+              : prev.totalReceived)
+          : (updated?.totalReceived ?? prev.totalReceived),
         principalAmount: updated?.principalAmount ?? prev.principalAmount,
         currentValue: updated?.currentValue ?? prev.currentValue,
       }))
@@ -552,13 +575,17 @@ export function SukukForm({ mode, initialData, userRole, onSuccess, onCancel }: 
               min="0"
               value={formData.totalReceived}
               onChange={handleChange}
-              className="w-full rounded-lg border border-slate-200 bg-white px-4 py-2 text-sm text-slate-900 placeholder:text-slate-400 shadow-sm transition-colors focus:border-emerald-500 focus:outline-none focus:ring-2 focus:ring-emerald-500/20 dark:border-white/10 dark:bg-slate-900/60 dark:text-slate-100 dark:placeholder:text-slate-500"
+              readOnly={isPartnerEdit}
+              disabled={isPartnerEdit}
+              className="w-full rounded-lg border border-slate-200 bg-white px-4 py-2 text-sm text-slate-900 placeholder:text-slate-400 shadow-sm transition-colors focus:border-emerald-500 focus:outline-none focus:ring-2 focus:ring-emerald-500/20 dark:border-white/10 dark:bg-slate-900/60 dark:text-slate-100 dark:placeholder:text-slate-500 disabled:cursor-not-allowed disabled:opacity-70"
               placeholder="0.00"
             />
             {errors.totalReceived && <p className="text-sm text-red-600 mt-1 dark:text-red-200">{errors.totalReceived}</p>}
             {mode === 'edit' && (
               <p className="mt-1 text-xs text-slate-500 dark:text-slate-400">
-                Use receipts below for dated entries; this total will update automatically.
+                {isPartnerEdit
+                  ? 'Your own total received so far, from your profit receipts on this deal.'
+                  : 'Use receipts below for dated entries; this total will update automatically.'}
               </p>
             )}
           </div>
