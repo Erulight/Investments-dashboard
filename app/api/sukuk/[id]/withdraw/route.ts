@@ -115,6 +115,26 @@ export async function POST(
     }
 
     if (user.role === 'OWNER') {
+      // A deal with DealParticipant rows has been explicitly divided between
+      // the owner and one or more partners. If the owner holds no active
+      // stake in it (no participant row, or investedAmount already at 0),
+      // this deal's remaining principal/profit belongs entirely to a
+      // partner and the owner must not be able to withdraw/close it -
+      // that mixes ownership and corrupts each side's Zakat calculation.
+      const participants = Array.isArray(investment.dealParticipants) ? investment.dealParticipants : []
+      if (participants.length > 0) {
+        const ownerParticipant = participants.find((p: any) => p?.personId === user.personId)
+        const ownerStake = Number(ownerParticipant?.investedAmount || 0)
+        if (!(Number.isFinite(ownerStake) && ownerStake > 0.01)) {
+          return NextResponse.json(
+            {
+              error: 'This deal\u2019s remaining principal belongs to a partner. Only that partner can withdraw/close it.',
+            },
+            { status: 403 },
+          )
+        }
+      }
+
       if (source === 'PRINCIPAL' && amount > investment.principalAmount) {
         return NextResponse.json(
           { error: 'Amount exceeds principal amount' },

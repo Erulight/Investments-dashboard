@@ -692,6 +692,40 @@ export async function POST(
         })
       }
 
+      // When the OWNER reopens a deal that still has active partner
+      // participants (investedAmount > 0), the deal-wide fields above get
+      // restored, but each partner's own withdrawal cap
+      // (DealParticipant.profit/receivable) does NOT - it only gets
+      // restored in the PARTNER-initiated branch above. Left alone, this
+      // lets the owner "re-receive" money via the deal-wide fields while
+      // the actual partner who owns that money is stuck at a 0 cap
+      // ("Amount exceeds your remaining profit"). Restore each active
+      // partner's cap proportional to their share of the deal's principal.
+      if (user.role === 'OWNER') {
+        const activeParticipants = (investment.dealParticipants || []).filter(
+          (p: any) => p?.personId && p.personId !== user.personId && Number(p?.investedAmount || 0) > 0.01,
+        )
+        const totalActiveInvested = activeParticipants.reduce(
+          (sum: number, p: any) => sum + Number(p.investedAmount || 0),
+          0,
+        )
+
+        for (const participant of activeParticipants) {
+          const share = totalActiveInvested > 0
+            ? Number(participant.investedAmount || 0) / totalActiveInvested
+            : 0
+          const restoredProfitCap = Math.max(0, Math.round(receivableAmountValue * share * 100) / 100)
+
+          await tx.dealParticipant.update({
+            where: { id: participant.id },
+            data: {
+              profit: restoredProfitCap,
+              receivable: restoredProfitCap,
+            },
+          })
+        }
+      }
+
       const updatedInvestment = await tx.investment.update({
         where: { id },
         data: {
