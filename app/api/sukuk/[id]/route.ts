@@ -295,8 +295,13 @@ export async function PUT(
         data: updateData,
       })
       
-      // Update participants if provided
-      if (data.participants !== undefined) {
+      // Update participants if provided. OWNER-only: a partner's own edit
+      // requests (e.g. auto-save after a withdrawal) can include
+      // `participants: []` simply because partners don't manage the
+      // participant list themselves - if we honored that here it would
+      // wipe every DealParticipant on the deal, including the partner's
+      // own stake, right after they'd just withdrawn from it.
+      if (data.participants !== undefined && user.role === 'OWNER') {
         // Delete existing participants
         await tx.dealParticipant.deleteMany({
           where: { investmentId: id },
