@@ -48,6 +48,13 @@ export async function GET(req: NextRequest) {
       orderBy: { createdAt: 'asc' },
     })
 
+    const auditLogs = await prisma.auditLog.findMany({
+      where: { entityType: 'SUKUK', entityId: investment.id },
+      orderBy: { createdAt: 'desc' },
+      take: 20,
+      include: { user: { select: { email: true, role: true } } },
+    })
+
     return NextResponse.json({
       investment: {
         id: investment.id,
@@ -70,6 +77,7 @@ export async function GET(req: NextRequest) {
       })),
       movements,
       transactions,
+      auditLogs,
     })
   } catch (error) {
     console.error('inspect-partner-profit-limit error:', error)
